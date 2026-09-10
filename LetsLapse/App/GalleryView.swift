@@ -32,12 +32,29 @@ struct GalleryView: View {
     @State private var deleteFailure: String?
 
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    #if os(iOS)
+    @Environment(\.verticalSizeClass) private var vSizeClass
+    #endif
 
     private var isWide: Bool {
         #if os(macOS)
         return true
         #else
         return hSizeClass == .regular
+        #endif
+    }
+
+    /// An iPhone held upright — the one width the full header row cannot fit.
+    ///
+    /// Idiom + vertical size class rather than the horizontal class alone: a
+    /// Max/Plus iPhone in landscape reports regular width and takes the wide
+    /// three-pane branch, a narrow iPad split reports compact width but has
+    /// the height of a tablet, and neither is the 361pt column this decides for.
+    private var isPhonePortrait: Bool {
+        #if os(iOS)
+        return UIDevice.current.userInterfaceIdiom == .phone && vSizeClass == .regular
+        #else
+        return false
         #endif
     }
 
@@ -171,24 +188,56 @@ struct GalleryView: View {
 
     // MARK: Header
 
+    /// Two forms of one header. The full row — library toggle, title, search,
+    /// sort, zoom slider, Timeline — is about 691pt wide and has nothing that
+    /// collapses, so on an upright iPhone SwiftUI crushed the title to zero
+    /// width (it wrapped one glyph per line, which is where the ~180pt blank
+    /// band came from) and laid the whole column out wider than the screen,
+    /// grid included. iPhone portrait gets the compact row instead.
+    @ViewBuilder
     private var galleryHeader: some View {
-        HStack(spacing: 10) {
-            // ▤ Library toggle
-            Button {
-                if isWide {
-                    withAnimation(.easeInOut(duration: 0.22)) { showSidebar.toggle() }
-                } else {
-                    showSidebarSheet = true
-                }
-            } label: {
-                Image(systemName: showSidebar ? "sidebar.left" : "sidebar.left")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(showSidebar ? LL.accent : .secondary)
-                    .frame(width: 32, height: 32)
-                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
+        if isPhonePortrait {
+            compactHeader
+        } else {
+            fullHeader
+        }
+    }
+
+    /// iPhone portrait: the tab's large title, with the three controls that
+    /// earn a seat on a 361pt row opposite it — library (the sheet that holds
+    /// the kind and tag filters), sort, and the Timeline toggle as a glyph.
+    ///
+    /// No search field here by decision (Steven, 2026-09-08): the row is for
+    /// filter · order · mode, and search on a phone was costing the whole
+    /// header. No zoom slider either — the grid already takes a pinch over
+    /// the same 2–6 columns, through the same `gallery.columnCount` key.
+    /// Rhythm matches the Projects tab: 34pt title 15pt down and 20pt in,
+    /// controls centred 6pt above its baseline like the sharing chip there.
+    private var compactHeader: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Gallery")
+                .font(.system(size: 34, weight: .bold))
+            Spacer(minLength: 8)
+            HStack(spacing: 8) {
+                libraryButton
+                sortControl
+                timelineGlyphToggle
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showSidebar ? "Hide library sidebar" : "Show library sidebar")
+            .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 6 }
+        }
+        .padding(.leading, 20)
+        .padding(.trailing, 16)
+        .padding(.top, 15)
+        .padding(.bottom, 10)
+    }
+
+    /// Mac, iPad and iPhone landscape: the single toolbar row. The search
+    /// field yields down to 120pt before anything else gives, which is what
+    /// keeps a small iPhone's landscape row (an SE has 635pt to work in) from
+    /// overflowing the way portrait did.
+    private var fullHeader: some View {
+        HStack(spacing: 10) {
+            libraryButton
 
             Spacer(minLength: 0)
 
@@ -199,7 +248,7 @@ struct GalleryView: View {
 
             // Search
             SceneSearchField(text: $query.text, placeholder: "Search titles, tags, in frame")
-                .frame(width: 190)
+                .frame(minWidth: 120, idealWidth: 190, maxWidth: 190)
 
             // Sort menu
             sortControl
@@ -235,6 +284,50 @@ struct GalleryView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    /// ▤ Library — collapses the sidebar where it is inline, opens it as a
+    /// sheet where it is not.
+    ///
+    /// The accent glyph means "the pane is open" on the wide layout and "the
+    /// library is narrowed" on the compact one: `showSidebar` is a Mac pane
+    /// state, and reading it on an iPhone lit the button permanently.
+    private var libraryButton: some View {
+        let isLit = isWide ? showSidebar : (filter != .all || !query.tags.isEmpty)
+        return Button {
+            if isWide {
+                withAnimation(.easeInOut(duration: 0.22)) { showSidebar.toggle() }
+            } else {
+                showSidebarSheet = true
+            }
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(isLit ? LL.accent : .secondary)
+                .frame(width: 32, height: 32)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isWide ? (showSidebar ? "Hide library sidebar" : "Show library sidebar") : "Library")
+        .accessibilityValue(isWide ? "" : (isLit ? "Filtered" : "All projects"))
+    }
+
+    /// The Timeline toggle as a 32pt square, the library button's twin: accent
+    /// glyph while timeline mode is on, secondary while the grid is plain.
+    private var timelineGlyphToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { timelineMode.toggle() }
+        } label: {
+            Image(systemName: "calendar")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(timelineMode ? LL.accent : .secondary)
+                .frame(width: 32, height: 32)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Timeline")
+        .accessibilityValue(timelineMode ? "On" : "Off")
+        .accessibilityAddTraits(timelineMode ? .isSelected : [])
     }
 
     // MARK: Sort control

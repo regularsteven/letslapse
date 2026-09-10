@@ -1,11 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Gallery · portrait</title>
-  <desc>Mirrors App/GalleryView.swift + App/CaptureFilterBar.swift (CaptureFilterBar) + App/CapturePhotoGrid.swift (CaptureAssetGrid, CaptureAssetTile): manual large title, the shared segmented capture filter (All · Photos · Interval · Video), 3-column square hero grid with 2pt gaps (pinch changes 2–5 columns), floating tab bar. Tiles show each project's hero asset; failed/empty tiles show a photo or film glyph. Filter bar and grid are the same components the Projects tab and the per-project photo browser use — this screen supplies the data source only. Layout is unchanged by that extraction: title baseline 106, filter 120–152, grid from 160.</desc>
+  <desc>Mirrors App/GalleryView.swift (compact branch — hSizeClass .compact, and the iPhone-portrait header form chosen by GalleryView.isPhonePortrait: UIDevice idiom .phone AND verticalSizeClass .regular) + App/GallerySidebar.swift (the Library sheet the ▤ button raises: kind filter rows, present tags, Collections) + App/GalleryGridContent.swift (standardGrid) + App/GalleryTile.swift + App/GalleryPreviewPanel.swift (the sheet a single tap raises on compact). Redrawn 2026-09-08, app-first: Steven's iPhone screenshot showed the Mac header reused verbatim — one HStack of eight children about 691pt wide on a 361pt content column, nothing collapsing — so SwiftUI crushed the 20pt "Gallery" title to zero width (it wrapped one glyph per line, which was the ~180pt blank band above the controls), the search field clipped at the leading edge, the Timeline toggle fell off the trailing edge, and the whole VStack — grid included — laid out ~600pt wide and centred, so tiles spilled off both sides. Reproduced on the iPhone 17 Pro simulator before the change. HEADER, iPhone portrait only: the tab's large title, 34pt bold, baseline 106 and 20pt in — the same rhythm as projects.portrait.svg and every other tab here — with three controls opposite it, centred 6pt above the baseline (y 100) exactly as the Projects sharing chip is (the same alignmentGuide), trailing inset 16, 8pt apart: ▤ Library (sidebar.left, 32×32 at radius 7 on primary@5%, glyph 16pt medium — secondary here, LL.accent once the kind filter or a tag is narrowing the library, since showSidebar is a Mac pane state and reading it lit the button permanently on a phone) · the sort capsule and direction button unchanged from the Mac (Capture ˅ 13pt medium on a 28pt capsule at primary@6%, the 28pt triangle 4pt after it; Capture · Added · Edit · Size) · Timeline as a glyph (calendar, the library button's twin, LL.accent while timeline mode is on). NO SEARCH FIELD on an upright iPhone, by decision (Steven, 2026-09-08 — "kill the search input to clear things up, iPhone portrait only"): the row is filter · order · mode, and a 190pt field cost the whole header. NO ZOOM SLIDER either: the grid takes a pinch over the same 2–6 columns through the same gallery.columnCount key. Everything else — iPad, Mac, iPhone landscape — keeps the full single row (macOS/gallery.svg), where the search field now yields down to 120pt before anything else gives; that is what keeps an SE's 635pt landscape row from overflowing the way portrait did. Header band: top padding 15, title frame 74–115, bottom padding 10, hairline Divider at 125.5. GRID (GalleryGridContent.standardGrid): ScrollView, .padding(.horizontal, 14) and .padding(.vertical, 14), LazyVGrid of columnCount flexible columns at spacing 12 — at the drawn columnCount of 3 that is a 365pt content width and 113.67×85.25pt tiles, drawn 4:3 by GalleryTile's .aspectRatio(4/3, contentMode: .fit) at cornerRadius 8; column origins 14 / 139.67 / 265.33, row pitch 97.25 from y 140. TILE: a MediaBadge naming the shoot type pinned bottom-leading with 6pt padding (black@50%, white 11.5pt semibold, 24pt tall) and an amber "N clips" badge top-trailing with the same padding, only where model.blends(for:).count ≥ 2 (one drawn, row 2). Single tap selects and raises GalleryPreviewPanel as a sheet; long-press raises the context menu (Open · New blended clip · Edit · Delete…), not drawn. The last rows scroll under the floating tab bar; the ScrollView appends an 82pt spacer for it. STATES NOT DRAWN: the Library sheet (a NavigationStack titled "Library" with Done), the preview sheet, timeline mode (macOS/gallery.timeline.svg draws the grouping), the empty state ("No projects" over "Adjust the filter or search to see your library." — still says search on a phone that no longer has one, noted in INDEX.md), the "Couldn't delete" alert. HOOKS: LL_TAB=gallery; sort, direction, column count and timeline mode are @AppStorage (gallery.sortKey / gallery.sortAscending / gallery.columnCount / gallery.timelineMode), seeded before launch. Verified against the iPhone 17 Pro simulator (iOS 26.1) on 2026-09-08; device sign-off owed.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="t00"><rect x="14" y="140" width="113.67" height="85.25" rx="8"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
   </defs>
-  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}</style>
 
   <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
   <g clip-path="url(#screen)">
@@ -20,41 +21,111 @@
         <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
       </g>
 
-      <text x="20" y="106" font-size="34" class="b" fill="#000">Gallery</text>
+      <!-- ===== HEADER — compactHeader (iPhone portrait only) ===== -->
+      <g id="header">
+        <!-- large title: 34pt bold, 15pt down, 20pt in — the tab rhythm -->
+        <text x="20" y="106" font-size="34" class="b" fill="#000">Gallery</text>
 
-      <!-- segmented filter -->
-      <g id="filter">
-        <rect x="16" y="120" width="361" height="32" rx="9" fill="#E3E3E8"/>
-        <rect x="18" y="122" width="87" height="28" rx="7" fill="#FFF" filter="url(#soft)"/>
-        <text x="61" y="140" font-size="13" class="sb" fill="#000" text-anchor="middle">All</text>
-        <text x="151" y="140" font-size="13" fill="#000" text-anchor="middle">Photos</text>
-        <text x="241" y="140" font-size="13" fill="#000" text-anchor="middle">Interval</text>
-        <text x="331" y="140" font-size="13" fill="#000" text-anchor="middle">Video</text>
+        <!-- controls, centred at y 100 (title baseline − 6), trailing inset 16, 8pt apart -->
+        <!-- ▤ Library: opens the Library sheet (kinds · tags · collections). Secondary
+             while nothing narrows the library; LL.accent once a kind or tag does. -->
+        <g id="library-button">
+          <rect x="181" y="84" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+          <g fill="none" stroke="#6D6D72" stroke-width="1.7" data-symbol="sidebar.left">
+            <rect x="189" y="92" width="16" height="16" rx="2.6"/>
+            <path d="M195 92 v16"/>
+          </g>
+        </g>
+
+        <!-- sort: menu capsule + direction button, as on the Mac -->
+        <g id="sort">
+          <g id="sort-menu">
+            <rect x="221" y="86" width="84" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+            <text x="230" y="105" font-size="13" class="m" fill="#C36A00">Capture</text>
+            <path d="M287 97 l4.5 5 4.5-5" fill="none" stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+          </g>
+          <g id="sort-direction">
+            <rect x="309" y="86" width="28" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+            <path d="M318 96 h10 l-5 8 z" fill="#C36A00" data-symbol="arrowtriangle.down.fill"/>
+          </g>
+        </g>
+
+        <!-- Timeline as a glyph: the library button's twin. OFF here (secondary);
+             LL.accent while timeline mode is on. -->
+        <g id="timeline-toggle">
+          <rect x="345" y="84" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+          <g fill="none" stroke="#6D6D72" stroke-width="1.7" stroke-linecap="round" data-symbol="calendar">
+            <rect x="354" y="93" width="14" height="13" rx="2.2"/>
+            <path d="M354 97.5 h14 M357.5 90.5 v3.5 M364.5 90.5 v3.5"/>
+          </g>
+        </g>
       </g>
 
-      <!-- 3-column grid, 2pt gaps, tile 129.7 -->
+      <line x1="0" y1="125.5" x2="393" y2="125.5" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- ===== GRID — GalleryGridContent.standardGrid, columnCount 3 ===== -->
       <g id="grid">
-        <!-- row 1 -->
-        <rect x="0" y="160" width="129.6" height="129.6" fill="#3D4A5C"/><circle cx="40" cy="200" r="12" fill="#FFB340" opacity="0.85"/><polygon points="0,262 45,236 90,258 129.6,240 129.6,289.6 0,289.6" fill="#232B36"/>
-        <rect x="131.6" y="160" width="129.6" height="129.6" fill="#4A3B2E"/><polygon points="131.6,250 180,222 226,246 261.2,232 261.2,289.6 131.6,289.6" fill="#2E2419"/>
-        <rect x="263.2" y="160" width="129.6" height="129.6" fill="#2E3A46"/><ellipse cx="328" cy="212" rx="34" ry="12" fill="#9FC2E8" opacity="0.4"/>
-        <!-- row 2 -->
-        <rect x="0" y="291.6" width="129.6" height="129.6" fill="#55402F"/><circle cx="88" cy="330" r="14" fill="#FFD9A0" opacity="0.8"/>
-        <rect x="131.6" y="291.6" width="129.6" height="129.6" fill="#26303C"/><polygon points="131.6,392 175,360 215,384 261.2,366 261.2,421.2 131.6,421.2" fill="#161D25"/>
-        <rect x="263.2" y="291.6" width="129.6" height="129.6" fill="#3B3F35"/><rect x="285" y="352" width="86" height="3" fill="#E8E4D8" opacity="0.5"/>
-        <!-- row 3 -->
-        <rect x="0" y="423.2" width="129.6" height="129.6" fill="#31404E"/><polygon points="0,520 52,492 96,514 129.6,500 129.6,552.8 0,552.8" fill="#1C2530"/>
-        <rect x="131.6" y="423.2" width="129.6" height="129.6" fill="#463522"/><circle cx="196" cy="470" r="11" fill="#FFB340" opacity="0.8"/>
-        <rect x="263.2" y="423.2" width="129.6" height="129.6" fill="#EDEDF0"/>
-        <g data-symbol="film" stroke="#9A9AA0" stroke-width="2" fill="none"><rect x="314" y="476" width="28" height="24" rx="3"/><path d="M321 476 v24 M335 476 v24 M314 488 h28"/></g>
-        <!-- row 4 -->
-        <rect x="0" y="554.8" width="129.6" height="129.6" fill="#232C38"/><ellipse cx="60" cy="600" rx="30" ry="10" fill="#8FB4DE" opacity="0.35"/>
-        <rect x="131.6" y="554.8" width="129.6" height="129.6" fill="#4E4638"/><polygon points="131.6,656 184,628 224,650 261.2,636 261.2,684.4 131.6,684.4" fill="#332D22"/>
-        <rect x="263.2" y="554.8" width="129.6" height="129.6" fill="#39424E"/><circle cx="330" cy="596" r="12" fill="#FFC670" opacity="0.7"/>
-        <!-- row 5 (scrolls behind tab bar) -->
-        <rect x="0" y="686.4" width="129.6" height="129.6" fill="#44352B"/>
-        <rect x="131.6" y="686.4" width="129.6" height="129.6" fill="#2B3540"/>
-        <rect x="263.2" y="686.4" width="129.6" height="129.6" fill="#50483A"/>
+                <rect x="14" y="140" width="113.67" height="85.25" rx="8" fill="#5A4A3A"/>
+        <rect x="139.67" y="140" width="113.67" height="85.25" rx="8" fill="#4A3B2E"/>
+        <rect x="265.33" y="140" width="113.67" height="85.25" rx="8" fill="#6B5B48"/>
+        <rect x="14" y="237.25" width="113.67" height="85.25" rx="8" fill="#2E3A46"/>
+        <rect x="139.67" y="237.25" width="113.67" height="85.25" rx="8" fill="#1E2633"/>
+        <rect x="265.33" y="237.25" width="113.67" height="85.25" rx="8" fill="#3B5A7A"/>
+        <rect x="14" y="334.5" width="113.67" height="85.25" rx="8" fill="#3D4A5C"/>
+        <rect x="139.67" y="334.5" width="113.67" height="85.25" rx="8" fill="#55402F"/>
+        <rect x="265.33" y="334.5" width="113.67" height="85.25" rx="8" fill="#5C6B3A"/>
+        <rect x="14" y="431.75" width="113.67" height="85.25" rx="8" fill="#7A6A5A"/>
+        <rect x="139.67" y="431.75" width="113.67" height="85.25" rx="8" fill="#4B4B50"/>
+        <rect x="265.33" y="431.75" width="113.67" height="85.25" rx="8" fill="#6A5A4A"/>
+        <rect x="14" y="529" width="113.67" height="85.25" rx="8" fill="#7C7A72"/>
+        <rect x="139.67" y="529" width="113.67" height="85.25" rx="8" fill="#6E5F4E"/>
+        <rect x="265.33" y="529" width="113.67" height="85.25" rx="8" fill="#9FB4C8"/>
+        <rect x="14" y="626.25" width="113.67" height="85.25" rx="8" fill="#8E6B3F"/>
+        <rect x="139.67" y="626.25" width="113.67" height="85.25" rx="8" fill="#5A6E52"/>
+        <rect x="265.33" y="626.25" width="113.67" height="85.25" rx="8" fill="#4F6A35"/>
+        <rect x="14" y="723.5" width="113.67" height="85.25" rx="8" fill="#232C38"/>
+        <rect x="139.67" y="723.5" width="113.67" height="85.25" rx="8" fill="#3A3F45"/>
+        <rect x="265.33" y="723.5" width="113.67" height="85.25" rx="8" fill="#3D5A3A"/>
+        <rect x="14" y="820.75" width="113.67" height="85.25" rx="8" fill="#44352B"/>
+        <rect x="139.67" y="820.75" width="113.67" height="85.25" rx="8" fill="#2B3540"/>
+        <rect x="265.33" y="820.75" width="113.67" height="85.25" rx="8" fill="#50483A"/>
+                <polygon points="14,202 54,180 92,198 127.67,184 127.67,225.25 14,225.25" fill="#3A2E22" clip-path="url(#t00)"/>
+        <circle cx="295.33" cy="170" r="10" fill="#FFB340" opacity="0.85"/>
+        <ellipse cx="195.67" cy="267.25" rx="30" ry="9" fill="#9FC2E8" opacity="0.35"/>
+        <rect x="281.33" y="382.5" width="82" height="3" fill="#E8E4D8" opacity="0.5"/>
+        <circle cx="86" cy="459.75" r="12" fill="#FFD9A0" opacity="0.8"/>
+        <ellipse cx="179.67" cy="563" rx="26" ry="8" fill="#FFFFFF" opacity="0.35"/>
+        <!-- shoot-type badges: MediaBadge, bottom-leading, 6pt in -->
+        <g id="type-badges" font-size="11.5" fill="#FFFFFF" class="sb">
+                    <rect x="20" y="195.25" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="50" y="210.75" text-anchor="middle">Interval</text>
+          <rect x="145.67" y="195.25" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="175.67" y="210.75" text-anchor="middle">Interval</text>
+          <rect x="271.33" y="195.25" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="301.33" y="210.75" text-anchor="middle">Interval</text>
+          <rect x="20" y="292.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="45" y="308" text-anchor="middle">Video</text>
+          <rect x="145.67" y="292.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="175.67" y="308" text-anchor="middle">Interval</text>
+          <rect x="271.33" y="292.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="296.33" y="308" text-anchor="middle">Video</text>
+          <rect x="20" y="389.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="46" y="405.25" text-anchor="middle">Photo</text>
+          <rect x="145.67" y="389.75" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="170.67" y="405.25" text-anchor="middle">Video</text>
+          <rect x="271.33" y="389.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="405.25" text-anchor="middle">Photo</text>
+          <rect x="20" y="487" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="46" y="502.5" text-anchor="middle">Photo</text>
+          <rect x="145.67" y="487" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="171.67" y="502.5" text-anchor="middle">Photo</text>
+          <rect x="271.33" y="487" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="502.5" text-anchor="middle">Photo</text>
+          <rect x="20" y="584.25" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="46" y="599.75" text-anchor="middle">Photo</text>
+          <rect x="145.67" y="584.25" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="171.67" y="599.75" text-anchor="middle">Photo</text>
+          <rect x="271.33" y="584.25" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="599.75" text-anchor="middle">Photo</text>
+          <rect x="20" y="681.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="45" y="697" text-anchor="middle">Video</text>
+          <rect x="145.67" y="681.5" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="171.67" y="697" text-anchor="middle">Photo</text>
+          <rect x="271.33" y="681.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="301.33" y="697" text-anchor="middle">Interval</text>
+          <rect x="20" y="778.75" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="45" y="794.25" text-anchor="middle">Video</text>
+          <rect x="145.67" y="778.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="171.67" y="794.25" text-anchor="middle">Photo</text>
+          <rect x="271.33" y="778.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="794.25" text-anchor="middle">Photo</text>
+          <rect x="20" y="876" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="50" y="891.5" text-anchor="middle">Interval</text>
+          <rect x="145.67" y="876" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="170.67" y="891.5" text-anchor="middle">Video</text>
+          <rect x="271.33" y="876" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="891.5" text-anchor="middle">Photo</text>
+        </g>
+        <!-- "N clips" badge: amber, top-trailing, only where blends ≥ 2 -->
+        <g id="clip-badges" font-size="11.5" fill="#FFB340" class="sb">
+                    <rect x="186.33" y="243.25" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="216.83" y="258.75" text-anchor="middle">2 clips</text>
+        </g>
       </g>
 
       <!-- floating tab bar (Gallery selected) -->
@@ -91,5 +162,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Gallery · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/GalleryView.swift — shared CaptureFilterBar · 3-column CaptureAssetGrid of CaptureAssetTile</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/GalleryView.swift compactHeader — large title · ▤ Library · sort · Timeline glyph · 3-column 4:3 GalleryGridContent</text>
 </svg>

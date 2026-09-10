@@ -55,8 +55,11 @@ macOS mirrors above were authored from the source. **Owed:** verification agains
 running and holds `library.json`, which still has no serialised writer, so a second instance could not be launched safely;
 every measurement in both files is computed from the SwiftUI layout rather than read off a screenshot, and the
 header-overflow arithmetic in particular wants a real window behind it. They are marked ⚠️ until that check happens.
-**Also owed:** the iOS side — [../iOS/gallery.portrait.svg](../iOS/gallery.portrait.svg) is stale, and its compact header
-needs a design decision before it can be mirrored (the same 691pt header is reused verbatim on a 393pt iPhone).
+**The iOS side, resolved 2026-09-08:** [../iOS/gallery.portrait.svg](../iOS/gallery.portrait.svg) was redrawn once
+`GalleryView` grew a compact header for iPhone portrait (large title · ▤ · sort · Timeline glyph; no search, no slider —
+Steven's call). The Mac keeps the full row unchanged at 1280 wide; its one new give is the search field, 190 → 120 pt
+before anything else compresses, which does not rescue the 760×680 default window (still ~130 pt short with the sidebar
+alone) — that and the iPad's narrow centre column are still open.
 
 🟡 **Mostly planned.** macOS shares the SwiftUI screens with iOS but differs structurally: the floating pill tab bar replaces native tabs (reselect-to-pop), the blended-clip flow lives *inside* the Create tab rather than as a full-screen overlay, capture is a sheet, and Settings adds a Camera access card. When macOS UI work happens, files land here following [../README.md](../README.md).
 
