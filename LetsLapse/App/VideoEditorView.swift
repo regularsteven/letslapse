@@ -205,6 +205,9 @@ struct VideoEditorView: View {
             guard !Task.isCancelled else { return }
             persist()
         }
+        // The Gallery panel's Text button asking for a page — `onReceive` so a
+        // Mac window that was merely fronted hears it too (see the photo editor).
+        .onReceive(model.$requestedEditorPage) { consumePageRequest($0) }
         .onDisappear {
             player.pause()
             if let timeObserver { player.removeTimeObserver(timeObserver) }
@@ -358,11 +361,25 @@ struct VideoEditorView: View {
 
     /// The same tab structure as the photo/interval editor, so the two rails
     /// keep reading as one design. No Frames page: a movie has no source
-    /// frame files to nominate.
+    /// frame files to nominate. No Masks page either — shapes are drawn on
+    /// stills, and Find shapes skips movies.
+    private var availableRailTabs: [RailTab] { [.editor, .text] }
+
     private var railTabBar: some View {
         RailTabBar(
-            selection: $railTab, tabs: [.editor, .text],
+            selection: $railTab, tabs: availableRailTabs,
             accent: accentColor, onAccent: pillTextColor)
+    }
+
+    /// A page requested for this project's editor (`AppModel.requestedEditorPage`)
+    /// — see the photo editor's twin. A page this rail doesn't have is consumed
+    /// and ignored rather than left pending for a window that will never come.
+    private func consumePageRequest(_ request: EditorPageRequest?) {
+        guard let request, request.captureID == captureID else { return }
+        if availableRailTabs.contains(request.page) { railTab = request.page }
+        DispatchQueue.main.async {
+            if model.requestedEditorPage == request { model.requestedEditorPage = nil }
+        }
     }
 
     @ViewBuilder private func controlStack(isWide: Bool) -> some View {

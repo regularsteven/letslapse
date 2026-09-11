@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Shape-mation · builder · done · portrait</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationOutputView after the render lands (doneCard), with ShapemationPosterView from App/Shapemation/ShapemationListView.swift (2026-09-11, code first, mirrored from the running app). Same Output screen as shapemation.builder.output.portrait.svg — back "Mode", large title "Output" — but the size list and Create button are replaced by the done card (llCard, radius 18): the rendered video's poster on a black table, 240 pt tall, scaledToFit inside a 12-pt-radius clip (no play badge — the app draws none); the record's title in 15-pt semibold, family · date; its subtitle in 12-pt secondary, family · mode · count · size; then Play (borderedProminent, play.fill) and Share (bordered, square.and.arrow.up — a ShareLink on the movie file). Sample data is the capture's own record: "Circle · 11. 9. 2026 at 7:50", "Circle · fit · 5 photos · 3948×4032". The poster is a flat stand-in for the real stack — the tall street layer, the wide mansion layer, the garden and the dark panel with its red sign, in the order and at the extents the capture shows. The progress card between Create and this state (Rendering n of N + a determinate bar) rendered too quickly to capture and has no mirror. Measured from an iPhone 16 Pro capture (402×874 pt) mapped to this 393×852 canvas; the sheet's top sits at safe-top + 10 as measured (69 here); the Presets mirrors draw it at 56.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
+    <clipPath id="poster"><rect x="32" y="209" width="329" height="240" rx="12"/></clipPath>
+    <linearGradient id="street-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DCE3EE"/><stop offset="1" stop-color="#B9C4D4"/></linearGradient>
+    <linearGradient id="mansion-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C9D3E0"/><stop offset="1" stop-color="#E4E9F0"/></linearGradient>
+    <linearGradient id="garden" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6F7B4A"/><stop offset="0.6" stop-color="#9AA066"/><stop offset="1" stop-color="#B8B58A"/></linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3E4048"/><stop offset="1" stop-color="#6B6E78"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar over the shrunken Create tab behind the sheet -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="59" width="361" height="30" rx="10" fill="#D5D5D9"/>
+
+      <!-- the sheet -->
+      <g id="shapemation-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
+
+        <g id="nav-bar">
+          <path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="30" y="103" font-size="17" fill="#C36A00">Mode</text>
+          <text x="16" y="161" font-size="34" class="b" fill="#000">Output</text>
+        </g>
+
+        <g id="done-card">
+          <rect x="16" y="193" width="361" height="376.3" rx="18" fill="#FFF"/>
+
+          <!-- the poster: the rendered stack on its black table, scaledToFit (3948×4032 → 235×240, centred) -->
+          <g id="poster" clip-path="url(#poster)">
+            <rect x="32" y="209" width="329" height="240" fill="#000"/>
+            <!-- layer 1 · the tall street photo, buildings either side of a bright sky and a church tower -->
+            <g id="layer-street">
+              <rect x="98" y="209" width="180" height="240" fill="url(#street-sky)"/>
+              <path d="M98 209 H150 L146 260 L152 300 V449 H98 Z" fill="#8A7B68"/>
+              <path d="M278 209 H222 L226 262 L220 300 V449 H278 Z" fill="#BFB29E"/>
+              <path d="M186 234 l8 -20 l8 20 v40 h-16 z" fill="#D9DEE6"/>
+              <rect x="98" y="423" width="180" height="26" fill="#8C8A86"/>
+              <rect x="152" y="300" width="68" height="126" fill="#6E6A66" opacity="0.35"/>
+            </g>
+            <!-- layer 2 · the wide mansion: sky, slate mansard roof, stone facade -->
+            <g id="layer-mansion">
+              <rect x="79" y="257.7" width="235" height="176.3" fill="url(#mansion-sky)"/>
+              <path d="M79 290 H314 V345 L300 350 H93 L79 345 Z" fill="#4E5566"/>
+              <g fill="#B8C4D6"><rect x="92" y="303" width="18" height="9"/><rect x="116" y="303" width="18" height="9"/><rect x="262" y="303" width="18" height="9"/><rect x="286" y="303" width="18" height="9"/></g>
+              <rect x="79" y="350" width="235" height="84" fill="#D9D3C9"/>
+              <g fill="#9CA3AE"><rect x="94" y="366" width="16" height="30"/><rect x="128" y="366" width="16" height="30"/><rect x="250" y="366" width="16" height="30"/><rect x="284" y="366" width="16" height="30"/></g>
+              <rect x="79" y="420" width="235" height="14" fill="#B9AE9C"/>
+            </g>
+            <!-- layer 3 · the garden -->
+            <g id="layer-garden">
+              <rect x="140" y="271" width="106.4" height="141" fill="url(#garden)"/>
+              <rect x="176" y="271" width="4" height="60" fill="#5A4636"/>
+              <path d="M150 300 q28 -34 56 0 q-28 10 -56 0 z" fill="#7C8E4E"/>
+            </g>
+            <!-- layer 4 · the dark panel with its red sign, the locked circle -->
+            <g id="layer-panel">
+              <rect x="160.4" y="280" width="74" height="99.7" fill="url(#panel)"/>
+              <path d="M172 284 l6 90 M212 286 l-4 88" stroke="#FFF" stroke-opacity="0.12" stroke-width="2"/>
+              <circle cx="196" cy="320.7" r="14.7" fill="#D8342E"/>
+              <rect x="186" y="319.5" width="20" height="3" fill="#FFF" opacity="0.9"/>
+              <rect x="189" y="312" width="14" height="2" fill="#FFF" opacity="0.7"/>
+              <rect x="190" y="327" width="12" height="2" fill="#FFF" opacity="0.7"/>
+            </g>
+          </g>
+
+          <text x="32" y="475.3" font-size="15" class="sb" fill="#000">Circle · 11. 9. 2026 at 7:50</text>
+          <text x="32" y="502.4" font-size="12" class="sec">Circle · fit · 5 photos · 3948×4032</text>
+
+          <g id="play-button">
+            <rect x="32" y="518" width="78.3" height="35" rx="9" fill="#C36A00"/>
+            <path d="M46.5 528.5 L58 535.7 L46.5 543 Z" fill="#FFF" data-symbol="play.fill"/>
+            <text x="67.5" y="542.1" font-size="17" fill="#FFF">Play</text>
+          </g>
+          <g id="share-button">
+            <rect x="122.5" y="518" width="94.5" height="35" rx="9" fill="#F2E2CF"/>
+            <g data-symbol="square.and.arrow.up" stroke="#C36A00" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M141 533.2 h-3.5 v12 h13 v-12 h-3.5"/>
+              <path d="M144 540.5 V527.5 M140.3 531.2 L144 527.5 L147.7 531.2"/>
+            </g>
+            <text x="162" y="542.2" font-size="17" fill="#C36A00">Share</text>
+          </g>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · done · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationOutputView.doneCard + ShapemationPosterView — the rendered Shape-mation's poster, title, subtitle, Play · Share</text>
+</svg>

@@ -131,8 +131,11 @@ struct GalleryView: View {
                 NavigationStack {
                     GalleryPreviewPanel(
                         capture: capture,
-                        onOpen:   { path.append(capture.id); showPreviewSheet = false },
-                        onDelete: { delete(capture); showPreviewSheet = false }
+                        onOpen:    { path.append(capture.id); showPreviewSheet = false },
+                        // The flow rises over the tabs, not over this sheet —
+                        // left up, the sheet would hide it.
+                        onNewClip: { model.openCapture(capture); showPreviewSheet = false },
+                        onDelete:  { delete(capture); showPreviewSheet = false }
                     )
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
@@ -178,8 +181,9 @@ struct GalleryView: View {
                     Divider()
                     GalleryPreviewPanel(
                         capture: capture,
-                        onOpen:   { path.append(capture.id) },
-                        onDelete: { delete(capture) }
+                        onOpen:    { path.append(capture.id) },
+                        onNewClip: { model.openCapture(capture) },
+                        onDelete:  { delete(capture) }
                     )
                     .frame(width: 300)
                 }

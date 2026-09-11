@@ -1,24 +1,23 @@
 <svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Photo viewer / grading editor · Masks tab · 1000×700</title>
-  <desc>Mirrors App/PhotoViewerView.swift (masksTab) hosting App/Overlay/OverlayMasksPanel.swift — REBUILT 2026-09-07 from the Claude Design handoff &quot;Masks as Adjustment Layers&quot; (turn 3, the handover build). THE ONE RULE THIS TAB NOW OBEYS: a mask has two homes and the split is strict — this tab owns a mask&#8217;s SHAPE (create it, drag its handles, feather it, tune the semantic dials, see what text is placed in it); the EDITOR tab owns its GRADE (photo-viewer.mask-grade.svg). Same mask, two sides of it, and the TAB IS THE MODE: a drag on the picture here draws masks, a drag on the picture there sets an armed slider — nothing to remember. TOOLBAR: three 30pt buttons — Linear and Radial arm a creation tool (filled accent while armed; the next drag on the picture draws one and the tool disarms itself, so there is no mode to get stuck in; a drag under 8pt is discarded rather than committed as an invisible mask), and ＋ Custom… opens the existing file import. MASKS DECK: a 3-column grid of 4:3 tiles, one per project mask, in menu order — the two semantic regions, then the custom files, then the drawn shapes. White in a tile is the region that version SELECTS. Sky and Land carry the AUTO chip (they re-segment per seam) and draw the real analysis once it is cached, falling back to a stylised horizon before then — inference for a 48pt thumbnail would be absurd. An amber dot bottom-right marks a mask graded inside; ⊘ bottom-left marks one graded inverted; the selection is a 2.5pt accent ring. Clicking the selected tile deselects — nothing is analysed until a region is chosen. DETAIL CARD for the selection: a 30×24 tile, an editable name (parametric masks only), Remove (parametric only — Sky and Land belong to the analysis, and a custom mask is removed from its own list where its file is), then a Shape | Text segment (LLInkSegment: #E9E9EB track, selected seat in LL.ink with an LL.amber label). SHAPE · a drawn mask: Feather as a PERCENTAGE OF ITS OWN SPAN (drag the handles wider and the softness grows with them) plus Rotation −90…90° for a radial, and a footnote giving the size in points. Feather semantics: radial — everything inside 1 − feather of the radius is fully selected, falling to 0 at the ellipse; linear — the 50% line is the midpoint of start→end and the transition spans feather × distance centred on it. SHAPE · Sky or Land: the shipped dials, unchanged, moved into the detail card so every kind of mask is edited in one place — Camera locked off (ON, and the default: one mask voted across 25 frames beat any single frame&#8217;s at 0.975 vs 0.959 IoU, measured 2026-08-31), Threshold (disabled with a reason whenever the grid carries no confidence — an argmax model&#8217;s single frame holds two values and thresholding them cannot change anything), Feather, Edge bias (bipolar, default 0), and the provenance line. SHAPE · Custom: the inverted-name field and &quot;Replace Sky &amp; Land&quot; (once per project). TEXT segment: the layers placed in this region as ID · copy · BOX/FREE rows, or the empty line — occlusion seen from the mask&#8217;s side. GRADE IN EDITOR: two rows, one per version, each with its own tile — &quot;Grade Sun&quot; and &quot;Grade Sun · inverted&quot;. Either CREATES-OR-OPENS the MaskGrade (unique on (mask, inverted), so a second click re-opens rather than duplicating) and switches to the Editor tab with it expanded; a row whose grade exists reads the grade&#8217;s summary instead. PICTURE: the selected shape&#8217;s handles, drawn in LL.amber over the dark pane. STAGED HERE by LL_MASKGRADE=shapes: a radial &quot;Sun&quot; (centre 0.80/0.31, 124×80pt, −12°, feather 60%) and a linear &quot;Quay lift&quot;, no grades — the deck&#8217;s own state. STATES NOT DRAWN (desc-only): the collapsed cardinal handles and their &quot;small mask · handles collapsed — zoom in to edit&quot; caption below min(rx,ry)=26pt; the create-drag HUD pill; the Text segment populated; the model-missing deck (Sky and Land dimmed to 40% and unclickable); the magenta &quot;Show mask&quot; tint, which is photo-viewer.masks.svg&#8217;s previous state and unchanged in behaviour. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_RAIL=masks, LL_MASKGRADE=shapes|first|empty, LL_MASKTOOL=linear|radial. Verified against the running Mac app 2026-09-07.</desc>
+  <desc>Mirrors App/PhotoViewerView.swift (masksTab, controlRail, the register-shape members: selectedShapeID / shapeTool / shapeSquareLock / selectedRegisterShapeIndex) hosting App/Overlay/OverlayMasksPanel.swift (toolbar, shapeToolMenu, deckCard, detailCard, shapesCard, RegisterShapeTile, customMasksCard) with App/Overlay/MaskShapeOverlay.swift on the picture. Code first, mirrored from the running app 2026-09-11 (captures mac-masks-mask-selected.png, 1000×700, and mac-masks-mask-selected-tall.png, 1000×1000, both 2×; window top at px 52, left at px 68 — the shadow is offset downward, so the vertical margin is NOT the 68 px the horizontal one is). Staged by LL_EDITOR=&lt;the &quot;Photo 9. 9. at 09:26&quot; single still&gt; LL_RAIL=masks with the Circle mask selected. STATE DRAWN: the Masks tab with a MASK SELECTED — the deck's Circle (a Radial mask made from the register's found ellipse through &quot;Use as Radial mask&quot;) and its detail card, then the Shapes card below it. The rail is NOT scrolled: the 700 pt window clips the Shapes card after its header (&quot;Shapes · 5 shapes&quot;), exactly as the capture shows; the card is nevertheless drawn in full geometry under the window clip, so the source carries the whole rail — scrolling instead would have pushed the deck off the top, and the deck is what says which mask the detail card belongs to. THE RULE THIS TAB OBEYS, unchanged since 2026-09-07: a mask has two homes — this tab owns a mask&#8217;s SHAPE (create it, drag its handles, feather it, tune the semantic dials, see what text is placed in it) and the EDITOR tab owns its GRADE (photo-viewer.mask-grade.svg). The TAB IS THE MODE: a drag on the picture here draws masks or shapes; a drag on the picture in Editor sets an armed slider. RAIL TABS: RailTabBar shows THREE seats here — Editor · Text · Masks — because availableRailTabs adds Frames only where allFrames.count &gt; 1; this project is a single still, so there is nothing to nominate and the tab does not exist. (The 2026-09-07 drawing carried a fourth &quot;Frames&quot; seat from an interval project.) 308×36 white capsule, 3 pt inset, 2 pt between seats (99.3 pt each), the selected seat an accent capsule with a white 13/600 label. TOOLBAR (30 pt, four equal buttons, 8 pt gaps): Linear and Radial (white, radius 9, accent 12.5/600 label) arm a creation tool — filled accent while armed; the next drag on the picture draws one and the tool disarms itself, so there is no mode to get stuck in; a drag under 8 pt is discarded rather than committed as an invisible mask. ＋ SHAPE is NEW (2026-09-10): a Menu button — Ellipse / Rectangle / Square, plus a Divider and Cancel while a tool is armed — with the resting label &quot;＋ Shape&quot;. The code styles it like ＋ Custom… (accent 4% fill, dashed accent-45% 1.5 pt border), but AS SHIPPED on macOS the borderlessButton menu style drops the label&#8217;s background and overlay, so it renders as a bare accent label in its 67.25 pt seat between two bordered buttons — drawn as captured, flagged for the code. While armed the button fills accent, its label goes white and reads the armed tool with a tick — &quot;Ellipse ✓&quot;, &quot;Rectangle ✓&quot; or &quot;Square ✓&quot; (Square = the quad tool with the square lock on) — and the next drag on the picture draws that shape into the register (shapes.json), not a mask. LL_SHAPETOOL=ellipse|rect|square arms it at launch. ＋ Custom… opens the file importer. AS SHIPPED the ＋ Custom… label wraps onto two lines (&quot;＋&quot; over &quot;Custom…&quot;) inside its 30 pt button at this width, spilling above and below it — mirrored, not fixed. RAIL WIDTH: the tab bar is 308 pt (rail 340 − 16 − 16), but the scrolled content below it measures 293 pt here because the ScrollView reserves a 15 pt gutter for its scroller (the thumb at x 1009–1017 is drawn); in the 1000-tall capture with the shorter shape-selected rail the content ran the full 308. MASKS DECK: a 3-column grid of 4:3 tiles (83×62.25, 8 pt gaps, radius 6), one per project mask in menu order — the two semantic regions, then the custom files, then the drawn shapes. White in a tile is the region that version SELECTS. Sky and Land carry the AUTO chip (they re-segment per seam) and draw the cached analysis — here Sky selects the frame&#8217;s top half behind a jagged horizon while Land renders all-white: that is what the cached analysis holds for this frame, mirrored as captured. An amber dot bottom-right marks a mask graded inside; ⊘ bottom-left marks one graded inverted; the legend under the tiles says so in two lines. The selection is a 2.5 pt accent ring drawn INSIDE the tile (strokeBorder). Clicking the selected tile deselects. The header trails the count in the mono face (&quot;3 masks&quot;). DETAIL CARD for the selected mask (14 pt padding, 12 pt rows): a 30×24 tile, the editable name &quot;Circle&quot; 14/700 (parametric masks only), Remove 12/600 secondary (parametric only — Sky and Land belong to the analysis, a custom mask is removed where its file is), then the Shape | Text LLInkSegment CENTRED in the card: #E9E9EB track (135×37, radius 9, 2 pt inset), the selected seat LL.ink (71.5×33, radius 7) with an LL.amber 14/700 label, the other seat&#8217;s label primary. SHAPE · a radial: Feather as a PERCENTAGE OF ITS OWN SPAN (50% here) and Rotation −90…90° (−10°) as native macOS sliders — 12.5/600 secondary label at the left, the grey 4 pt track from x 788 to 925, a 20 pt white knob, the value right-aligned in the mono face — then the footnote &quot;225 × 209 pt · drag the handles on the picture to move and resize it.&quot; (the size is in points of the DRAWN picture: the same mask read 294 × 273 pt in the 1000-tall window), the Show mask checkbox (14 pt, off) and GRADE IN EDITOR: two 36 pt rows on accent-4% (radius 9), each with its own 30×24 tile — &quot;Grade Circle&quot; and &quot;Grade Circle · inverted&quot; (the inverted tile is white with the ink ellipse and the amber ⊘) — either CREATES-OR-OPENS the MaskGrade (unique on (mask, inverted)) and switches to the Editor tab with it expanded; a row whose grade exists reads the grade&#8217;s summary instead. Feather semantics unchanged: radial — everything inside 1 − feather of the radius is fully selected, falling to 0 at the ellipse; linear — the 50% line is the midpoint of start→end and the transition spans feather × distance centred on it. SHAPE · Sky or Land and SHAPE · Custom keep their 2026-09-07 dials (Camera locked off, Threshold, Feather, Edge bias, provenance; the inverted-name field and Replace Sky &amp; Land) — desc-only here, the photo-viewer.mask-grade.svg lineage documents them. TEXT segment: the layers placed in this region, or the empty line. SHAPES CARD (NEW, shapesCard): the project&#8217;s register — &quot;Shapes&quot; 13/600 secondary with the mono count &quot;5 shapes&quot;, then a 3-column LazyVGrid (8 pt columns, 10 pt rows) of RegisterShapeTile: an LL.ink 4:3 tile (radius 7) with the picture&#8217;s own aspect letterboxed inside it (a 3:4 frame here, 46 pt wide, ruled by a 0.5 pt white-25% hairline) and the shape filled white-90% at its place in that frame; under each tile a caption &quot;◎ Square&quot; / &quot;◎ Square&quot; / &quot;◎ Rectangle&quot; / &quot;◎ Circle&quot; / &quot;✎ Square&quot; — the 9 pt glyph is the source (◎ found by Find shapes, ✎ drawn here) and the 11/600 name is the family (Circle / Oval / Square / Rectangle, or the user&#8217;s own name); the legend &quot;◎ found by Find shapes · ✎ drawn here · an ellipse can become a Radial mask&quot; 10.5 pt secondary wraps to two lines at this width. Clicking a tile selects the shape (exclusive with the deck&#8217;s selection — selecting one clears the other) and puts its handles on the picture: that state, with the shape detail card, is photo-viewer.masks.shape.svg. With no shapes the card reads &quot;No shapes yet. Run Find shapes from the Create tab, or draw one with ＋ Shape. Shapes are what a Shape-mation holds still.&quot; (desc-only). CUSTOM MASKS CARD (below the fold at 700 pt, desc-only; measured in mac-masks-default.png): &quot;Custom Masks&quot; 13/600 secondary with the mono &quot;0 masks&quot;, one row per imported file, the 58 pt &quot;＋ Add Custom Mask&quot; drop target (dashed accent-45% border on accent-4%, radius 10; 13/600 accent title over &quot;Drop a black &amp; white PNG or JPEG&quot; 10.5 pt tertiary) and the footnote &quot;Masks belong to the project, not the layer — every text layer can pick any of them, and any of them can carry a grade.&quot; 11.5 pt secondary. DEFAULT STATE (nothing selected, mac-masks-default.png; described, not drawn): toolbar, deck, Shapes card, Custom Masks card in that order with no detail card and no picture chrome — the deck 152–323, the Shapes card 335–596, Custom Masks from 608, its footnote cut by the window&#8217;s bottom edge. PICTURE: the 3:4 still is fitted to the 660×672 pane (504×672 at x 98) with no timeline strip — a single still has no clock — and the ⤢ zoom control bottom-trailing. Over it the SELECTED MASK&#8217;s handles (MaskShapeOverlay, radial): a 1.2 pt white outline (drag inside to move; centre (372.5, 409), semi-axes 112.5 × 104.5, −10°), a dashed white-55% inner ellipse at 1 − feather marking where the falloff begins, four 11 pt white squares with a 1.5 pt LL.amber border at the cardinals, turned WITH the ellipse (E/W set radiusX, N/S radiusY), and beyond the east cardinal a 1 pt white stalk of MaskShape.rotationStalkPoints (26 pt) to a 14 pt white knob with the amber border and a 6 pt amber arrow.clockwise. Below min(rx, ry) = 26 pt the cardinals collapse under the caption &quot;small mask · handles collapsed — zoom in to edit&quot; (desc-only). Handles take a drag BEFORE the armed-slider gesture. STATES NOT DRAWN: the armed ＋ Shape label, the create-drag HUD pill, the Text segment populated, the model-missing deck (Sky and Land dimmed to 40% and unclickable), the magenta &quot;Show mask&quot; tint. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_RAIL=masks, LL_MASKGRADE=shapes|first|empty, LL_MASKTOOL=linear|radial, LL_SHAPETOOL=ellipse|rect|square. Verified against the running Mac app 2026-09-11.</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
-    <clipPath id="photo"><rect x="20" y="110" width="660" height="495"/></clipPath>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8FA3B8"/>
-      <stop offset="0.45" stop-color="#E8B98C"/>
-      <stop offset="1" stop-color="#F6DFB2"/>
-    </linearGradient>
-    <linearGradient id="quayfade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#1C1C1E"/>
-    </linearGradient>
-    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#D9A45E"/>
-      <stop offset="1" stop-color="#5C666E"/>
-    </linearGradient>
+    <clipPath id="photo"><rect x="98" y="48" width="504" height="672"/></clipPath>
+    <clipPath id="tile-sky"><rect x="710" y="192" width="83" height="62.25" rx="6"/></clipPath>
+    <!-- A feathered radial mask's thumbnail: white at the centre, gone at the ellipse. -->
+    <radialGradient id="soft" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="soft-ink" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#1C1C1E" stop-opacity="1"/>
+      <stop offset="0.45" stop-color="#1C1C1E" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#1C1C1E" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums;font-family:'SF Mono', Menlo, monospace}</style>
 
   <g clip-path="url(#win)">
     <rect x="20" y="20" width="1000" height="700" fill="#F2F2F7"/>
@@ -26,235 +25,231 @@
     <g id="titlebar">
       <rect x="20" y="20" width="1000" height="28" fill="#F6F6F8"/>
       <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
-      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
+      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Photo 9. 9. at 09:26</text>
     </g>
 
-    <!-- Media column: black pane, 4:3 picture fitted and centred, zoom
-         control bottom-trailing. The picture is a flat approximation of the
-         staged frame: sunset sky, the overlay text, then skyline / bridge /
-         river / quay — the skyline is drawn AFTER the text on purpose, so
-         the drawing occludes the descenders the way the composite does. -->
+    <!-- Media column: black pane 660×672, the 3:4 still fitted to its full
+         height (504×672 at x 98), zoom control bottom-trailing. No timeline
+         strip — a single still has no clock. The picture is a flat stand-in
+         for the staged frame (the Rouen Gros-Horloge): slate roof, the pale
+         facade, the gilded clock square with its dial, the arch below. -->
     <g id="media">
-      <rect x="20" y="48" width="660" height="618" fill="#000000"/>
+      <rect x="20" y="48" width="660" height="672" fill="#000000"/>
       <g clip-path="url(#photo)">
-        <rect x="20" y="110" width="660" height="495" fill="url(#sky)"/>
-        <ellipse cx="200" cy="180" rx="160" ry="24" fill="#7E93A9" opacity="0.35"/>
-        <ellipse cx="480" cy="150" rx="190" ry="22" fill="#8A9DB1" opacity="0.3"/>
-        <ellipse cx="360" cy="240" rx="230" ry="22" fill="#EACBA0" opacity="0.45"/>
-        <ellipse cx="150" cy="300" rx="170" ry="16" fill="#F2D9AE" opacity="0.5"/>
-        <!-- Layer 1 at its resting layout. Its reveal has not started at
-             this playhead, so the composite draws nothing — the chrome below
-             is all that marks where it will land. (Drawn faint here so the
-             spec shows the placement the badge refers to.) -->
-        <text x="345" y="360" font-size="96" class="b" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.16">LetsLapse</text>
-        <!-- Skyline band drawn AFTER the text — only the baseline bottoms and
-             descenders sink behind the rooftops, the way the composite cuts. -->
-        <path d="M20 380 L20 356 L60 356 L60 350 L118 350 L118 358 L175 358 L175 352 L240 352 L240 360 L300 360 L300 350 L332 344 L385 340 L448 344 L470 352 L520 349 L520 356 L575 356 L575 347 L620 347 L620 355 L680 355 L680 380 Z" fill="#5D5346"/>
-        <!-- Bridge deck with piers at the river head. -->
-        <rect x="20" y="380" width="660" height="8" fill="#8C7B5F"/>
-        <rect x="20" y="388" width="660" height="6" fill="#6E6152"/>
-        <g fill="#524A40">
-          <rect x="252" y="394" width="10" height="12"/><rect x="316" y="394" width="10" height="12"/>
-          <rect x="380" y="394" width="10" height="12"/><rect x="444" y="394" width="10" height="12"/>
+        <rect x="98" y="48" width="504" height="672" fill="#CFC9BE"/>
+        <rect x="98" y="48" width="504" height="60" fill="#6C7079"/>
+        <rect x="98" y="108" width="504" height="10" fill="#B5B0A6"/>
+        <rect x="98" y="118" width="130" height="602" fill="#D8CBA3"/>
+        <g fill="#5B3B3C"><rect x="112" y="290" width="18" height="60"/><rect x="112" y="430" width="18" height="60"/><rect x="112" y="570" width="18" height="60"/></g>
+        <rect x="330" y="120" width="64" height="76" fill="#3B4653"/>
+        <rect x="336" y="126" width="52" height="64" fill="#5A6B80"/>
+        <g fill="#C9A24A"><rect x="268" y="204" width="8" height="72" rx="4"/><rect x="368" y="192" width="10" height="84" rx="5"/><rect x="478" y="204" width="8" height="72" rx="4"/></g>
+        <circle cx="373" cy="230" r="14" fill="#3D3F45" stroke="#C9A24A" stroke-width="3"/>
+        <rect x="237" y="272" width="268" height="294" fill="#C9A24A"/>
+        <rect x="252" y="300" width="238" height="250" fill="#3E4A55"/>
+        <g fill="#C9A24A"><circle cx="271" cy="326" r="11"/><circle cx="471" cy="326" r="11"/><circle cx="271" cy="524" r="11"/><circle cx="471" cy="524" r="11"/></g>
+        <circle cx="372.5" cy="409" r="94" fill="#2E3944" stroke="#D3AE59" stroke-width="7"/>
+        <circle cx="372.5" cy="409" r="62" fill="#37434E" stroke="#D3AE59" stroke-width="4"/>
+        <g stroke="#E0BF6B" stroke-width="2.5" stroke-linecap="round">
+          <line x1="392.5" y1="409" x2="424.5" y2="409"/><line x1="386.6" y1="423.1" x2="409.3" y2="445.8"/>
+          <line x1="372.5" y1="429" x2="372.5" y2="461"/><line x1="358.4" y1="423.1" x2="335.7" y2="445.8"/>
+          <line x1="352.5" y1="409" x2="320.5" y2="409"/><line x1="358.4" y1="394.9" x2="335.7" y2="372.2"/>
+          <line x1="372.5" y1="389" x2="372.5" y2="357"/><line x1="386.6" y1="394.9" x2="409.3" y2="372.2"/>
         </g>
-        <!-- River with the sunset's reflection. -->
-        <rect x="20" y="394" width="660" height="146" fill="url(#river)"/>
-        <rect x="120" y="410" width="260" height="6" rx="3" fill="#EBC27E" opacity="0.5"/>
-        <rect x="90" y="430" width="330" height="6" rx="3" fill="#E0B26B" opacity="0.4"/>
-        <rect x="140" y="452" width="240" height="6" rx="3" fill="#D2A45F" opacity="0.3"/>
-        <!-- Quay diagonal, crowd, railing — the right embankment. -->
-        <path d="M330 540 L680 436 L680 605 L240 605 Z" fill="#8A7A55"/>
-        <path d="M500 605 L680 470 L680 605 Z" fill="#3F4438"/>
-        <g fill="#221F1C">
-          <circle cx="380" cy="560" r="4"/><circle cx="416" cy="550" r="4"/><circle cx="452" cy="540" r="4"/>
-          <circle cx="492" cy="528" r="4"/><circle cx="352" cy="576" r="4"/><circle cx="530" cy="516" r="4"/>
-        </g>
-      </g>
-      <g clip-path="url(#photo)">
-        <!-- Layer 2: BOX mode, Georgia italic, auto-sized to its box, onion
-             skin ON — so it draws at full strength even though its slide
-             reveal has not run at this playhead. Placed in Land, so the sky
-             would occlude it; nothing here is sky. -->
-        <text x="98" y="512" font-size="34" font-family="Georgia, serif" font-style="italic" fill="#FFFFFF">River Sunset</text>
-        <text x="98" y="548" font-size="34" font-family="Georgia, serif" font-style="italic" fill="#FFFFFF">to Dusk</text>
-        <!-- Layer 4: Courier, wide tracking, centred. Layer 3 is hidden and
-             is deliberately absent. -->
-        <text x="350" y="588" font-size="17" font-family="'Courier New', monospace" letter-spacing="3.2" text-anchor="middle" fill="#FFFFFF">12 Aug 2026 · 55 min</text>
+        <circle cx="372.5" cy="409" r="15" fill="#E0BF6B"/>
+        <path d="M170 720 L170 640 A175 120 0 0 1 520 640 L520 720 Z" fill="#58524A"/>
+        <path d="M230 720 L230 680 A115 90 0 0 1 460 680 L460 720 Z" fill="#3A3733"/>
+        <rect x="548" y="420" width="54" height="300" fill="#DAD3C7"/>
+        <rect x="560" y="440" width="30" height="120" fill="#B49B6D" opacity="0.6"/>
       </g>
 
-      <!-- The SELECTED mask's handles (MaskShapeOverlay). Radial: a 1.2pt
-           white outline (drag inside to move), a dashed inner ellipse at
-           1 − feather marking where the falloff begins, four 11pt square
-           cardinal handles that turn WITH the ellipse (e/w set radiusX,
-           n/s set radiusY), and a rotation knob on a 26pt stalk beyond the
-           +x cardinal — clipped by the picture's edge here, which is what
-           the app draws when a mask sits near the frame. Below
-           min(rx, ry) = 26pt the cardinals collapse and a caption asks for
-           a zoom (desc-only). Handles take a drag BEFORE the armed-slider
-           gesture, so a mask can be nudged in the middle of grading it. -->
-      <g clip-path="url(#photo)" id="mask-handles">
-        <ellipse cx="548" cy="263.5" rx="124" ry="80" transform="rotate(-12 548 263.5)" fill="none" stroke="#FFFFFF" stroke-width="1.2"/>
-        <ellipse cx="548" cy="263.5" rx="49.6" ry="32" transform="rotate(-12 548 263.5)" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="1" stroke-dasharray="4 4"/>
-        <line x1="669.3" y1="237.7" x2="694.7" y2="232.3" stroke="#FFFFFF" stroke-width="1"/>
+      <!-- The SELECTED mask's handles (MaskShapeOverlay, radial), LL.amber
+           over white. Centre (372.5, 409), semi-axes 112.5 × 104.5, −10°:
+           the outline, the 1 − feather ellipse (feather 50%), the four
+           cardinal squares turned with the ellipse, the 26 pt stalk and its
+           knob beyond the east cardinal. -->
+      <g id="mask-handles" clip-path="url(#photo)">
+        <ellipse cx="372.5" cy="409" rx="112.5" ry="104.5" transform="rotate(-10 372.5 409)" fill="none" stroke="#FFFFFF" stroke-width="1.2"/>
+        <ellipse cx="372.5" cy="409" rx="56.25" ry="52.25" transform="rotate(-10 372.5 409)" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="1" stroke-dasharray="4 4"/>
+        <line x1="483.3" y1="389.5" x2="508.9" y2="385" stroke="#FFFFFF" stroke-width="1"/>
         <g fill="#FFFFFF" stroke="#FFB340" stroke-width="1.5">
-          <rect x="663.8" y="232.2" width="11" height="11" rx="2" transform="rotate(-12 669.3 237.7)"/>
-          <rect x="421.2" y="283.8" width="11" height="11" rx="2" transform="rotate(-12 426.7 289.3)"/>
-          <rect x="525.9" y="179.8" width="11" height="11" rx="2" transform="rotate(-12 531.4 185.3)"/>
-          <rect x="559.1" y="336.2" width="11" height="11" rx="2" transform="rotate(-12 564.6 341.7)"/>
-          <circle cx="694.7" cy="232.3" r="7"/>
+          <rect x="349.6" y="301.35" width="9.5" height="9.5" rx="1.5" transform="rotate(-10 354.35 306.1)"/>
+          <rect x="478.55" y="384.75" width="9.5" height="9.5" rx="1.5" transform="rotate(-10 483.3 389.5)"/>
+          <rect x="385.9" y="507.15" width="9.5" height="9.5" rx="1.5" transform="rotate(-10 390.65 511.9)"/>
+          <rect x="256.95" y="423.75" width="9.5" height="9.5" rx="1.5" transform="rotate(-10 261.7 428.5)"/>
+          <circle cx="508.9" cy="385" r="6.25"/>
+        </g>
+        <g fill="none" stroke="#FFB340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.clockwise">
+          <path d="M506.5 386.3 A2.6 2.6 0 1 0 507.4 382.6"/>
+          <path d="M506.2 381.8 L507.6 382.7 L507 384.2"/>
         </g>
       </g>
 
-      <text x="653" y="652" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
-    </g>
-
-    <!-- Timeline strip: play · track with playhead + keyframes · frame steps. -->
-    <g id="strip">
-      <circle cx="51.5" cy="688" r="13" fill="#FFFFFF"/>
-      <path d="M48 682 L58 688 L48 694 Z" fill="#C36A00" data-symbol="play.fill"/>
-      <rect x="76" y="686.5" width="522" height="3" rx="1.5" fill="#000000" fill-opacity="0.18"/>
-      <rect x="74.5" y="678" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
-      <circle cx="222.7" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <circle cx="458.6" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <circle cx="596.9" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <rect x="90" y="666" width="45" height="15" rx="7.5" fill="#2B2B2E" fill-opacity="0.9"/>
-      <text x="112.5" y="677" font-size="10" class="sb mono" text-anchor="middle" fill="#FFFFFF">0:00</text>
-      <text x="76" y="712" font-size="10" class="mono" fill="#6D6D72">0:00</text>
-      <text x="598" y="712" font-size="10" class="mono" text-anchor="end" fill="#6D6D72">55:13</text>
-      <circle cx="617" cy="688" r="13" fill="#FFFFFF"/>
-      <text x="617" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#B5B5BA" data-symbol="chevron.left">‹</text>
-      <circle cx="649" cy="688" r="13" fill="#FFFFFF"/>
-      <text x="649" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00" data-symbol="chevron.right">›</text>
-      <!-- The SELECTED layer's reveal span, read-only. Selecting another
-           layer moves the band; authoring it is Set Start / Set End. -->
-      <rect x="107" y="700" width="68" height="4" rx="2" fill="#C36A00"/>
+      <text x="644" y="698" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
     </g>
 
     <line x1="680" y1="48" x2="680" y2="720" stroke="#000" stroke-opacity="0.1"/>
-    <!-- Control rail · Masks tab (OverlayMasksPanel), rebuilt 2026-09-07. -->
+
+    <!-- Control rail · Masks tab (OverlayMasksPanel). The tab bar is pinned;
+         everything below it scrolls (viewport y 102–720, content 293 wide
+         beside a 15 pt scroller gutter). Unscrolled here. -->
     <g id="rail">
       <g id="railtabs">
         <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
-        <rect x="929" y="63" width="72" height="30" rx="15" fill="#C36A00"/>
-        <text x="736" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Editor</text>
-        <text x="812" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
-        <text x="888" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
-        <text x="965" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Masks</text>
+        <rect x="901.67" y="63" width="99.33" height="30" rx="15" fill="#C36A00"/>
+        <text x="748.67" y="82.5" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Editor</text>
+        <text x="850" y="82.5" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
+        <text x="951.33" y="82.5" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Masks</text>
       </g>
 
-      <!-- Creation toolbar. Linear/Radial arm a tool; ＋ Custom… imports a file. -->
+      <!-- Scroller thumb, as captured (always-on scroll bars on the bench). -->
+      <rect x="1009" y="105" width="8" height="439" rx="4" fill="#C2C2C2"/>
+
+      <!-- Creation toolbar: Linear · Radial arm a mask tool; ＋ Shape (a Menu:
+           Ellipse / Rectangle / Square) arms a register-shape tool; ＋ Custom…
+           imports a file. Four equal 67.25 pt buttons, 8 pt gaps. -->
       <g id="masktoolbar">
-        <rect x="696" y="110" width="97" height="30" rx="9" fill="#FFFFFF"/>
-        <text x="744.5" y="129" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00">Linear</text>
-        <rect x="801" y="110" width="97" height="30" rx="9" fill="#FFFFFF"/>
-        <text x="849.5" y="129" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00">Radial</text>
-        <rect x="906" y="110" width="98" height="30" rx="9" fill="#C36A00" fill-opacity="0.04" stroke="#C36A00" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="4 3"/>
-        <text x="955" y="129" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00">＋ Custom…</text>
+        <rect x="696" y="110" width="67.25" height="30" rx="9" fill="#FFFFFF"/>
+        <text x="729.6" y="129.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00">Linear</text>
+        <rect x="771.25" y="110" width="67.25" height="30" rx="9" fill="#FFFFFF"/>
+        <text x="804.9" y="129.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00">Radial</text>
+        <!-- ＋ Shape (a Menu): the code gives it ＋ Custom…'s dashed accent
+             box, but on macOS the borderlessButton menu ships as the bare
+             label in the same 67.25×30 seat — mirrored as shipped. -->
+        <text x="880.1" y="129.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00">＋ Shape</text>
+        <rect x="921.75" y="110" width="67.25" height="30" rx="9" fill="#C36A00" fill-opacity="0.04" stroke="#C36A00" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <!-- As shipped: the label wraps to two leading-aligned lines inside
+             the 30 pt button, the block centred on the seat. -->
+        <text x="929" y="122" font-size="12.5" class="sb" fill="#C36A00">＋</text>
+        <text x="955.4" y="137" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00">Custom…</text>
       </g>
 
-      <!-- The deck: every project mask as a 4:3 tile. White = the region this
-           version selects. AUTO = re-segments per seam. -->
+      <!-- The deck: every project mask as a 4:3 tile (83×62.25, 8 pt gaps).
+           White = the region this version selects. AUTO = re-segments per
+           seam. Circle is selected (2.5 pt accent ring inside the tile). -->
       <g id="deck">
-        <rect x="696" y="152" width="308" height="241" rx="12" fill="#FFFFFF"/>
-        <text x="712" y="181" font-size="13" class="sb" fill="#6D6D72">Masks</text>
-        <text x="988" y="181" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">4 masks</text>
+        <rect x="696" y="152" width="293" height="171" rx="12" fill="#FFFFFF"/>
+        <text x="710" y="179" font-size="13" class="sb" fill="#6D6D72">Masks</text>
+        <text x="975" y="179" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">3 masks</text>
 
-        <!-- Row 1: Sky · Land · Sun (selected). -->
         <g id="tile-sky">
-          <rect x="712" y="191" width="88" height="66" rx="7" fill="#1C1C1E"/>
-          <path d="M712 231 L723 228 L734 234 L745 230 L756 236 L767 231 L778 235 L789 230 L800 233 L800 191 L712 191 Z" fill="#FFFFFF"/>
-          <rect x="715" y="194" width="26" height="11" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
-          <text x="728" y="202.5" font-size="7.5" class="sb mono" text-anchor="middle" fill="#1C1C1E">AUTO</text>
-          <rect x="712" y="191" width="88" height="66" rx="7" fill="none" stroke="#000" stroke-opacity="0.14"/>
-          <text x="756" y="270" font-size="11" class="sb" text-anchor="middle" fill="#000">Sky</text>
+          <rect x="710" y="192" width="83" height="62.25" rx="6" fill="#FFFFFF"/>
+          <path clip-path="url(#tile-sky)" d="M710 216 L722 214 L734 218 L746 213 L758 217 L770 212 L782 216 L793 214 L793 254.25 L710 254.25 Z" fill="#1C1C1E"/>
+          <rect x="713" y="195" width="26" height="11" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
+          <text x="726" y="203.5" font-size="7.5" class="sb mono" text-anchor="middle" fill="#1C1C1E">AUTO</text>
+          <rect x="710" y="192" width="83" height="62.25" rx="6" fill="none" stroke="#000" stroke-opacity="0.14"/>
+          <text x="751.5" y="269" font-size="11" class="sb" text-anchor="middle" fill="#000">Sky</text>
         </g>
         <g id="tile-land">
-          <rect x="806" y="191" width="88" height="66" rx="7" fill="#1C1C1E"/>
-          <path d="M806 231 L817 228 L828 234 L839 230 L850 236 L861 231 L872 235 L883 230 L894 233 L894 257 L806 257 Z" fill="#FFFFFF"/>
-          <rect x="809" y="194" width="26" height="11" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
-          <text x="822" y="202.5" font-size="7.5" class="sb mono" text-anchor="middle" fill="#1C1C1E">AUTO</text>
-          <rect x="806" y="191" width="88" height="66" rx="7" fill="none" stroke="#000" stroke-opacity="0.14"/>
-          <text x="850" y="270" font-size="11" class="sb" text-anchor="middle" fill="#000">Land</text>
+          <rect x="801" y="192" width="83" height="62.25" rx="6" fill="#FFFFFF"/>
+          <rect x="804" y="195" width="26" height="11" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
+          <text x="817" y="203.5" font-size="7.5" class="sb mono" text-anchor="middle" fill="#1C1C1E">AUTO</text>
+          <rect x="801" y="192" width="83" height="62.25" rx="6" fill="none" stroke="#000" stroke-opacity="0.14"/>
+          <text x="842.5" y="269" font-size="11" class="sb" text-anchor="middle" fill="#000">Land</text>
         </g>
-        <g id="tile-sun">
-          <rect x="900" y="191" width="88" height="66" rx="7" fill="#1C1C1E"/>
-          <ellipse cx="970" cy="211" rx="17" ry="11" transform="rotate(-12 970 211)" fill="#FFFFFF" opacity="0.92"/>
-          <ellipse cx="970" cy="211" rx="24" ry="15" transform="rotate(-12 970 211)" fill="#FFFFFF" opacity="0.35"/>
-          <rect x="900" y="191" width="88" height="66" rx="7" fill="none" stroke="#C36A00" stroke-width="2.5"/>
-          <text x="944" y="270" font-size="11" class="sb" text-anchor="middle" fill="#000">Sun</text>
+        <g id="tile-circle">
+          <rect x="892" y="192" width="83" height="62.25" rx="6" fill="#1C1C1E"/>
+          <ellipse cx="937.5" cy="225" rx="18" ry="10" transform="rotate(-10 937.5 225)" fill="url(#soft)"/>
+          <rect x="893.25" y="193.25" width="80.5" height="59.75" rx="5" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+          <text x="933.5" y="269" font-size="11" class="sb" text-anchor="middle" fill="#000">Circle</text>
         </g>
 
-        <!-- Row 2: the linear mask. Its gradient reaches the tile's own edge,
-             which is why every tile carries a hairline — an inverted or
-             edge-reaching mask would otherwise dissolve into the white card. -->
-        <g id="tile-quay">
-          <rect x="712" y="280" width="88" height="66" rx="7" fill="#1C1C1E"/>
-          <rect x="712" y="280" width="88" height="30" fill="#FFFFFF"/>
-          <rect x="712" y="310" width="88" height="20" fill="url(#quayfade)"/>
-          <rect x="712" y="280" width="88" height="66" rx="7" fill="none" stroke="#000" stroke-opacity="0.14"/>
-          <text x="756" y="359" font-size="11" class="sb" text-anchor="middle" fill="#000">Quay lift</text>
-        </g>
-
-        <text x="712" y="379" font-size="10.5" fill="#6D6D72">AUTO re-segments per seam · amber dot = graded</text>
+        <text x="710" y="293" font-size="10.5" fill="#6D6D72">AUTO re-segments per seam · amber dot = graded</text>
+        <text x="710" y="306" font-size="10.5" fill="#6D6D72">inside · ⊘ = graded inverted</text>
       </g>
 
-      <!-- Detail card for the selection. -->
+      <!-- Detail card for the selected mask. -->
       <g id="detail">
-        <rect x="696" y="405" width="308" height="304" rx="12" fill="#FFFFFF"/>
+        <rect x="696" y="335" width="293" height="341" rx="12" fill="#FFFFFF"/>
 
-        <rect x="712" y="419" width="30" height="24" rx="5" fill="#1C1C1E"/>
-        <ellipse cx="736" cy="426" rx="6" ry="4" transform="rotate(-12 736 426)" fill="#FFFFFF"/>
-        <rect x="712" y="419" width="30" height="24" rx="5" fill="none" stroke="#000" stroke-opacity="0.14"/>
-        <text x="752" y="436" font-size="14" class="b" fill="#000">Sun</text>
-        <text x="988" y="436" font-size="12" class="sb" text-anchor="end" fill="#6D6D72">Remove</text>
+        <rect x="710" y="349" width="30" height="24" rx="5" fill="#1C1C1E"/>
+        <ellipse cx="727" cy="361" rx="7" ry="4" transform="rotate(-10 727 361)" fill="url(#soft)"/>
+        <text x="750" y="366" font-size="14" class="b" fill="#000">Circle</text>
+        <text x="975" y="365" font-size="12" class="sb" text-anchor="end" fill="#6D6D72">Remove</text>
 
-        <!-- LLInkSegment: ink seat, amber label. -->
-        <rect x="712" y="455" width="276" height="34" rx="9" fill="#E9E9EB"/>
-        <rect x="714" y="457" width="136" height="30" rx="7" fill="#1C1C1E"/>
-        <text x="782" y="476" font-size="12.5" class="sb" text-anchor="middle" fill="#FFB340">Shape</text>
-        <text x="920" y="476" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Text</text>
+        <!-- LLInkSegment, centred: #E9E9EB track, ink seat, amber label. -->
+        <rect x="775" y="385" width="135" height="37" rx="9" fill="#E9E9EB"/>
+        <rect x="777" y="387" width="71.5" height="33" rx="7" fill="#1C1C1E"/>
+        <text x="812.75" y="408.5" font-size="14" class="b" text-anchor="middle" fill="#FFB340">Shape</text>
+        <text x="879.25" y="408.5" font-size="14" class="b" text-anchor="middle" fill="#000">Text</text>
 
-        <text x="712" y="509" font-size="12.5" class="sb" fill="#6D6D72">Feather</text>
-        <rect x="790" y="505" width="158" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="790" y="505" width="95" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="885" cy="507" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="988" y="511" font-size="11.5" class="sb mono" text-anchor="end" fill="#6D6D72">60%</text>
+        <!-- Native macOS sliders: grey 4 pt track, 20 pt white knob. -->
+        <text x="710" y="448.5" font-size="12.5" class="sb" fill="#6D6D72">Feather</text>
+        <rect x="788" y="442" width="137" height="4" rx="2" fill="#E5E5E5"/>
+        <circle cx="856.5" cy="444" r="10" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        <text x="975" y="448.5" font-size="11.5" class="mono" text-anchor="end" fill="#6D6D72">50%</text>
 
-        <text x="712" y="539" font-size="12.5" class="sb" fill="#6D6D72">Rotation</text>
-        <rect x="790" y="535" width="158" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="790" y="535" width="69" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="859" cy="537" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="988" y="541" font-size="11.5" class="sb mono" text-anchor="end" fill="#6D6D72">−12°</text>
+        <text x="710" y="479.5" font-size="12.5" class="sb" fill="#6D6D72">Rotation</text>
+        <rect x="788" y="473" width="137" height="4" rx="2" fill="#E5E5E5"/>
+        <circle cx="849" cy="475" r="10" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        <text x="975" y="479.5" font-size="11.5" class="mono" text-anchor="end" fill="#6D6D72">−10°</text>
 
-        <text x="712" y="563" font-size="11" fill="#6D6D72">413 × 267 pt · drag the handles on the picture to</text>
-        <text x="712" y="577" font-size="11" fill="#6D6D72">move and resize it.</text>
+        <text x="710" y="506.5" font-size="11" fill="#6D6D72">225 × 209 pt · drag the handles on the picture to</text>
+        <text x="710" y="521" font-size="11" fill="#6D6D72">move and resize it.</text>
 
-        <rect x="712" y="591" width="14" height="14" rx="3" fill="none" stroke="#000" stroke-opacity="0.28"/>
-        <text x="734" y="603" font-size="13.5" class="sb" fill="#000">Show mask</text>
+        <rect x="710" y="537" width="14" height="14" rx="3" fill="#FFFFFF" stroke="#CFCFCF" stroke-width="1"/>
+        <text x="730" y="548.5" font-size="13.5" class="sb" fill="#000">Show mask</text>
 
-        <text x="712" y="629" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">GRADE IN EDITOR</text>
+        <text x="710" y="575" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">GRADE IN EDITOR</text>
 
-        <rect x="712" y="639" width="276" height="30" rx="9" fill="#C36A00" fill-opacity="0.04"/>
-        <rect x="721" y="642" width="30" height="24" rx="5" fill="#1C1C1E"/>
-        <ellipse cx="745" cy="649" rx="6" ry="4" transform="rotate(-12 745 649)" fill="#FFFFFF"/>
-        <text x="761" y="658" font-size="12.5" class="sb" fill="#C36A00">Grade Sun</text>
-        <text x="979" y="658" font-size="10" class="sb" text-anchor="end" fill="#6D6D72" data-symbol="chevron.right">›</text>
+        <rect x="710" y="584" width="265" height="36" rx="9" fill="#C36A00" fill-opacity="0.04"/>
+        <rect x="719" y="590" width="30" height="24" rx="5" fill="#1C1C1E"/>
+        <ellipse cx="736" cy="602" rx="7" ry="4" transform="rotate(-10 736 602)" fill="url(#soft)"/>
+        <text x="758" y="606.5" font-size="12.5" class="sb" fill="#C36A00">Grade Circle</text>
+        <path d="M960.5 598 L964.5 602.25 L960.5 606.5" fill="none" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
 
-        <rect x="712" y="675" width="276" height="30" rx="9" fill="#C36A00" fill-opacity="0.04"/>
-        <rect x="721" y="678" width="30" height="24" rx="5" fill="#FFFFFF"/>
-        <ellipse cx="745" cy="685" rx="6" ry="4" transform="rotate(-12 745 685)" fill="#1C1C1E"/>
-        <rect x="721" y="678" width="30" height="24" rx="5" fill="none" stroke="#000" stroke-opacity="0.14"/>
-        <circle cx="726" cy="698" r="3.5" fill="none" stroke="#FFB340" stroke-width="1.4"/>
-        <line x1="723.6" y1="700.4" x2="728.4" y2="695.6" stroke="#FFB340" stroke-width="1.4"/>
-        <text x="761" y="694" font-size="12.5" class="sb" fill="#C36A00">Grade Sun · inverted</text>
-        <text x="979" y="694" font-size="10" class="sb" text-anchor="end" fill="#6D6D72" data-symbol="chevron.right">›</text>
+        <rect x="710" y="626" width="265" height="36" rx="9" fill="#C36A00" fill-opacity="0.04"/>
+        <rect x="719" y="632" width="30" height="24" rx="5" fill="#FFFFFF"/>
+        <ellipse cx="736" cy="644" rx="7" ry="4" transform="rotate(-10 736 644)" fill="url(#soft-ink)"/>
+        <rect x="719" y="632" width="30" height="24" rx="5" fill="none" stroke="#000" stroke-opacity="0.14"/>
+        <circle cx="724" cy="652" r="3.5" fill="none" stroke="#FFB340" stroke-width="1.4"/>
+        <line x1="721.6" y1="654.4" x2="726.4" y2="649.6" stroke="#FFB340" stroke-width="1.4"/>
+        <text x="758" y="648.5" font-size="12.5" class="sb" fill="#C36A00">Grade Circle · inverted</text>
+        <path d="M960.5 640 L964.5 644.25 L960.5 648.5" fill="none" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
       </g>
 
-      <!-- Custom Masks card is below the fold at 700pt (desc). -->
+      <!-- The Shapes card (shapesCard): the register's five shapes as ink
+           tiles with the picture's 3:4 frame letterboxed inside. Drawn in
+           full; the 700 pt window clips it after its header. -->
+      <g id="shapes">
+        <rect x="696" y="688" width="293" height="261" rx="12" fill="#FFFFFF"/>
+        <text x="710" y="715" font-size="13" class="sb" fill="#6D6D72">Shapes</text>
+        <text x="975" y="715" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">5 shapes</text>
+
+        <g id="shape-tiles" fill="#1C1C1E">
+          <rect x="710" y="728" width="83" height="62.25" rx="7"/>
+          <rect x="801" y="728" width="83" height="62.25" rx="7"/>
+          <rect x="892" y="728" width="83" height="62.25" rx="7"/>
+          <rect x="710" y="818.5" width="83" height="62.25" rx="7"/>
+          <rect x="801" y="818.5" width="83" height="62.25" rx="7"/>
+        </g>
+        <g fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="0.5">
+          <rect x="728.5" y="728" width="46" height="62.25"/><rect x="819.5" y="728" width="46" height="62.25"/><rect x="910.5" y="728" width="46" height="62.25"/>
+          <rect x="728.5" y="818.5" width="46" height="62.25"/><rect x="819.5" y="818.5" width="46" height="62.25"/>
+        </g>
+        <g fill="#FFFFFF" fill-opacity="0.9">
+          <rect x="764" y="735" width="10" height="9"/>
+          <polygon points="844,736.5 851,736.5 851,746.5 845,745"/>
+          <rect x="919" y="752.5" width="4" height="10.5"/>
+          <ellipse cx="753.75" cy="852" rx="10.25" ry="9.5" transform="rotate(-10 753.75 852)"/>
+          <rect x="851.5" y="829" width="7.5" height="7"/>
+        </g>
+        <g font-size="11" class="sb" text-anchor="middle" fill="#000">
+          <text x="751.5" y="805.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Square</text>
+          <text x="842.5" y="805.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Square</text>
+          <text x="933.5" y="805.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Rectangle</text>
+          <text x="751.5" y="895.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Circle</text>
+          <text x="842.5" y="895.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">✎</tspan> Square</text>
+        </g>
+        <text x="710" y="918.5" font-size="10.5" fill="#6D6D72">◎ found by Find shapes · ✎ drawn here · an ellipse</text>
+        <text x="710" y="931" font-size="10.5" fill="#6D6D72">can become a Radial mask</text>
+      </g>
+
+      <!-- Custom Masks card follows at y 961 — below the fold (desc). -->
     </g>
   </g>
 
   <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
-  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Masks tab · 1000×700 pt window</text>
-  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (masksTab) + App/Overlay/OverlayMasksPanel.swift — a mask's GRADE lives in photo-viewer.mask-grade.svg</text>
+  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Masks tab · Circle mask selected · 1000×700 pt window</text>
+  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (masksTab) + App/Overlay/OverlayMasksPanel.swift — a mask's GRADE lives in photo-viewer.mask-grade.svg, a found shape's handles in photo-viewer.masks.shape.svg</text>
 </svg>

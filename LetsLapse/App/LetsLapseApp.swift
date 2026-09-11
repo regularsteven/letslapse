@@ -268,6 +268,13 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     #endif
     @State private var lastStage: AppModel.Stage = .home
+    /// The tab a flow was started from when that wasn't Create — New clip on
+    /// the Gallery panel or a project screen. Entering the flow fronts Create
+    /// (below), which the person never chose; leaving it through Back puts
+    /// them back here rather than on Create's home. Cleared when they pick
+    /// another tab themselves while the flow is parked: from then on the tab
+    /// bar is where they are, and Back means Create's home as it always did.
+    @State private var flowOriginTab: LLTab?
     /// Raised once at launch when a nominated library location couldn't be
     /// reached and the session fell back to the default (see `StorageRoot`).
     @State private var showStorageFallbackAlert = false
@@ -412,9 +419,26 @@ struct ContentView: View {
             // ("from these settings" on the result screen, a Guided clip
             // opened while another flow sat parked).
             if newStage == .configure || (newStage != .home && lastStage == .home) {
+                if lastStage == .home, selectedTab != .create {
+                    flowOriginTab = selectedTab
+                }
                 selectedTab = .create
             }
+            if newStage == .home {
+                // Back, or Cancel. A finished job asks for its project on the
+                // Projects tab itself (`finishFlow` → `requestedProjectDetailID`),
+                // and that request wins over where the flow began.
+                if let origin = flowOriginTab, model.requestedProjectDetailID == nil {
+                    selectedTab = origin
+                }
+                flowOriginTab = nil
+            }
             lastStage = newStage
+        }
+        .onChange(of: selectedTab) { tab in
+            // Parking the flow on a tab of their choosing — not the Create
+            // front above, and not the return to the origin, which is itself.
+            if tab != .create, model.stage != .home { flowOriginTab = nil }
         }
         // Say so up front when the session isn't on the nominated library:
         // otherwise a detached drive just looks like every project vanished.
@@ -1278,6 +1302,10 @@ struct ContentView: View {
             // way to stop it. Otherwise (already home) reopen the camera, so a
             // tap on the current tab brings the camera back up.
             if model.stage == .configure || model.stage == .done {
+                #if os(macOS)
+                // A tap ON Create asks for Create: the origin tab does not apply.
+                flowOriginTab = nil
+                #endif
                 model.reset()
             } else {
                 #if os(iOS)

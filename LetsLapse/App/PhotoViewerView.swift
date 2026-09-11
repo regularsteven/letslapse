@@ -1099,6 +1099,11 @@ struct PhotoViewerView: View {
             armedMaskField = nil
             maskHUD = nil
         }
+        // A page asked for from outside — the Gallery panel's Text and Shapes
+        // buttons. `onReceive` rather than a value at init because on the Mac
+        // this window may already exist: reopening fronts it, and this is the
+        // only way a fronted window learns which page it was opened for.
+        .onReceive(model.$requestedEditorPage) { consumePageRequest($0) }
         .onChange(of: frameWindowKey) { _, _ in refreshFrameWindow() }
         .onChange(of: displayedURL) { _, _ in
             // A scrub moved to a different still: what is on screen at full
@@ -2296,6 +2301,17 @@ struct PhotoViewerView: View {
         RailTabBar(
             selection: $railTab, tabs: availableRailTabs,
             accent: accentColor, onAccent: pillTextColor)
+    }
+
+    /// A page requested for this project's editor (`AppModel.requestedEditorPage`).
+    /// Frames is never taken from outside: it exists only once the shoot's
+    /// frames have loaded, which they have not at the first delivery.
+    private func consumePageRequest(_ request: EditorPageRequest?) {
+        guard let request, request.captureID == captureID else { return }
+        if request.page != .frames { railTab = request.page }
+        DispatchQueue.main.async {
+            if model.requestedEditorPage == request { model.requestedEditorPage = nil }
+        }
     }
 
     @ViewBuilder private func controlStack(isWide: Bool) -> some View {

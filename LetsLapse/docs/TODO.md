@@ -26,14 +26,33 @@ detector, register, `ShapemationPlan` + renderer, unit-tested). Verified on the
 Mac and the iPhone simulator against a 13-project scratch library (registers
 identical on both); 1 s per photo, hard cuts, no rotation for circles.
 
-- **Design mirrors are owed.** Code first by Steven's call; the four Shape-mation
-  screens are rows marked ⏳ in the iOS/iPadOS/macOS INDEX files, and the Masks
-  tab's `photo-viewer.masks.svg` (macOS) is stale: **＋ Shape** in the toolbar, a
-  **Shapes** card (the project's register, ◎ found / ✎ drawn) and a shape detail
-  card (name, caption, Square lock, Use as Radial mask, Remove) shipped 2026-09-10
-  for hand CRUD of shapes — Steven's answer to shapes being missed. Ellipses edit
-  like Radial (centre, axis handles, rotation stalk); rectangles are four corner
-  handles with a Square lock. `LL_SHAPETOOL=ellipse|rect|square` arms the tool.
+- **Design mirrors drawn 2026-09-11** (code first by Steven's call, mirrored the
+  next morning from the iPhone 16 Pro simulator and the Mac Debug build): the
+  Shape-mation screens (`docs/design/iOS/shapemation*.portrait.svg`, nine files,
+  referenced from the macOS/iPadOS rows), the Masks tab's `photo-viewer.masks.svg`
+  (macOS, refreshed: three rail tabs, **＋ Shape** in the toolbar, the **Shapes**
+  card under the mask detail card) plus `photo-viewer.masks.shape.svg` (a register
+  shape selected: amber handles, the shape detail card with name, caption, Use as
+  Radial mask, Remove), the Gallery sidebar SHAPES section in all three Mac gallery
+  mirrors and the new iPhone `gallery.library-sheet.portrait.svg`. Still undrawn,
+  🟡 Planned in the INDEX files: the Find-shapes progress card and the builder's
+  rendering card (both finish before a screenshot can land; a hook to freeze them
+  would fix that), and the Masks tab on iOS (no iOS photo-viewer mirrors exist yet).
+  `LL_SHAPETOOL=ellipse|rect|square` arms the shape tool; `LL_SHAPES=…` lights
+  Gallery rows.
+- **Small things the mirror pass saw in the shipped screens** (reported by the
+  drawing agents, none fixed): tapping *All Collections* in the iPhone Library
+  sheet switches the tab underneath but never dismisses the sheet; the builder's
+  Mode summary says "Canvas 3949×4032" while Output and the record say
+  "3948×4032" (two roundings of one width); the family card draws a hairline
+  after its last row; the Find-shapes paragraph will re-wrap on a 393 pt phone
+  (its first line is 335 pt wide against 329 available); Find shapes backs to
+  "Shape-mation" while the list backs to "Back" (the long title leaves no room);
+  `LibraryFilterRow` fixes the symbol's width but not its height, so rows with a
+  tall symbol run 1–2 pt taller. Also the iPhone 16 Pro simulator is 402×874 pt,
+  not the README's 393×852 canvas, and the app's tab-presented sheets land at
+  safe-top + 10 (69 on the canvas) where the older design-first sheet mirrors draw
+  56 — worth a README note and a sweep of those files.
 - **Rectangle shapes as masks.** Only an ellipse can become a mask today (a Radial
   copy); a quad needs a polygon mask kind through `MaskShapeRenderer`, the
   thumbnails and the export bake.

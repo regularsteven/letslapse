@@ -1187,6 +1187,12 @@ final class AppModel: ObservableObject {
     /// "Download a model in Settings" caption. ContentView consumes and clears it.
     @Published var requestedSettingsDestination: SettingsDestination?
 
+    /// Which rail page a project's editor should land on — the Gallery panel's
+    /// Text and Shapes buttons. The editor for that project consumes and clears
+    /// it, whether it was just presented or (on the Mac) was already open and
+    /// merely fronted. Staged by `stageEditor(for:page:)` — see `EditorLaunch.swift`.
+    @Published var requestedEditorPage: EditorPageRequest?
+
     private var blendTask: Task<Void, Never>?
 
     init() {

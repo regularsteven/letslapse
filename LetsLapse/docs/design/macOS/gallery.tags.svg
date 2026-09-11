@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1320 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Gallery · tag picker popover · 1280×800</title>
-  <desc>gallery.svg with the tag picker open — the macOS door onto the shared tag editor, and the counterpart of iOS's project-tags.portrait.svg. The preview panel's TAGS block (components/tag-field.applied.narrow.svg) carries a dashed "+ Add tag" chip at 1119,541; clicking it raises a 361pt popover holding components/tag-suggestions.default.svg — a field that both filters and creates, then SUGGESTED (SceneMetadata.orderedTaxonomy in prompt order, minus what is applied) and YOUR TAGS (the custom tags this library already holds). It opens UPWARD, over the hero and action grid, because the chip sits low enough in a 300pt panel that a downward popover would run off the window bottom; AppKit picks that edge for itself, and this file draws the edge it will pick here. A POPOVER, not the sheet iOS uses: the panel is already a detail surface beside the thing being edited, and a modal sheet over a single-click selection would be heavier than the edit. It is otherwise the same component and the same rules — click a suggestion and it moves up into the field, click an xmark and it moves back down, and nothing is ever listed in both halves. Writes are immediate; there is no Apply here and none is wanted, since every change is one click to reverse. The typed state is iOS's project-tags.adding.portrait.svg, whose Create row and "No existing tag matches" line render identically in this popover (components/tag-suggestions.filtered.svg) — no separate Mac file. Everything behind the popover is gallery.svg unchanged; see there for the panel, the grid, the header-width arithmetic and the 119pt the TAGS block costs the panel. NOT YET IN CODE — design-first, 2026-09-08.</desc>
+  <desc>gallery.svg with the tag picker open — the macOS door onto the shared tag editor, and the counterpart of iOS's project-tags.portrait.svg. The preview panel's TAGS block (components/tag-field.applied.narrow.svg) carries a dashed "+ Add tag" chip at 1119,541; clicking it raises a 361pt popover holding components/tag-suggestions.default.svg — a field that both filters and creates, then SUGGESTED (SceneMetadata.orderedTaxonomy in prompt order, minus what is applied) and YOUR TAGS (the custom tags this library already holds). It opens UPWARD, over the hero and action grid, because the chip sits low enough in a 300pt panel that a downward popover would run off the window bottom; AppKit picks that edge for itself, and this file draws the edge it will pick here. A POPOVER, not the sheet iOS uses: the panel is already a detail surface beside the thing being edited, and a modal sheet over a single-click selection would be heavier than the edit. It is otherwise the same component and the same rules — click a suggestion and it moves up into the field, click an xmark and it moves back down, and nothing is ever listed in both halves. Writes are immediate; there is no Apply here and none is wanted, since every change is one click to reverse. The typed state is iOS's project-tags.adding.portrait.svg, whose Create row and "No existing tag matches" line render identically in this popover (components/tag-suggestions.filtered.svg) — no separate Mac file. Everything behind the popover is gallery.svg unchanged; see there for the panel, the grid, the header-width arithmetic and the 119pt the TAGS block costs the panel. NOT YET IN CODE — design-first, 2026-09-08. SIDEBAR, 2026-09-11: a fourth section, SHAPES (Ellipse · Rectangle · Square · No Shapes), sits under COLLECTIONS — GallerySidebar.shapesSection over AppModel.shapeSummaries, one row per ShapeFilter; drawn at rest here (no row lit).</desc>
 
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1280" height="800" rx="11"/></clipPath>
@@ -122,6 +122,45 @@
         <path d="M42.5 507 h11 M44.5 510 h7" stroke-linecap="round"/>
       </g>
       <text x="68" y="506" font-size="14" fill="#000">All Collections</text>
+
+      <line x1="32" y1="537" x2="208" y2="537" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- SHAPES (2026-09-11): GallerySidebar.shapesSection — the four ShapeFilter rows,
+           drawn as LibraryFilterRow like the kind rows above. A project shows under
+           Ellipse / Rectangle / Square when its shapes.json register holds one (found by
+           Find shapes or drawn in the Masks tab) and under No Shapes when it holds none or
+           has no register. Rows narrow like the tag rows (a project must hold every lit
+           shape); No Shapes stands alone — lighting it clears the others. A lit row draws
+           as All does above: #C36A00 @ 10% capsule (x 24, 192×31, rx 8), accent glyph and
+           label; while any row is lit a 12pt semibold "Clear shapes" link in #C36A00 sits
+           14pt in, 4pt under the last row. All four rows are always offered — an empty row
+           is the prompt to run Find shapes, not a dead control. -->
+      <text x="38" y="570" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">SHAPES</text>
+
+      <!-- Ellipse -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="oval">
+        <ellipse cx="48" cy="591" rx="8" ry="5.5"/>
+      </g>
+      <text x="68" y="596" font-size="14" fill="#000">Ellipse</text>
+
+      <!-- Rectangle -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="rectangle">
+        <rect x="40" y="618.5" width="16" height="11" rx="2"/>
+      </g>
+      <text x="68" y="629" font-size="14" fill="#000">Rectangle</text>
+
+      <!-- Square -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="square">
+        <rect x="42" y="650.5" width="12" height="12" rx="2"/>
+      </g>
+      <text x="68" y="662" font-size="14" fill="#000">Square</text>
+
+      <!-- No Shapes -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="circle.slash">
+        <circle cx="48" cy="690" r="7"/>
+        <path d="M43 685 L53 695"/>
+      </g>
+      <text x="68" y="695" font-size="14" fill="#000">No Shapes</text>
     </g>
 
     <line x1="220.5" y1="48" x2="220.5" y2="820" stroke="#000" stroke-opacity="0.10"/>

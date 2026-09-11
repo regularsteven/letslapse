@@ -1601,22 +1601,10 @@ private struct ProjectHeroPane: View {
         model.captures.first { $0.id == captureID }
     }
 
-    /// What the pane previews, and how it has to be decoded.
-    private enum Preview: Equatable {
-        case still(URL)
-        case movie(URL)
-
-        var url: URL {
-            switch self {
-            case .still(let url), .movie(let url): return url
-            }
-        }
-
-        var isMovie: Bool {
-            if case .movie = self { return true }
-            return false
-        }
-    }
+    /// What the pane previews, and how it has to be decoded — the asset the
+    /// editor opens on, shared with the Gallery's editor buttons
+    /// (`AppModel.editorAsset(for:)`, EditorLaunch.swift).
+    private typealias Preview = EditorAsset
 
     var body: some View {
         if let capture {
@@ -1673,15 +1661,7 @@ private struct ProjectHeroPane: View {
     /// is a finished render that already carries whatever grade produced it —
     /// grading it again on screen would show the grade twice.
     private func preview(for capture: AppModel.CaptureProject) -> Preview? {
-        switch capture.kind {
-        case .video:
-            return model.mediaURL(for: capture).map(Preview.movie)
-        case .photos:
-            if capture.isPhotoCapture {
-                return model.heroImageURL(for: capture).map(Preview.still)
-            }
-            return model.thumbnailFrameURL(for: capture).map(Preview.still)
-        }
+        model.editorAsset(for: capture)
     }
 
     /// The asset's shape without touching the file: what a grid tile has

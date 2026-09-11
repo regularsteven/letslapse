@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Shape-mation · builder · family · portrait</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationBuilderView, step 1 of the shape-slideshow builder) over ShapemationBuilder and Kit/Shapes/ShapeRegister.swift (DetectedShape.Family: title + symbolName). 2026-09-11, code first, mirrored from the running app. Pushed inside the Shape-mation sheet (ShapemationHomeView, opened from the Create tab's Create Shape-mation row), which owns its NavigationStack the way Presets does — so the nav bar is a back chevron + "Back" in accent, then the large title "Shape slideshow". Body is a ScrollView: the question "Which shape holds still?" (17 semibold), then one white llCard (radius 18) with a row per family that has at least one register entry — Circle, Oval, Square, Rectangle, in DetectedShape.Family.allCases order, each a NavigationLink to ShapemationBuildStep.projects(family): the family's SF Symbol (circle / oval / square / rectangle, 17 semibold, accent, in a 30×30 frame), the title (16), a Spacer, then "N project(s) · M" (13 secondary — N = projects holding at least one instance of the family, M = instances across every register) and chevron.right (13 semibold, tertiary). Rows are padded 16 horizontal / 13 vertical, so each is 56 pt tall; a Divider padded 58 from the leading edge follows EVERY row, including the last one — which is why a hairline sits on the card's bottom edge, drawn here as shipped. Not drawn: the loading spinner before the registers are read, and the empty card "No shapes in the register yet. Run Find shapes first." when no register holds a shape. Sample data is the 2026-09-11 library: 5 projects · 5 circles, 1 · 1 oval, 6 · 7 squares, 6 · 7 rectangles. Measured from an iPhone 16 Pro screenshot (402×874 pt) and re-anchored to this 393×852 canvas: leading/top positions are as measured, the trailing count and chevron sit 9 pt further left.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="56" width="393" height="796" rx="10"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar over the shrunken Create tab behind the sheet -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="44" width="361" height="30" rx="10" fill="#C7C7CC"/>
+
+      <!-- the sheet: Shape-mation's NavigationStack, one screen in -->
+      <g id="shapemation-builder-family" clip-path="url(#sheet)">
+        <rect x="0" y="56" width="393" height="796" fill="#F2F2F7"/>
+
+        <!-- nav bar: back to the sheet's home -->
+        <g id="nav-back">
+          <path d="M18.6 76.1 L11 84 L18.6 91.9" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="31" y="90" font-size="17" fill="#C36A00">Back</text>
+        </g>
+        <text x="16" y="148" font-size="34" class="b" fill="#000">Shape slideshow</text>
+
+        <!-- the question -->
+        <text x="16" y="196" font-size="17" class="sb" fill="#000">Which shape holds still?</text>
+
+        <!-- one card, a row per family with instances in the register -->
+        <g id="family-card">
+          <rect x="16" y="216" width="361" height="225" rx="18" fill="#FFF"/>
+
+          <g id="row-circle">
+            <circle cx="47" cy="244.3" r="7.65" fill="none" stroke="#C36A00" stroke-width="2" data-symbol="circle"/>
+            <text x="74" y="250.3" font-size="16" fill="#000">Circle</text>
+            <text x="338" y="248.3" font-size="13" class="sec" text-anchor="end">5 projects · 5</text>
+            <path d="M353.5 237.8 l6.5 6.5 -6.5 6.5" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="74" y1="272.3" x2="377" y2="272.3" stroke="#C6C6C8" stroke-width="0.5"/>
+
+          <g id="row-oval">
+            <ellipse cx="47" cy="300.7" rx="10" ry="7.3" fill="none" stroke="#C36A00" stroke-width="2" data-symbol="oval"/>
+            <text x="74" y="306.7" font-size="16" fill="#000">Oval</text>
+            <text x="338" y="304.7" font-size="13" class="sec" text-anchor="end">1 project · 1</text>
+            <path d="M353.5 294.2 l6.5 6.5 -6.5 6.5" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="74" y1="328.7" x2="377" y2="328.7" stroke="#C6C6C8" stroke-width="0.5"/>
+
+          <g id="row-square">
+            <rect x="40.3" y="350.3" width="13.7" height="13.7" rx="2.2" fill="none" stroke="#C36A00" stroke-width="2" data-symbol="square"/>
+            <text x="74" y="363" font-size="16" fill="#000">Square</text>
+            <text x="338" y="361" font-size="13" class="sec" text-anchor="end">6 projects · 7</text>
+            <path d="M353.5 350.5 l6.5 6.5 -6.5 6.5" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="74" y1="385" x2="377" y2="385" stroke="#C6C6C8" stroke-width="0.5"/>
+
+          <g id="row-rectangle">
+            <rect x="38.2" y="406.7" width="17.7" height="13.7" rx="2.2" fill="none" stroke="#C36A00" stroke-width="2" data-symbol="rectangle"/>
+            <text x="74" y="419.3" font-size="16" fill="#000">Rectangle</text>
+            <text x="338" y="417.3" font-size="13" class="sec" text-anchor="end">6 projects · 7</text>
+            <path d="M353.5 406.8 l6.5 6.5 -6.5 6.5" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+          </g>
+          <!-- the trailing Divider after the last row lands on the card's bottom edge (shipped as such) -->
+          <line x1="74" y1="441.2" x2="377" y2="441.2" stroke="#C6C6C8" stroke-width="0.5"/>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · family · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationBuilderView (step 1) — Which shape holds still? · Circle · Oval · Square · Rectangle · in the Shape-mation sheet</text>
+</svg>

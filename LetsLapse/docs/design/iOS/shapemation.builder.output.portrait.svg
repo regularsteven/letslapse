@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Shape-mation · builder · output · portrait</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationOutputView before Create, step 4 of the Shape-mation slideshow builder (2026-09-11, code first, mirrored from the running app). Pushed from Mode inside the Shape-mation sheet; back reads "Mode", large title "Output". Heading "Output size", the 13-pt secondary explanation wrapped as the app wraps it, then one card of radio rows from ShapemationPlan.outputOptions() — the native canvas first, then the fits — each a 15-pt label with checkmark.circle.fill (accent) on the chosen row and an empty ring on the rest; rows are 47 pt with a Divider inset 16 from the card's leading edge. Then the full-width "Create Shape-mation" borderedProminent button, 16-pt semibold. Sample data is the five-circle pick the capture was made on: Native 3948×4032 and its four fits. Measured from an iPhone 16 Pro capture (402×874 pt) mapped to this 393×852 canvas: top-anchored content follows the 59-pt safe top, cards keep their 16-pt margins. The sheet's top sits at safe-top + 10 as measured (69 here); the Presets mirrors draw it at 56.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar over the shrunken Create tab behind the sheet -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="59" width="361" height="30" rx="10" fill="#D5D5D9"/>
+
+      <!-- the sheet -->
+      <g id="shapemation-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
+
+        <g id="nav-bar">
+          <path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="30" y="103" font-size="17" fill="#C36A00">Mode</text>
+          <text x="16" y="161" font-size="34" class="b" fill="#000">Output</text>
+        </g>
+
+        <text x="16" y="208.4" font-size="17" class="sb" fill="#000">Output size</text>
+        <g font-size="13" class="sec">
+          <text x="16" y="237.3">Sizes come from the pictures you picked: the native canvas</text>
+          <text x="16" y="253">keeps every pixel; the fits scale it down.</text>
+        </g>
+
+        <g id="output-options">
+          <rect x="16" y="268.7" width="361" height="234.7" rx="16" fill="#FFF"/>
+          <g id="row-native" data-selected="true">
+            <text x="32" y="297.4" font-size="15" fill="#000">Native 3948×4032</text>
+            <g data-symbol="checkmark.circle.fill">
+              <circle cx="349.3" cy="292" r="10" fill="#C36A00"/>
+              <path d="M344.6 292.4 l3.3 3.3 l6.2 -6.6" stroke="#FFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </g>
+          </g>
+          <line x1="32" y1="315.5" x2="377" y2="315.5" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-fit-3840">
+            <text x="32" y="344.4" font-size="15" fill="#000">Fit 3840 · 3760×3840</text>
+            <circle cx="349.3" cy="339" r="9.3" fill="none" stroke="#C3C3C5" stroke-width="1.4" data-symbol="circle"/>
+          </g>
+          <line x1="32" y1="362.5" x2="377" y2="362.5" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-fit-2160">
+            <text x="32" y="391.4" font-size="15" fill="#000">Fit 2160 · 2114×2160</text>
+            <circle cx="349.3" cy="386" r="9.3" fill="none" stroke="#C3C3C5" stroke-width="1.4" data-symbol="circle"/>
+          </g>
+          <line x1="32" y1="409.5" x2="377" y2="409.5" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-fit-1920">
+            <text x="32" y="438.4" font-size="15" fill="#000">Fit 1920 · 1880×1920</text>
+            <circle cx="349.3" cy="433" r="9.3" fill="none" stroke="#C3C3C5" stroke-width="1.4" data-symbol="circle"/>
+          </g>
+          <line x1="32" y1="456.5" x2="377" y2="456.5" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-fit-1080">
+            <text x="32" y="485.4" font-size="15" fill="#000">Fit 1080 · 1056×1080</text>
+            <circle cx="349.3" cy="480" r="9.3" fill="none" stroke="#C3C3C5" stroke-width="1.4" data-symbol="circle"/>
+          </g>
+        </g>
+
+        <g id="create-button">
+          <rect x="16" y="515.7" width="361" height="57.3" rx="11" fill="#C36A00"/>
+          <text x="196.5" y="550.1" font-size="16" class="sb" fill="#FFF" text-anchor="middle">Create Shape-mation</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · output · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationOutputView before Create — step 4, pushed from Mode · Native 3948×4032 chosen · Create Shape-mation</text>
+</svg>

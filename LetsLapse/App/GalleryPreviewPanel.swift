@@ -7,18 +7,32 @@ import SwiftUI
 /// Contains:
 /// - Thumbnail (150pt height)
 /// - Title, date, size
-/// - 2×2 action grid: Open / Edit / Text / New blended clip
+/// - Actions: Open, then Edit / Text / Shapes / New clip (see `actionGrid`)
 /// - Tags: the shared tag editor (`TagField`), full width
 /// - Metadata rows: In frame, Storage, Field notes
 /// - Footer: Rename, Share, Show in Finder, Delete…
 struct GalleryPreviewPanel: View {
     @EnvironmentObject var model: AppModel
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
     var capture: AppModel.CaptureProject
+    /// Open: the project screen. Owned by the host because it is the host's
+    /// navigation stack — and, on an iPhone, its sheet to dismiss.
     var onOpen: () -> Void
+    /// New clip: the blend flow. The host's for the same reason as Open — on
+    /// an iPhone the flow rises over the tabs, under a sheet that doesn't go.
+    var onNewClip: () -> Void
     var onDelete: () -> Void
 
     // Async loads
     @State private var storageBytes: Int64?
+    #if os(iOS)
+    /// The editor Edit / Text / Shapes present — a full-screen cover from
+    /// this very view, so it lands above the panel even when the panel is a
+    /// sheet. On the Mac the editor is a window instead.
+    @State private var editorRequest: EditorOpenRequest?
+    #endif
     @State private var isRenaming = false
     @State private var renameText = ""
     @State private var previewItem: MediaPreviewItem?
@@ -82,6 +96,9 @@ struct GalleryPreviewPanel: View {
         }
         .scrollContentBackground(.hidden)
         .background(LL.cardBackground)
+        #if os(iOS)
+        .editorCover($editorRequest)
+        #endif
         .task(id: capture.id) {
             if let bytes = await model.storageBytes(for: capture) {
                 storageBytes = bytes
@@ -152,27 +169,59 @@ struct GalleryPreviewPanel: View {
         }
     }
 
-    // MARK: 2×2 action grid
+    // MARK: Actions
 
+    /// Open leads, full width. The row under it goes straight to the editor —
+    /// Edit on its grading page, Text on its Text page, Shapes on its Masks
+    /// page, where a project's shapes are drawn and managed — and New clip
+    /// starts a blend from the project. Two rows either way, so the panel
+    /// keeps the height the old 2×2 grid had. (Until 2026-09-11 Edit and Text
+    /// were wired to the New clip flow — see EditorLaunch.swift.)
+    ///
+    /// Shapes is left out for a video project: the movie editor has no Masks
+    /// page, and Find shapes skips movies. New clip is left out for a Photo
+    /// capture: it is one photo, with nothing to blend — the rule the project
+    /// screen and the tile menu already apply.
+    ///
+    /// Provisional layout (Steven, 2026-09-11): the five buttons are to become
+    /// a shared design component; the row here is what the code shows until
+    /// that component is drawn.
     private var actionGrid: some View {
-        let cols = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
-        return LazyVGrid(columns: cols, spacing: 8) {
+        VStack(spacing: 8) {
             actionButton("Open", icon: "arrow.up.forward.square", filled: true) {
                 onOpen()
             }
-            actionButton("Edit", icon: "pencil") {
-                model.openCapture(capture)
-            }
-            actionButton("Text", icon: "textformat") {
-                // Opens to the editor's Text rail — same entry point for now;
-                // the editor shows the Text tab by default when opened for a
-                // finished project.
-                model.openCapture(capture)
-            }
-            actionButton("New clip", icon: "plus.circle") {
-                model.openCapture(capture)
+            HStack(spacing: 8) {
+                actionButton("Edit", icon: "pencil") {
+                    openEditor(page: .editor)
+                }
+                actionButton("Text", icon: "textformat") {
+                    openEditor(page: .text)
+                }
+                if capture.kind == .photos {
+                    actionButton("Shapes", icon: "circle.square") {
+                        openEditor(page: .masks)
+                    }
+                }
+                if !capture.isPhotoCapture {
+                    actionButton("New clip", icon: "plus.circle") {
+                        onNewClip()
+                    }
+                }
             }
         }
+    }
+
+    /// The editor, straight from here, on the page named: a full-screen cover
+    /// on iOS/iPadOS, a window on the Mac (fronted if it is already open —
+    /// the page request moves it).
+    private func openEditor(page: RailTab) {
+        guard let request = model.stageEditor(for: capture, page: page) else { return }
+        #if os(macOS)
+        request.open(with: openWindow)
+        #else
+        editorRequest = request
+        #endif
     }
 
     @ViewBuilder

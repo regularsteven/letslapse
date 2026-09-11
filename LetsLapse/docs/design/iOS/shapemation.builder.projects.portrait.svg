@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Shape-mation · builder · projects · portrait</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationProjectsView + ShapemationProjectRow + ShapeOverlayThumbnail, step 2 of the shape-slideshow builder) over ShapemationBuilder. 2026-09-11, code first, mirrored from the running app. Pushed from the family step (shapemation.builder.family.portrait.svg) inside the Shape-mation sheet: back chevron + "Shape slideshow" in accent, large title "Circles" (the family's title, pluralised), then the count line "5 of 5 picked" (13 secondary) and a LazyVStack of white llCards (radius 14, spacing 10, padding 12), one per project whose register holds at least one instance of the family, in capture order. Each row: the project's representative picture on the leading side, fitted into a 96×96 frame (so a 3:4 portrait is 72×96, a 4:3 landscape 96×72) with every instance of the family traced over it — white at 85% (1.5 pt), the picked instance in amber (2.5 pt); then the title (15 semibold, one line), "1 circle · Photo" (12 secondary — instance count · capture mode) and "519 px across" (12 tertiary — the largest instance's native diameter); a Spacer; and the pick mark, checkmark.circle.fill (22, accent) when picked or circle (22, secondary at 50%) when not. Tapping anywhere on the row toggles it. INSTANCE PILLS — when a picked project holds SEVERAL instances of the family, the "px across" line is replaced by a row of capsules, one per instance, "1 · 519 px", "2 · 312 px" … (11 medium, 8×4 padding, spacing 6; the chosen instance accent-filled with white text, the rest secondary at 15% with primary text); tapping one makes it the instance the slideshow locks on. An unpicked multi-instance project shows the plain "px across" line. None of the 2026-09-11 circle projects holds more than one, so no pill is drawn here. Bottom: a safeAreaInset bar over .regularMaterial (drawn flat, 92% opaque) — "Clear" when everything is picked, otherwise "Pick all" (17, accent, leading) and the "Next · mode" NavigationLink (15 semibold, 18×10 padding, borderedProminent in accent, radius ~10) to ShapemationBuildStep.mode(family); it is DISABLED until at least two projects are picked (near-white #F8F8F7 fill, #C6C6C8 label). DRAWN STATE: everything picked — "5 of 5 picked", amber rings, accent check marks, "Clear", Next live. The unpicked state (ios-shapemation-build-projects.png) is the same layout with "0 of 5 picked", white rings on the pictures, grey ring marks, "Pick all" and the greyed Next. The fifth project's card starts at y 728 and lies under the bar until the list scrolls; its copy is not visible in the screenshot, so it is drawn as a bare card. Sample data is the 2026-09-11 library: Photo 9. 9. at 09:26 (a street traffic light, 519 px), Photo 9. 9. at 09:26 (the Gros-Horloge dial, 1 350 px), Photo 9. 9. at 10:07 (a museum façade clock, landscape, 530 px), Photo 9. 9. at 17:15 (a no-parking sign, 879 px). Pictures are flat placeholders. Measured from an iPhone 16 Pro screenshot (402×874 pt) and re-anchored to this 393×852 canvas: leading/top positions as measured, the pick marks 9 pt further left, the bottom bar 22 pt higher.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="56" width="393" height="796" rx="10"/></clipPath>
+    <clipPath id="pic-portrait"><rect width="72" height="96"/></clipPath>
+    <clipPath id="pic-landscape"><rect width="96" height="72"/></clipPath>
+    <!-- checkmark.circle.fill, 22 pt, origin at the circle's centre -->
+    <symbol id="check" overflow="visible">
+      <circle r="10.85" fill="#C36A00"/>
+      <path d="M-5.2 0.6 L-1.6 4.2 L5.4 -3.8" stroke="#FFF" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.ter{fill:#C4C4C7}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar over the shrunken Create tab behind the sheet -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="44" width="361" height="30" rx="10" fill="#C7C7CC"/>
+
+      <!-- the sheet: Shape-mation's NavigationStack, two screens in -->
+      <g id="shapemation-builder-projects" clip-path="url(#sheet)">
+        <rect x="0" y="56" width="393" height="796" fill="#F2F2F7"/>
+
+        <!-- nav bar: back to the family step -->
+        <g id="nav-back">
+          <path d="M18.6 76.1 L11 84 L18.6 91.9" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="31" y="90" font-size="17" fill="#C36A00">Shape slideshow</text>
+        </g>
+        <text x="16" y="148" font-size="34" class="b" fill="#000">Circles</text>
+
+        <text id="picked-count" x="16" y="192" font-size="13" class="sec">5 of 5 picked</text>
+
+        <!-- row 1: street traffic light, portrait, picked -->
+        <g id="row-0926-traffic">
+          <rect x="16" y="208" width="361" height="120" rx="14" fill="#FFF"/>
+          <g transform="translate(40,220)" clip-path="url(#pic-portrait)">
+            <rect width="72" height="96" fill="#CFCAC2"/>
+            <rect width="72" height="18" fill="#DCD9D3"/>
+            <rect y="10" width="22" height="66" fill="#B6AFA5"/>
+            <rect x="50" y="12" width="22" height="62" fill="#C3BCB1"/>
+            <rect x="4" y="18" width="6" height="9" fill="#8E877D"/><rect x="12" y="18" width="6" height="9" fill="#8E877D"/>
+            <rect x="55" y="20" width="5" height="8" fill="#9A9288"/><rect x="63" y="20" width="5" height="8" fill="#9A9288"/>
+            <rect y="70" width="72" height="26" fill="#A8A39B"/>
+            <rect x="30" y="24" width="12" height="72" rx="1.5" fill="#4A4A4E"/>
+            <circle cx="36" cy="33" r="3.6" fill="#2C2C30"/>
+            <circle cx="36" cy="44.9" r="3.6" fill="#2C2C30"/>
+            <circle cx="38.3" cy="44.9" r="5.75" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+          </g>
+          <text x="136" y="234.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 09:26</text>
+          <text x="136" y="254.5" font-size="12" class="sec">1 circle · Photo</text>
+          <text x="136" y="275" font-size="12" class="ter">519 px across</text>
+          <use href="#check" x="352" y="233" data-symbol="checkmark.circle.fill"/>
+        </g>
+
+        <!-- row 2: the Gros-Horloge dial, portrait, picked -->
+        <g id="row-0926-clock">
+          <rect x="16" y="338" width="361" height="120" rx="14" fill="#FFF"/>
+          <g transform="translate(40,350)" clip-path="url(#pic-portrait)">
+            <rect width="72" height="96" fill="#CDC7BF"/>
+            <rect width="72" height="20" fill="#D8D3CC"/>
+            <rect x="8" y="4" width="8" height="12" fill="#6F7A86"/>
+            <path d="M0 96 V70 a36 36 0 0 1 72 0 V96 Z" fill="#8E8378"/>
+            <path d="M10 96 V78 a26 26 0 0 1 52 0 V96 Z" fill="#3A342F"/>
+            <circle cx="39.3" cy="51.2" r="14" fill="#D6A742"/>
+            <circle cx="39.3" cy="51.2" r="10.5" fill="#2F4A7A"/>
+            <circle cx="39.3" cy="51.2" r="4" fill="#E9C76A"/>
+            <circle cx="39.3" cy="51.2" r="16.1" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+          </g>
+          <text x="136" y="364.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 09:26</text>
+          <text x="136" y="384.5" font-size="12" class="sec">1 circle · Photo</text>
+          <text x="136" y="405" font-size="12" class="ter">1 350 px across</text>
+          <use href="#check" x="352" y="363" data-symbol="checkmark.circle.fill"/>
+        </g>
+
+        <!-- row 3: museum façade clock, landscape, picked -->
+        <g id="row-1007-museum">
+          <rect x="16" y="468" width="361" height="120" rx="14" fill="#FFF"/>
+          <g transform="translate(28,492)" clip-path="url(#pic-landscape)">
+            <rect width="96" height="72" fill="#C9BBA4"/>
+            <rect width="96" height="28" fill="#C0C8D4"/>
+            <path d="M0 34 V22 L20 20 Q47 -2 74 20 L96 22 V34 Z" fill="#4E535C"/>
+            <rect y="34" width="96" height="38" fill="#CBBDA6"/>
+            <rect x="8" y="24" width="8" height="6" fill="#33373E"/><rect x="80" y="24" width="8" height="6" fill="#33373E"/>
+            <rect x="10" y="44" width="12" height="18" fill="#8B8073"/><rect x="42" y="44" width="12" height="18" fill="#8B8073"/><rect x="74" y="44" width="12" height="18" fill="#8B8073"/>
+            <circle cx="47.2" cy="25.8" r="5.5" fill="#F4F0E6"/>
+            <circle cx="47.2" cy="25.8" r="6.3" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+          </g>
+          <text x="136" y="494.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 10:07</text>
+          <text x="136" y="514.5" font-size="12" class="sec">1 circle · Photo</text>
+          <text x="136" y="535" font-size="12" class="ter">530 px across</text>
+          <use href="#check" x="352" y="493" data-symbol="checkmark.circle.fill"/>
+        </g>
+
+        <!-- row 4: no-parking sign in foliage, portrait, picked -->
+        <g id="row-1715-sign">
+          <rect x="16" y="598" width="361" height="120" rx="14" fill="#FFF"/>
+          <g transform="translate(40,610)" clip-path="url(#pic-portrait)">
+            <rect width="72" height="96" fill="#7C8457"/>
+            <rect y="52" width="72" height="44" fill="#B5B48A"/>
+            <rect y="0" width="72" height="14" fill="#5E6743"/>
+            <rect x="35" y="54" width="3" height="42" fill="#6B6B66"/>
+            <rect x="26" y="45" width="21" height="7" fill="#FFF"/>
+            <rect x="43" y="45" width="6" height="7" fill="#1E4FA8"/>
+            <circle cx="36.7" cy="34.3" r="9" fill="#E8ECEF" stroke="#D9302A" stroke-width="2.4"/>
+            <path d="M31 28.6 L42.4 40 M42.4 28.6 L31 40" stroke="#1E4FA8" stroke-width="2"/>
+            <circle cx="36.7" cy="34.3" r="10.4" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+          </g>
+          <text x="136" y="624.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 17:15</text>
+          <text x="136" y="644.5" font-size="12" class="sec">1 circle · Photo</text>
+          <text x="136" y="665" font-size="12" class="ter">879 px across</text>
+          <use href="#check" x="352" y="623" data-symbol="checkmark.circle.fill"/>
+        </g>
+
+        <!-- row 5: under the bar until the list scrolls; its copy is not visible in the screenshot -->
+        <g id="row-5-under-bar">
+          <rect x="16" y="728" width="361" height="120" rx="14" fill="#FFF"/>
+        </g>
+
+        <!-- bottom inset bar: Pick all / Clear · Next -->
+        <g id="bottom-bar">
+          <rect x="0" y="734" width="393" height="118" fill="#F0F0F2" fill-opacity="0.92"/>
+          <text x="16" y="782" font-size="17" fill="#C36A00">Clear</text>
+          <g id="next-mode">
+            <rect x="231" y="750" width="146" height="52" rx="10" fill="#C36A00"/>
+            <text x="304" y="781.3" font-size="15" class="sb" fill="#FFF" text-anchor="middle">Next · mode</text>
+          </g>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · projects · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationProjectsView (step 2) — Circles · 5 of 5 picked · picture rows · Clear · Next · mode</text>
+</svg>

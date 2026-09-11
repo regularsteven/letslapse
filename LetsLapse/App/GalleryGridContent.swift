@@ -12,6 +12,9 @@ import SwiftUI
 ///   month scrubber rail on the trailing edge.
 struct GalleryGridContent: View {
     @EnvironmentObject var model: AppModel
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
     var captures: [AppModel.CaptureProject]
     var columnCount: Int
     var timelineMode: Bool
@@ -20,19 +23,28 @@ struct GalleryGridContent: View {
 
     // Shared zoom-level key — pinch on either grid keeps them in sync.
     @AppStorage("gallery.columnCount") private var storedColumnCount = 3
+    #if os(iOS)
+    /// The editor the tile menu's Edit presents (a window on the Mac).
+    @State private var editorRequest: EditorOpenRequest?
+    #endif
 
     var body: some View {
-        if captures.isEmpty {
-            emptyState
-        } else if timelineMode {
-            TimelineGalleryGrid(
-                captures: captures,
-                selectedID: $selectedID,
-                onOpen: onOpen
-            )
-        } else {
-            standardGrid
+        Group {
+            if captures.isEmpty {
+                emptyState
+            } else if timelineMode {
+                TimelineGalleryGrid(
+                    captures: captures,
+                    selectedID: $selectedID,
+                    onOpen: onOpen
+                )
+            } else {
+                standardGrid
+            }
         }
+        #if os(iOS)
+        .editorCover($editorRequest)
+        #endif
     }
 
     // MARK: Standard grid
@@ -116,7 +128,15 @@ struct GalleryGridContent: View {
         Divider()
 
         Button {
-            model.openCapture(capture)   // same as "Edit" entry point
+            // The editor itself — the same door as the preview panel's Edit
+            // button (EditorLaunch.swift); this used to start the New clip
+            // flow instead.
+            guard let request = model.stageEditor(for: capture) else { return }
+            #if os(macOS)
+            request.open(with: openWindow)
+            #else
+            editorRequest = request
+            #endif
         } label: {
             Label("Edit", systemImage: "pencil")
         }
