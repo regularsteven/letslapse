@@ -1701,6 +1701,7 @@ struct PhotoViewerView: View {
         do {
             try register.save(inProjectFolder: model.projectFolderURL(for: capture))
             persistedShapeRegister = register
+            model.shapeRegisterDidChange(for: capture)
         } catch {
             showOverlayToast("Could not save shapes: \(error.localizedDescription)")
         }

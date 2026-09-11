@@ -839,6 +839,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var captures: [CaptureProject] = []
     @Published private(set) var blends: [BlendProject] = []
     @Published private(set) var collections: [LapseCollection] = []
+    /// Per-project `shapes.json` summaries for the Gallery's Shapes rows,
+    /// keyed by capture id; a project with no register has no entry. Filled
+    /// by `refreshShapeSummaries()` and `shapeRegisterDidChange(for:)`
+    /// (ShapeSummaryIndex.swift).
+    @Published var shapeSummaries: [UUID: ShapeSummary] = [:]
     /// Probed durations for blends whose manifests predate output stats,
     /// keyed by blend id — filled lazily by `blendDuration(for:)` callers.
     @Published private(set) var probedBlendDurations: [UUID: Double] = [:]
@@ -1186,6 +1191,7 @@ final class AppModel: ObservableObject {
 
     init() {
         loadLibrary()
+        refreshShapeSummaries()
         // The Adjust and Guided previews level their source frames the way
         // the render will; they learn the current project's level from here.
         AdjustPreviewLevel.provider = { [weak self] in

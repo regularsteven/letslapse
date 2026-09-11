@@ -4,14 +4,17 @@ import SwiftUI
 
 /// The left sidebar panel of the Gallery tab.
 ///
-/// Three sections:
+/// Four sections:
 /// - **Library**: capture-kind filter rows (All / Photos / Interval / Video)
 /// - **Tags**: scene tags present in the visible library
 /// - **Collections**: link to Collections tab (navigates via model)
+/// - **Shapes**: Ellipse / Rectangle / Square / No Shapes, from each project's
+///   `shapes.json` register (Find shapes, or drawn in the Masks tab)
 struct GallerySidebar: View {
     @EnvironmentObject var model: AppModel
     @Binding var filter: CaptureFilter
     @Binding var tagSelection: Set<String>
+    @Binding var shapeSelection: Set<ShapeFilter>
     /// The captures already filtered by type — used to derive which tags appear.
     var allCaptures: [AppModel.CaptureProject]
 
@@ -29,6 +32,8 @@ struct GallerySidebar: View {
                 }
                 Divider().padding(.horizontal, 12)
                 collectionsSection
+                Divider().padding(.horizontal, 12)
+                shapesSection
             }
             .padding(.top, 14)
             .padding(.bottom, 20)
@@ -133,6 +138,50 @@ struct GallerySidebar: View {
                 )
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: Shapes
+
+    /// The register rows. A project shows under Ellipse / Rectangle / Square
+    /// when its `shapes.json` holds one (found by Find shapes or drawn in the
+    /// Masks tab), and under No Shapes when it holds none or was never given
+    /// one — so the pictures the detector missed can be browsed to and given
+    /// a shape by hand. Rows narrow like the tags; No Shapes stands alone.
+    /// All four are always offered: an empty row is the prompt to run Find
+    /// shapes, not a dead control.
+    private var shapesSection: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            LLSectionHeader("Shapes")
+                .padding(.horizontal, 14)
+
+            ForEach(ShapeFilter.allCases) { row in
+                let isOn = shapeSelection.contains(row)
+                Button {
+                    shapeSelection.toggle(row)
+                } label: {
+                    LibraryFilterRow(
+                        label: row.title,
+                        icon: row.symbolName,
+                        isSelected: isOn
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isOn ? .isSelected : [])
+            }
+
+            if !shapeSelection.isEmpty {
+                Button {
+                    shapeSelection = []
+                } label: {
+                    Text("Clear shapes")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(LL.accent)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+            }
         }
     }
 }

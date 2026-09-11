@@ -143,6 +143,7 @@ struct ShapemationHomeView: View {
 
     private func refreshCounts() {
         store.load()
+        model.refreshShapeSummaries()
         let captures = model.captures.filter { !$0.isScannerCapture && $0.kind == .photos }
         let folders = captures.map { model.projectFolderURL(for: $0) }
         Task.detached(priority: .utility) {

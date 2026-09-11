@@ -52,6 +52,11 @@ identical on both); 1 s per photo, hard cuts, no rotation for circles.
   fallback; a picker that shows the crop live would let people trim the outlier.
 - **An iPad run and a device run are owed**; the Mac was verified on a Debug
   build pointed at a scratch root via `-storage.libraryRootPath`.
+- **Gallery SHAPES rows (2026-09-11).** The Gallery sidebar / Library sheet lists
+  Ellipse · Rectangle · Square · No Shapes under COLLECTIONS, read from each
+  project's `shapes.json` (`AppModel.shapeSummaries`, `ShapeFilter`). Owed: the
+  three gallery mirrors, an iPhone run of the sheet, and — if wanted — counts
+  on the rows and a Circle / Oval split (the register already knows the family).
 
 ### Batch import / export between devices and the Mac library
 

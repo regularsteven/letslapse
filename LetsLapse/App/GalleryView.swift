@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Gallery (main container)
 
 /// The Gallery tab: a searchable, filterable grid of all projects, with a
-/// toggleable sidebar (Library / Tags / Collections), a preview panel that
+/// toggleable sidebar (Library / Tags / Collections / Shapes), a preview panel that
 /// slides in on selection, and a Hero view reachable by double-clicking a tile.
 ///
 /// Layout strategy
@@ -26,6 +26,7 @@ struct GalleryView: View {
     // MARK: Ephemeral state
     @State private var query       = SceneQuery.empty
     @State private var filter      = CaptureFilter.all
+    @State private var shapeSelection = GalleryView.initialShapeSelection  // sidebar Shapes rows
     @State private var selectedID: UUID?          // single-click → preview panel
     @State private var showSidebarSheet  = false  // iPhone/compact only
     @State private var showPreviewSheet  = false  // iPhone/compact only
@@ -55,6 +56,19 @@ struct GalleryView: View {
         return UIDevice.current.userInterfaceIdiom == .phone && vSizeClass == .regular
         #else
         return false
+        #endif
+    }
+
+    /// `LL_SHAPES=ellipse,rectangle,square,empty` — Shapes rows lit from launch,
+    /// for screenshots.
+    private static var initialShapeSelection: Set<ShapeFilter> {
+        #if DEBUG
+        let raw = ProcessInfo.processInfo.environment["LL_SHAPES"] ?? ""
+        return Set(raw.split(separator: ",").compactMap {
+            ShapeFilter(rawValue: $0.trimmingCharacters(in: .whitespaces))
+        })
+        #else
+        return []
         #endif
     }
 
@@ -90,6 +104,8 @@ struct GalleryView: View {
             // External navigation requests (from Settings or other tabs).
             .onAppear   { consumeDetailRequest(model.requestedProjectDetailID) }
             .onReceive(model.$requestedProjectDetailID) { consumeDetailRequest($0) }
+            // The Shapes rows read each project's `shapes.json`; re-check on every visit.
+            .onAppear   { model.refreshShapeSummaries() }
         }
         // iPhone/compact: sidebar sheet
         .sheet(isPresented: $showSidebarSheet) {
@@ -97,6 +113,7 @@ struct GalleryView: View {
                 GallerySidebar(
                     filter: $filter,
                     tagSelection: $query.tags,
+                    shapeSelection: $shapeSelection,
                     allCaptures: visibleCaptures
                 )
                 .navigationTitle("Library")
@@ -137,6 +154,7 @@ struct GalleryView: View {
                     GallerySidebar(
                         filter: $filter,
                         tagSelection: $query.tags,
+                        shapeSelection: $shapeSelection,
                         allCaptures: visibleCaptures
                     )
                     .frame(width: 200)
@@ -293,7 +311,7 @@ struct GalleryView: View {
     /// library is narrowed" on the compact one: `showSidebar` is a Mac pane
     /// state, and reading it on an iPhone lit the button permanently.
     private var libraryButton: some View {
-        let isLit = isWide ? showSidebar : (filter != .all || !query.tags.isEmpty)
+        let isLit = isWide ? showSidebar : (filter != .all || !query.tags.isEmpty || !shapeSelection.isEmpty)
         return Button {
             if isWide {
                 withAnimation(.easeInOut(duration: 0.22)) { showSidebar.toggle() }
@@ -371,11 +389,13 @@ struct GalleryView: View {
 
     // MARK: Data pipeline
 
-    /// The library after filtering by type and search.
+    /// The library after filtering by type, search and the sidebar's Shapes rows.
     private var visibleCaptures: [AppModel.CaptureProject] {
-        model.libraryCaptures
+        let base = model.libraryCaptures
             .filtered(by: filter)
             .matching(query)
+        guard !shapeSelection.isEmpty else { return base }
+        return base.filter { shapeSelection.allows(model.shapeSummaries[$0.id]) }
     }
 
     /// Filtered then sorted.
