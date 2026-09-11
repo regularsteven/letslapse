@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>shapebench · labels</title>
+<style>
+  :root { color-scheme: dark; --ink:#e8e8ea; --dim:#9a9aa0; --bg:#141416; --panel:#1e1e22; --line:#333; --amber:#FFB340; --accent:#C36A00; --green:#4ad26b; --red:#ff5a5a; --cyan:#3fd0ff; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:13px/1.4 -apple-system, "SF Pro Text", Helvetica, sans-serif; }
+  #app { display:grid; grid-template-columns: 260px 1fr; height:100%; }
+  #side { background:var(--panel); border-right:1px solid var(--line); overflow:auto; padding:10px; }
+  #side h1 { font-size:14px; margin:0 0 8px; color:var(--amber); }
+  #side .asset { padding:5px 6px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:6px; }
+  #side .asset:hover { background:#2a2a30; }
+  #side .asset.current { background:#3a2a10; outline:1px solid var(--accent); }
+  #side .asset .id { font-family: ui-monospace, Menlo, monospace; font-size:12px; }
+  #side .asset .st { color:var(--dim); font-size:11px; }
+  #side .asset.done .st { color:var(--green); }
+  #side .asset.extra { opacity:.55; }
+  #main { display:grid; grid-template-rows: auto 1fr auto; min-width:0; }
+  #bar { display:flex; gap:10px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+  #bar button { background:#2a2a30; color:var(--ink); border:1px solid #444; border-radius:6px; padding:5px 10px; cursor:pointer; }
+  #bar button.on { background:var(--accent); border-color:var(--amber); color:#fff; }
+  #bar button:disabled { opacity:.4; cursor:default; }
+  #bar .sp { flex:1; }
+  #bar .hint { color:var(--dim); font-size:12px; }
+  #stage { position:relative; overflow:hidden; background:#0a0a0b; cursor:crosshair; }
+  canvas { display:block; }
+  #loupe { position:absolute; right:14px; bottom:14px; width:180px; height:180px; border:1px solid #555; border-radius:6px; background:#000; pointer-events:none; }
+  #foot { display:flex; gap:12px; align-items:center; padding:6px 12px; border-top:1px solid var(--line); background:var(--panel); min-height:22px; }
+  #foot .msg { flex:1; }
+  #foot .msg.err { color:var(--red); }
+  #foot .msg.ok { color:var(--green); }
+  #shapes { font-size:12px; color:var(--dim); }
+  #shapes b { color:var(--ink); }
+  textarea { background:#111; color:var(--ink); border:1px solid #444; border-radius:6px; width:100%; box-sizing:border-box; min-height:44px; font:12px -apple-system, Helvetica, sans-serif; }
+  #list { margin-top:8px; }
+  #list .sh { display:flex; justify-content:space-between; padding:3px 6px; border-radius:5px; cursor:pointer; font-size:12px; }
+  #list .sh:hover { background:#2a2a30; }
+  #list .sh.sel { background:#10303a; outline:1px solid var(--cyan); }
+  #list .sh .x { color:var(--red); }
+  kbd { background:#2a2a30; border:1px solid #555; border-radius:4px; padding:0 5px; font-size:11px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="side">
+    <h1>Shape testing · labels</h1>
+    <div id="assets"></div>
+    <div id="list"></div>
+    <div style="margin-top:10px"><textarea id="notes" placeholder="notes for this picture (optional)"></textarea></div>
+    <div style="margin-top:10px;color:var(--dim);font-size:11px;line-height:1.6">
+      <kbd>R</kbd> rectangle · <kbd>E</kbd> ellipse · click to place points, <b>drag a point to move it</b><br>
+      <kbd>Enter</kbd> fit &amp; keep, then keep clicking for the next shape<br>
+      <kbd>Backspace</kbd> undo point · <kbd>Esc</kbd> clear points / deselect<br>
+      <b>double-click an outline</b> (or a row below) to re-open a kept shape: drag its points, it re-fits live<br>
+      <kbd>Delete</kbd> remove the selected shape · <kbd>D</kbd> done (saves) · <kbd>N</kbd>/<kbd>P</kbd> next/prev<br>
+      wheel = zoom at cursor · drag empty space = pan · <kbd>0</kbd> fit · <kbd>1</kbd> 1:1<br>
+      Rectangle: the 4 corners, any order. Ellipse: 8–12 points around the rim.<br>
+      Label every shape a person would align on, oblique or not; the rules are applied later.
+    </div>
+  </div>
+  <div id="main">
+    <div id="bar">
+      <button id="bRect">R · rectangle</button>
+      <button id="bEll">E · ellipse</button>
+      <button id="bFit" disabled>Enter · fit &amp; keep</button>
+      <button id="bUndo">⌫ undo point</button>
+      <button id="bDel" disabled>Delete shape</button>
+      <span class="sp"></span>
+      <span class="hint" id="pos"></span>
+      <button id="bPrev">P · prev</button>
+      <button id="bNext">N · next</button>
+      <button id="bDone">D · done ✓</button>
+    </div>
+    <div id="stage"><canvas id="cv"></canvas><canvas id="loupe" width="180" height="180"></canvas></div>
+    <div id="foot"><span class="msg" id="msg">loading…</span><span id="shapes"></span></div>
+  </div>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const cv = $('cv'), ctx = cv.getContext('2d'), stage = $('stage'), loupe = $('loupe'), lctx = loupe.getContext('2d');
+  let assets = [], labelSet = [], cur = -1, img = null, W = 0, H = 0;
+  let view = { s: 1, tx: 0, ty: 0 };   // image px → canvas px: cx = x*s + tx
+  let primitive = 'ellipse', points = [], shapes = [], rejected = [], sel = -1, preview = null, dirty = false;
+  let drag = null, mouse = { x: 0, y: 0, ix: 0, iy: 0 }, userView = false;
+  let dpr = window.devicePixelRatio || 1;
+
+  function msg(t, cls) { const m = $('msg'); m.textContent = t; m.className = 'msg ' + (cls || ''); }
+  function toImg(cx, cy) { return { x: (cx - view.tx) / view.s, y: (cy - view.ty) / view.s }; }
+  function toCv(x, y) { return { x: x * view.s + view.tx, y: y * view.s + view.ty }; }
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    const r = stage.getBoundingClientRect();
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+    cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
+    if (img && !userView) fit(); else draw();
+  }
+  function fit() {
+    if (!img) return;
+    userView = false;
+    const r = stage.getBoundingClientRect();
+    view.s = Math.min(r.width / W, r.height / H) * 0.98;
+    view.tx = (r.width - W * view.s) / 2; view.ty = (r.height - H * view.s) / 2;
+    draw();
+  }
+  function zoomAt(cx, cy, factor) {
+    userView = true;
+    const p = toImg(cx, cy);
+    view.s = Math.max(0.02, Math.min(8, view.s * factor));
+    view.tx = cx - p.x * view.s; view.ty = cy - p.y * view.s;
+    draw();
+  }
+
+  function ellipseOutline(sh) {
+    const a = sh.axes.major * W / 2, b = sh.axes.minor * W / 2, cx = sh.centre.x * W, cy = sh.centre.y * H;
+    const th = sh.orientationDeg * Math.PI / 180, pts = [];
+    for (let i = 0; i < 120; i++) {
+      const t = i / 120 * 2 * Math.PI;
+      pts.push([cx + a * Math.cos(t) * Math.cos(th) - b * Math.sin(t) * Math.sin(th),
+                cy + a * Math.cos(t) * Math.sin(th) + b * Math.sin(t) * Math.cos(th)]);
+    }
+    return pts;
+  }
+  function outlineOf(sh) {
+    if (sh.primitive === 'rectangle') return sh.vertices.map(v => [v.x * W, v.y * H]);
+    return ellipseOutline(sh);
+  }
+  function strokePath(pts, colour, width, dash) {
+    ctx.beginPath();
+    pts.forEach((p, i) => { const c = toCv(p[0], p[1]); i ? ctx.lineTo(c.x, c.y) : ctx.moveTo(c.x, c.y); });
+    ctx.closePath(); ctx.strokeStyle = colour; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]);
+  }
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#0a0a0b'; ctx.fillRect(0, 0, cv.width / dpr, cv.height / dpr);
+    if (!img) return;
+    ctx.imageSmoothingEnabled = view.s < 1;
+    ctx.drawImage(img, view.tx, view.ty, W * view.s, H * view.s);
+    shapes.forEach((sh, i) => {
+      const pts = outlineOf(sh);
+      strokePath(pts, i === sel ? '#3fd0ff' : (sh.sizeBand === 'discard' ? '#ff9a3f' : '#4ad26b'), i === sel ? 3 : 2);
+      const c = toCv(pts[0][0], pts[0][1]);
+      ctx.fillStyle = '#000a'; ctx.fillRect(c.x, c.y - 14, 120, 14);
+      ctx.fillStyle = '#fff'; ctx.font = '11px ui-monospace, Menlo, monospace';
+      ctx.fillText(`${i + 1} ${sh.subclass} e${sh.extentRatio.toFixed(2)}${sh.gt && sh.gt.passesRules === false ? ' ⚠' : ''}`, c.x + 3, c.y - 3);
+    });
+    if (preview) strokePath(preview, '#FFB340', 2, [6, 4]);
+    if (sel >= 0 && shapes[sel] && shapes[sel].clicks && !points.length) {
+      shapes[sel].clicks.forEach((p, i) => {
+        const c = toCv(p[0], p[1]);
+        ctx.beginPath(); ctx.arc(c.x, c.y, 6, 0, Math.PI * 2); ctx.fillStyle = '#3fd0ff'; ctx.fill();
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+      });
+    }
+    points.forEach((p, i) => {
+      const c = toCv(p[0], p[1]);
+      ctx.beginPath(); ctx.arc(c.x, c.y, 5, 0, Math.PI * 2); ctx.strokeStyle = '#FFB340'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(c.x - 8, c.y); ctx.lineTo(c.x + 8, c.y); ctx.moveTo(c.x, c.y - 8); ctx.lineTo(c.x, c.y + 8); ctx.strokeStyle = '#FFB340'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#FFB340'; ctx.font = '11px ui-monospace, Menlo, monospace'; ctx.fillText(String(i + 1), c.x + 7, c.y - 7);
+    });
+    if (points.length && primitive === 'rectangle') strokePath(points, '#FFB34099', 1, [3, 3]);
+    drawLoupe();
+    $('shapes').innerHTML = `<b>${shapes.length}</b> shape${shapes.length === 1 ? '' : 's'} · ${points.length} point${points.length === 1 ? '' : 's'} (${primitive})${dirty ? ' · unsaved' : ''}`;
+    $('bFit').disabled = !(primitive === 'rectangle' ? points.length === 4 : points.length >= 5);
+    $('bDel').disabled = sel < 0;
+  }
+  function drawLoupe() {
+    if (!img) return;
+    const z = 6, n = 180 / z;
+    lctx.imageSmoothingEnabled = false;
+    lctx.fillStyle = '#000'; lctx.fillRect(0, 0, 180, 180);
+    lctx.drawImage(img, mouse.ix - n / 2, mouse.iy - n / 2, n, n, 0, 0, 180, 180);
+    lctx.strokeStyle = '#FFB340'; lctx.lineWidth = 1;
+    lctx.beginPath(); lctx.moveTo(90, 0); lctx.lineTo(90, 180); lctx.moveTo(0, 90); lctx.lineTo(180, 90); lctx.stroke();
+    // nearby points
+    points.forEach(p => {
+      const x = (p[0] - mouse.ix) * z + 90, y = (p[1] - mouse.iy) * z + 90;
+      if (x >= 0 && x <= 180 && y >= 0 && y <= 180) { lctx.beginPath(); lctx.arc(x, y, 4, 0, 7); lctx.stroke(); }
+    });
+  }
+
+  // ---- interaction ----
+  let dragPoint = null;   // { list: points | shapes[sel].clicks, index, kind: 'placing' | 'shape' }
+  function nearestHandle(cx, cy) {
+    const lists = [];
+    if (points.length) lists.push({ list: points, kind: 'placing' });
+    else if (sel >= 0 && shapes[sel] && shapes[sel].clicks) lists.push({ list: shapes[sel].clicks, kind: 'shape' });
+    let best = null, bd = 10;   // screen px
+    lists.forEach(({ list, kind }) => list.forEach((p, i) => {
+      const c = toCv(p[0], p[1]); const d = Math.hypot(c.x - cx, c.y - cy);
+      if (d < bd) { bd = d; best = { list, index: i, kind }; }
+    }));
+    return best;
+  }
+  stage.addEventListener('wheel', e => { e.preventDefault(); const r = stage.getBoundingClientRect(); zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  function track(e) {
+    const r = stage.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top;
+    const p = toImg(mouse.x, mouse.y); mouse.ix = p.x; mouse.iy = p.y;
+  }
+  stage.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    track(e);
+    const h = nearestHandle(mouse.x, mouse.y);
+    if (h) { dragPoint = h; drag = null; stage.style.cursor = 'grabbing'; return; }
+    drag = { x: mouse.x, y: mouse.y, tx: view.tx, ty: view.ty, moved: false };
+  });
+  window.addEventListener('mousemove', e => {
+    track(e);
+    const p = { x: mouse.ix, y: mouse.iy };
+    $('pos').textContent = img ? `${p.x.toFixed(0)}, ${p.y.toFixed(0)} px · ${(view.s * 100).toFixed(0)} %` : '';
+    if (dragPoint) {
+      dragPoint.list[dragPoint.index] = [Math.max(0, Math.min(W, p.x)), Math.max(0, Math.min(H, p.y))];
+      if (dragPoint.kind === 'shape') preview = null;
+    } else if (drag) {
+      const dx = mouse.x - drag.x, dy = mouse.y - drag.y;
+      if (Math.hypot(dx, dy) > 3) drag.moved = true;
+      if (drag.moved) { userView = true; view.tx = drag.tx + dx; view.ty = drag.ty + dy; }
+    } else if (img && !points.length && (sel < 0 || !shapes[sel] || !shapes[sel].clicks)) {
+      stage.style.cursor = 'crosshair';
+    } else if (img) {
+      stage.style.cursor = nearestHandle(mouse.x, mouse.y) ? 'grab' : 'crosshair';
+    }
+    draw();
+  });
+  window.addEventListener('mouseup', async e => {
+    if (dragPoint) {
+      const dp = dragPoint; dragPoint = null; stage.style.cursor = 'crosshair';
+      if (dp.kind === 'placing') { if (enough()) fitPreview(); else draw(); }
+      else await refitSelected();
+      return;
+    }
+    if (!drag) return;
+    const wasClick = !drag.moved; drag = null;
+    if (!wasClick || !img || e.target !== cv) return;
+    track(e);
+    const p = toImg(mouse.x, mouse.y);
+    if (p.x < 0 || p.y < 0 || p.x > W || p.y > H) return;
+    if (primitive === 'rectangle' && points.length >= 4) { msg('a rectangle has 4 corners — drag one to adjust, Enter to keep, Backspace to undo', 'err'); return; }
+    points.push([p.x, p.y]); sel = -1; preview = null; draw();
+    if (enough()) fitPreview();
+  });
+  cv.addEventListener('dblclick', e => {
+    track(e);
+    const p = toImg(mouse.x, mouse.y);
+    const hit = hitShape(p);
+    if (hit >= 0) { selectShape(hit); msg(`editing shape ${hit + 1} — drag its points, it re-fits as you go; Esc to leave`, 'ok'); }
+  });
+  function enough() { return primitive === 'rectangle' ? points.length === 4 : points.length >= 5; }
+  function selectShape(i) {
+    sel = i; points = []; preview = null;
+    if (shapes[i] && shapes[i].primitive) setPrimQuiet(shapes[i].primitive);
+    renderList(); draw();
+  }
+  async function refitSelected() {
+    if (sel < 0 || !shapes[sel] || !shapes[sel].clicks) return;
+    const old = shapes[sel];
+    const res = await post('/api/fit', { assetId: assets[cur].assetId, primitive: old.primitive, points: old.clicks });
+    if (!res.accepted) { preview = res.outline || null; msg(res.reason, 'err'); draw(); return; }
+    res.shape.shapeId = old.shapeId; res.shape.clicks = old.clicks.slice();
+    shapes[sel] = res.shape; dirty = true;
+    msg(`shape ${sel + 1}: ${res.shape.subclass} · extent ${res.shape.extentRatio.toFixed(2)} · aspect ${res.shape.aspectRatio.toFixed(2)} · ${res.shape.orientationDeg.toFixed(1)}°` +
+        (res.shape.gt && res.shape.gt.passesRules === false ? ' · ⚠ would fail the rules — kept as a target anyway' : ''), 'ok');
+    renderList(); draw(); autosave();
+  }
+  function hitShape(p) {
+    let best = -1, bd = 1e9;
+    shapes.forEach((sh, i) => {
+      const pts = outlineOf(sh);
+      let d = 1e9;
+      for (let k = 0; k < pts.length; k++) { const a = pts[k], b = pts[(k + 1) % pts.length]; d = Math.min(d, segDist(p, a, b)); }
+      if (d < bd) { bd = d; best = i; }
+    });
+    return bd * view.s <= 12 ? best : -1;
+  }
+  function segDist(p, a, b) {
+    const vx = b[0] - a[0], vy = b[1] - a[1], wx = p.x - a[0], wy = p.y - a[1];
+    const t = Math.max(0, Math.min(1, (vx * wx + vy * wy) / ((vx * vx + vy * vy) || 1)));
+    return Math.hypot(p.x - (a[0] + t * vx), p.y - (a[1] + t * vy));
+  }
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'TEXTAREA') return;
+    const k = e.key;
+    if (k === 'r' || k === 'R') setPrim('rectangle');
+    else if (k === 'e' || k === 'E') setPrim('ellipse');
+    else if (k === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13) keep();
+    else if (k === 'Backspace') { e.preventDefault(); points.pop(); preview = null; draw(); }
+    else if (k === 'Escape') { points = []; preview = null; sel = -1; renderList(); draw(); }
+    else if (k === 'Delete' || e.code === 'Delete' || e.keyCode === 46 || (k === 'Backspace' && e.metaKey)) removeSel();
+    else if (k === 'd' || k === 'D') done();
+    else if (k === 'n' || k === 'N') go(cur + 1);
+    else if (k === 'p' || k === 'P') go(cur - 1);
+    else if (k === '0') fit();
+    else if (k === '1') { const r = stage.getBoundingClientRect(); const p = toImg(r.width / 2, r.height / 2); view.s = 1 / dpr * dpr; view.tx = r.width / 2 - p.x; view.ty = r.height / 2 - p.y; draw(); }
+  });
+  function setPrimQuiet(p) { primitive = p; $('bRect').classList.toggle('on', p === 'rectangle'); $('bEll').classList.toggle('on', p === 'ellipse'); }
+  function setPrim(p) { setPrimQuiet(p); points = []; preview = null; draw(); }
+  $('bRect').onclick = () => setPrim('rectangle'); $('bEll').onclick = () => setPrim('ellipse');
+  $('bFit').onclick = keep; $('bUndo').onclick = () => { points.pop(); preview = null; draw(); };
+  $('bDel').onclick = removeSel; $('bPrev').onclick = () => go(cur - 1); $('bNext').onclick = () => go(cur + 1); $('bDone').onclick = done;
+  $('notes').addEventListener('input', () => { dirty = true; });
+
+  async function fitPreview() {
+    const res = await post('/api/fit', { assetId: assets[cur].assetId, primitive, points });
+    if (res.outline) preview = res.outline;
+    if (!res.accepted) msg(res.reason || 'not accepted', 'err');
+    else msg(`${res.shape.subclass} · extent ${res.shape.extentRatio.toFixed(2)} (${res.shape.sizeBand}) · aspect ${res.shape.aspectRatio.toFixed(2)} · ${res.shape.orientationDeg.toFixed(1)}°` +
+             (res.shape.gt && res.shape.gt.passesRules === false ? ` · ⚠ would fail the rules (angle dev ${res.shape.gt.maxAngularDeviationDeg}°, sides ${(res.shape.gt.sideMismatch * 100).toFixed(0)} %) — kept as a target anyway` : '') +
+             (res.warnings && res.warnings.length ? ' · ' + res.warnings.join('; ') : '') + ' — Enter to keep', res.shape.gt && res.shape.gt.passesRules === false ? '' : 'ok');
+    draw();
+  }
+  async function keep() {
+    if (!img) return;
+    const need = primitive === 'rectangle' ? points.length === 4 : points.length >= 5;
+    if (!need) { msg(primitive === 'rectangle' ? 'click the 4 corners first' : 'click at least 5 rim points (8–12 is better)', 'err'); return; }
+    const res = await post('/api/fit', { assetId: assets[cur].assetId, primitive, points });
+    if (!res.accepted) { preview = res.outline || null; msg(res.reason, 'err'); draw(); return; }
+    res.shape.clicks = points.slice();
+    shapes.push(res.shape); points = []; preview = null; dirty = true; sel = shapes.length - 1;
+    msg(`kept ${res.shape.subclass} — ${shapes.length} shape${shapes.length === 1 ? '' : 's'} on this picture. Click points for the next one (R/E to switch), or D when done`, 'ok');
+    renderList(); draw(); autosave();
+  }
+  function removeSel() { if (sel < 0) return; shapes.splice(sel, 1); sel = -1; dirty = true; renderList(); draw(); autosave(); }
+  async function save(doneFlag) {
+    if (cur < 0) return;
+    const a = assets[cur];
+    const body = { shapes, rejected, done: doneFlag === undefined ? a.done : doneFlag, notes: $('notes').value };
+    const res = await post('/api/labels/' + a.assetId, body);
+    if (res.ok) { dirty = false; a.done = body.done; a.nShapes = shapes.length; renderAssets(); draw(); }
+    return res;
+  }
+  let saveTimer = null;
+  function autosave() { clearTimeout(saveTimer); saveTimer = setTimeout(() => save(), 400); }
+  async function done() {
+    if (cur < 0) return;
+    await save(true);
+    msg(`saved ${shapes.length} shape${shapes.length === 1 ? '' : 's'} · marked done`, 'ok');
+    const nextIdx = assets.findIndex((a, i) => i > cur && a.inLabelSet && !a.done);
+    if (nextIdx >= 0) go(nextIdx);
+  }
+
+  async function post(url, body) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return r.json();
+  }
+  async function go(i) {
+    if (i < 0 || i >= assets.length) return;
+    if (dirty) await save();
+    cur = i; points = []; preview = null; sel = -1; img = null; draw();
+    const a = assets[cur];
+    msg(`loading ${a.assetId.slice(0, 8)}…`);
+    const lab = await (await fetch('/api/labels/' + a.assetId)).json();
+    shapes = lab.shapes || []; rejected = lab.rejected || []; $('notes').value = lab.notes || ''; dirty = false;
+    const im = new Image();
+    im.onload = () => { img = im; W = a.frameWidth; H = a.frameHeight; if (im.naturalWidth !== W || im.naturalHeight !== H) msg(`WARNING: browser decoded ${im.naturalWidth}x${im.naturalHeight}, manifest says ${W}x${H}`, 'err'); else msg(`${a.assetId.slice(0, 8)} · ${a.name || ''} · ${W}x${H}${a.inLabelSet ? '' : ' · (not in the label set)'}`); fit(); renderList(); };
+    im.src = '/' + a.image;
+    renderAssets();
+  }
+  function renderAssets() {
+    const box = $('assets'); box.innerHTML = '';
+    let n = 0;
+    assets.forEach((a, i) => {
+      if (!a.inLabelSet) return;
+      const d = document.createElement('div');
+      d.className = 'asset' + (i === cur ? ' current' : '') + (a.done ? ' done' : '');
+      d.innerHTML = `<span class="id">${++n}. ${a.assetId.slice(0, 8)}</span><span class="st">${a.done ? '✓ ' : ''}${a.nShapes} shape${a.nShapes === 1 ? '' : 's'}</span>`;
+      d.onclick = () => go(i); box.appendChild(d);
+    });
+    const extras = assets.filter(a => !a.inLabelSet);
+    if (extras.length) {
+      const h = document.createElement('div'); h.style.cssText = 'margin-top:8px;color:var(--dim);font-size:11px'; h.textContent = `not in the label set (${extras.length}) — label if you like`; box.appendChild(h);
+      assets.forEach((a, i) => {
+        if (a.inLabelSet) return;
+        const d = document.createElement('div');
+        d.className = 'asset extra' + (i === cur ? ' current' : '') + (a.done ? ' done' : '');
+        d.innerHTML = `<span class="id">${a.assetId.slice(0, 8)}</span><span class="st">${a.done ? '✓ ' : ''}${a.nShapes}</span>`;
+        d.onclick = () => go(i); box.appendChild(d);
+      });
+    }
+  }
+  function renderList() {
+    const l = $('list'); l.innerHTML = shapes.length ? '<div style="color:var(--dim);font-size:11px;margin:4px 0">shapes on this picture</div>' : '';
+    shapes.forEach((sh, i) => {
+      const d = document.createElement('div'); d.className = 'sh' + (i === sel ? ' sel' : '');
+      d.innerHTML = `<span>${i + 1}. ${sh.subclass} · e${sh.extentRatio.toFixed(2)} ${sh.sizeBand}${sh.gt && sh.gt.passesRules === false ? ' ⚠' : ''}</span><span class="x" title="remove">✕</span>`;
+      d.onclick = ev => { if (ev.target.className === 'x') { sel = i; removeSel(); } else { selectShape(i); } };
+      l.appendChild(d);
+    });
+  }
+
+  window.addEventListener('resize', resize);
+  (async () => {
+    const d = await (await fetch('/api/assets')).json();
+    assets = d.assets; labelSet = d.labelSet;
+    setPrim('ellipse'); resize(); renderAssets();
+    const first = assets.findIndex(a => a.inLabelSet && !a.done);
+    go(first >= 0 ? first : assets.findIndex(a => a.inLabelSet));
+  })();
+})();
+</script>
+</body>
+</html>

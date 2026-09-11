@@ -214,6 +214,32 @@ register so a later Find shapes run does not resurrect them, and a control run
 for the 5× blur with the toggle off (focus-tap, then 5×) to confirm it is the
 existing lens-pin-survives-a-lens-switch behaviour.
 
+### Shape register schema v2 — adopt the benchmark's run blocks in the app
+
+**Raised:** 2026-09-11 · **Size:** medium
+
+The offline benchmark (`tools/shapebench`, brief and findings in
+`docs/shape-benchmark/`) writes one file per project in schema v2: `{ schemaVersion: 2,
+projectId, runs: [ { detectorId, detectorVersion, paramsHash, params, runAt, durationMs,
+assets: [ { assetId, frameWidth, frameHeight, shapes: [ … ] } ] } ] }` — shapes carry
+primitive/subclass (rectangle/square, ellipse/circle), centre, extentRatio + sizeBand,
+aspectRatio ≥ 1, orientationDeg in [0,180), vertices or axes, confidence, and the §3
+rule figures. Runs are keyed by detectorId + detectorVersion + paramsHash; "already
+analysed" means that key already ran; nothing is ever flushed. The rig's
+`work/results/<id>.json` files are shaped to drop into `<project>/shapes.json` the day
+`ShapeRegister` learns v2: decode `runs[]`, migrate a v1 register into an
+`apple-vision-register` block with per-shape provenance (captured/detected/manual), key
+the Find shapes skip (`ShapeFinder.swift`, today `existing.isAnalysed`) on the run key,
+map the SHAPES/SENSITIVITY/SIZE dials onto the §3 bands and thresholds, and keep the
+Masks tab, Gallery SHAPES rows and the Shape-mation builder reading one chosen run
+(a "which run" choice on Find shapes needs its two SVG mirrors updated). **The decision landed
+2026-09-11 evening** (`docs/shape-benchmark/report.md`): no ranking layer — the §3 rules + size
+floor accept a median of 2 shapes per picture; the gap is recall (56 % for the geometric
+reference, 16 % for today's Find-shapes pass against 68 hand labels), on ornate rims and nested
+shapes. Next lever is proposal (an honestly-measured Hough rim pass benchmarked as a run block),
+then this adoption.
+
+
 ### Shape-mation — from spike to feature: timing, accuracy, design mirrors, collections
 
 **Raised:** 2026-09-10 · **Size:** medium
