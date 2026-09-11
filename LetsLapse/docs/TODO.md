@@ -68,13 +68,49 @@ floor/ceiling on the short edge AND the live resolution — Large 256 px, Small
 512 px; the file pass looks for the same family and size at its own gates).
 Steven is torn on SIZE; it stays until the field says.
 
-**Still not found: textured circles.** The facade medallion (ribbed disc) and
-the spike's Gros-Horloge class: the contour tracer needs a closed outline and
-the ribs cut it into pieces — the residual gate is never reached — while the
-rim is a clean strong circle in the CIEdges map. The lever is an edge-point
-circle pass (gradient-direction Hough over the edge map, then the existing
-Halir–Flusser fit on the supporting edge points), for both the live and the
-file pass. Next.
+**Textured circles — the edge-point pass (built 2026-09-11 afternoon).**
+`EdgeCircleDetector` in Kit: Sobel (vDSP) → percentile threshold + thinning →
+gradient-direction Hough (both signs, every radius) → vImage max-filter peaks
+→ per-centre radius histogram of *radial* edge points → support (share of
+2πr), coverage (36 bins, filled from 40 % of the rim's own median bin) and
+largest angular gap ≤ 6 bins (an arch has 18) → Halir–Flusser fit on the rim's
+points. Accepted rims claim their edge points; the tracer's ellipses claim
+theirs first (a marble coaster's veins + a third of its rim read as a circle
+otherwise). Finds the facade medallion live (0.68 support at 384 px) and in
+the file; 7 ms in release, ~50 ms in a Debug build after the hot loops went
+through unsafe buffers. Synthetic sunburst + arch test pins it. Known: one
+0.36 phantom on the marble coaster's bevel in the file pass (`.detected`).
+
+**Performance regression found by Steven's 13:21 recording:** the viewfinder
+ran at a steady 8.3 fps with the toggle on (30 fps in the 09:24 recording).
+Cause: the tap only spaced sample *starts* 200 ms apart, so once a Debug-build
+sample (4 contour passes + Hough at -Onone) outgrew that, the tap queue ran
+back-to-back at `.userInitiated` and iOS throttled the camera. Fix: a
+duty-cycle governor in `ShapeFrameTap` (rest ≥ 1.5× the sample's own time),
+`.utility` QoS, and a log-only `systemPressureState` observer while the tap is
+attached (`shapes: camera pressure …`). Also the SENSITIVITY menu pulsed while
+open — the documented UIMenu-cross-fades-on-re-render trap — fixed by making
+each dial its own `Equatable` view with `.equatable()` like BLEND.
+**Verified on the phone the same afternoon — and the 8 fps had a different
+cause than first thought.** The tap now logs the camera's own period from the
+frames' presentation timestamps: the tele ran at exactly 10 fps because the
+app remembers a per-lens frame rate (`captureSettings.…Telephoto…frameRate =
+10`, an Interval acquisition rate) and applied it to Photo mode's viewfinder;
+the wide ran at 25. Fix: `CameraController.setPhotoViewfinder` — Photo mode's
+viewfinder asks for the format's own rate (≤ 30) and never persists it
+(`photo viewfinder: 30.0 fps (stored 10)`); this also stops the ISP using
+100 ms exposures that blurred every rim at 5×. Two more bugs the same run
+found: tracks expired (0.8 s hold) faster than a slow sample cadence could
+confirm them — hold and the sightings-to-show now follow the measured sample
+period; and a shutter with nothing kept skipped the file pass entirely — every
+shutter with the toggle on now runs it (the 15:01 photo: `0 kept, 1 found in
+the file, register 0 captured + 1 detected`). A window pane with curtain folds
+read as a circle (four tangent clusters, four ~40° holes) → at most two holes
+wider than 30° around a rim. Tap-to-focus: a tap whose hunt never began is left
+on continuous auto-focus instead of pinned where it was. **Field-test with a
+Release build**: Debug samples were 200–1000 ms (`-Onone` Kit) and heated the
+phone to `camera pressure serious`; Release samples are 35–50 ms at 5 Hz on the
+same scene (`xcodebuild … -configuration Release -derivedDataPath <scratch>`).
 
 Owed after the field test: design mirrors (the six `shutter-cluster.photo-*`
 component states lose the Hand and gain the shapes glyph; `capture-photo.shapes`

@@ -597,6 +597,7 @@ struct CaptureView: View {
             // follow the user across the switch.
             if burstPillMode != nil, burstPillMode != newMode { dismissBurstPill() }
             updateTestCardWatch()
+            camera.setPhotoViewfinder(newMode == .photo)
             updateShapeWatch()
             // M is Photo-only chrome (`clusterSlot`, `exposurePanel` both
             // gate on `mode == .photo`), but the exposure it set is real
@@ -973,6 +974,7 @@ struct CaptureView: View {
             testRig.seedDemoChip()
         }
         updateTestCardWatch()
+        camera.setPhotoViewfinder(mode == .photo)
         updateShapeWatch()
         #if DEBUG
         applyModePreviewHook()
@@ -1481,6 +1483,7 @@ struct CaptureView: View {
         steadiness.stop()
         camera.stopTestCardTap()
         camera.stopShapeTap()
+        camera.setPhotoViewfinder(false)
         // Same reasoning as `steadiness.stop()` above: a mid-session close
         // shouldn't leave the manual-exposure servo timer running against a
         // screen nobody can see.
@@ -4189,34 +4192,40 @@ struct CaptureView: View {
         )
         .equatable()
         // Auto shapes on: its three dials join BLEND — one line where they
-        // fit (landscape, the Mac), two on a portrait phone.
+        // fit (landscape, the Mac), two on a portrait phone. Each dial is
+        // `.equatable()` on its own selection, like BLEND: the open menu
+        // must not see this body's re-renders (see `ShapeSearchDial`).
+        let search = shapeSearch
+        let family = ShapeSearchDial(caption: "SHAPES", options: ShapeSearch.Family.allCases, selected: search.family,
+                                     title: \.title, onSelect: { shapeFamilyToken = $0.rawValue }).equatable()
+        let sensitivity = ShapeSearchDial(caption: "SENSITIVITY", options: ShapeSearch.Sensitivity.allCases, selected: search.sensitivity,
+                                          title: \.title, onSelect: { shapeSensitivityToken = $0.rawValue }).equatable()
+        let size = ShapeSearchDial(caption: "SIZE", options: ShapeSearch.Size.allCases, selected: search.size,
+                                   title: \.title, onSelect: { shapeSizeToken = $0.rawValue }).equatable()
         return Group {
             if autoShapesEnabled {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) {
                         blend
-                        shapeSearchDials
+                        family
+                        sensitivity
+                        size
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             blend
-                            shapeSearchDials.familyOnly
+                            family
                         }
-                        shapeSearchDials.sensitivityAndSize
+                        HStack(spacing: 8) {
+                            sensitivity
+                            size
+                        }
                     }
                 }
             } else {
                 blend
             }
         }
-    }
-
-    private var shapeSearchDials: ShapeSearchDials {
-        ShapeSearchDials(
-            search: shapeSearch,
-            onSelectFamily: { shapeFamilyToken = $0.rawValue },
-            onSelectSensitivity: { shapeSensitivityToken = $0.rawValue },
-            onSelectSize: { shapeSizeToken = $0.rawValue })
     }
 
     /// The dials as one value, from their remembered tokens.

@@ -130,6 +130,7 @@ public struct ShapeSearch: Equatable, Sendable, Codable {
             s.edgeCircleMinSupport = 0.3
             s.edgeCircleMinCoverage = 0.45
             s.edgeCircleMaxGapBins = 8
+            s.edgeCircleMaxWideHoles = 3
         case .medium:
             // 1.0 as well as 2.0: a matte disc on a pale table survives at
             // 1.0 and merges with its own shadow at 2.0 (2026-09-11 coasters).
@@ -141,6 +142,7 @@ public struct ShapeSearch: Equatable, Sendable, Codable {
             s.edgeCircleMinSupport = 0.35
             s.edgeCircleMinCoverage = 0.55
             s.edgeCircleMaxGapBins = 6
+            s.edgeCircleMaxWideHoles = 2
         case .low:
             s.contrastAdjustments = [1.0]
             s.maxFitResidual = 0.04
@@ -150,6 +152,7 @@ public struct ShapeSearch: Equatable, Sendable, Codable {
             s.edgeCircleMinSupport = 0.45
             s.edgeCircleMinCoverage = 0.65
             s.edgeCircleMaxGapBins = 5
+            s.edgeCircleMaxWideHoles = 1
         }
     }
 }

@@ -36,9 +36,15 @@ struct EdgeCircleDetector {
         /// Largest run of empty angular bins allowed (of 36): 6 is a 60° hole
         /// — a hand or a car in front of part of a rim, not an arch's half.
         var maxGapBins = 6
+        /// Holes of 3+ bins allowed around the rim: 2 is an occlusion or a
+        /// weak stretch, 4 is a rectangle's four tangent points.
+        var maxWideHoles = 2
         /// How far a supporting point's gradient may be from radial.
         var radialToleranceDegrees = 25.0
-        var maxCandidates = 24
+        /// Proposed centres judged, strongest votes first. A real rim's own
+        /// centre is always near the top; the tail is the cost of judging
+        /// candidates that will fail.
+        var maxCandidates = 16
     }
 
     struct Circle {
@@ -88,31 +94,54 @@ struct EdgeCircleDetector {
         var maxMag: Float = 0
         vDSP_maxv(mag, 1, &maxMag, vDSP_Length(count))
         guard maxMag > 0 else { return [] }
+        // The percentile from every fourth pixel: the estimate is the same to
+        // within a bin and the loop is a quarter of the price in -Onone.
         var histogram = [Int](repeating: 0, count: 256)
-        for m in mag { histogram[min(255, Int(m / maxMag * 255))] += 1 }
+        var sampled = 0
+        mag.withUnsafeBufferPointer { mag in
+            var i = 0
+            while i < count {
+                histogram[min(255, Int(mag[i] / maxMag * 255))] += 1
+                sampled += 1
+                i += 4
+            }
+        }
         var acc = 0, bin = 0
-        let target = Int(Double(count) * settings.edgePercentile)
+        let target = Int(Double(sampled) * settings.edgePercentile)
         while bin < 255, acc + histogram[bin] < target { acc += histogram[bin]; bin += 1 }
         let threshold = max(Float(bin) / 255 * maxMag, 12)
 
+        // The loops below run through unsafe buffers on purpose: the app's
+        // Debug build compiles this package -Onone, where bounds-checked
+        // array access made the pass 10× slower than release and cost the
+        // viewfinder its frame rate (2026-09-11).
         struct Edge { var x: Int32; var y: Int32; var dx: Float; var dy: Float }
         var edges: [Edge] = []
         edges.reserveCapacity(count / 20)
-        for y in 1..<(h - 1) {
-            for x in 1..<(w - 1) {
-                let i = y * w + x
-                let m = mag[i]
-                guard m >= threshold else { continue }
-                let dx = gx[i] / m, dy = gy[i] / m
-                // Quantised direction for the non-maximum test.
-                let ax = abs(dx), ay = abs(dy)
-                let n1: Int, n2: Int
-                if ax >= 2.414 * ay { n1 = i - 1; n2 = i + 1 }
-                else if ay >= 2.414 * ax { n1 = i - w; n2 = i + w }
-                else if (dx > 0) == (dy > 0) { n1 = i - w - 1; n2 = i + w + 1 }
-                else { n1 = i - w + 1; n2 = i + w - 1 }
-                guard m >= mag[n1], m >= mag[n2] else { continue }
-                edges.append(Edge(x: Int32(x), y: Int32(y), dx: dx, dy: dy))
+        mag.withUnsafeBufferPointer { mag in
+            gx.withUnsafeBufferPointer { gx in
+                gy.withUnsafeBufferPointer { gy in
+                    for y in 1..<(h - 1) {
+                        var i = y * w + 1
+                        for x in 1..<(w - 1) {
+                            let m = mag[i]
+                            if m >= threshold {
+                                let dx = gx[i] / m, dy = gy[i] / m
+                                // Quantised direction for the non-maximum test.
+                                let ax = abs(dx), ay = abs(dy)
+                                let n1: Int, n2: Int
+                                if ax >= 2.414 * ay { n1 = i - 1; n2 = i + 1 }
+                                else if ay >= 2.414 * ax { n1 = i - w; n2 = i + w }
+                                else if (dx > 0) == (dy > 0) { n1 = i - w - 1; n2 = i + w + 1 }
+                                else { n1 = i - w + 1; n2 = i + w - 1 }
+                                if m >= mag[n1], m >= mag[n2] {
+                                    edges.append(Edge(x: Int32(x), y: Int32(y), dx: dx, dy: dy))
+                                }
+                            }
+                            i += 1
+                        }
+                    }
+                }
             }
         }
         if debug { print("    hough: \(w)×\(h), \(edges.count) edge points, radii \(Int(settings.minRadius))–\(Int(settings.maxRadius)), threshold \(Int(threshold))") }
@@ -124,15 +153,21 @@ struct EdgeCircleDetector {
         guard rmax > rmin else { return [] }
         let step = rmax - rmin > 60 ? 2 : 1
         var votes = [Int32](repeating: 0, count: count)
-        for e in edges {
-            var r = rmin
-            while r <= rmax {
-                let fr = Float(r)
-                let x1 = Int(Float(e.x) + e.dx * fr), y1 = Int(Float(e.y) + e.dy * fr)
-                if x1 >= 0, x1 < w, y1 >= 0, y1 < h { votes[y1 * w + x1] += 1 }
-                let x2 = Int(Float(e.x) - e.dx * fr), y2 = Int(Float(e.y) - e.dy * fr)
-                if x2 >= 0, x2 < w, y2 >= 0, y2 < h { votes[y2 * w + x2] += 1 }
-                r += step
+        votes.withUnsafeMutableBufferPointer { votes in
+            edges.withUnsafeBufferPointer { edges in
+                let fw = Float(w), fh = Float(h)
+                for e in edges {
+                    var r = rmin
+                    let ex = Float(e.x), ey = Float(e.y)
+                    while r <= rmax {
+                        let fr = Float(r)
+                        let x1 = ex + e.dx * fr, y1 = ey + e.dy * fr
+                        if x1 >= 0, x1 < fw, y1 >= 0, y1 < fh { votes[Int(y1) * w + Int(x1)] += 1 }
+                        let x2 = ex - e.dx * fr, y2 = ey - e.dy * fr
+                        if x2 >= 0, x2 < fw, y2 >= 0, y2 < fh { votes[Int(y2) * w + Int(x2)] += 1 }
+                        r += step
+                    }
+                }
             }
         }
         lap("votes")
@@ -156,11 +191,16 @@ struct EdgeCircleDetector {
                 vImageMax_PlanarF(&input, &output, nil, 0, 0, vImagePixelCount(window), vImagePixelCount(window), vImage_Flags(kvImageEdgeExtend))
             }
         }
-        for y in 1..<(h - 1) {
-            for x in 1..<(w - 1) {
-                let i = y * w + x
-                let v = smooth[i]
-                if v >= 3, v == dilated[i] { peaks.append((x, y, v)) }
+        smooth.withUnsafeBufferPointer { smooth in
+            dilated.withUnsafeBufferPointer { dilated in
+                for y in 1..<(h - 1) {
+                    var i = y * w + 1
+                    for x in 1..<(w - 1) {
+                        let v = smooth[i]
+                        if v >= 3, v == dilated[i] { peaks.append((x, y, v)) }
+                        i += 1
+                    }
+                }
             }
         }
         peaks.sort { $0.2 > $1.2 }
@@ -188,16 +228,24 @@ struct EdgeCircleDetector {
             var radial: [(d: Float, e: Edge, i: Int)] = []
             let cx = Float(px), cy = Float(py)
             let reach = Float(rmax + 2)
-            for (i, e) in edges.enumerated() where !used[i] {
-                let vx = Float(e.x) - cx, vy = Float(e.y) - cy
-                if abs(vx) > reach || abs(vy) > reach { continue }
-                let d = (vx * vx + vy * vy).squareRoot()
-                guard d >= Float(rmin) - 1, d <= reach, d > 0 else { continue }
-                // Radial: the gradient points at (or away from) the centre.
-                let align = abs((vx * e.dx + vy * e.dy) / d)
-                guard align >= cosTol else { continue }
-                hist[Int(d.rounded())] += 1
-                radial.append((d, e, i))
+            let floorD = Float(rmin) - 1
+            edges.withUnsafeBufferPointer { edges in
+                used.withUnsafeBufferPointer { used in
+                    hist.withUnsafeMutableBufferPointer { hist in
+                        for i in 0..<edges.count where !used[i] {
+                            let e = edges[i]
+                            let vx = Float(e.x) - cx, vy = Float(e.y) - cy
+                            if abs(vx) > reach || abs(vy) > reach { continue }
+                            let d = (vx * vx + vy * vy).squareRoot()
+                            if d < floorD || d > reach || d <= 0 { continue }
+                            // Radial: the gradient points at (or away from) the centre.
+                            let align = abs((vx * e.dx + vy * e.dy) / d)
+                            if align < cosTol { continue }
+                            hist[Int(d.rounded())] += 1
+                            radial.append((d, e, i))
+                        }
+                    }
+                }
             }
             // Best radius: the ±1 bin window with the most points, scored per
             // unit of perimeter so a small full rim beats a big sparse one.
@@ -238,8 +286,29 @@ struct EdgeCircleDetector {
             var gap = 0, run = 0
             for f in filled + filled { if f { run = 0 } else { run += 1; gap = max(gap, run) } }
             gap = min(gap, 36)
-            if debug { print(String(format: "      coverage %.2f, largest gap %d bins  %@", coverage, gap, bins.map { String($0) }.joined(separator: " "))) }
-            guard coverage >= settings.minCoverage, gap <= settings.maxGapBins else { continue }
+            // Holes wider than 30°, counted around the circle. A circle
+            // inscribed in a rectangle — a window pane with curtain folds and
+            // sash bars near its four tangent points — fills ~20 bins in four
+            // clusters with four ~40° holes between, and passes coverage and
+            // the largest-gap test (2026-09-11 15:05 screenshot). A rim is
+            // not sampled in four bursts: at most two wide holes.
+            var wideHoles = 0
+            if let firstFilled = filled.firstIndex(of: true) {
+                var i = firstFilled, unfilled = 0
+                for _ in 0..<36 {
+                    i = (i + 1) % 36
+                    if filled[i] {
+                        if unfilled >= 3 { wideHoles += 1 }
+                        unfilled = 0
+                    } else {
+                        unfilled += 1
+                    }
+                }
+            } else {
+                wideHoles = 36
+            }
+            if debug { print(String(format: "      coverage %.2f, largest gap %d bins, %d wide holes  %@", coverage, gap, wideHoles, bins.map { String($0) }.joined(separator: " "))) }
+            guard coverage >= settings.minCoverage, gap <= settings.maxGapBins, wideHoles <= settings.maxWideHoles else { continue }
             // Accepted: its rim is spoken for. Candidates come strongest
             // vote first, so a rim's own centre claims it before the centres
             // a pixel or two off it, or a smaller circle leaning on it, are

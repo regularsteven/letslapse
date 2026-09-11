@@ -24,25 +24,68 @@ import LetsLapseKit
 /// life of its sample buffer, and the output discards late frames anyway, so a
 /// sample that takes too long costs frames rather than correctness.
 final class ShapeFrameTap: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    let queue = DispatchQueue(label: "letslapse.shapes.tap", qos: .userInitiated)
-    /// Called on `queue` with each frame that is taken, at most every
-    /// `minimumInterval` — a detection runs for most of that anyway.
+    /// `.default`: below the interface, above background work. `.utility`
+    /// was tried and put the pass on the efficiency cores, where a busy
+    /// scene's sample ran 3–5× longer for no gain — the governor below is
+    /// what keeps the pass from crowding anything, not the QoS.
+    let queue = DispatchQueue(label: "letslapse.shapes.tap", qos: .default)
+    /// Called on `queue` with each frame that is taken.
     var handler: ((CVPixelBuffer) -> Void)?
-    private var lastStarted = Date.distantPast
+    private var nextAllowed = Date.distantPast
+    /// The camera's delivery rate as this output sees it — every frame lands
+    /// here before the governor decides, so this is the viewfinder's own
+    /// frame rate, the number a throttled camera shows first. Read by the
+    /// finder for its log line.
+    private(set) var deliveredFPS: Double = 0
+    /// The camera's own frame period, from the smallest gap between the
+    /// presentation timestamps of consecutive delivered frames in the window:
+    /// frames dropped while a sample runs widen a gap, they never narrow one,
+    /// so the minimum is the rate the sensor is actually running at.
+    private(set) var cameraPeriod: Double = 0
+    private var windowStart = Date.distantPast
+    private var windowFrames = 0
+    private var lastPTS: Double = -1
+    private var minGap = Double.greatestFiniteMagnitude
+    private var received = 0
 
-    /// Caps the pass at 5 Hz on a device fast enough to go faster: a viewfinder
-    /// aid does not need more, and the heat budget in Photo mode is the next
+    /// The cadence on a device fast enough for it: 5 Hz. A viewfinder aid
+    /// does not need more, and the heat budget in Photo mode is the next
     /// shot's, not this pass's.
     static let minimumInterval: TimeInterval = 0.2
+    /// The governor: after a sample of `d` seconds the queue rests for at
+    /// least `restFactor × d` before the next, so the pass never holds more
+    /// than ~40 % of a core however expensive the dials make a sample. Spacing
+    /// only the *starts* was the 2026-09-11 13:21 regression: a Debug build's
+    /// sample outgrew the 200 ms and the queue ran back-to-back, iOS answered
+    /// by throttling the camera to 8 fps.
+    static let restFactor = 1.5
 
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         let now = Date()
-        guard now.timeIntervalSince(lastStarted) >= Self.minimumInterval,
-              let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        lastStarted = now
+        windowFrames += 1
+        received += 1
+        if received == 1 || received == 2 || received == 10 || received % 300 == 0 {
+            LLog(String(format: "shapes: tap frame %d, governor opens in %.0f ms", received, max(0, nextAllowed.timeIntervalSince(now)) * 1000))
+        }
+        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        if lastPTS >= 0, pts > lastPTS { minGap = min(minGap, pts - lastPTS) }
+        lastPTS = pts
+        let elapsed = now.timeIntervalSince(windowStart)
+        if elapsed >= 2 {
+            if windowStart != .distantPast {
+                deliveredFPS = Double(windowFrames - 1) / elapsed
+                if minGap < .greatestFiniteMagnitude { cameraPeriod = minGap }
+            }
+            windowStart = now
+            windowFrames = 1
+            minGap = .greatestFiniteMagnitude
+        }
+        guard now >= nextAllowed, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         handler?(buffer)
+        let took = Date().timeIntervalSince(now)
+        nextAllowed = Date().addingTimeInterval(max(Self.minimumInterval - took, Self.restFactor * took))
     }
 }
 
@@ -116,7 +159,7 @@ final class LiveShapeFinder {
         /// second sighting: a one-sample false positive then never blinks on.
         var sightings: Int
 
-        var isConfirmed: Bool { sightings >= LiveShapeFinder.sightingsToShow }
+        func isConfirmed(sightingsToShow: Int) -> Bool { sightings >= sightingsToShow }
     }
 
     /// Everything followed right now, confirmed or not, in first-seen order.
@@ -153,11 +196,26 @@ final class LiveShapeFinder {
     @ObservationIgnored let tap = ShapeFrameTap()
     @ObservationIgnored private let sampler = ShapeSampler()
 
-    /// How long a track stands after its last sighting — four samples at the
-    /// 5 Hz cadence, so a shape the tracer drops for a frame or two stays
-    /// traced, and one that has really gone is off within a second.
-    static let holdFor: TimeInterval = 0.8
-    static let sightingsToShow = 2
+    /// How long a track stands after its last sighting, at the 5 Hz cadence:
+    /// four samples, so a shape the tracer drops for a frame or two stays
+    /// traced and one that has really gone is off within a second. The hold
+    /// actually used scales with the cadence the pass is achieving (see
+    /// `holdFor`): on a busy scene in a Debug build a sample plus its rest
+    /// ran 1.4–2.4 s, longer than this, and every track expired before the
+    /// next sample could confirm it — found, forgotten, found, forgotten
+    /// (2026-09-11 14:54, the medallion at 5×).
+    static let baseHold: TimeInterval = 0.8
+    /// Sightings before a track is drawn at the 5 Hz cadence (a one-sample
+    /// false positive never blinks on). When samples are slower than 0.4 s
+    /// apart the first sighting shows: waiting a second cycle would mean
+    /// seconds of nothing on screen.
+    static let baseSightingsToShow = 2
+    /// Seconds between the last two samples that landed.
+    @ObservationIgnored private var lastIngestAt: Date?
+    @ObservationIgnored private(set) var samplePeriod: TimeInterval = 0.2
+
+    var holdFor: TimeInterval { max(Self.baseHold, 2.5 * samplePeriod) }
+    var sightingsToShow: Int { samplePeriod > 0.4 ? 1 : Self.baseSightingsToShow }
     /// Same-thing test between samples, and against the dismissed list.
     static let matchThreshold = ShapeReconciler.matchThreshold
 
@@ -204,9 +262,15 @@ final class LiveShapeFinder {
                 seconds: Double, at now: Date = Date()) {
         sampleCount += 1
         lastSampleSeconds = seconds
-        if sampleCount % 25 == 0 {
-            LLog(String(format: "shapes: sample %d took %.0f ms (%@), %d found, %d tracked, %d dismissed",
-                        sampleCount, seconds * 1000, search.token, shapes.count, tracks.count, dismissed.count))
+        if let last = lastIngestAt {
+            let gap = now.timeIntervalSince(last)
+            if gap > 0 { samplePeriod = 0.5 * samplePeriod + 0.5 * gap }
+        }
+        lastIngestAt = now
+        if sampleCount == 1 || sampleCount % 25 == 0 {
+            LLog(String(format: "shapes: sample %d took %.0f ms every %.2f s (%@), %d found, %d tracked, %d dismissed; tap saw %.1f fps, camera period %.1f ms (%.0f fps)",
+                        sampleCount, seconds * 1000, samplePeriod, search.token, shapes.count, tracks.count, dismissed.count,
+                        tap.deliveredFPS, tap.cameraPeriod * 1000, tap.cameraPeriod > 0 ? 1 / tap.cameraPeriod : 0))
         }
         // A sample measured in a pose that has since changed is a quarter turn
         // off; the next one will be right.
@@ -226,12 +290,16 @@ final class LiveShapeFinder {
                 next.append(Track(id: UUID(), shape: shape, lastSeen: now, sightings: 1))
             }
         }
-        next.removeAll { now.timeIntervalSince($0.lastSeen) > Self.holdFor }
+        let hold = holdFor
+        next.removeAll { now.timeIntervalSince($0.lastSeen) > hold }
         if next != tracks { tracks = next }
     }
 
     /// The tracks worth drawing.
-    var visible: [Track] { tracks.filter(\.isConfirmed) }
+    var visible: [Track] {
+        let needed = sightingsToShow
+        return tracks.filter { $0.isConfirmed(sightingsToShow: needed) }
+    }
 
     // MARK: - What the person does
 
@@ -252,14 +320,16 @@ final class LiveShapeFinder {
     }
 
     /// What the shutter takes with it: the confirmed shapes on screen and the
-    /// dismissed ones, in the upright preview frame. Nil when nothing was
-    /// measured yet (no sample has landed) — a register is not written for a
-    /// viewfinder that never looked.
+    /// dismissed ones, in the upright preview frame. Nil only when nothing
+    /// was measured yet (no sample has landed). An empty snapshot is still a
+    /// snapshot: the file pass — the better detector, on a sharp still — runs
+    /// on the photo whatever the viewfinder managed, and records what it
+    /// finds as plain detections (2026-09-11: a medallion the live pass lost
+    /// to a blurred 10 fps preview was in the photo at 0.77 and never
+    /// recorded because the shutter had nothing to carry).
     func snapshot() -> ViewfinderShapes? {
         guard frameSize.width > 0, frameSize.height > 0 else { return nil }
-        let kept = visible.map(\.shape)
-        guard !kept.isEmpty || !dismissed.isEmpty else { return nil }
-        return ViewfinderShapes(kept: kept, dismissed: dismissed, frameSize: frameSize, search: search)
+        return ViewfinderShapes(kept: visible.map(\.shape), dismissed: dismissed, frameSize: frameSize, search: search)
     }
 
     // MARK: - Screenshot staging

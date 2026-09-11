@@ -73,6 +73,7 @@ public struct ShapeDetector: Sendable {
         /// bins — an arch has 18 of 36.
         public var edgeCircleMinCoverage = 0.55
         public var edgeCircleMaxGapBins = 6
+        public var edgeCircleMaxWideHoles = 2
         public var edgeCirclePercentile = 0.85
         public var edgeCircleMaxResidual = 0.08
         /// Which contour polarities to trace: dark shapes on light, light on
@@ -216,6 +217,7 @@ public struct ShapeDetector: Sendable {
             hs.minSupport = settings.edgeCircleMinSupport
             hs.minCoverage = settings.edgeCircleMinCoverage
             hs.maxGapBins = settings.edgeCircleMaxGapBins
+            hs.maxWideHoles = settings.edgeCircleMaxWideHoles
             var exclusions: [EdgeCircleDetector.Exclusion] = []
             for e in keptEllipses {
                 let cx: Double = Double(e.centre.x) * w * houghScale

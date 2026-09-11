@@ -694,80 +694,46 @@ struct PhotoBlendDial: View, Equatable {
     }
 }
 
-/// Auto shape mode's three dials, beside BLEND while the toggle is on:
-/// SHAPES (what to look for), SENSITIVITY (how hard), SIZE (how big) — the
-/// field-test levers of `ShapeSearch`, in the row's own grammar. Menus read
-/// in declaration order on the Mac and reversed on the phone (see
-/// `BlendMenuOrder`), so each list is declared so its first option lands
-/// nearest the button — the way BLEND does it.
+/// One of auto shape mode's dials — SHAPES, SENSITIVITY or SIZE — in the
+/// row's own grammar: caption, then a menu with a check on the option
+/// chosen. Its own `Equatable` view, keyed on the selection, for the reason
+/// `PhotoBlendDial` is one: an open `UIMenu` cross-fades its items on ANY
+/// re-render of the view that hosts it, and the capture screen's body
+/// re-renders on every camera publish (2026-09-11 13:21: the High / Medium /
+/// Low list pulsed while open). `.equatable()` at the call site is what
+/// stops the re-render reaching the menu.
 ///
-/// Offered whole for one-line layouts and in two halves for the portrait
-/// phone's second line (`familyOnly` / `sensitivityAndSize`).
-struct ShapeSearchDials: View, Equatable {
-    let search: ShapeSearch
-    let onSelectFamily: (ShapeSearch.Family) -> Void
-    let onSelectSensitivity: (ShapeSearch.Sensitivity) -> Void
-    let onSelectSize: (ShapeSearch.Size) -> Void
+/// Menus read in declaration order on the Mac and reversed on the phone
+/// (see `BlendMenuOrder`), so the options are declared so the first lands
+/// nearest the button — the way BLEND does it.
+struct ShapeSearchDial<Option: Hashable>: View, Equatable {
+    let caption: String
+    let options: [Option]
+    let selected: Option
+    let title: (Option) -> String
+    let onSelect: (Option) -> Void
 
-    static func == (lhs: Self, rhs: Self) -> Bool { lhs.search == rhs.search }
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.caption == rhs.caption && lhs.selected == rhs.selected
+    }
 
     var body: some View {
         HStack(spacing: 8) {
-            familyDial
-            sensitivityDial
-            sizeDial
-        }
-    }
-
-    var familyOnly: some View { familyDial }
-
-    var sensitivityAndSize: some View {
-        HStack(spacing: 8) {
-            sensitivityDial
-            sizeDial
-        }
-    }
-
-    private var familyDial: some View {
-        dial("SHAPES", ordered(ShapeSearch.Family.allCases), selected: search.family,
-             title: \.title, select: onSelectFamily)
-    }
-
-    private var sensitivityDial: some View {
-        dial("SENSITIVITY", ordered(ShapeSearch.Sensitivity.allCases), selected: search.sensitivity,
-             title: \.title, select: onSelectSensitivity)
-    }
-
-    private var sizeDial: some View {
-        dial("SIZE", ordered(ShapeSearch.Size.allCases), selected: search.size,
-             title: \.title, select: onSelectSize)
-    }
-
-    /// Declaration order that reads top-to-bottom as the case order on both platforms.
-    private func ordered<T>(_ cases: [T]) -> [T] {
-        BlendMenuOrder.topFirst ? cases : cases.reversed()
-    }
-
-    private func dial<T: Hashable>(
-        _ caption: String, _ options: [T], selected: T,
-        title: KeyPath<T, String>, select: @escaping (T) -> Void
-    ) -> some View {
-        HStack(spacing: 8) {
             DialCaption(text: caption)
             Menu {
-                ForEach(options, id: \.self) { option in
+                ForEach(BlendMenuOrder.topFirst ? options : options.reversed(), id: \.self) { option in
                     Button {
-                        select(option)
+                        onSelect(option)
                     } label: {
                         if option == selected {
-                            Label(option[keyPath: title], systemImage: "checkmark")
+                            Label(title(option), systemImage: "checkmark")
                         } else {
-                            Text(option[keyPath: title])
+                            Text(title(option))
                         }
                     }
                 }
             } label: {
-                PickerMenuLabel(text: selected[keyPath: title])
+                PickerMenuLabel(text: title(selected))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()

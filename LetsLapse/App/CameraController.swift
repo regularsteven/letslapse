@@ -1297,6 +1297,10 @@ final class CameraController: NSObject, ObservableObject {
     /// lifetime, none can steal another's frames, and every capture start
     /// detaches all three inline.
     private var shapeOutput: AVCaptureVideoDataOutput?
+    /// Log-only, while the shape tap is attached: the camera's own pressure
+    /// reading is the one number that says whether the pass is costing the
+    /// viewfinder its frame rate (the run-time guard only watches a shoot).
+    private var shapePressureObservation: NSKeyValueObservation?
     private var liveBlendController: LiveBlendController?
     #if os(iOS)
     private var liveBlendRawController: LiveBlendRawController?
@@ -1368,6 +1372,15 @@ final class CameraController: NSObject, ObservableObject {
     /// itself is mode-agnostic — it is told which run to start — so this is a
     /// label, never a switch. Set by CaptureView.
     var loggedCaptureMode = CaptureMode.video.rawValue
+    /// Photo mode's viewfinder runs at the format's own rate, up to 30 fps,
+    /// instead of the per-lens rate Interval remembers. 10/12/15 are blend
+    /// acquisition rates — a stills viewfinder has no blend stream to feed
+    /// and no heat budget to hold, and at 10 fps the tele's preview stutters
+    /// and the ISP is free to use 100 ms exposures that blur every edge
+    /// (2026-09-11: the 5× viewfinder at a stored 10 fps). sessionQueue-
+    /// confined; set through `setPhotoViewfinder`. The stored preference is
+    /// untouched — this never persists anything.
+    private var photoViewfinderActive = false
 
     /// What the session log should report as this session's frame count: the
     /// stills or blended outputs a run produced, else the recorded segment
@@ -1775,6 +1788,19 @@ final class CameraController: NSObject, ObservableObject {
     /// letting a 16:9 video letterbox promise framing the file won't have.
     /// No-op while any capture is running — the DNG run flips the preset
     /// itself, and its restore leaves the armed configuration in place.
+    /// Photo mode on or off — see `photoViewfinderActive`. Re-applies the
+    /// format while idle so the rate takes effect at once; a run in flight
+    /// keeps its rate and picks the new one up at its next format apply.
+    func setPhotoViewfinder(_ active: Bool) {
+        sessionQueue.async {
+            guard self.photoViewfinderActive != active else { return }
+            self.photoViewfinderActive = active
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive,
+                  self.photoAspectPreviousPreset == nil else { return }
+            _ = self.applyCaptureFormat(resolution: self.selectedResolution, fps: self.selectedFrameRate)
+        }
+    }
+
     func setPhotoAspectPreview(_ active: Bool) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
@@ -3072,9 +3098,16 @@ final class CameraController: NSObject, ObservableObject {
                 device.activeFormat = match.format
             }
             // Asked of the format being landed on, not the one still active.
-            let duration = Self.frameDuration(forNominal: fps, in: match.format)
+            // Photo's viewfinder asks for the format's own rate (≤ 30) and
+            // keeps the format the stored rate chose, so the stills path
+            // sees the same format either way.
+            let nominal = photoViewfinderActive ? max(fps, 30) : fps
+            let duration = Self.frameDuration(forNominal: nominal, in: match.format)
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
+            if photoViewfinderActive {
+                LLog(String(format: "photo viewfinder: %.1f fps (stored %d)", 1 / duration.seconds, fps))
+            }
             selectedPhotoDimensions = match.photoDimensions
             if let photoDimensions = match.photoDimensions,
                !sameDimensions(photoOutput.maxPhotoDimensions, photoDimensions) {
@@ -4441,12 +4474,16 @@ final class CameraController: NSObject, ObservableObject {
     /// budget is locked wherever it got to and said out loud — carrying on into
     /// the run under continuous auto-focus is the failure this path exists to
     /// prevent.
+    /// Returns whether a hunt was ever observed — false when `expectStart`
+    /// was asked and the lens never began to move within the grace window.
+    @discardableResult
     private func awaitFocusSettle(
         on device: AVCaptureDevice,
         expectStart: Bool = false,
         startingFromLocked: Bool = false,
         timeout: TimeInterval = 1.5
-    ) {
+    ) -> Bool {
+        var huntSeen = !expectStart
         if expectStart {
             // Coming out of a hard lock the ISP takes appreciably longer to
             // begin than it does from continuous auto — the motor is parked, not
@@ -4460,7 +4497,8 @@ final class CameraController: NSObject, ObservableObject {
             while !device.isAdjustingFocus, Date() < graceUntil {
                 Thread.sleep(forTimeInterval: 0.02)
             }
-            if !device.isAdjustingFocus {
+            huntSeen = device.isAdjustingFocus
+            if !huntSeen {
                 LLog(String(format: "focus: no hunt began within %.2fs — lens may not move", grace))
             }
         }
@@ -4471,6 +4509,7 @@ final class CameraController: NSObject, ObservableObject {
         if device.isAdjustingFocus {
             LLog(String(format: "focus: still hunting after %.1fs — pinning where it is", timeout))
         }
+        return huntSeen
     }
 
     /// sessionQueue-confined. Blocks until AE and AWB have settled on `device`,
@@ -4874,8 +4913,28 @@ final class CameraController: NSObject, ObservableObject {
         tapFocusPoint = point
         tapFocusLocked = true
         publishFocusHold()
-        awaitFocusSettle(on: device, expectStart: true, startingFromLocked: wasLocked)
-        pinFocusHere(on: device)
+        // The tele's hunt can start later than the grace, or not at all from
+        // a lens position another constituent left behind (2026-09-11, 5×
+        // blurry after taps: every tap logged "no hunt began" and pinned the
+        // lens exactly where it was, which is a tap that makes things worse).
+        // A tap whose hunt never began is not pinned: the point of interest
+        // stays and the lens goes back to continuous auto, so at least the
+        // picture focuses — the pin is only worth having on a hunt that ran.
+        let hunted = awaitFocusSettle(on: device, expectStart: true, startingFromLocked: wasLocked)
+        if hunted {
+            pinFocusHere(on: device)
+        } else {
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                if device.isFocusModeSupported(.continuousAutoFocus) {
+                    device.focusMode = .continuousAutoFocus
+                }
+            } catch {}
+            tapFocusLocked = false
+            publishFocusHold()
+            LLog("focus: tap left the lens on continuous auto-focus (no hunt to pin)")
+        }
         #if os(iOS)
         let after = device.lensPosition
         CaptureSessionLogger.shared.log("focus_tap", [
@@ -4883,8 +4942,8 @@ final class CameraController: NSObject, ObservableObject {
             "lensBefore": before, "lensPosition": after,
             "moved": abs(after - before) >= 0.001,
         ])
-        LLog(String(format: "focus: tap at %.2f,%.2f pinned at lens %.3f (from %.3f)",
-                    point.x, point.y, after, before))
+        LLog(String(format: "focus: tap at %.2f,%.2f %@ lens %.3f (from %.3f)",
+                    point.x, point.y, hunted ? "pinned at" : "left continuous at", after, before))
         #else
         CaptureSessionLogger.shared.log("focus_tap", [
             "x": Double(point.x), "y": Double(point.y),
@@ -5363,6 +5422,18 @@ final class CameraController: NSObject, ObservableObject {
                 self.session.commitConfiguration()
             }
             output.setSampleBufferDelegate(tap, queue: tap.queue)
+            LLog("shapes: tap attached (outputs \(self.session.outputs.count), inputs \(self.session.inputs.count), connection \(output.connection(with: .video) != nil), device \(self.videoDevice != nil))")
+            #if os(iOS)
+            if self.shapePressureObservation == nil, let device = self.videoDevice {
+                LLog(String(format: "shapes: device frame duration %.1f–%.1f ms, format %@",
+                            device.activeVideoMinFrameDuration.seconds * 1000, device.activeVideoMaxFrameDuration.seconds * 1000,
+                            String(describing: device.activeFormat.formatDescription.dimensions.width) + "×" + String(describing: device.activeFormat.formatDescription.dimensions.height)))
+                self.shapePressureObservation = device.observe(\.systemPressureState, options: [.initial, .new]) { device, _ in
+                    let state = device.systemPressureState
+                    LLog("shapes: camera pressure \(Self.systemPressureName(state)) (factors \(state.factors.rawValue))")
+                }
+            }
+            #endif
         }
     }
 
@@ -5375,6 +5446,7 @@ final class CameraController: NSObject, ObservableObject {
     /// sessionQueue-confined, synchronous detach — called inline from every
     /// capture start beside the other two.
     private func detachShapeTapNow() {
+        shapePressureObservation = nil
         guard let output = shapeOutput else { return }
         output.setSampleBufferDelegate(nil, queue: nil)
         if session.outputs.contains(output) {
