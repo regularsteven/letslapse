@@ -83,6 +83,38 @@ IoU gate to 0.85 buys 4 labels for 7 false positives, to 0.80 buys 14 for 49; a 
 `approxPolyDP` epsilon (rounder corners) buys 0 for 26; rectangle fill 0.80, sides 15 % and angle
 12° buy 0–1. **The §3 thresholds stand as specified.**
 
+## Dial sweep (2026-09-11, later): the missing recall is not behind a setting
+
+Step 1 of "Next" below, done the same night: the shipping detector run through the rig at every
+sensitivity and at the Small size dial, each as its own run block, all against the same labels.
+
+| `lapse shapes` dial | raw shapes on the 25 | TP | FP | FN | precision | recall |
+|---|---|---|---|---|---|---|
+| all / **medium** / all (Find-shapes default) | 36 | 11 | 14 | 57 | 44 % | 16 % |
+| all / high / all | 63 | 13 | 33 | 55 | 28 % | 19 % |
+| all / low / all | 22 | 11 | 5 | 57 | 69 % | 16 % |
+| all / medium / small | — | 4 | 8 | 64 | 33 % | 6 % |
+| all / high / small | — | 4 | 41 | 64 | 9 % | 6 % |
+
+- **High** doubles the proposals and buys 2 labels for 19 more false positives. **Low** keeps the
+  default's recall exactly and drops 9 of its 14 false positives: on this corpus the medium default
+  pays nine false positives for nothing.
+- 17 of the 68 labels have a major axis under the Kit's own size floor (1/6 of the short edge,
+  504 px on these frames, versus the brief's 0.10 of the frame). The Small dial, which covers that
+  band, finds 4 of them at 8–41 false positives — the floor is not the cause; those shapes are not
+  proposed.
+- **Union over every Vision setting and the phone registers: 19 of 68 labels.** The geometric
+  reference alone: 39. Both together: 43. **25 labels are found by nothing** — 8 small rectangles,
+  6 small circles, 4 small ellipses, 2 medium circles, 2 medium rectangles, 2 large ellipses, 1 small
+  square. 24 labels are found by the reference and by no Vision setting; 4 the other way.
+
+So the Kit's proposal stage is the bottleneck, and it is not a dial. The reference's contour maps
+(Otsu-threshold Canny with an enclosed-fill pass at three closing sizes, RETR_CCOMP so a light
+shape inside a dark one is a hole) find twice as many of the shapes a person marked. The
+actionable step is to port those maps into the Kit's still-photo pass as an extra candidate
+source — the file pass has seconds to spend, the live pass does not — and re-run this benchmark.
+The 25 never-found labels are the hard set to watch.
+
 ## What was learned building the reference (worth keeping)
 
 - The brief's auto-Canny (median ± σ) goes blind on a bright wall (median 165 → high threshold
@@ -115,10 +147,11 @@ IoU gate to 0.85 buys 4 labels for 7 false positives, to 0.80 buys 14 for 49; a 
 
 ## Next
 
-1. **Proposal, not rules.** The recall gap is ornate rims and nests. The Kit's own Hough rim pass
-   finds the rose windows and medallions that this reference cannot trace — measured honestly
-   (edge support with radial gradient agreement, not a band), it is the candidate to lift recall.
-   Benchmark it as another run block against these labels; it earns its place or it does not.
+1. **Proposal, not rules, and not a dial** (the sweep above). Port the reference's proposal maps
+   into `ShapeDetector`'s still-photo path as an additional candidate source, keep the Kit's
+   Hough rim pass, and re-run `vision` + `metrics` against these labels. Separately, the
+   Find-shapes default could move from medium to low today: same recall, 9 fewer false
+   positives on this corpus — measure it on the next corpus before shipping it.
 2. **Adopt schema v2 in the app** (TODO "Shape register schema v2"): the run ledger, the §3 rules,
    the size bands, and `refined`/provenance are the pieces Find shapes needs.
 3. **Decide the nest policy** once: label and detect the outermost member, or all members. The

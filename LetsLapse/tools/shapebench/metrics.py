@@ -456,7 +456,8 @@ def write_overlays(work, manifest, results, docs_dir=None):
     os.makedirs(comb_dir, exist_ok=True)
     per_det_dir = {}
     for det in results:
-        per_det_dir[det] = os.path.join(work, "overlays", f"{det}.vs-gt")
+        safe = "".join(ch if (ch.isalnum() or ch in "-._") else "-" for ch in det).strip("-")
+        per_det_dir[det] = os.path.join(work, "overlays", f"{safe}.vs-gt")
         os.makedirs(per_det_dir[det], exist_ok=True)
     labelled = set()
     for det, res in results.items():
@@ -482,7 +483,7 @@ def write_overlays(work, manifest, results, docs_dir=None):
             cv2.imwrite(os.path.join(per_det_dir[det], f"{aid}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
             if gt_layer is None:
                 gt_layer = ("gt", gt, label_fn("GT"))
-            combined_layers.append(("matched" if det == schema.DETECTOR_OPENCV else "fp", det_s, label_fn(det[:6])))
+            combined_layers.append(("matched" if det.startswith(schema.DETECTOR_OPENCV) else "fp", det_s, label_fn(det[:6])))
         if gt_layer is not None:
             img = overlay.render(bgr, W, H, [gt_layer] + combined_layers, f"{aid[:8]} GT (green) + detectors")
             cv2.imwrite(os.path.join(comb_dir, f"{aid}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -493,6 +494,14 @@ def write_overlays(work, manifest, results, docs_dir=None):
 
 
 # --- entry -----------------------------------------------------------------
+
+def run_label(det: str, key: str, runs: dict, all_runs_mode: bool) -> str:
+    if not all_runs_mode:
+        return det
+    params = (runs[key]["run"].get("params") or {}).get("detector") or {}
+    tag = params.get("profile") or ("dedupe " + str((params.get("shapeDedupe") or {}).get("iou")) if "shapeDedupe" in params else key.split("|")[-1])
+    return f"{det} · {tag}"
+
 
 def run(args) -> int:
     work = args.work
@@ -508,20 +517,30 @@ def run(args) -> int:
     if gt_slot is None:
         print("no manual-groundtruth run yet — reporting candidates/runtime only")
     results, summaries, sweeps = {}, {}, {}
-    for det, key in chosen.items():
+    all_mode = bool(getattr(args, "all_runs", False))
+    todo = []
+    for det in all_runs:
         if det == schema.DETECTOR_GT:
             continue
+        keys = sorted(all_runs[det], key=lambda k: all_runs[det][k]["run"]["runAt"]) if all_mode else [chosen[det]]
+        for key in keys:
+            todo.append((det, key))
+    for det, key in todo:
+        label = run_label(det, key, all_runs[det], all_mode)
         res = evaluate_detector(det, all_runs[det][key], gt_slot, manifest, floor)
-        results[det] = res
+        results[label] = res
         s = summarise(res)
         s["runKey"] = key
         s["_perAsset"] = res["perAsset"]
-        summaries[det] = s
-        sweeps[det] = floor_sweep(work, det, key)
-    # the gate is judged on opencv-reference once it has been validated (Phase 3)
-    gate_det = schema.DETECTOR_OPENCV if schema.DETECTOR_OPENCV in summaries else next(iter(summaries), None)
-    validated = bool(gate_det and summaries[gate_det]["labelledAssets"] > 0)
-    gate = gate_line(gate_det, chosen.get(gate_det, "|||"), summaries[gate_det]["acceptedPerImage"]["median"], validated) if gate_det else "no detector run"
+        summaries[label] = s
+        sweeps[label] = floor_sweep(work, det, key)
+    # the gate is judged on opencv-reference's pinned/latest run once it has been validated (Phase 3)
+    gate_det = schema.DETECTOR_OPENCV if schema.DETECTOR_OPENCV in chosen else None
+    gate_label = run_label(gate_det, chosen[gate_det], all_runs[gate_det], all_mode) if gate_det else None
+    if gate_label and gate_label not in summaries:
+        gate_label = next((l for l in summaries if summaries[l]["runKey"] == chosen[gate_det]), None)
+    validated = bool(gate_label and summaries[gate_label]["labelledAssets"] > 0)
+    gate = gate_line(gate_det, chosen.get(gate_det, "|||"), summaries[gate_label]["acceptedPerImage"]["median"], validated) if gate_label else "no detector run"
     print()
     print("== Decision gate ==")
     print(gate)

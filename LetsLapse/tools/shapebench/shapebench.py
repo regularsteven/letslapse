@@ -22,6 +22,7 @@ import json
 import math
 import os
 import random
+import shlex
 import shutil
 import subprocess
 import sys
@@ -225,9 +226,11 @@ def cmd_vision(args) -> int:
     params = detect_opencv.merged_params(overrides)
     refine_params = {k: params[k] for k in ("blur", "canny", "adaptive", "close", "contours", "refine", "shapeDedupe")}
     lapse_sha = _sha_of(lapse)
+    flags = shlex.split(args.flags or "")
+    slug = "default" if not flags else "".join(ch if ch.isalnum() else "-" for ch in " ".join(flags)).strip("-")
     assets = detect_opencv.select_assets(manifest, args)
     os.makedirs(os.path.join(work, "vision-raw"), exist_ok=True)
-    ovl_v = os.path.join(work, "overlays", schema.DETECTOR_VISION)
+    ovl_v = os.path.join(work, "overlays", schema.DETECTOR_VISION + ("" if slug == "default" else "." + slug))
     ovl_r = os.path.join(work, "overlays", schema.DETECTOR_REGISTER)
     os.makedirs(ovl_v, exist_ok=True)
     os.makedirs(ovl_r, exist_ok=True)
@@ -239,7 +242,7 @@ def cmd_vision(args) -> int:
         doc = schema.load_results(rpath, a["projectId"])
         gray = None
         # --- apple-vision: run lapse ---
-        raw_path = os.path.join(work, "vision-raw", f"{aid}.json")
+        raw_path = os.path.join(work, "vision-raw", f"{aid}.json" if slug == "default" else f"{aid}.{slug}.json")
         need_run = True
         if os.path.exists(raw_path) and not args.force:
             with open(raw_path, "r", encoding="utf-8") as f:
@@ -249,7 +252,7 @@ def cmd_vision(args) -> int:
         wall_ms = None
         if need_run:
             t0 = time.perf_counter()
-            proc = subprocess.run([lapse, "shapes", img_path, "--json"], capture_output=True, text=True, timeout=600)
+            proc = subprocess.run([lapse, "shapes", img_path, "--json", *flags], capture_output=True, text=True, timeout=600)
             wall_ms = int(round((time.perf_counter() - t0) * 1000))
             if proc.returncode != 0 or not proc.stdout.strip():
                 failed += 1
@@ -267,13 +270,13 @@ def cmd_vision(args) -> int:
             failed += 1
             print(f"  FAIL {aid[:8]}: lapse reports {d.get('width')}x{d.get('height')} but the export is {W}x{H}")
             continue
-        run_params = {"detector": {"profile": d.get("profile"), "flags": [], "lapseSha256": lapse_sha,
+        run_params = {"detector": {"profile": d.get("profile"), "flags": flags, "lapseSha256": lapse_sha,
                                    "kitDetectorVersion": 1, "refine": refine_params}, "rules": RULES}
         key = schema.run_key(schema.DETECTOR_VISION, VISION_VERSION, schema.params_hash(run_params))
         diag = d.get("diagnostics") or {}
         if schema.has_run(doc, key) and not args.force:
             skipped += 1
-            print(f"  skip {aid[:8]}  (already ran apple-vision {key.split('|')[-1]})")
+            print(f"  skip {aid[:8]}  (already ran apple-vision {slug} {key.split('|')[-1]})")
         else:
             gray = load_gray(img_path)
             try:
@@ -307,7 +310,7 @@ def cmd_vision(args) -> int:
             detect_opencv.write_rows(detect_opencv.log_path_for(work, schema.DETECTOR_VISION, key), aid, rows, key)
             bgr = load_bgr(img_path)
             cv2.imwrite(os.path.join(ovl_v, f"{aid}.jpg"),
-                        detect_opencv.overlay_for(bgr, W, H, shapes, rows, f"{aid[:8]} apple-vision"),
+                        detect_opencv.overlay_for(bgr, W, H, shapes, rows, f"{aid[:8]} apple-vision {slug}"),
                         [cv2.IMWRITE_JPEG_QUALITY, 85])
             done += 1
             print(f"  {status:8s} {aid[:8]}  v1 shapes {len(v1_shapes):2d} + refusals {len(refusals):2d}"
@@ -352,7 +355,7 @@ def cmd_vision(args) -> int:
                     [cv2.IMWRITE_JPEG_QUALITY, 85])
         reg_done += 1
         print(f"           {aid[:8]}  register {len(v1_shapes):2d} shapes {srcs} → accepted {len(shapes)}")
-    print(f"apple-vision: done {done}, skipped {skipped}, failed {failed} · register blocks written {reg_done}")
+    print(f"apple-vision [{slug}]: done {done}, skipped {skipped}, failed {failed} · register blocks written {reg_done}")
     return 0 if failed == 0 else 1
 
 
@@ -727,6 +730,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("vision", help="lapse shapes --json and the library register → schema v2")
     p.add_argument("--lapse", default=DEFAULT_LAPSE)
     p.add_argument("--params", help="JSON overrides for the refinement / dedupe knobs (same file as detect)")
+    p.add_argument("--flags", default="", help='extra lapse arguments, e.g. "--sensitivity high --size all" (a new run block per distinct set)')
     p.add_argument("--only")
     p.add_argument("--limit", type=int)
     p.add_argument("--force", action="store_true")
@@ -743,6 +747,7 @@ def main(argv=None) -> int:
     p.add_argument("--run", action="append", default=[], help="detectorId=paramsHash to pin a run (default: latest)")
     p.add_argument("--docs", help="copy the report, metrics.json and review overlays into this docs folder")
     p.add_argument("--floor", type=float, default=None, help="override the size floor applied to GT and detections")
+    p.add_argument("--all-runs", action="store_true", help="evaluate every run block of every detector, not just the latest/pinned one")
     p.set_defaults(fn=lambda a: __import__("metrics").run(a))
 
     p = sub.add_parser("selftest", help="synthetic card through every stage")
