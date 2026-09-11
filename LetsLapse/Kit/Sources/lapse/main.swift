@@ -23,6 +23,20 @@ USAGE:
       --lock                Apply the committed framing lock (framing.json beside
                             the stills) to every still before averaging
 
+  lapse shapes <image> [options]     Run the shape detector on one picture and
+                            print what it finds — the Photo viewfinder's and
+                            Find shapes' machine, gates on the command line.
+      --family F            The SHAPES dial: all | circular | rectangular
+      --sensitivity S       The SENSITIVITY dial: high | medium | low
+      --size Z              The SIZE dial: all | large | mid | small
+      --residual R          Ellipse fit residual gate (file pass 0.04, live 0.06)
+      --live                The viewfinder's profile (384 px, no edge maps)
+      --long-edge N         Detection resolution (default 1024; live 384)
+      --contrast A,B        Contour contrast sweep (file 1,2,3; live 2)
+      --edges A,B           CIEdges thresholds for the edge-map passes (file 0.06,0.15; live none)
+      --contour-dimension N Vision's tracer resolution (file 512, live 384)
+      --verbose             Also list ellipses only the residual gate refused
+
   lapse framing <project-or-source-dir> [options]   Review the framing of an
                             interval shoot's stills: where each sits against one
                             locked reference, the knocks, and the crop that would
@@ -604,6 +618,31 @@ do {
             urls: args.map { URL(fileURLWithPath: $0) }, outputPath: outputPath, depth: depth,
             settings: settings, variations: variationCount, variationMode: variationMode,
             seed: seed, recipeJSON: recipeJSON, gamma: gamma)
+
+    case "shapes":
+        let residual = takeOption(["--residual"]).map { Double($0) ?? 0 }
+        let live = takeFlag(["--live"])
+        let longEdge = takeOption(["--long-edge"]).map { Int($0) ?? 0 }
+        let verbose = takeFlag(["--verbose", "-v"])
+        let contrasts = takeOption(["--contrast"]).map { $0.split(separator: ",").compactMap { Float($0) } }
+        let edges = takeOption(["--edges"]).map { $0.split(separator: ",").compactMap { Float($0) } }
+        let contourDimension = takeOption(["--contour-dimension"]).map { Int($0) ?? 0 }
+        var search = ShapeSearch()
+        if let raw = takeOption(["--family"]) {
+            guard let v = ShapeSearch.Family(rawValue: raw) else { fail("--family needs all | circular | rectangular") }
+            search.family = v
+        }
+        if let raw = takeOption(["--sensitivity"]) {
+            guard let v = ShapeSearch.Sensitivity(rawValue: raw) else { fail("--sensitivity needs high | medium | low") }
+            search.sensitivity = v
+        }
+        if let raw = takeOption(["--size"]) {
+            guard let v = ShapeSearch.Size(rawValue: raw) else { fail("--size needs all | large | mid | small") }
+            search.size = v
+        }
+        guard args.count == 1 else { fail("shapes needs one image") }
+        try runShapes(path: args[0], residual: residual, live: live, longEdge: longEdge, verbose: verbose,
+                      contrasts: contrasts, edges: edges, contourDimension: contourDimension, search: search)
 
     case "framing":
         let apply = takeFlag(["--apply"])

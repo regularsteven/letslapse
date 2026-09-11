@@ -5324,7 +5324,8 @@ final class AppModel: ObservableObject {
     /// With `presentResult` false the job runs without driving the flow stages
     /// — the camera stays on screen and the finished photo lands quietly in
     /// Projects, so the user can shoot the next frame straight away.
-    func processPhotoBurst(urls: [URL], blendDepth: Int, linear: Bool, presentResult: Bool = true) async {
+    func processPhotoBurst(urls: [URL], blendDepth: Int, linear: Bool, presentResult: Bool = true,
+                           viewfinderShapes: ViewfinderShapes? = nil) async {
         // Preserve the burst as a photo capture so its frames stay on disk and
         // the blend has a project to belong to.
         let capture: CaptureProject
@@ -5334,6 +5335,12 @@ final class AppModel: ObservableObject {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
             stage = .home
             return
+        }
+        // Auto shape mode: what the viewfinder had on screen becomes the
+        // project's register now, and is refined against the file in the
+        // background (see `recordViewfinderShapes`).
+        if let viewfinderShapes {
+            recordViewfinderShapes(viewfinderShapes, for: capture)
         }
 
         // Blend from the in-project copies, not the temporary burst URLs.

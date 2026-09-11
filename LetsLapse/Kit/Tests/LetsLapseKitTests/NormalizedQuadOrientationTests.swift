@@ -113,4 +113,33 @@ final class NormalizedQuadOrientationTests: XCTestCase {
         XCTAssertEqual(corners.bottomLeft.x, sensorQuad.bottomLeft.x, accuracy: 0.0001)
         XCTAssertEqual(corners.bottomLeft.y, 1 - sensorQuad.bottomLeft.y, accuracy: 0.0001)
     }
+    /// The point-wise twin agrees with `sensorCorners` for every orientation.
+    /// `sensorCorners` relabels as it turns (the sensor frame's own top-left is
+    /// called `topLeft`), the point map does not, so the four corners are
+    /// compared as a set — and the documented portrait case directly: a
+    /// portrait quad's top-left corner is the sensor frame's bottom left.
+    func testSensorPointMatchesSensorCornersInEveryOrientation() {
+        func tl(_ p: NormalizedQuad.Point) -> CGPoint { CGPoint(x: p.x, y: 1 - p.y) }
+        let corners = [portraitQuad.topLeft, portraitQuad.topRight, portraitQuad.bottomRight, portraitQuad.bottomLeft].map(tl)
+        for orientation in QuadOrientation.allCases {
+            let e = portraitQuad.sensorCorners(measuredIn: orientation)
+            let expected = [e.topLeft, e.topRight, e.bottomRight, e.bottomLeft]
+            for c in corners {
+                let s = orientation.sensorPoint(c)
+                XCTAssertTrue(expected.contains { abs($0.x - Double(s.x)) < 1e-9 && abs($0.y - Double(s.y)) < 1e-9 },
+                              "\(orientation): \(s) not among the sensor corners")
+                let back = orientation.uprightPoint(fromSensor: s)
+                XCTAssertEqual(Double(back.x), Double(c.x), accuracy: 1e-9)
+                XCTAssertEqual(Double(back.y), Double(c.y), accuracy: 1e-9)
+            }
+        }
+        let portraitTL = QuadOrientation.right.sensorPoint(corners[0])
+        let e = portraitQuad.sensorCorners(measuredIn: .right)
+        XCTAssertEqual(Double(portraitTL.x), e.bottomLeft.x, accuracy: 1e-9)
+        XCTAssertEqual(Double(portraitTL.y), e.bottomLeft.y, accuracy: 1e-9)
+        // Portrait → upside-down portrait is a half turn.
+        let q = QuadOrientation.convert(CGPoint(x: 0.2, y: 0.7), from: .right, to: .left)
+        XCTAssertEqual(Double(q.x), 0.8, accuracy: 1e-9)
+        XCTAssertEqual(Double(q.y), 0.3, accuracy: 1e-9)
+    }
 }

@@ -199,7 +199,7 @@ struct OverlayMasksPanel: View {
                 RegisterShapeTile(shape: shape, frame: shapeFrame, selected: selected, accent: accent)
                     .aspectRatio(4 / 3, contentMode: .fit)
                 HStack(spacing: 3) {
-                    Text(shape.source == .manual ? "✎" : "◎")
+                    Text(sourceGlyph(shape.source))
                         .font(.system(size: 9))
                         .foregroundStyle(.secondary)
                     Text(shape.displayName)
@@ -279,8 +279,22 @@ struct OverlayMasksPanel: View {
         .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    /// ✎ drawn here · ✓ confirmed on the viewfinder at capture · ◎ found by a detector pass.
+    private func sourceGlyph(_ source: DetectedShape.Source) -> String {
+        switch source {
+        case .manual: return "✎"
+        case .captured: return "✓"
+        case .detected: return "◎"
+        }
+    }
+
     private func shapeCaption(_ shape: DetectedShape) -> String {
-        let origin = shape.source == .manual ? "drawn here" : "found by Find shapes"
+        let origin: String
+        switch shape.source {
+        case .manual: origin = "drawn here"
+        case .captured: origin = "confirmed on the viewfinder"
+        case .detected: origin = "found by Find shapes"
+        }
         let px = Int(shape.majorAxis * Double(max(shapeFrame.width, 1)))
         switch shape.kind {
         case .ellipse:

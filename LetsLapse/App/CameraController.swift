@@ -1292,6 +1292,11 @@ final class CameraController: NSObject, ObservableObject {
     /// surgery in the one area of this class where a mistake kills recordings
     /// outright. Two outputs that each own their lifetime cannot do that.
     private var framingOutput: AVCaptureVideoDataOutput?
+    /// The Photo viewfinder's live shape pass (see LiveShapeFinder.swift). A
+    /// third output for the reason the second is a second: each owns its
+    /// lifetime, none can steal another's frames, and every capture start
+    /// detaches all three inline.
+    private var shapeOutput: AVCaptureVideoDataOutput?
     private var liveBlendController: LiveBlendController?
     #if os(iOS)
     private var liveBlendRawController: LiveBlendRawController?
@@ -5011,6 +5016,7 @@ final class CameraController: NSObject, ObservableObject {
             // the same kind of output and carries the same hazard.
             self.detachTestCardTapNow()
             self.detachFramingTapNow()
+            self.detachShapeTapNow()
 
             let startedAt = Date()
             // Geotagging: open this take's fix tracking now, so the location
@@ -5322,6 +5328,62 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
     #endif
+
+    // MARK: - Live shape tap
+
+    /// Attach the Photo viewfinder's shape tap (see LiveShapeFinder.swift).
+    /// Same guards, same reasoning as the two taps above: idle only, and the
+    /// output is removed from the session whenever the pass stops watching.
+    func startShapeTap(_ tap: ShapeFrameTap) {
+        sessionQueue.async {
+            guard !self.movieOutput.isRecording,
+                  self.activeSequence == nil,
+                  !self.intervalActive else {
+                LLog("shapes: tap refused — capture in flight")
+                return
+            }
+            let output: AVCaptureVideoDataOutput
+            if let existing = self.shapeOutput {
+                output = existing
+            } else {
+                output = AVCaptureVideoDataOutput()
+                output.videoSettings = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                ]
+                output.alwaysDiscardsLateVideoFrames = true
+                self.shapeOutput = output
+            }
+            if !self.session.outputs.contains(output) {
+                self.session.beginConfiguration()
+                if self.session.canAddOutput(output) {
+                    self.session.addOutput(output)
+                } else {
+                    LLog("shapes: session refused the preview tap")
+                }
+                self.session.commitConfiguration()
+            }
+            output.setSampleBufferDelegate(tap, queue: tap.queue)
+        }
+    }
+
+    func stopShapeTap() {
+        sessionQueue.async {
+            self.detachShapeTapNow()
+        }
+    }
+
+    /// sessionQueue-confined, synchronous detach — called inline from every
+    /// capture start beside the other two.
+    private func detachShapeTapNow() {
+        guard let output = shapeOutput else { return }
+        output.setSampleBufferDelegate(nil, queue: nil)
+        if session.outputs.contains(output) {
+            session.beginConfiguration()
+            session.removeOutput(output)
+            session.commitConfiguration()
+            LLog("shapes: tap detached")
+        }
+    }
 
     /// sessionQueue-confined, synchronous detach — called inline from every
     /// capture start for exactly the reason `detachTestCardTapNow` is.
@@ -5930,6 +5992,7 @@ final class CameraController: NSObject, ObservableObject {
             // inline before any capture work.
             self.detachTestCardTapNow()
             self.detachFramingTapNow()
+            self.detachShapeTapNow()
             // Same rule as a video take: the shot is in focus when the user
             // presses the shutter, so the lens stops there for the whole run.
             // An interval shoot is the least forgiving of the three — a hunt
@@ -7100,6 +7163,7 @@ final class CameraController: NSObject, ObservableObject {
             // adding or removing an output reconfigures the session.
             self.detachTestCardTapNow()
             self.detachFramingTapNow()
+            self.detachShapeTapNow()
 
             // The scene's own light, read before anything in this method
             // disturbs it. The framing preview has been live for as long as the
@@ -8646,6 +8710,12 @@ final class CameraController: NSObject, ObservableObject {
     func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false, autoInterval: Bool = false, ladder: LightLadder? = nil, ladderRung: Int? = nil) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
+            // A DNG Photo shot arrives here with the viewfinder's shape pass
+            // still attached: detached inline like every other capture start,
+            // so the blend stream is the only tap running while frames are
+            // gathered. (The other two taps ride the view's own idle check
+            // here, as they always have — there is no movie writer to race.)
+            self.detachShapeTapNow()
             var interval = interval
             var depth = depth
             var holyGrail = holyGrail

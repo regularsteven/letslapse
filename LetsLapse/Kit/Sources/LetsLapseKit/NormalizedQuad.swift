@@ -267,6 +267,37 @@ public enum QuadOrientation: String, Codable, Sendable, CaseIterable {
     }
 }
 
+extension QuadOrientation {
+    /// A single point, normalised with a **top-left** origin to an image turned
+    /// to this orientation, restated in the sensor's own read-out (`.up`, also
+    /// top-left origin) — the "capture device point" the preview layer maps.
+    ///
+    /// The register's shapes are measured this way (Vision's bottom-left origin
+    /// flipped once in the detector), so this is the point-wise twin of
+    /// `NormalizedQuad.sensorCorners(measuredIn:)`: one clockwise quarter turn
+    /// in top-left space is `(u, v) → (1 − v, u)`, and undoing it is
+    /// `(u, v) → (v, 1 − u)`, applied once per turn this orientation is from
+    /// the sensor.
+    public func sensorPoint(_ p: CGPoint) -> CGPoint {
+        var q = p
+        for _ in 0..<clockwiseQuarterTurns { q = CGPoint(x: q.y, y: 1 - q.x) }
+        return q
+    }
+
+    /// The inverse: a sensor point (top-left origin) as it lands in an image
+    /// turned to this orientation.
+    public func uprightPoint(fromSensor p: CGPoint) -> CGPoint {
+        var q = p
+        for _ in 0..<clockwiseQuarterTurns { q = CGPoint(x: 1 - q.y, y: q.x) }
+        return q
+    }
+
+    /// A top-left-normalised point measured in `source` restated in `target`.
+    public static func convert(_ p: CGPoint, from source: QuadOrientation, to target: QuadOrientation) -> CGPoint {
+        target.uprightPoint(fromSensor: source.sensorPoint(p))
+    }
+}
+
 extension NormalizedQuad {
 
     /// The same quadrilateral seen in an image turned `quarterTurns` × 90°

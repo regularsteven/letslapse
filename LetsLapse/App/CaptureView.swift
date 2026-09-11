@@ -41,9 +41,15 @@ struct CaptureView: View {
     @ObservedObject private var watchRemote = WatchRemoteControlReceiver.shared
     #endif
     @StateObject private var camera = CameraController()
-    /// Device-motion primitive for Photo mode's capture-when-steady gate (and
-    /// the live "waiting for steady" indicator).
+    /// Device-motion primitive: the Interval tail-frame log and the Scanner's
+    /// steadiness veto. (Its Photo-mode shutter gate — the Hand — was retired
+    /// 2026-09-11; blended bursts and Bulb fire at once.)
     @StateObject private var steadiness = SteadinessMonitor()
+    /// Auto shape mode's live pass (see LiveShapeFinder.swift): the shapes
+    /// traced on the Photo viewfinder while `autoShapesEnabled`. `@State`
+    /// holding an `@Observable`, so its samples re-render the overlay and
+    /// not this body.
+    @State private var liveShapes = LiveShapeFinder()
     /// Monitor test-rig watcher/executor (see TestCardRig.swift): watches the
     /// idle Video preview for the test card, then runs its script hands-free.
     @StateObject private var testRig = TestCardRigController()
@@ -269,11 +275,19 @@ struct CaptureView: View {
     /// Deadline of a pending delayed start; nil when none. Tapping the
     /// shutter while pending cancels instead of stacking starts.
     @State private var delayedStartAt: Date?
-    /// Photo mode: whether the shutter waits for the device to settle before
-    /// firing, and whether it is currently waiting (drives the viewfinder
-    /// steady indicator).
-    @State private var photoCaptureWhenSteady = false
-    @State private var isWaitingForSteady = false
+    /// Photo mode's auto shape mode — the slot-4 toggle. Remembered across
+    /// sessions like the grid; turning it off and on is also the reset that
+    /// forgets every dismissed shape.
+    @AppStorage("capture.autoShapes") private var autoShapesEnabled = false
+    /// The three dials beside BLEND while auto shapes is on — what to look
+    /// for, how hard, how big (see `ShapeSearch`). Remembered like the toggle.
+    @AppStorage("capture.shapes.family") private var shapeFamilyToken = ShapeSearch.Family.all.rawValue
+    @AppStorage("capture.shapes.sensitivity") private var shapeSensitivityToken = ShapeSearch.Sensitivity.medium.rawValue
+    @AppStorage("capture.shapes.size") private var shapeSizeToken = ShapeSearch.Size.all.rawValue
+    /// What the viewfinder had on screen when the shutter fired, carried to the
+    /// finish handler that registers the photo (the capture itself is
+    /// asynchronous through the interval or live-blend engine).
+    @State private var pendingViewfinderShapes: ViewfinderShapes?
     /// Brightness offset, in stops, either side of the exposure the AE lock
     /// froze at. 0 is the centre of the slider — "as locked" — so the control
     /// can travel both ways; re-taking the lock re-centres it.
@@ -514,7 +528,19 @@ struct CaptureView: View {
                     frames: finishedRunFrameCount,
                     seconds: runStartedAt.map { Date().timeIntervalSince($0) } ?? 0)
             }
+            // Photo mode keeps the camera live after a shot, so the live shape
+            // pass comes back as soon as the engine is done with the session.
+            updateShapeWatch()
         }
+        .onChange(of: autoShapesEnabled) { _ in
+            // On or off, the slate is clean: off drops the tracks so nothing
+            // is left traced, on starts from nothing — which is the reset.
+            liveShapes.reset()
+            updateShapeWatch()
+        }
+        .onChange(of: shapeFamilyToken) { _ in liveShapes.search = shapeSearch }
+        .onChange(of: shapeSensitivityToken) { _ in liveShapes.search = shapeSearch }
+        .onChange(of: shapeSizeToken) { _ in liveShapes.search = shapeSearch }
     }
 
     /// Ladder MODE's sheets and observers over `content`. On the Mac the
@@ -571,6 +597,7 @@ struct CaptureView: View {
             // follow the user across the switch.
             if burstPillMode != nil, burstPillMode != newMode { dismissBurstPill() }
             updateTestCardWatch()
+            updateShapeWatch()
             // M is Photo-only chrome (`clusterSlot`, `exposurePanel` both
             // gate on `mode == .photo`), but the exposure it set is real
             // device state — leaving Photo must hand that back to AE even
@@ -819,6 +846,11 @@ struct CaptureView: View {
             if let physical = effectiveCaptureOrientation(device: device) {
                 camera.updateCaptureOrientation(physical)
             }
+            // Auto shape mode measures in the pose the still will be tagged
+            // with — this one, not the interface's, which stays put under
+            // rotation lock while the tag turns. Same reason the Scanner's
+            // quad is detected at the capture pose.
+            liveShapes.setCaptureOrientation(camera.currentCaptureOrientation)
         }
         .onChange(of: camera.isRecording) { isRecording in
             if !isRecording {
@@ -941,8 +973,10 @@ struct CaptureView: View {
             testRig.seedDemoChip()
         }
         updateTestCardWatch()
+        updateShapeWatch()
         #if DEBUG
         applyModePreviewHook()
+        applyAutoShapesPreviewHook()
         applyStandbyPreviewHook()
         applyHolyGrailPreviewHook()
         applyScannerPreviewHook()
@@ -1048,10 +1082,12 @@ struct CaptureView: View {
                 // Photo snapshot already delivers exactly one; an open Bulb run
                 // may have captured many, so trim to the last before it stacks.
                 let framesToBlend = depth <= 1 ? Array(urls.suffix(1)) : urls
+                let shapes = pendingViewfinderShapes
+                pendingViewfinderShapes = nil
                 Task {
                     await model.processPhotoBurst(
                         urls: framesToBlend, blendDepth: depth, linear: model.linearLight,
-                        presentResult: false)
+                        presentResult: false, viewfinderShapes: shapes)
                 }
                 return
             }
@@ -1093,10 +1129,12 @@ struct CaptureView: View {
             if mode == .photo {
                 let dngURLs = Array(result.frameURLs.suffix(1))
                 guard !dngURLs.isEmpty else { return }
+                let shapes = pendingViewfinderShapes
+                pendingViewfinderShapes = nil
                 Task {
                     await model.processPhotoBurst(
                         urls: dngURLs, blendDepth: 1, linear: model.linearLight,
-                        presentResult: false)
+                        presentResult: false, viewfinderShapes: shapes)
                 }
                 return
             }
@@ -1442,6 +1480,7 @@ struct CaptureView: View {
         // close (or a Photo-mode exit) shouldn't leave motion updates running.
         steadiness.stop()
         camera.stopTestCardTap()
+        camera.stopShapeTap()
         // Same reasoning as `steadiness.stop()` above: a mid-session close
         // shouldn't leave the manual-exposure servo timer running against a
         // screen nobody can see.
@@ -1941,8 +1980,15 @@ struct CaptureView: View {
                             alignment: isPortrait ? .top : .center
                         )
                 }
-                if mode == .photo && isWaitingForSteady {
-                    SteadyGateOverlay(isStill: steadiness.isStill, magnitude: steadiness.magnitude)
+                // Auto shape mode: the shapes the live pass is following,
+                // traced over the picture and mapped point by point through
+                // the preview layer exactly as the Scanner's quad is. Tapping
+                // one dismisses it, so unlike the quad this layer takes hits.
+                if mode == .photo && autoShapesEnabled && !isCapturing {
+                    LiveShapesOverlay(finder: liveShapes) {
+                        liveShapeOverlayPoint($0, region: geometry, screenSize: screenSize)
+                    }
+                    .transition(.opacity)
                 }
                 // A DNG lens change reconnects the physical camera — the one
                 // transition the zoom ramp can't cover. Dip instead of
@@ -1983,15 +2029,23 @@ struct CaptureView: View {
             // the quad following it rather than as a new quad each frame.
             .animation(.easeOut(duration: 0.12), value: scannerOverlayQuad)
             .frame(width: geometry.size.width, height: geometry.size.height)
-            #if os(iOS)
             // The whole region takes the tap, not just whatever is drawn in it.
             .contentShape(Rectangle())
             .simultaneousGesture(
                 SpatialTapGesture().onEnded { value in
+                    // A tap on a traced LINE dismisses that shape and is not a
+                    // focus tap (see `LiveShapePlacement.hit`); a tap on the
+                    // picture inside or beside it focuses, as it always did.
+                    if let placements = liveShapePlacements(region: geometry, screenSize: screenSize),
+                       let id = LiveShapePlacement.hit(at: value.location, in: placements) {
+                        liveShapes.dismiss(id)
+                        return
+                    }
+                    #if os(iOS)
                     focusTap(at: value.location, region: geometry, screenSize: screenSize)
+                    #endif
                 }
             )
-            #endif
         }
         .contentShape(Rectangle())
         .simultaneousGesture(modeSwipeGesture)
@@ -2109,6 +2163,88 @@ struct CaptureView: View {
         focusReticle = FocusReticle(point: point)
     }
     #endif
+
+    // MARK: - Auto shape mode
+
+    /// Auto shape mode's tracks placed in this region, or nil while the layer
+    /// is not showing: another mode, the toggle off, a capture in flight (the
+    /// tap is detached for it and the last tracks would freeze on screen), or
+    /// nothing confirmed yet.
+    private func liveShapePlacements(region: GeometryProxy, screenSize: CGSize) -> [LiveShapePlacement]? {
+        guard mode == .photo, autoShapesEnabled, !isCapturing else { return nil }
+        let tracks = liveShapes.visible
+        guard !tracks.isEmpty else { return nil }
+        return LiveShapePlacement.place(
+            tracks, orientation: liveShapes.orientation, frameSize: liveShapes.frameSize
+        ) { liveShapeOverlayPoint($0, region: region, screenSize: screenSize) }
+    }
+
+    /// A point in the sensor's own space (its landscape read-out, top-left
+    /// origin) on this region — `scannerOverlayCorners`' chain for one point:
+    /// the preview layer converts it (the only thing that knows the letterbox,
+    /// the gravity and the connection's rotation), then the top-anchor slide
+    /// and this region's origin come off. Without a live connection (the
+    /// simulator) the point is restated in the preview's orientation and laid
+    /// on an aspect-fitted picture the way the layer would lay itself out.
+    private func liveShapeOverlayPoint(_ sensor: CGPoint, region: GeometryProxy, screenSize: CGSize) -> CGPoint {
+        let frame = region.frame(in: .named(Self.stageSpace))
+        let slide = previewTopAnchorOffset(in: screenSize)
+        #if os(iOS)
+        if let layer = camera.previewLayer, layer.connection != nil,
+           layer.bounds.width > 1, layer.bounds.height > 1 {
+            let onLayer = layer.layerPointConverted(fromCaptureDevicePoint: sensor)
+            return CGPoint(x: onLayer.x - frame.minX, y: onLayer.y + slide - frame.minY)
+        }
+        #endif
+        // The Mac has no layer hand-over (`CameraController.previewLayer` is
+        // iOS-only), so it always takes this fitted path; its pose is the
+        // read-out itself, so nothing turns.
+        let preview = QuadOrientation(pose: orientation).uprightPoint(fromSensor: sensor)
+        let fitted = aspectFitSize(
+            aspectRatio: previewAspectRatio, maxWidth: screenSize.width, maxHeight: screenSize.height)
+        let origin = CGPoint(
+            x: (screenSize.width - fitted.width) / 2 - frame.minX,
+            y: (screenSize.height - fitted.height) / 2 + slide - frame.minY)
+        return CGPoint(x: origin.x + preview.x * fitted.width, y: origin.y + preview.y * fitted.height)
+    }
+
+    /// The live pass runs only while there is nothing else going on: Photo
+    /// mode, idle, toggle on. Everything else detaches the tap — the same rule
+    /// as the test-card and framing taps, for the same reason (an output added
+    /// or removed under a capture reconfigures the session).
+    private func updateShapeWatch() {
+        if mode == .photo && !isCapturing && autoShapesEnabled {
+            liveShapes.search = shapeSearch
+            liveShapes.setCaptureOrientation(livePassPose)
+            camera.startShapeTap(liveShapes.tap)
+        } else {
+            camera.stopShapeTap()
+        }
+    }
+
+    /// The pose a still captured now would be tagged with — the camera's own
+    /// reading on iOS (kept current by the orientation handler above), the
+    /// read-out itself on a Mac.
+    private var livePassPose: AVCaptureVideoOrientation {
+        #if os(iOS)
+        camera.currentCaptureOrientation
+        #else
+        .landscapeRight
+        #endif
+    }
+
+    /// The shutter's moment: what the viewfinder has on screen goes with the
+    /// capture to `processPhotoBurst`, which registers the photo and writes
+    /// the register. Taken here — after the self-timer, before the engine
+    /// starts — because the capture start detaches the tap and the tracks
+    /// would otherwise age out before the finish handler runs.
+    private func takeViewfinderShapes() {
+        guard mode == .photo, autoShapesEnabled else { pendingViewfinderShapes = nil; return }
+        pendingViewfinderShapes = liveShapes.snapshot()
+        if let shapes = pendingViewfinderShapes {
+            LLog("shapes: shutter with \(shapes.kept.count) kept, \(shapes.dismissed.count) dismissed (\(shapes.search.token))")
+        }
+    }
 
     /// Swipe across the viewfinder to change modes, matching the mode row's
     /// order (PHOTO · INTERVAL · VIDEO): swipe left steps right along the row,
@@ -2898,6 +3034,30 @@ struct CaptureView: View {
             durationMinutes: 60,
             blendDepth: blendDepth.fixedFrames,
             label: "Sunset over the harbour")
+    }
+
+    /// `LL_SHAPEFINDER=on` arms auto shape mode in Photo mode; `=shapes` also
+    /// stages a circle and a keystoned quad over the viewfinder. Staged for
+    /// the reason `LL_SCANNER_RECT` is: the simulator has no camera, so
+    /// nothing is ever found in it, and the overlay is otherwise unreachable
+    /// off-device.
+    private func applyAutoShapesPreviewHook() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_SHAPEFINDER"] else { return }
+        mode = .photo
+        autoShapesEnabled = true
+        if raw == "shapes" {
+            // After the toggle's own `onChange` has run its reset — which
+            // would otherwise wipe the staged tracks a beat after they land.
+            // Staged on a frame of the preview's own proportions: on a device
+            // the tap's frames and the preview share the format, and the
+            // simulator's cameraless preview is 16:9 where a Photo shoot's
+            // would be 4:3.
+            let resolution = camera.previewDimensions ?? camera.selectedResolution
+            let frame = CGSize(width: CGFloat(max(resolution.height, 1)), height: CGFloat(max(resolution.width, 1)))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                liveShapes.stageDemoShapes(frameSize: frame)
+            }
+        }
     }
 
     private func applyScannerPreviewHook() {
@@ -4013,14 +4173,12 @@ struct CaptureView: View {
     /// (Bulb · 20 · 10 · 5 · 3 · Off), so the two modes read identically.
     /// Selecting Bulb arms hold-open capture; any numeric option (or Off)
     /// disarms it and sets the stack depth. Photo captures at a fixed fast
-    /// burst, so there's no spacing picker. The capture-when-steady toggle
-    /// lives in the shutter-row controls (`steadyToggleCircle`) unchanged.
-    /// Its own `Equatable` view for the same reason as `intervalPickerRow` —
-    /// see CaptureDials.swift. Photo needs it most: `isWaitingForSteady` is not
-    /// `isCapturing`, so this row stays on screen through the steady-gate wait
-    /// while `SteadinessMonitor` publishes at 50 Hz.
+    /// burst, so there's no spacing picker. Its own `Equatable` view for the
+    /// same reason as `intervalPickerRow` — see CaptureDials.swift: this row
+    /// stays on screen while the live shape pass publishes a few times a
+    /// second, and must not re-render with it.
     private var photoControlsRow: some View {
-        PhotoBlendDial(
+        let blend = PhotoBlendDial(
             isBulb: photoBulbMode,
             frames: photoBlendDepth,
             onSelectBulb: { photoBulbMode = true },
@@ -4030,6 +4188,43 @@ struct CaptureView: View {
             }
         )
         .equatable()
+        // Auto shapes on: its three dials join BLEND — one line where they
+        // fit (landscape, the Mac), two on a portrait phone.
+        return Group {
+            if autoShapesEnabled {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        blend
+                        shapeSearchDials
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            blend
+                            shapeSearchDials.familyOnly
+                        }
+                        shapeSearchDials.sensitivityAndSize
+                    }
+                }
+            } else {
+                blend
+            }
+        }
+    }
+
+    private var shapeSearchDials: ShapeSearchDials {
+        ShapeSearchDials(
+            search: shapeSearch,
+            onSelectFamily: { shapeFamilyToken = $0.rawValue },
+            onSelectSensitivity: { shapeSensitivityToken = $0.rawValue },
+            onSelectSize: { shapeSizeToken = $0.rawValue })
+    }
+
+    /// The dials as one value, from their remembered tokens.
+    private var shapeSearch: ShapeSearch {
+        ShapeSearch(
+            family: ShapeSearch.Family(rawValue: shapeFamilyToken) ?? .all,
+            sensitivity: ShapeSearch.Sensitivity(rawValue: shapeSensitivityToken) ?? .medium,
+            size: ShapeSearch.Size(rawValue: shapeSizeToken) ?? .all)
     }
 
     // MARK: - Recent capture tile
@@ -4151,20 +4346,14 @@ struct CaptureView: View {
         return shutterDelayEnabled ? "2s" : nil
     }
 
-    /// Centered readout on the idle shutter: the armed capture-when-steady hand
-    /// and the self-timer countdown/"2s", sharing the same slot and type
-    /// treatment. The hand icon stands in for text at the same placement.
+    /// Centered readout on the idle shutter: BULB when armed, and the
+    /// self-timer countdown/"2s", sharing one slot and type treatment.
     @ViewBuilder
     private var shutterBadge: some View {
         HStack(spacing: 5) {
             if mode == .photo && photoBulbMode {
                 Text("BULB")
                     .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(.white)
-            }
-            if photoCaptureWhenSteady {
-                Image(systemName: "hand.raised.fill")
-                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
             }
             if let label = shutterDelayLabel {
@@ -4350,37 +4539,20 @@ struct CaptureView: View {
                 // Bulb exposure. Either way this press ends it; a Bulb run then
                 // stacks everything captured in `onFinishPhotos`.
                 camera.stopInterval()
-            } else if isWaitingForSteady {
-                // Still arming the steady gate — cancel the wait; the gate
-                // resolves as "not settled" and the capture aborts.
-                steadiness.stop()
             } else if photoBulbMode {
-                Task { await fireBulbCapture() }
+                startBulbCapture()
             } else {
-                Task { await firePhotoCapture() }
+                startPhotoCapture()
             }
         }
     }
 
-    /// Bulb: optionally hold for the device to settle, then start an uncapped
-    /// plain-still burst that runs until the user taps the shutter again.
-    private func fireBulbCapture() async {
-        steadiness.start()
-        defer { steadiness.stop() }
-
-        if photoCaptureWhenSteady {
-            isWaitingForSteady = true
-            let didSettle = await steadiness.waitUntilSteady(timeout: 15)
-            isWaitingForSteady = false
-            if !didSettle { return }  // timed out or cancelled — don't start
-        }
-
-        startBulbCapture()
-    }
-
+    /// Bulb: an uncapped plain-still burst that runs until the user taps the
+    /// shutter again.
     private func startBulbCapture() {
         framingStartedAt = Date()
         dismissBurstPill()  // re-appears on the first shot
+        takeViewfinderShapes()
         // DNG Bulb: one open-ended live-blend RAW window that stacks every
         // captured frame into a single blended DNG when the user stops. No
         // auto-stop — the second shutter tap closes it (see `shutterAction`).
@@ -4410,29 +4582,13 @@ struct CaptureView: View {
             bracketedRAW: model.liveBlendBracketedRAW)
     }
 
-    /// Photo mode: optionally hold for the device to settle, then fire a
-    /// capped-frame still capture. A single snapshot (blend off) captures one
-    /// frame; a steadied burst captures `photoBlendDepth` frames that stack
-    /// into one long exposure in post.
-    private func firePhotoCapture() async {
-        steadiness.start()
-        defer { steadiness.stop() }
-
-        // Only a blended capture benefits from the steady hold — a single
-        // snapshot fires straight away.
-        if photoCaptureWhenSteady && photoBlendDepth > 1 {
-            isWaitingForSteady = true
-            let didSettle = await steadiness.waitUntilSteady(timeout: 15)
-            isWaitingForSteady = false
-            if !didSettle { return }  // timed out or cancelled — don't fire
-        }
-
-        startPhotoCapture()
-    }
-
+    /// Photo mode: a capped-frame still capture. A single snapshot (blend off)
+    /// captures one frame; a burst captures `photoBlendDepth` frames that
+    /// stack into one long exposure in post.
     private func startPhotoCapture() {
         framingStartedAt = Date()
         dismissBurstPill()  // re-appears on the first shot
+        takeViewfinderShapes()
         // DNG: run the live-blend RAW pipeline for a single window — it blends
         // `photoBlendDepth` RAW frames into one DNG (or emits one untouched DNG
         // with blend Off, depth 1), exactly as Interval does. The first
@@ -4882,7 +5038,10 @@ struct CaptureView: View {
         .frame(width: g.box.width, height: g.box.height)
     }
 
-    /// What a slot holds. Idle: 1 grid · 2 delay · 3 AE/AF lock · 4 steady.
+    /// What a slot holds. Idle: 1 grid · 2 delay · 3 AE/AF lock (M in Photo)
+    /// · 4 auto shapes in Photo, empty elsewhere (the Hand that used to sit
+    /// there was retired 2026-09-11 — it only ever gated a blended Photo burst
+    /// and Bulb, and toggled nothing in Interval or Video).
     /// Once a shoot is under way — any shoot, `isCapturing`, not only a movie
     /// — all four hide (design 2026-09-04): the slots stay reserved, so the
     /// cluster's footprint never changes, and the run-time controls take the
@@ -4933,7 +5092,8 @@ struct CaptureView: View {
                 } else {
                     exposureLockCircle
                 }
-            default: steadyToggleCircle
+            default:
+                if mode == .photo { autoShapesToggleCircle }
             }
         }
     }
@@ -5094,21 +5254,22 @@ struct CaptureView: View {
         .accessibilityLabel(shutterDelayEnabled ? "Turn off 2 second delay" : "Turn on 2 second delay")
     }
 
-    /// Capture-when-steady toggle — a circular icon button matching the 2 s
-    /// delay button's shape and on/off treatment. Present in every mode; the
-    /// gate itself still only fires in Photo (see `firePhotoCapture`).
-    private var steadyToggleCircle: some View {
+    /// Auto shape mode's toggle — a circular icon button matching the 2 s
+    /// delay button's shape and on/off treatment. Photo only. Turning it on
+    /// (including off-and-on again) starts from nothing: every dismissed shape
+    /// is forgotten and re-traced if it is still there.
+    private var autoShapesToggleCircle: some View {
         Button {
-            photoCaptureWhenSteady.toggle()
+            autoShapesEnabled.toggle()
         } label: {
-            Image(systemName: photoCaptureWhenSteady ? "hand.raised.fill" : "hand.raised")
+            Image(systemName: autoShapesEnabled ? "square.fill.on.circle.fill" : "square.on.circle")
                 .font(.system(size: 18))
-                .foregroundStyle(photoCaptureWhenSteady ? LL.amber : .white)
+                .foregroundStyle(autoShapesEnabled ? LL.amber : .white)
                 .frame(width: 44, height: 44)
                 .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(photoCaptureWhenSteady ? "Turn off capture when steady" : "Turn on capture when steady")
+        .accessibilityLabel(autoShapesEnabled ? "Turn off auto shapes" : "Turn on auto shapes")
     }
 
     /// The manual pose shutter, right of the stop button while a scan runs.
@@ -5972,38 +6133,148 @@ private struct CameraPill: View {
     }
 }
 
-/// Photo mode's "waiting for steady" indicator — a pulsing centered badge that
-/// reads amber while the device is moving and flips to green the instant it
-/// settles, just before the shutter fires. The countdown text's steadiness twin.
-private struct SteadyGateOverlay: View {
-    var isStill: Bool
-    var magnitude: Double
-    @State private var pulse = false
+/// One of auto shape mode's tracks on glass: an ellipse's centre and half-axis
+/// vectors, or a quad's corners — in the viewfinder region's own coordinates.
+/// Geometry arrives normalised to the upright preview frame and is put on
+/// glass by a sensor-point map (see `liveShapeOverlayPoint`), the same
+/// point-by-point chain the Scanner's quad takes; the preview map is a
+/// similarity (scale, quarter turns, a slide), so mapping an ellipse's axis
+/// end-points maps the ellipse exactly.
+///
+/// Built once per body for both the drawing layer and the tap: the layer is
+/// `allowsHitTesting(false)` like every other viewfinder overlay, and the
+/// region's own tap asks `hit(at:)` first, so a dismiss never doubles as a
+/// focus tap.
+private struct LiveShapePlacement: Identifiable {
+    var id: UUID
+    var centre: CGPoint
+    var a: CGSize
+    var b: CGSize
+    var corners: [CGPoint]
+    var area: CGFloat
+
+    var isEllipse: Bool { corners.isEmpty }
+
+    static func place(_ tracks: [LiveShapeFinder.Track], orientation: QuadOrientation,
+                      frameSize: CGSize, map: (CGPoint) -> CGPoint) -> [LiveShapePlacement] {
+        // Axes are fractions of the frame's WIDTH, so a y component is scaled
+        // by the frame's aspect to stay a fraction of its height.
+        let aspect = frameSize.width > 0 && frameSize.height > 0 ? frameSize.height / frameSize.width : 4.0 / 3.0
+        func glass(_ p: CGPoint) -> CGPoint { map(orientation.sensorPoint(p)) }
+        return tracks.map { track in
+            let shape = track.shape
+            if let corners = shape.corners, corners.count == 4 {
+                let pts = corners.map(glass)
+                let centre = CGPoint(x: pts.map(\.x).reduce(0, +) / 4, y: pts.map(\.y).reduce(0, +) / 4)
+                var area = 0.0
+                for i in 0..<4 { let p0 = pts[i], p1 = pts[(i + 1) % 4]; area += p0.x * p1.y - p1.x * p0.y }
+                return LiveShapePlacement(id: track.id, centre: centre, a: .zero, b: .zero, corners: pts, area: abs(area) / 2)
+            }
+            let c = shape.centre
+            let ax = shape.majorAxis / 2, bx = shape.minorAxis / 2
+            let cosR = cos(shape.rotation), sinR = sin(shape.rotation)
+            let aEnd = CGPoint(x: c.x + ax * cosR, y: c.y + ax * sinR / aspect)
+            let bEnd = CGPoint(x: c.x - bx * sinR, y: c.y + bx * cosR / aspect)
+            let gc = glass(c), ga = glass(aEnd), gb = glass(bEnd)
+            let a = CGSize(width: ga.x - gc.x, height: ga.y - gc.y)
+            let b = CGSize(width: gb.x - gc.x, height: gb.y - gc.y)
+            return LiveShapePlacement(id: track.id, centre: gc, a: a, b: b, corners: [],
+                                      area: .pi * hypot(a.width, a.height) * hypot(b.width, b.height))
+        }
+    }
+
+    /// How far a tap may land from a traced line and still mean it. A finger
+    /// is not a point; 22 pt either side is a 44 pt corridor along the line.
+    static let outlineBand: CGFloat = 22
+
+    /// The shape whose OUTLINE is nearest the tap, within `outlineBand`, or
+    /// nil. The outline and not the interior, deliberately: a large rectangle
+    /// — a window, a whole monitor — covers most of the picture, and a tap
+    /// anywhere inside it would otherwise be a dismiss instead of the focus
+    /// tap it was (2026-09-11: a facade's windows swallowed every focus tap,
+    /// and the misses pinned the lens for the 5× that followed). Tapping the
+    /// amber line is "tapping the shape"; tapping the picture is still tapping
+    /// the picture.
+    static func hit(at p: CGPoint, in placements: [LiveShapePlacement]) -> UUID? {
+        var best: (UUID, CGFloat)?
+        for shape in placements {
+            let d = shape.distanceToOutline(p)
+            if d <= outlineBand, d < (best?.1 ?? .greatestFiniteMagnitude) { best = (shape.id, d) }
+        }
+        return best?.0
+    }
+
+    /// Distance from the point to the traced line: along the radial line for
+    /// an ellipse (exact on the axes, within a few points elsewhere), to the
+    /// nearest edge for a quad.
+    func distanceToOutline(_ p: CGPoint) -> CGFloat {
+        if isEllipse {
+            let d = CGPoint(x: p.x - centre.x, y: p.y - centre.y)
+            let la = hypot(a.width, a.height), lb = hypot(b.width, b.height)
+            guard la > 0, lb > 0 else { return .greatestFiniteMagnitude }
+            let s = (d.x * a.width + d.y * a.height) / (la * la)
+            let t = (d.x * b.width + d.y * b.height) / (lb * lb)
+            let rho = hypot(s, t)
+            guard rho > 0 else { return min(la, lb) }
+            let q = CGPoint(x: centre.x + (s / rho) * a.width + (t / rho) * b.width,
+                            y: centre.y + (s / rho) * a.height + (t / rho) * b.height)
+            return hypot(p.x - q.x, p.y - q.y)
+        }
+        var nearest = CGFloat.greatestFiniteMagnitude
+        for i in 0..<4 {
+            let p0 = corners[i], p1 = corners[(i + 1) % 4]
+            let vx = p1.x - p0.x, vy = p1.y - p0.y
+            let len2 = vx * vx + vy * vy
+            let u = len2 > 0 ? max(0, min(1, ((p.x - p0.x) * vx + (p.y - p0.y) * vy) / len2)) : 0
+            nearest = min(nearest, hypot(p.x - (p0.x + u * vx), p.y - (p0.y + u * vy)))
+        }
+        return nearest
+    }
+
+    func path() -> Path {
+        var path = Path()
+        if isEllipse {
+            let steps = 72
+            for i in 0...steps {
+                let t = Double(i) / Double(steps) * 2 * .pi
+                let p = CGPoint(x: centre.x + a.width * cos(t) + b.width * sin(t),
+                                y: centre.y + a.height * cos(t) + b.height * sin(t))
+                if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
+            }
+            path.closeSubpath()
+        } else {
+            path.move(to: corners[0])
+            for c in corners.dropFirst() { path.addLine(to: c) }
+            path.closeSubpath()
+        }
+        return path
+    }
+}
+
+/// Auto shape mode's viewfinder layer: every confirmed track traced in amber
+/// over a dark halo so it reads on any picture. One `Canvas` rather than a
+/// view per shape: the tracks change a few times a second and diffing a
+/// per-shape view tree is not worth its cost on a layer this simple. This
+/// view, and not the capture screen, is what re-renders on a sample: it is
+/// the one place the finder's tracks are read in a body.
+private struct LiveShapesOverlay: View {
+    let finder: LiveShapeFinder
+    /// Sensor-space normalised point → this layer's coordinates.
+    let map: (CGPoint) -> CGPoint
 
     var body: some View {
-        VStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .stroke((isStill ? Color.green : LL.amber).opacity(0.6), lineWidth: 2)
-                    .frame(width: 64, height: 64)
-                    .scaleEffect(pulse ? 1.12 : 0.9)
-                    .opacity(pulse ? 0.2 : 0.85)
-                Image(systemName: isStill ? "checkmark" : "waveform")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(isStill ? Color.green : LL.amber)
-            }
-            Text(isStill ? "Steady" : "Waiting for steady")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-        }
-        .padding(18)
-        .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                pulse = true
+        let placements = LiveShapePlacement.place(
+            finder.visible, orientation: finder.orientation, frameSize: finder.frameSize, map: map)
+        Canvas { context, _ in
+            for shape in placements {
+                let path = shape.path()
+                context.stroke(path, with: .color(.black.opacity(0.35)), lineWidth: 4)
+                context.stroke(path, with: .color(LL.amber), lineWidth: 2)
             }
         }
-        .accessibilityLabel(isStill ? "Steady" : "Waiting for steady")
+        .animation(.easeOut(duration: 0.12), value: finder.tracks)
+        .allowsHitTesting(false)
+        .accessibilityLabel("\(placements.count) shapes found")
     }
 }
 

@@ -11,6 +11,82 @@ live inline.
 
 ## Open
 
+### Auto shape mode — shapes found live on the Photo viewfinder, recorded at capture
+
+**Raised:** 2026-09-11 · **Size:** medium · **Status:** in build (code first, by Steven's call)
+
+Shooting for a Shape-mation deliberately: with the capture screen in **Photo**
+mode, a toggle in the shutter cluster (slot 4, where the Hand was) arms a live
+shape pass on the preview tap; found ellipses and quads are traced on the
+viewfinder in amber; tapping one removes it; the shutter records what is still
+on screen into the new project's `shapes.json`, and a background pass on the
+captured file snaps each kept shape to its full-resolution fit. Decisions taken
+2026-09-11 (Steven):
+
+- **The Hand (capture when steady) is retired everywhere.** It only ever gated a
+  blended Photo burst and Bulb (`firePhotoCapture` / `fireBulbCapture`); in
+  Interval and Video it toggled a flag nothing read. Blended bursts and Bulb now
+  fire at once. `SteadinessMonitor` stays for the Interval tail-frame log and the
+  Scanner's veto.
+- **Provenance, not exclusion.** Shapes left on screen are written with
+  `source: .captured`; shapes the full detector finds in the file that were never
+  on screen are written as `.detected`; a photo detection that overlaps a
+  dismissed live shape is dropped. Find shapes keeps captured shapes the way it
+  keeps drawn ones.
+- **Reset is the toggle.** Turning the button off and on again forgets every
+  dismissal and re-shows everything. An undo control can come later; this is a
+  field-test build first ("before true engineering focus and UX").
+- **Live profile.** One contour pass per sample (dark/light alternating), 384 px,
+  plus the rectangle request; one sample in flight at a time; a shape is held
+  ~1 s after it was last seen so the overlay does not blink between samples.
+  The on-device rate is the open measurement (Mac estimate: a full eight-pass
+  sweep is 1–2 s per frame, so the sweep itself is not live).
+
+**First field test, 2026-09-11 (16 Pro, Steven):** 25–95 ms per contour pass —
+ten times faster than the estimate, the 5 Hz cap is the limit. Three things the
+test found and the same day fixed: `VNDetectRectangles` reads a round coaster
+as a rounded square (a spinning "cage" per circle) → an **edge-support gate**
+on quads (fraction of the perimeter with an edge under it; windows 0.55–1.0,
+cages 0.00–0.20, gate 0.45) plus "an ellipse beats a quad over the same
+bounds"; a matte disc on a pale table is lost at contour contrast 2.0 → the
+live sweep is `[1.0, 2.0]`; a tap anywhere *inside* a traced shape was a
+dismiss, so a facade's windows swallowed the focus taps and the misses pinned
+the lens for the 5× that followed → **dismiss is a tap on the amber line**
+(22 pt corridor), the picture inside still focuses. Also: the finder is
+`@Observable` so its samples re-render the overlay and not the capture body
+(the stutter Steven saw), and `lapse shapes <image> [--live] [--family …]
+[--sensitivity …] [--size …] [--verbose]` runs the same machine on any file
+(`LAPSE_SHAPES_DEBUG=1` prints each quad's support, `=<path>.png` dumps the
+edge map).
+
+**Field-test dials (Steven's brief, 2026-09-11):** with the toggle on, three
+dials join BLEND — **SHAPES** All / Circular / Rectangular, **SENSITIVITY**
+High / Medium / Low, **SIZE** All / Large / Mid / Small (`ShapeSearch` in Kit:
+family skips the other half of the machine — Rectangular ~2.5× cheaper;
+sensitivity is the contrast sweep and the gates — Low one pass; size is a
+floor/ceiling on the short edge AND the live resolution — Large 256 px, Small
+512 px; the file pass looks for the same family and size at its own gates).
+Steven is torn on SIZE; it stays until the field says.
+
+**Still not found: textured circles.** The facade medallion (ribbed disc) and
+the spike's Gros-Horloge class: the contour tracer needs a closed outline and
+the ribs cut it into pieces — the residual gate is never reached — while the
+rim is a clean strong circle in the CIEdges map. The lever is an edge-point
+circle pass (gradient-direction Hough over the edge map, then the existing
+Halir–Flusser fit on the supporting edge points), for both the live and the
+file pass. Next.
+
+Owed after the field test: design mirrors (the six `shutter-cluster.photo-*`
+component states lose the Hand and gain the shapes glyph; `capture-photo.shapes`
+mirrors in both orientations with the three dials; the idle Interval/Video
+cluster states lose slot 4; INDEX rows ⏳), an undo for a dismissed shape, the
+Mac's Photo mode (the tap is not iOS-gated and it compiles, but only the iPhone
+is verified — the Mac takes the fitted fallback mapping since
+`CameraController.previewLayer` is iOS-only), persisting dismissals into the
+register so a later Find shapes run does not resurrect them, and a control run
+for the 5× blur with the toggle off (focus-tap, then 5×) to confirm it is the
+existing lens-pin-survives-a-lens-switch behaviour.
+
 ### Shape-mation — from spike to feature: timing, accuracy, design mirrors, collections
 
 **Raised:** 2026-09-10 · **Size:** medium

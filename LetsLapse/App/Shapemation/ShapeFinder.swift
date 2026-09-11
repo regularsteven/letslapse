@@ -152,12 +152,15 @@ final class ShapeFinder: ObservableObject {
                 if Task.isCancelled { break }
                 await MainActor.run { self?.progress = Progress(done: i, total: todo.count, current: candidate.title) }
                 let rep = candidate.representative
-                // Shapes drawn by hand before this run stay; the detector's join them.
-                let drawn = ShapeRegister.load(inProjectFolder: candidate.folder)?.manualShapes ?? []
+                // Shapes drawn by hand or confirmed on the viewfinder before
+                // this run stay; the detector's join them — minus any that
+                // are the same thing as a kept one, which is already listed.
+                let drawn = ShapeRegister.load(inProjectFolder: candidate.folder)?.keptShapes ?? []
                 var register: ShapeRegister
                 if let size = RepresentativeLoader.orientedPixelSize(rep),
                    let image = RepresentativeLoader.image(rep, maxPixelSize: detector.settings.detectionLongEdge) {
-                    let shapes = (try? detector.detect(in: image, nativeSize: size)) ?? []
+                    let shapes = ((try? detector.detect(in: image, nativeSize: size)) ?? [])
+                        .filter { ShapeReconciler.bestMatch(for: $0, in: drawn) == nil }
                     register = ShapeRegister(representative: .init(relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction,
                                                                    width: Int(size.width), height: Int(size.height)), shapes: drawn + shapes)
                     analysed += 1
@@ -185,5 +188,61 @@ final class ShapeFinder: ObservableObject {
 
     func cancel() {
         task?.cancel()
+    }
+}
+
+// MARK: - Auto shape mode's register
+
+extension AppModel {
+    /// The register for a photo that has just landed with the viewfinder's
+    /// shapes attached. Written twice. First the viewfinder's own kept shapes,
+    /// at once and provisional (`analysedAt` nil, so a Find shapes run would
+    /// still visit the project if the second write never came). Then, once
+    /// the file has been through the full detector in the background, the
+    /// reconciled list: kept shapes snapped to their full-resolution fits,
+    /// file detections over dismissed shapes dropped, the rest recorded as
+    /// plain detections (see `ShapeReconciler`). The Gallery's SHAPES rows
+    /// hear about both.
+    func recordViewfinderShapes(_ viewfinder: ViewfinderShapes, for capture: CaptureProject) {
+        let folder = projectFolderURL(for: capture)
+        guard let rep = ShapeFinder.representative(for: capture, in: self) else {
+            LLog("shapes: no picture to record the viewfinder's shapes on for \(capture.displayTitle)")
+            return
+        }
+        let title = capture.displayTitle
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let size = RepresentativeLoader.orientedPixelSize(rep) ?? viewfinder.frameSize
+            let representative = ShapeRegister.Representative(
+                relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction,
+                width: Int(size.width), height: Int(size.height))
+            var register = ShapeRegister(analysedAt: nil, representative: representative,
+                                         shapes: ShapeReconciler.provisional(viewfinder, photoSize: size))
+            do { try register.save(inProjectFolder: folder) } catch {
+                LLog("shapes: could not write the provisional register for \(title): \(error)")
+                return
+            }
+            await MainActor.run { self?.shapeRegisterDidChange(for: capture) }
+
+            // The same things the viewfinder was looking for, at the file
+            // pass's own resolution and gates (see `ShapeSearch.fileSettings`).
+            let detector = ShapeDetector(settings: viewfinder.search.fileSettings())
+            guard let image = RepresentativeLoader.image(rep, maxPixelSize: detector.settings.detectionLongEdge) else {
+                LLog("shapes: could not read \(rep.url.lastPathComponent) to refine the viewfinder's shapes; provisional register stands")
+                return
+            }
+            let started = Date()
+            let found = (try? detector.detect(in: image, nativeSize: size)) ?? []
+            register.shapes = ShapeReconciler.reconcile(viewfinder, photoDetections: found, photoSize: size)
+            register.analysedAt = Date()
+            do { try register.save(inProjectFolder: folder) } catch {
+                LLog("shapes: could not write the refined register for \(title): \(error)")
+                return
+            }
+            let captured = register.shapes.filter { $0.source == .captured }.count
+            let extras = register.shapes.count - captured
+            LLog(String(format: "shapes: %@ — %d kept on the viewfinder, %d found in the file (%@), register %d captured + %d detected (%.1f s)",
+                        title, viewfinder.kept.count, found.count, viewfinder.search.token, captured, extras, Date().timeIntervalSince(started)))
+            await MainActor.run { self?.shapeRegisterDidChange(for: capture) }
+        }
     }
 }

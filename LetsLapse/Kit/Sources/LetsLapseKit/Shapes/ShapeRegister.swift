@@ -21,8 +21,10 @@ public struct DetectedShape: Codable, Identifiable, Equatable, Sendable {
         }
     }
 
-    /// Where a shape came from: the detector, or a hand on the picture.
-    public enum Source: String, Codable, Sendable { case detected, manual }
+    /// Where a shape came from: the detector, a hand on the picture, or the
+    /// viewfinder — found live before the shutter and left on screen by the
+    /// person shooting (`captured`), which is a detection a human confirmed.
+    public enum Source: String, Codable, Sendable { case detected, manual, captured }
 
     /// What the picker offers: the detected kind narrowed by how it sits.
     public enum Family: String, Codable, CaseIterable, Sendable {
@@ -248,6 +250,8 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
 
     public var isAnalysed: Bool { analysedAt != nil }
     public var manualShapes: [DetectedShape] { shapes.filter { $0.source == .manual } }
+    /// The shapes a person put there or confirmed — what a detector re-run keeps.
+    public var keptShapes: [DetectedShape] { shapes.filter { $0.source != .detected } }
     public var frameSize: CGSize { CGSize(width: representative.width, height: representative.height) }
 
     public func families() -> [DetectedShape.Family: Int] {
