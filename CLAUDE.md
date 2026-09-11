@@ -54,12 +54,19 @@ validated on real devices via a hands-free bench. Reports in
 `LetsLapse/docs/fieldtests/`; program history in the "Holy Grail Field
 Program" artifact. The loop:
 
-1. **Build & deploy** (signed Debug, isolated DerivedData — the shared one
-   can be broken by Xcode/MLX state):
+1. **Build & deploy** (isolated DerivedData — the shared one can be broken
+   by Xcode/MLX state):
    `xcodebuild -project LetsLapse/LetsLapse.xcodeproj -scheme LetsLapse
-   -destination 'generic/platform=iOS' -configuration Debug
-   -derivedDataPath <scratch>/dd-device -allowProvisioningUpdates build`,
+   -destination 'generic/platform=iOS' -configuration Release
+   -derivedDataPath <scratch>/dd-device-release -allowProvisioningUpdates build`,
    then `xcrun devicectl device install app --device <udid> <.app>`.
+   **Release is the field-test build** — it is what the Xcode scheme's Run
+   action builds too (`LetsLapse.xcscheme`, since edf0370). Use
+   `-configuration Debug` ONLY when a `#if DEBUG` lever is needed (`LL_*`
+   hooks, `LL_STOP`, the scanner tuning arguments): a Debug build compiles
+   the Kit `-Onone`, which made the live shape pass 10–20× slower and drove
+   the camera to `pressure serious` on 2026-09-11 — never judge performance
+   or heat from one.
 2. **Launch + pairing code**: `xcrun devicectl device process launch
    --device <udid> --console --terminate-existing
    com.regularsteven.letslapse` — the capture screen opens itself and the

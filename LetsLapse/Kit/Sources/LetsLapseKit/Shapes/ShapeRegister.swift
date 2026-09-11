@@ -68,18 +68,26 @@ public struct DetectedShape: Codable, Identifiable, Equatable, Sendable {
     /// Needed because the axes are fractions of the frame's width and the
     /// corners are normalised per axis — neither can say which way a rectangle lies.
     public var wide: Bool
+    /// Quads: width ÷ height of the physical rectangle this quad is a
+    /// photograph of — top edge over side, like `aspect` — recovered from the
+    /// perspective it was seen under (Zhang–He, `NormalizedQuad.
+    /// rectifiedAspectRatio`, the Scanner's PAPER gate). Needs the lens's
+    /// field of view, which the register's representative carries; nil when
+    /// the lens is unknown or the quad is degenerate. `aspect` is what the
+    /// quad looks like on screen; this is what the rectangle is.
+    public var rectifiedAspect: Double?
 
     public init(id: UUID = UUID(), kind: Kind, centre: CGPoint, majorAxis: Double, minorAxis: Double,
                 rotation: Double, corners: [CGPoint]?, confidence: Float, nativeDiameterPx: Double,
-                name: String? = nil, source: Source = .detected, wide: Bool = true) {
+                name: String? = nil, source: Source = .detected, wide: Bool = true, rectifiedAspect: Double? = nil) {
         self.id = id; self.kind = kind; self.centre = centre; self.majorAxis = majorAxis
         self.minorAxis = minorAxis; self.rotation = rotation; self.corners = corners
         self.confidence = confidence; self.nativeDiameterPx = nativeDiameterPx
-        self.name = name; self.source = source; self.wide = wide
+        self.name = name; self.source = source; self.wide = wide; self.rectifiedAspect = rectifiedAspect
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, centre, majorAxis, minorAxis, rotation, corners, confidence, nativeDiameterPx, name, source, wide
+        case id, kind, centre, majorAxis, minorAxis, rotation, corners, confidence, nativeDiameterPx, name, source, wide, rectifiedAspect
     }
 
     /// Registers written before names and sources existed decode as detected, unnamed.
@@ -97,24 +105,54 @@ public struct DetectedShape: Codable, Identifiable, Equatable, Sendable {
         name = try c.decodeIfPresent(String.self, forKey: .name)
         source = try c.decodeIfPresent(Source.self, forKey: .source) ?? .detected
         wide = try c.decodeIfPresent(Bool.self, forKey: .wide) ?? true
+        rectifiedAspect = try c.decodeIfPresent(Double.self, forKey: .rectifiedAspect)
     }
 
     /// minor/major — 1 is head-on.
     public var obliquity: Double { majorAxis > 0 ? minorAxis / majorAxis : 0 }
 
-    /// Quads: width over height in pixels (top-edge mean over side mean).
+    /// Quads: width over height in pixels (top-edge mean over side mean), as seen.
     public var aspect: Double {
         guard kind == .quad, majorAxis > 0, minorAxis > 0 else { return 1 }
         return wide ? majorAxis / minorAxis : minorAxis / majorAxis
     }
 
+    /// Quads: the rectangle's own proportions where the lens was known, its
+    /// proportions on screen otherwise. What `family` and the Match step judge.
+    public var effectiveAspect: Double { rectifiedAspect ?? aspect }
+
+    /// Whether the rectangle's aspect is the physical one (see `rectifiedAspect`).
+    public var isRectified: Bool { rectifiedAspect != nil }
+
     public var family: Family {
         switch kind {
         case .ellipse: return obliquity >= 0.85 ? .circle : .oval
         case .quad:
-            let a = aspect
+            let a = effectiveAspect
             return (a >= 0.8 && a <= 1.25) ? .square : .rectangle
         }
+    }
+
+    /// The same quad with `rectifiedAspect` worked out from the lens's
+    /// horizontal field of view (degrees) and the frame it was measured on.
+    /// The corners are in the register's top-left space; `NormalizedQuad`
+    /// speaks Vision's bottom-left one, so y flips on the way in. Degenerate
+    /// quads (no area) come back untouched.
+    public func rectified(horizontalFieldOfView: Double?, frame: CGSize) -> DetectedShape {
+        guard kind == .quad, let c = corners, c.count == 4, let fov = horizontalFieldOfView, fov > 0,
+              frame.width > 0, frame.height > 0 else { return self }
+        let quad = NormalizedQuad(
+            topLeft: .init(x: Double(c[0].x), y: 1 - Double(c[0].y)),
+            topRight: .init(x: Double(c[1].x), y: 1 - Double(c[1].y)),
+            bottomLeft: .init(x: Double(c[3].x), y: 1 - Double(c[3].y)),
+            bottomRight: .init(x: Double(c[2].x), y: 1 - Double(c[2].y)),
+            confidence: Double(confidence))
+        let focal = 0.5 / tan(fov * .pi / 360)
+        guard let ratio = quad.rectifiedAspectRatio(frameAspect: Double(frame.width / frame.height), focalInFrameWidths: focal),
+              ratio.isFinite, ratio > 0 else { return self }
+        var s = self
+        s.rectifiedAspect = ratio
+        return s
     }
 
     public var displayName: String {
@@ -201,14 +239,20 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
         public enum Source: String, Codable, Sendable { case blendImage, blendVideo, sourceFrame }
         public var relativePath: String
         public var source: Source
+        /// The lens's horizontal field of view in degrees when the picture
+        /// was taken — read from the active format at the shutter, from EXIF
+        /// on import, nil when unknown. What lets a quad's `rectifiedAspect`
+        /// be worked out, now or on any later re-measure.
+        public var horizontalFieldOfView: Double?
         /// For a clip, the fraction of its duration the frame was pulled from.
         public var frameFraction: Double?
         public var width: Int
         public var height: Int
 
-        public init(relativePath: String, source: Source, frameFraction: Double? = nil, width: Int, height: Int) {
+        public init(relativePath: String, source: Source, frameFraction: Double? = nil, width: Int, height: Int,
+                    horizontalFieldOfView: Double? = nil) {
             self.relativePath = relativePath; self.source = source; self.frameFraction = frameFraction
-            self.width = width; self.height = height
+            self.width = width; self.height = height; self.horizontalFieldOfView = horizontalFieldOfView
         }
     }
 
@@ -270,11 +314,26 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard var register = try? decoder.decode(ShapeRegister.self, from: data) else { return nil }
-        // Registers written before `wide` existed: re-measure quads from their corners.
+        // Registers written before `wide` existed: re-measure quads from their
+        // corners; and where the lens is known, quads written before
+        // `rectifiedAspect` existed get theirs worked out now.
         if register.frameSize.width > 0 {
-            register.shapes = register.shapes.map { $0.kind == .quad ? $0.remeasured(frame: register.frameSize) : $0 }
+            register.shapes = register.shapes.map { shape in
+                guard shape.kind == .quad else { return shape }
+                var s = shape.remeasured(frame: register.frameSize)
+                if s.rectifiedAspect == nil { s = s.rectified(horizontalFieldOfView: register.representative.horizontalFieldOfView, frame: register.frameSize) }
+                return s
+            }
         }
         return register
+    }
+
+    /// Every quad's `rectifiedAspect` worked out (or re-worked) against this
+    /// register's lens and frame — for a register about to be written.
+    public func rectifyingQuads() -> ShapeRegister {
+        var r = self
+        r.shapes = shapes.map { $0.kind == .quad ? $0.rectified(horizontalFieldOfView: representative.horizontalFieldOfView, frame: frameSize) : $0 }
+        return r
     }
 
     public func save(inProjectFolder folder: URL) throws {

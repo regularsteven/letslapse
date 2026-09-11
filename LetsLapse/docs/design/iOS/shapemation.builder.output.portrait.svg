@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Shape-mation · builder · output · portrait</title>
-  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationOutputView before Create, step 4 of the Shape-mation slideshow builder (2026-09-11, code first, mirrored from the running app). Pushed from Mode inside the Shape-mation sheet; back reads "Mode", large title "Output". Heading "Output size", the 13-pt secondary explanation wrapped as the app wraps it, then one card of radio rows from ShapemationPlan.outputOptions() — the native canvas first, then the fits — each a 15-pt label with checkmark.circle.fill (accent) on the chosen row and an empty ring on the rest; rows are 47 pt with a Divider inset 16 from the card's leading edge. Then the full-width "Create Shape-mation" borderedProminent button, 16-pt semibold. Sample data is the five-circle pick the capture was made on: Native 3948×4032 and its four fits. Measured from an iPhone 16 Pro capture (402×874 pt) mapped to this 393×852 canvas: top-anchored content follows the 59-pt safe top, cards keep their 16-pt margins. The sheet's top sits at safe-top + 10 as measured (69 here); the Presets mirrors draw it at 56.</desc>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationOutputView before Create, step 4 of the Shape-mation slideshow builder (2026-09-11, code first, mirrored from the running app). Pushed from Mode inside the Shape-mation sheet; back reads "Timing" (the new step between Mode and Output, design-first 2026-09-11), large title "Output". Heading "Output size", the 13-pt secondary explanation wrapped as the app wraps it, then one card of radio rows from ShapemationPlan.outputOptions() — the native canvas first, then the fits — each a 15-pt label with checkmark.circle.fill (accent) on the chosen row and an empty ring on the rest; rows are 47 pt with a Divider inset 16 from the card's leading edge. Then the full-width "Create Shape-mation" borderedProminent button, 16-pt semibold. Sample data is the five-circle pick the capture was made on: Native 3948×4032 and its four fits. Measured from an iPhone 16 Pro capture (402×874 pt) mapped to this 393×852 canvas: top-anchored content follows the 59-pt safe top, cards keep their 16-pt margins. The sheet's top sits at safe-top + 10 as measured (69 here); the Presets mirrors draw it at 56. PLAYBACK ESTIMATE (design-first, 2026-09-11): one 12-pt secondary line above Create restating the Timing step's answer for the pictures picked — "12 photos · 25 fps · ramp 2 s → 0.5 s → 1 s — 12.6 s of playback, 314 frames." (or "… · 1 s each — 12.0 s of playback, 300 frames." with the ramp off) — so the last thing read before Create is how long the movie will be. Two lines (the first names the timing, the second the length, frames and sort); the button moves down 37 pt to make room.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
@@ -28,7 +28,7 @@
 
         <g id="nav-bar">
           <path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
-          <text x="30" y="103" font-size="17" fill="#C36A00">Mode</text>
+          <text x="30" y="103" font-size="17" fill="#C36A00">Timing</text>
           <text x="16" y="161" font-size="34" class="b" fill="#000">Output</text>
         </g>
 
@@ -69,9 +69,15 @@
           </g>
         </g>
 
+        <!-- playback estimate (design-first 2026-09-11): what Timing decided, restated where Create is pressed -->
+        <g id="playback-estimate" font-size="12" class="sec">
+          <text x="16" y="520.3">12 photos · 25 fps · ramp 2 s → 0.5 s → 1 s</text>
+          <text x="16" y="535.8">12.6 s of playback · 314 frames · largest first</text>
+        </g>
+
         <g id="create-button">
-          <rect x="16" y="515.7" width="361" height="57.3" rx="11" fill="#C36A00"/>
-          <text x="196.5" y="550.1" font-size="16" class="sb" fill="#FFF" text-anchor="middle">Create Shape-mation</text>
+          <rect x="16" y="553.2" width="361" height="57.3" rx="11" fill="#C36A00"/>
+          <text x="196.5" y="587.6" font-size="16" class="sb" fill="#FFF" text-anchor="middle">Create Shape-mation</text>
         </g>
       </g>
 
@@ -82,5 +88,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · output · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationOutputView before Create — step 4, pushed from Mode · Native 3948×4032 chosen · Create Shape-mation</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationOutputView before Create — pushed from Timing · estimate above Create · Mode · Native 3948×4032 chosen · Create Shape-mation</text>
 </svg>

@@ -2244,8 +2244,10 @@ struct CaptureView: View {
     private func takeViewfinderShapes() {
         guard mode == .photo, autoShapesEnabled else { pendingViewfinderShapes = nil; return }
         pendingViewfinderShapes = liveShapes.snapshot()
+        pendingViewfinderShapes?.horizontalFieldOfView = camera.currentHorizontalFieldOfView
         if let shapes = pendingViewfinderShapes {
-            LLog("shapes: shutter with \(shapes.kept.count) kept, \(shapes.dismissed.count) dismissed (\(shapes.search.token))")
+            LLog(String(format: "shapes: shutter with %d kept, %d dismissed (%@), lens %.1f° wide",
+                        shapes.kept.count, shapes.dismissed.count, shapes.search.token, shapes.horizontalFieldOfView ?? 0))
         }
     }
 

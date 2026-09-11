@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Shape-mation · builder · match · oval · portrait</title>
+  <desc>Design-first, 2026-09-11 (Steven: &#x27;a followup input to decide how strict this should be for each with aspect ratio inputs as well&#x27;). The Match step is NEW: pushed from the family row of ShapemationBuilderView (back reads &#x27;Shape slideshow&#x27;), before the projects step, large title &#x27;Match&#x27;. It narrows the family to the shapes the slideshow can land on one another: every control is label-above and full-width inside one white llCard (radius 18, 16-pt padding) in the grammar of the Adjust screen&#x27;s time-slicing card — LLInkSegment-style segmented controls (E9E9EB track, white knob) and capsule chips (accent when chosen). Under the card a 12-pt secondary readout counts what passes (&#x27;N projects · M &lt;shapes&gt; match&#x27;), live as the controls change, and the bottom safeAreaInset bar carries &#x27;Next · projects&#x27; (disabled when nothing matches). The match is saved with the Shape-mation record so a re-render reproduces it; family membership itself is unchanged, Match only narrows. Same geometry as the other builder steps (sheet top 69, question at 209, card at 225). OVAL: Ratio chips — Any · 0.5 · 0.6 · 0.7 · 0.8 · Custom (Custom reveals a &#x27;Ratio&#x27; stepper row, 0.30…0.85 in 0.05 steps, below the chips; not drawn, 0.6 is chosen) — then Tolerance Strict ±0.05 · Normal ±0.10 · Loose ±0.20 around the ratio (hidden when Any), then Angle Any · Level — Level turns each oval so its major axis is horizontal, which is what makes same-ratio ovals coincide; Any keeps the angle as shot. The renderer scales by the major axis as today. Drawn at 0.6 · Normal · Level.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
+    <filter id="knob" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000" flood-opacity="0.2"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="59" width="361" height="30" rx="10" fill="#D5D5D9"/>
+
+      <!-- the sheet -->
+      <g id="shapemation-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
+
+        <g id="nav-bar">
+          <path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="30" y="103" font-size="17" fill="#C36A00">Shape slideshow</text>
+          <text x="16" y="161" font-size="34" class="b" fill="#000">Match</text>
+        </g>
+
+        <text x="16" y="209" font-size="17" class="sb" fill="#000">How strict about the oval?</text>
+
+        <g id="match-card">
+          <rect x="16" y="225" width="361" height="303.0" rx="18" fill="#FFF"/>
+        <g id="ratio">
+          <text x="32" y="255" font-size="14" fill="#000">Ratio</text>
+          <rect x="32" y="267" width="50" height="31" rx="15.5" fill="#E9E9EB"/>
+          <text x="57.0" y="287" font-size="13" fill="#000" text-anchor="middle">Any</text>
+          <rect x="90" y="267" width="50" height="31" rx="15.5" fill="#E9E9EB"/>
+          <text x="115.0" y="287" font-size="13" fill="#000" text-anchor="middle">0.5</text>
+          <rect x="148" y="267" width="50" height="31" rx="15.5" fill="#C36A00"/>
+          <text x="173.0" y="287" font-size="13" fill="#FFF" text-anchor="middle" class="sb">0.6</text>
+          <rect x="206" y="267" width="50" height="31" rx="15.5" fill="#E9E9EB"/>
+          <text x="231.0" y="287" font-size="13" fill="#000" text-anchor="middle">0.7</text>
+          <rect x="264" y="267" width="50" height="31" rx="15.5" fill="#E9E9EB"/>
+          <text x="289.0" y="287" font-size="13" fill="#000" text-anchor="middle">0.8</text>
+          <rect x="32" y="306" width="74" height="31" rx="15.5" fill="#E9E9EB"/>
+          <text x="69.0" y="326" font-size="13" fill="#000" text-anchor="middle">Custom</text>
+        </g>
+        <g id="tolerance">
+          <text x="32" y="355" font-size="14" fill="#000">Tolerance</text>
+          <rect x="32" y="367" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="143.7" y="369" width="105.7" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="86.8" y="387">Strict</text>
+            <text x="196.5" y="387" class="sb">Normal</text>
+            <text x="306.2" y="387">Loose</text>
+          </g>
+        </g>
+        <g id="angle">
+          <text x="32" y="416" font-size="14" fill="#000">Angle</text>
+          <rect x="32" y="428" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="198.5" y="430" width="160.5" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="114.2" y="448">Any</text>
+            <text x="278.8" y="448" class="sb">Level</text>
+          </g>
+        </g>
+        <g font-size="12" class="sec">
+          <text x="32" y="475.0">Ovals between 0.50 and 0.70 (minor ÷ major), each turned so</text>
+          <text x="32" y="490.5">its long axis is level. Strict is ±0.05, Loose ±0.20; Any</text>
+          <text x="32" y="506.0">keeps every angle as shot.</text>
+        </g>
+        </g>
+
+        <g id="match-readout" font-size="12" class="sec">
+          <text x="16" y="552.0">1 project · 1 oval matches</text>
+        </g>
+
+        <!-- bottom safeAreaInset bar: regularMaterial, Next trailing -->
+        <g id="bottom-bar">
+          <rect x="0" y="734" width="393" height="118" fill="#FFF" opacity="0.2"/>
+          <rect x="224" y="750" width="153" height="52" rx="11" fill="#C36A00"/>
+          <text x="300.5" y="781.4" font-size="15" class="sb" fill="#FFF" text-anchor="middle">Next · projects</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · match · oval · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationMatchView (planned) — Oval · Ratio 0.6 · Normal · Level</text>
+</svg>

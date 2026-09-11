@@ -21,9 +21,15 @@ public struct ViewfinderShapes: Sendable, Equatable {
     public var frameSize: CGSize
     /// The dials the viewfinder was set to — the file pass looks for the same things.
     public var search: ShapeSearch
+    /// The lens's horizontal field of view at the shutter, in degrees — what
+    /// lets the register work out a rectangle's own proportions from the
+    /// angle it was seen at. Read per shot: zoom changes it.
+    public var horizontalFieldOfView: Double?
 
-    public init(kept: [DetectedShape], dismissed: [DetectedShape], frameSize: CGSize, search: ShapeSearch = ShapeSearch()) {
+    public init(kept: [DetectedShape], dismissed: [DetectedShape], frameSize: CGSize, search: ShapeSearch = ShapeSearch(),
+                horizontalFieldOfView: Double? = nil) {
         self.kept = kept; self.dismissed = dismissed; self.frameSize = frameSize; self.search = search
+        self.horizontalFieldOfView = horizontalFieldOfView
     }
 
     public var isEmpty: Bool { kept.isEmpty && dismissed.isEmpty }

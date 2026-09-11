@@ -96,11 +96,19 @@ public struct ShapemationPlan: Equatable, Sendable {
     }
 
     /// Lays the items out. Every shape is scaled to the smallest native shape
-    /// among the items (so no photo is ever upscaled), ellipses keep their
-    /// orientation (a circle's axis direction is noise), quads level their top
-    /// edge. The canvas is the union (stack) or intersection (crop) of the
-    /// footprints, translated so it starts at the origin.
-    public static func make(items: [ShapemationItem], mode: ShapemationMode) -> ShapemationPlan? {
+    /// among the items (so no photo is ever upscaled). Without a `match` —
+    /// the builder before the Match step — ellipses keep their orientation
+    /// (a circle's axis direction is noise) and quads level their top edge.
+    /// With one, the family decides how each shape is made to coincide with
+    /// the others: circles are un-tilted (the minor axis stretched to the
+    /// major, so a rim seen from the side lands round); ovals are turned
+    /// level when the match asks and scaled by their major axis; squares and
+    /// rectangles are placed by the homography that puts the quad's four
+    /// corners on one target rectangle — the match's class, else the quad's
+    /// own effective aspect — so every rectangle lands on the same shape,
+    /// perspective corrected. The canvas is the union (stack) or intersection
+    /// (crop) of the footprints, translated so it starts at the origin.
+    public static func make(items: [ShapemationItem], mode: ShapemationMode, match: ShapeMatch? = nil) -> ShapemationPlan? {
         guard !items.isEmpty else { return nil }
         let target = items.map { $0.shape.nativeDiameterPx }.min() ?? 0
         guard target > 0 else { return nil }
@@ -112,8 +120,25 @@ public struct ShapemationPlan: Equatable, Sendable {
             let majorPx = shape.majorAxis * W
             guard majorPx > 0 else { continue }
             let s = target / majorPx
-            let rot: Homography = shape.kind == .quad ? .rotate(-shape.rotation) : .identity
-            let h = Homography.scale(s, s) * rot * Homography.translate(-cx, -cy)
+            let centred = Homography.translate(-cx, -cy)
+            var h: Homography
+            switch (shape.kind, match?.family) {
+            case (.quad, .square?), (.quad, .rectangle?):
+                h = Self.rectanglePlacement(shape, W: W, H: H, target: target, match: match!)
+                    ?? Homography.scale(s, s) * .rotate(-shape.rotation) * centred
+            case (.ellipse, .circle?):
+                // Un-tilt about the centre: into the ellipse's own frame,
+                // stretch the minor axis up to the major, back out.
+                let stretch = shape.obliquity > 0 ? 1 / shape.obliquity : 1
+                let untilt = Homography.rotate(shape.rotation) * Homography.scale(1, stretch) * Homography.rotate(-shape.rotation)
+                h = Homography.scale(s, s) * untilt * centred
+            case (.ellipse, .oval?):
+                let turn: Homography = match?.angle == .level ? .rotate(-shape.rotation) : .identity
+                h = Homography.scale(s, s) * turn * centred
+            default:
+                let rot: Homography = shape.kind == .quad ? .rotate(-shape.rotation) : .identity
+                h = Homography.scale(s, s) * rot * centred
+            }
             let corners = [CGPoint(x: 0, y: 0), CGPoint(x: W, y: 0), CGPoint(x: W, y: H), CGPoint(x: 0, y: H)].map { h.apply($0) }
             raw.append((item.id, h, corners, s))
         }
@@ -133,6 +158,23 @@ public struct ShapemationPlan: Equatable, Sendable {
                                canvas: CGRect(origin: .zero, size: canvas.size), placements: placements,
                                unionCanvas: CGRect(origin: .zero, size: union.size))
     }
+
+    /// The homography that puts a quad's four corners (source pixels) on a
+    /// rectangle of `target` long side, centred at the origin: the match's
+    /// class ratio where one is chosen, the quad's own effective aspect
+    /// otherwise; landscape or portrait as the quad lies. Nil for a
+    /// degenerate quad, which the caller places by similarity instead.
+    static func rectanglePlacement(_ shape: DetectedShape, W: Double, H: Double, target: Double, match: ShapeMatch) -> Homography? {
+        guard let c = shape.corners, c.count == 4 else { return nil }
+        let src = c.map { CGPoint(x: Double($0.x) * W, y: Double($0.y) * H) }
+        let own = shape.effectiveAspect
+        let landscape = match.targetAspect ?? max(own, 1 / own)
+        guard landscape.isFinite, landscape > 0 else { return nil }
+        let long = target, short = target / landscape
+        let (w, h) = shape.wide ? (long, short) : (short, long)
+        let dst = [CGPoint(x: -w / 2, y: -h / 2), CGPoint(x: w / 2, y: -h / 2), CGPoint(x: w / 2, y: h / 2), CGPoint(x: -w / 2, y: h / 2)]
+        return Homography.from(src, to: dst)
+    }
 }
 
 /// Writes the video: each item held for `secondsPerItem`, hard cuts, composited
@@ -151,6 +193,10 @@ public final class ShapemationRenderer {
     public var secondsPerItem = 1.0
     public var fps: Int32 = 30
     public var bitsPerSecond = 16_000_000
+    /// The Timing step's answer. When set it decides the frame rate and
+    /// every item's own hold (`ShapemationTiming.holds(count:)`); when nil the
+    /// constant `secondsPerItem` at `fps` applies, as before it existed.
+    public var timing: ShapemationTiming?
 
     private let context: CIContext
     public init() {
@@ -164,6 +210,8 @@ public final class ShapemationRenderer {
         try? FileManager.default.removeItem(at: url)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let width = Int(outputSize.width), height = Int(outputSize.height)
+        let fps: Int32 = timing.map { Int32($0.fps) } ?? self.fps
+        let holds = timing?.holds(count: items.count)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let settings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -225,7 +273,8 @@ public final class ShapemationRenderer {
             CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pb)
             guard let buffer = pb else { throw LapseError.writerFailed("no pixel buffer") }
             context.render(frame, to: buffer, bounds: frameRect, colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
-            for _ in 0..<framesPerItem {
+            let hold = holds.map { n < $0.count ? $0[n] : framesPerItem } ?? framesPerItem
+            for _ in 0..<hold {
                 while !input.isReadyForMoreMediaData { Thread.sleep(forTimeInterval: 0.002) }
                 if !adaptor.append(buffer, withPresentationTime: CMTime(value: frameIndex, timescale: fps)) {
                     throw writer.error ?? LapseError.writerFailed("could not append a frame")

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Shape-mation · builder · projects · portrait</title>
-  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationProjectsView + ShapemationProjectRow + ShapeOverlayThumbnail, step 2 of the shape-slideshow builder) over ShapemationBuilder. 2026-09-11, code first, mirrored from the running app. Pushed from the family step (shapemation.builder.family.portrait.svg) inside the Shape-mation sheet: back chevron + "Shape slideshow" in accent, large title "Circles" (the family's title, pluralised), then the count line "5 of 5 picked" (13 secondary) and a LazyVStack of white llCards (radius 14, spacing 10, padding 12), one per project whose register holds at least one instance of the family, in capture order. Each row: the project's representative picture on the leading side, fitted into a 96×96 frame (so a 3:4 portrait is 72×96, a 4:3 landscape 96×72) with every instance of the family traced over it — white at 85% (1.5 pt), the picked instance in amber (2.5 pt); then the title (15 semibold, one line), "1 circle · Photo" (12 secondary — instance count · capture mode) and "519 px across" (12 tertiary — the largest instance's native diameter); a Spacer; and the pick mark, checkmark.circle.fill (22, accent) when picked or circle (22, secondary at 50%) when not. Tapping anywhere on the row toggles it. INSTANCE PILLS — when a picked project holds SEVERAL instances of the family, the "px across" line is replaced by a row of capsules, one per instance, "1 · 519 px", "2 · 312 px" … (11 medium, 8×4 padding, spacing 6; the chosen instance accent-filled with white text, the rest secondary at 15% with primary text); tapping one makes it the instance the slideshow locks on. An unpicked multi-instance project shows the plain "px across" line. None of the 2026-09-11 circle projects holds more than one, so no pill is drawn here. Bottom: a safeAreaInset bar over .regularMaterial (drawn flat, 92% opaque) — "Clear" when everything is picked, otherwise "Pick all" (17, accent, leading) and the "Next · mode" NavigationLink (15 semibold, 18×10 padding, borderedProminent in accent, radius ~10) to ShapemationBuildStep.mode(family); it is DISABLED until at least two projects are picked (near-white #F8F8F7 fill, #C6C6C8 label). DRAWN STATE: everything picked — "5 of 5 picked", amber rings, accent check marks, "Clear", Next live. The unpicked state (ios-shapemation-build-projects.png) is the same layout with "0 of 5 picked", white rings on the pictures, grey ring marks, "Pick all" and the greyed Next. The fifth project's card starts at y 728 and lies under the bar until the list scrolls; its copy is not visible in the screenshot, so it is drawn as a bare card. Sample data is the 2026-09-11 library: Photo 9. 9. at 09:26 (a street traffic light, 519 px), Photo 9. 9. at 09:26 (the Gros-Horloge dial, 1 350 px), Photo 9. 9. at 10:07 (a museum façade clock, landscape, 530 px), Photo 9. 9. at 17:15 (a no-parking sign, 879 px). Pictures are flat placeholders. Measured from an iPhone 16 Pro screenshot (402×874 pt) and re-anchored to this 393×852 canvas: leading/top positions as measured, the pick marks 9 pt further left, the bottom bar 22 pt higher.</desc>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationProjectsView + ShapemationProjectRow + ShapeOverlayThumbnail, step 2 of the shape-slideshow builder) over ShapemationBuilder. 2026-09-11, code first, mirrored from the running app. Pushed from the family step (shapemation.builder.family.portrait.svg) inside the Shape-mation sheet: back chevron + "Shape slideshow" in accent, large title "Circles" (the family's title, pluralised), then the count line "5 of 5 picked" (13 secondary) and a LazyVStack of white llCards (radius 14, spacing 10, padding 12), one per project whose register holds at least one instance of the family, in capture order. Each row: the project's representative picture on the leading side, fitted into a 96×96 frame (so a 3:4 portrait is 72×96, a 4:3 landscape 96×72) with every instance of the family traced over it — white at 85% (1.5 pt), the picked instance in amber (2.5 pt); then the title (15 semibold, one line), "1 circle · Photo" (12 secondary — instance count · capture mode) and "519 px across" (12 tertiary — the largest instance's native diameter); a Spacer; and the pick mark, checkmark.circle.fill (22, accent) when picked or circle (22, secondary at 50%) when not. Tapping anywhere on the row toggles it. INSTANCE PILLS — when a picked project holds SEVERAL instances of the family, the "px across" line is replaced by a row of capsules, one per instance, "1 · 519 px", "2 · 312 px" … (11 medium, 8×4 padding, spacing 6; the chosen instance accent-filled with white text, the rest secondary at 15% with primary text); tapping one makes it the instance the slideshow locks on. An unpicked multi-instance project shows the plain "px across" line. None of the 2026-09-11 circle projects holds more than one, so no pill is drawn here. Bottom: a safeAreaInset bar over .regularMaterial (drawn flat, 92% opaque) — "Clear" when everything is picked, otherwise "Pick all" (17, accent, leading) and the "Next · mode" NavigationLink (15 semibold, 18×10 padding, borderedProminent in accent, radius ~10) to ShapemationBuildStep.mode(family); it is DISABLED until at least two projects are picked (near-white #F8F8F7 fill, #C6C6C8 label). DRAWN STATE: everything picked — "5 of 5 picked", amber rings, accent check marks, "Clear", Next live. The unpicked state (ios-shapemation-build-projects.png) is the same layout with "0 of 5 picked", white rings on the pictures, grey ring marks, "Pick all" and the greyed Next. The fifth project's card starts at y 728 and lies under the bar until the list scrolls; its copy is not visible in the screenshot, so it is drawn as a bare card. Sample data is the 2026-09-11 library: Photo 9. 9. at 09:26 (a street traffic light, 519 px), Photo 9. 9. at 09:26 (the Gros-Horloge dial, 1 350 px), Photo 9. 9. at 10:07 (a museum façade clock, landscape, 530 px), Photo 9. 9. at 17:15 (a no-parking sign, 879 px). Pictures are flat placeholders. Measured from an iPhone 16 Pro screenshot (402×874 pt) and re-anchored to this 393×852 canvas: leading/top positions as measured, the pick marks 9 pt further left, the bottom bar 22 pt higher. SORT (design-first, 2026-09-11, Steven): a Menu on the count line's trailing side — "Sort  Largest first ⌄" — with Largest first (the DEFAULT, on for every new slideshow) · Smallest first · Newest first (capture order, the only order until now). The key is the picked instance's share of its photo — nativeDiameterPx over the photo's short edge — not its pixel size, so a small photo with a big circle sorts ahead of a large photo with a small one; the tertiary line now says both ("1 350 px · 45 % of the frame" — "across" dropped so it stays one line on a 402-pt phone). The rows are drawn in that order (45 · 29 · 18 · 17 %), which is also the order the slideshow plays: largest share first, each photo a little further away than the last, which is what makes the playback read as a zoom rather than a shuffle. The sort is saved with the Shape-mation record.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="sheet"><rect x="0" y="56" width="393" height="796" rx="10"/></clipPath>
@@ -41,9 +41,15 @@
         <text x="16" y="148" font-size="34" class="b" fill="#000">Circles</text>
 
         <text id="picked-count" x="16" y="192" font-size="13" class="sec">5 of 5 picked</text>
+        <!-- SORT (design-first 2026-09-11): a Menu on the count line's trailing side — Largest first (default) · Smallest first · Newest first; the rows below follow it -->
+        <g id="sort-menu" data-control="Menu">
+          <text x="286" y="192" font-size="13" class="sec" text-anchor="end">Sort</text>
+          <text x="364" y="192" font-size="13" class="sb" fill="#C36A00" text-anchor="end">Largest first</text>
+          <path d="M369 186.5 l4 4 4 -4" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+        </g>
 
-        <!-- row 1: street traffic light, portrait, picked -->
-        <g id="row-0926-traffic">
+        <!-- traffic light: 17 % of its frame, so last under Largest first (drawn at y 208, moved to 598) -->
+        <g id="row-0926-traffic" transform="translate(0,390)">
           <rect x="16" y="208" width="361" height="120" rx="14" fill="#FFF"/>
           <g transform="translate(40,220)" clip-path="url(#pic-portrait)">
             <rect width="72" height="96" fill="#CFCAC2"/>
@@ -60,12 +66,12 @@
           </g>
           <text x="136" y="234.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 09:26</text>
           <text x="136" y="254.5" font-size="12" class="sec">1 circle · Photo</text>
-          <text x="136" y="275" font-size="12" class="ter">519 px across</text>
+          <text x="136" y="275" font-size="12" class="ter">519 px · 17 % of the frame</text>
           <use href="#check" x="352" y="233" data-symbol="checkmark.circle.fill"/>
         </g>
 
-        <!-- row 2: the Gros-Horloge dial, portrait, picked -->
-        <g id="row-0926-clock">
+        <!-- the Gros-Horloge dial: 45 %, first under Largest first (drawn at y 338, moved to 208) -->
+        <g id="row-0926-clock" transform="translate(0,-130)">
           <rect x="16" y="338" width="361" height="120" rx="14" fill="#FFF"/>
           <g transform="translate(40,350)" clip-path="url(#pic-portrait)">
             <rect width="72" height="96" fill="#CDC7BF"/>
@@ -80,12 +86,12 @@
           </g>
           <text x="136" y="364.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 09:26</text>
           <text x="136" y="384.5" font-size="12" class="sec">1 circle · Photo</text>
-          <text x="136" y="405" font-size="12" class="ter">1 350 px across</text>
+          <text x="136" y="405" font-size="12" class="ter">1 350 px · 45 % of the frame</text>
           <use href="#check" x="352" y="363" data-symbol="checkmark.circle.fill"/>
         </g>
 
         <!-- row 3: museum façade clock, landscape, picked -->
-        <g id="row-1007-museum">
+        <g id="row-1007-museum" transform="translate(0,0)">
           <rect x="16" y="468" width="361" height="120" rx="14" fill="#FFF"/>
           <g transform="translate(28,492)" clip-path="url(#pic-landscape)">
             <rect width="96" height="72" fill="#C9BBA4"/>
@@ -99,12 +105,12 @@
           </g>
           <text x="136" y="494.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 10:07</text>
           <text x="136" y="514.5" font-size="12" class="sec">1 circle · Photo</text>
-          <text x="136" y="535" font-size="12" class="ter">530 px across</text>
+          <text x="136" y="535" font-size="12" class="ter">530 px · 18 % of the frame</text>
           <use href="#check" x="352" y="493" data-symbol="checkmark.circle.fill"/>
         </g>
 
         <!-- row 4: no-parking sign in foliage, portrait, picked -->
-        <g id="row-1715-sign">
+        <g id="row-1715-sign" transform="translate(0,-260)">
           <rect x="16" y="598" width="361" height="120" rx="14" fill="#FFF"/>
           <g transform="translate(40,610)" clip-path="url(#pic-portrait)">
             <rect width="72" height="96" fill="#7C8457"/>
@@ -119,7 +125,7 @@
           </g>
           <text x="136" y="624.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 17:15</text>
           <text x="136" y="644.5" font-size="12" class="sec">1 circle · Photo</text>
-          <text x="136" y="665" font-size="12" class="ter">879 px across</text>
+          <text x="136" y="665" font-size="12" class="ter">879 px · 29 % of the frame</text>
           <use href="#check" x="352" y="623" data-symbol="checkmark.circle.fill"/>
         </g>
 
@@ -146,5 +152,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · projects · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationProjectsView (step 2) — Circles · 5 of 5 picked · picture rows · Clear · Next · mode</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationProjectsView (step 2) — Circles · 5 of 5 picked · Sort Largest first · Clear · Next · mode</text>
 </svg>

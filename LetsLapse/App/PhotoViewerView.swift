@@ -1704,6 +1704,9 @@ struct PhotoViewerView: View {
     private func persistShapeRegister() {
         guard let capture, let register = shapeRegister, register != persistedShapeRegister else { return }
         do {
+            // A hand-edited quad's own proportions follow its new corners —
+            // the register's lens (when it has one) re-measures every quad.
+            let register = register.rectifyingQuads()
             try register.save(inProjectFolder: model.projectFolderURL(for: capture))
             persistedShapeRegister = register
             model.shapeRegisterDidChange(for: capture)

@@ -11,6 +11,39 @@ live inline.
 
 ## Open
 
+### Shape-mation · Match, Sort and Timing — shipped 2026-09-11, owed follow-ups
+
+**Raised:** 2026-09-11 · **Size:** small (what is left)
+
+Designed in the morning (signed off), built in the afternoon — code from the
+mirrors. Kit: `ShapeMatch` (per-family strictness, oval ratio/angle,
+rectangle aspect class + orientation), `DetectedShape.rectifiedAspect` from
+the register's new `Representative.horizontalFieldOfView` (Zhang–He via
+`NormalizedQuad.rectifiedAspectRatio`; `family` now judges the effective
+aspect), `ShapemationTiming` (fps 24/25/30/50/60, holds in seconds or frames,
+ramp start → middle? → end interpolated on exact anchors, whole frames per
+photo), `ShapemationSort` (share of the frame), the plan's per-family
+transforms (circles un-tilted, ovals turned level, quads placed by homography
+onto the class rectangle), per-item holds in the renderer; 8 tests. App: the
+Match and Timing steps, Sort on the projects step, the estimate on Output,
+the record carries match/sort/timing; the lens reaches the register from the
+shutter (`CameraController.currentHorizontalFieldOfView`, zoom-aware) and from
+EXIF `FocalLenIn35mmFilm` on import; the Masks-tab save re-rectifies. A
+7-photo render came out at exactly the estimate (159 frames · 6.36 s at 25).
+
+Owed:
+- **A device run** for the lens: a fresh capture's register should carry
+  `horizontalFieldOfView` and its quads a `rectifiedAspect`; the Rectangle
+  Match footer then reads "N of M" instead of "0 of M". The zoom-aware FOV
+  (constituent's format narrowed by the crop above its switch-over factor)
+  is derived, not measured — check it against a known rectangle.
+- The Mac reports no field of view (`videoFieldOfView` is iOS-only), so Mac
+  captures are matched as seen; imports still get EXIF.
+- The oval Custom chip seeds 0.65 and steps 0.30…0.85; the rectangle Custom
+  steppers run 1…32 — both unstyled Steppers for now.
+- The Sort's "Newest first" keeps the builder's capture order (oldest → newest
+  as loaded); rename or reverse if that reads wrong in use.
+
 ### Auto shape mode — shapes found live on the Photo viewfinder, recorded at capture
 
 **Raised:** 2026-09-11 · **Size:** medium · **Status:** in build (code first, by Steven's call)

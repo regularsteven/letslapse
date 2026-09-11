@@ -40,6 +40,25 @@ enum RepresentativeLoader {
         }
     }
 
+    /// The lens's horizontal field of view for a picture that carries EXIF —
+    /// an import, or a DNG — from its 35 mm-equivalent focal length, read on
+    /// the diagonal the way that number is defined (a 4:3 frame with the
+    /// 43.3 mm diagonal is 34.6 mm wide, so an iPhone's "24 mm" is a 71.6°
+    /// horizontal field, not 73.7°). nil when the file does not say — the
+    /// app's own JPEG stills carry almost no EXIF, which is why the capture
+    /// path records the lens on the register itself.
+    static func horizontalFieldOfView(_ rep: ShapeRepresentative) -> Double? {
+        guard rep.source != .blendVideo,
+              let source = CGImageSourceCreateWithURL(rep.url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any],
+              let f35 = (exif[kCGImagePropertyExifFocalLenIn35mmFilm] as? NSNumber)?.doubleValue, f35 > 0,
+              let size = orientedPixelSize(rep), size.width > 0, size.height > 0 else { return nil }
+        let diagonal35 = 43.27
+        let halfWidth = diagonal35 / 2 * Double(size.width) / Double(hypot(size.width, size.height))
+        return 2 * atan(halfWidth / f35) * 180 / .pi
+    }
+
     /// The representative's oriented pixel size without a full decode.
     static func orientedPixelSize(_ rep: ShapeRepresentative) -> CGSize? {
         switch rep.source {
@@ -161,8 +180,13 @@ final class ShapeFinder: ObservableObject {
                    let image = RepresentativeLoader.image(rep, maxPixelSize: detector.settings.detectionLongEdge) {
                     let shapes = ((try? detector.detect(in: image, nativeSize: size)) ?? [])
                         .filter { ShapeReconciler.bestMatch(for: $0, in: drawn) == nil }
+                    // The lens: what the register already knew (a capture-time
+                    // register keeps its shutter reading), else the file's EXIF.
+                    let fov = ShapeRegister.load(inProjectFolder: candidate.folder)?.representative.horizontalFieldOfView
+                        ?? RepresentativeLoader.horizontalFieldOfView(rep)
                     register = ShapeRegister(representative: .init(relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction,
-                                                                   width: Int(size.width), height: Int(size.height)), shapes: drawn + shapes)
+                                                                   width: Int(size.width), height: Int(size.height), horizontalFieldOfView: fov),
+                                             shapes: drawn + shapes).rectifyingQuads()
                     analysed += 1
                     if !shapes.isEmpty { withShapes += 1 }
                     for s in shapes { families[s.family, default: 0] += 1 }
@@ -214,9 +238,10 @@ extension AppModel {
             let size = RepresentativeLoader.orientedPixelSize(rep) ?? viewfinder.frameSize
             let representative = ShapeRegister.Representative(
                 relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction,
-                width: Int(size.width), height: Int(size.height))
+                width: Int(size.width), height: Int(size.height),
+                horizontalFieldOfView: viewfinder.horizontalFieldOfView ?? RepresentativeLoader.horizontalFieldOfView(rep))
             var register = ShapeRegister(analysedAt: nil, representative: representative,
-                                         shapes: ShapeReconciler.provisional(viewfinder, photoSize: size))
+                                         shapes: ShapeReconciler.provisional(viewfinder, photoSize: size)).rectifyingQuads()
             do { try register.save(inProjectFolder: folder) } catch {
                 LLog("shapes: could not write the provisional register for \(title): \(error)")
                 return
@@ -233,6 +258,7 @@ extension AppModel {
             let started = Date()
             let found = (try? detector.detect(in: image, nativeSize: size)) ?? []
             register.shapes = ShapeReconciler.reconcile(viewfinder, photoDetections: found, photoSize: size)
+            register = register.rectifyingQuads()
             register.analysedAt = Date()
             do { try register.save(inProjectFolder: folder) } catch {
                 LLog("shapes: could not write the refined register for \(title): \(error)")

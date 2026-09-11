@@ -29,9 +29,16 @@ final class ShapemationStore: ObservableObject {
         var seconds: Double
         var fileName: String
         var posterFileName: String?
+        /// The Match, Sort and Timing the slideshow was built with (2026-09-11
+        /// designs); nil on records from before they existed.
+        var match: ShapeMatch?
+        var sort: ShapemationSort?
+        var timing: ShapemationTiming?
 
         var subtitle: String {
-            "\(family.title) · \(mode == .stack ? "fit" : "crop") · \(itemCount) photo\(itemCount == 1 ? "" : "s") · \(width)×\(height)"
+            var line = "\(match?.summary ?? family.title) · \(mode == .stack ? "fit" : "crop") · \(itemCount) photo\(itemCount == 1 ? "" : "s") · \(width)×\(height)"
+            if let timing { line += " · \(timing.summary)" }
+            return line
         }
     }
 

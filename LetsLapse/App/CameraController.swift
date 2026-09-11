@@ -1788,6 +1788,40 @@ final class CameraController: NSObject, ObservableObject {
     /// letting a 16:9 video letterbox promise framing the file won't have.
     /// No-op while any capture is running — the DNG run flips the preset
     /// itself, and its restore leaves the armed configuration in place.
+    /// The horizontal field of view of what the viewfinder shows right now,
+    /// in degrees: the active constituent's own format, narrowed by whatever
+    /// digital crop the current zoom applies on top of that constituent's
+    /// native factor (a 16 Pro at 3× is the wide at a 1.5× crop, at 5× the
+    /// tele at 1×). Main-thread read of KVO-able device state, for the shape
+    /// register: a rectangle's true proportions are only recoverable from the
+    /// angle it was seen at when the lens is known, and zoom is part of the
+    /// lens. nil without a device.
+    var currentHorizontalFieldOfView: Double? {
+        guard let device = videoDevice else { return nil }
+        #if os(iOS)
+        let zoom = Double(device.videoZoomFactor)
+        var format = device.activeFormat
+        var base = 1.0
+        if device.isVirtualDevice, let primary = device.activePrimaryConstituent {
+            format = primary.activeFormat
+            let constituents = device.constituentDevices
+            let switchOvers = device.virtualDeviceSwitchOverVideoZoomFactors.map { $0.doubleValue }
+            if let i = constituents.firstIndex(of: primary), i > 0, i - 1 < switchOvers.count {
+                base = switchOvers[i - 1]
+            }
+        }
+        let native = Double(format.videoFieldOfView)
+        guard native > 0 else { return nil }
+        let crop = max(1, zoom / base)
+        return 2 * atan(tan(native * .pi / 360) / crop) * 180 / .pi
+        #else
+        // AVFoundation on the Mac does not report a format's field of view;
+        // the register then carries no lens and rectangles are matched as
+        // they appear on screen (the footer says so).
+        return nil
+        #endif
+    }
+
     /// Photo mode on or off — see `photoViewfinderActive`. Re-applies the
     /// format while idle so the rate takes effect at once; a run in flight
     /// keeps its rate and picks the new one up at its next format apply.

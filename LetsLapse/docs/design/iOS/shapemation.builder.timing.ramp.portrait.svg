@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Shape-mation · builder · timing · ramp · portrait</title>
+  <desc>Design-first, 2026-09-11 (Steven: speed ramping, &#x27;independent of FPS, default 25 fps with 24, 25, 30, 50 and 60&#x27;, per-photo holds of &#x27;2s, 1s, .5s, .25s, .1s and 3 frame, 2 frame and 1 frame&#x27;, start/middle/end when ramping, &#x27;an estimation for the end playback&#x27;; &#x27;don&#x27;t use sliders, simple selects&#x27;). TIMING is a NEW step between Mode and Output (back reads &#x27;Mode&#x27;, Next · output). One white card in the time-slicing card&#x27;s grammar: Frame rate segmented 24 · 25 · 30 · 50 · 60 (25 the default); Ramp segmented Off · On; then Picker rows in .menu style — label leading, value + chevron.up.chevron.down trailing in secondary — each offering 2 s · 1 s · 0.5 s · 0.25 s · 0.1 s · 3 frames · 2 frames · 1 frame (the frame options are literal at the chosen rate, the second options round to whole frames at it, never under one: 0.1 s is 2 frames at 24 fps and 6 at 60). Ramp On shows Start · Middle · End (Middle also offers None, which runs straight from Start to End): the hold interpolates over the sequence — start → middle across the first half of the photos, middle → end across the second — so a slideshow can speed up and slow down, at any frame rate. Under the card the ESTIMATE for the pictures picked, live as the controls change: &#x27;12 photos · 12.6 s of playback · 314 frames&#x27; — the per-photo holds summed (50, 43, 36, 30, 23, 16, 14, 16, 18, 20, 23, 25 frames here — the anchors stay exact, 0.5 s is 12.5 frames, and only each photo's own hold is rounded). The same line is restated above Create on the Output step. Timing is saved with the Shape-mation record; the Sort on the projects step (largest share first) decides the order these holds are applied to.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
+    <filter id="knob" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000" flood-opacity="0.2"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="59" width="361" height="30" rx="10" fill="#D5D5D9"/>
+
+      <!-- the sheet -->
+      <g id="shapemation-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
+
+        <g id="nav-bar">
+          <path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="30" y="103" font-size="17" fill="#C36A00">Mode</text>
+          <text x="16" y="161" font-size="34" class="b" fill="#000">Timing</text>
+        </g>
+
+        <text x="16" y="209" font-size="17" class="sb" fill="#000">How fast should it play?</text>
+
+        <g id="match-card">
+          <rect x="16" y="225" width="361" height="345.0" rx="18" fill="#FFF"/>
+        <g id="frame-rate">
+          <text x="32" y="255" font-size="14" fill="#000">Frame rate</text>
+          <rect x="32" y="267" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="99.8" y="269" width="61.8" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="64.9" y="287">24</text>
+            <text x="130.7" y="287" class="sb">25</text>
+            <text x="196.5" y="287">30</text>
+            <text x="262.3" y="287">50</text>
+            <text x="328.1" y="287">60</text>
+          </g>
+        </g>
+        <g id="ramp">
+          <text x="32" y="316" font-size="14" fill="#000">Ramp</text>
+          <rect x="32" y="328" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="198.5" y="330" width="160.5" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="114.2" y="348">Off</text>
+            <text x="278.8" y="348" class="sb">On</text>
+          </g>
+        </g>
+        <g id="start" data-control="Picker.menu">
+          <text x="32" y="396" font-size="15" fill="#000">Start</text>
+          <text x="338" y="396" font-size="15" class="sec" text-anchor="end">2 s</text>
+          <path d="M349 387.5 l4 -4 4 4 M349 394.5 l4 4 4 -4" stroke="#6D6D72" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
+          <line x1="32" y1="413" x2="361" y2="413" stroke="#C6C6C8" stroke-width="0.5"/>
+        </g>
+        <g id="middle" data-control="Picker.menu">
+          <text x="32" y="440" font-size="15" fill="#000">Middle</text>
+          <text x="338" y="440" font-size="15" class="sec" text-anchor="end">0.5 s</text>
+          <path d="M349 431.5 l4 -4 4 4 M349 438.5 l4 4 4 -4" stroke="#6D6D72" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
+          <line x1="32" y1="457" x2="361" y2="457" stroke="#C6C6C8" stroke-width="0.5"/>
+        </g>
+        <g id="end" data-control="Picker.menu">
+          <text x="32" y="484" font-size="15" fill="#000">End</text>
+          <text x="338" y="484" font-size="15" class="sec" text-anchor="end">1 s</text>
+          <path d="M349 475.5 l4 -4 4 4 M349 482.5 l4 4 4 -4" stroke="#6D6D72" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
+        </g>
+        <g font-size="12" class="sec">
+          <text x="32" y="517.0">Photos hold 2 s at the start, 0.5 s in the middle and 1 s at the</text>
+          <text x="32" y="532.5">end, eased between — each in whole frames at 25 fps, never</text>
+          <text x="32" y="548.0">under one. Middle can be None for a straight run start → end.</text>
+        </g>
+        </g>
+
+        <g id="match-readout" font-size="12" class="sec">
+          <text x="16" y="594.0">12 photos · 12.6 s of playback · 314 frames</text>
+        </g>
+
+        <!-- bottom safeAreaInset bar: regularMaterial, Next trailing -->
+        <g id="bottom-bar">
+          <rect x="0" y="734" width="393" height="118" fill="#FFF" opacity="0.2"/>
+          <rect x="224" y="750" width="153" height="52" rx="11" fill="#C36A00"/>
+          <text x="300.5" y="781.4" font-size="15" class="sb" fill="#FFF" text-anchor="middle">Next · output</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · timing · ramp · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationTimingView (planned) — 25 fps · Ramp On 2 s → 0.5 s → 1 s · 12.6 s</text>
+</svg>
