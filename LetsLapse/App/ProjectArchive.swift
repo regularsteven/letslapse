@@ -53,7 +53,7 @@ enum ProjectArchive {
     /// AirDropped project arrived with its text gone and had to be re-typed
     /// on the far side. `project.json` is NOT here: the manifest is written
     /// by the sender and re-keyed by the installer, never moved.
-    static let transferableFiles = ["overlays.json"]
+    static let transferableFiles = ["overlays.json", "shapes.json"]
 
     static func write(contentsOf directory: URL, to archiveURL: URL) throws {
         try DirectoryArchive.write(contentsOf: directory, to: archiveURL)

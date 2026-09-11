@@ -35,6 +35,8 @@ enum StorageRoot {
     static let libraryItemNames = [
         "Projects", "Collections", "Thumbnails", "SceneMasks", "CaptureLogs", "Logs",
         "Incoming",
+        // Shape-mation videos and their index (`ShapemationStore`).
+        "Shapemations",
         "blend-profiles.json", "custom_presets.json", "light_ladders.json",
         // Imported LUTs (`LUTStore`): the cubes and their index.
         "luts", "luts.json",

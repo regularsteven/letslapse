@@ -1,0 +1,4 @@
+.build/
+spike-out*/
+*.stdout
+selftest/

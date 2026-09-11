@@ -52,6 +52,21 @@ struct OverlayMasksPanel: View {
     /// with it expanded.
     let onGradeInEditor: (MaskRef, Bool) -> Void
 
+    // MARK: Shapes — the project's register (`shapes.json`), found or drawn
+    /// The register's shapes; edits write straight back.
+    @Binding var shapes: [DetectedShape]
+    /// The shape whose handles are on the picture. Exclusive with a selected mask.
+    @Binding var selectedShapeID: UUID?
+    /// The + Shape tool, armed until it draws one.
+    @Binding var shapeTool: DetectedShape.Kind?
+    /// Square lock for rectangle drawing and corner drags.
+    @Binding var squareLock: Bool
+    /// The register's frame, for size captions.
+    let shapeFrame: CGSize
+    let onShapesEdited: (_ commit: Bool) -> Void
+    /// "Use as mask": an ellipse becomes a Radial mask copy.
+    let onUseAsMask: (DetectedShape) -> Void
+
     @State private var importing = false
     @State private var importError: String?
 
@@ -68,8 +83,16 @@ struct OverlayMasksPanel: View {
             if let mask = selectedMask {
                 detailCard(for: mask)
             }
+            shapesCard
+            if let shape = selectedShape {
+                shapeDetailCard(shape)
+            }
             customMasksCard
         }
+    }
+
+    private var selectedShape: DetectedShape? {
+        selectedShapeID.flatMap { id in shapes.first { $0.id == id } }
     }
 
     // MARK: - Toolbar
@@ -81,6 +104,7 @@ struct OverlayMasksPanel: View {
         HStack(spacing: 8) {
             toolButton(.linear)
             toolButton(.radial)
+            shapeToolMenu
             Button { importing = true } label: {
                 Text("＋ Custom…")
                     .font(.system(size: 12.5, weight: .semibold))
@@ -96,6 +120,181 @@ struct OverlayMasksPanel: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    /// "＋ Shape": arms the ellipse or rectangle tool — the next drag on the
+    /// picture draws it into the register. While armed it reads as the shape.
+    private var shapeToolMenu: some View {
+        let armed = shapeTool
+        return Menu {
+            Button("Ellipse") { shapeTool = .ellipse; tool = nil }
+            Button("Rectangle") { shapeTool = .quad; tool = nil; squareLock = false }
+            Button("Square") { shapeTool = .quad; tool = nil; squareLock = true }
+            if armed != nil { Divider(); Button("Cancel") { shapeTool = nil } }
+        } label: {
+            Text(armed == nil ? "＋ Shape" : (armed == .ellipse ? "Ellipse ✓" : (squareLock ? "Square ✓" : "Rectangle ✓")))
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(armed == nil ? accent : Color.white)
+                .frame(maxWidth: .infinity, minHeight: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(armed == nil ? accent.opacity(0.04) : accent))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(accent.opacity(armed == nil ? 0.45 : 0),
+                                      style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .help(armed == nil ? "Add an ellipse or rectangle shape by drawing on the picture" : "Drag on the picture to draw it")
+    }
+
+    // MARK: - Shapes (the register)
+
+    private var shapesCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Shapes")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(shapes.count) \(shapes.count == 1 ? "shape" : "shapes")")
+                    .font(.system(size: 11))
+                    .monospaced()
+                    .foregroundStyle(.secondary)
+            }
+            if shapes.isEmpty {
+                Text("No shapes yet. Run Find shapes from the Create tab, or draw one with ＋ Shape. Shapes are what a Shape-mation holds still.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
+                    spacing: 10
+                ) {
+                    ForEach(shapes) { shape in
+                        shapeTile(shape)
+                    }
+                }
+                Text("◎ found by Find shapes · ✎ drawn here · an ellipse can become a Radial mask")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func shapeTile(_ shape: DetectedShape) -> some View {
+        let selected = selectedShapeID == shape.id
+        return Button {
+            selectedShapeID = selected ? nil : shape.id
+            if !selected { inspectedRegion = nil }
+        } label: {
+            VStack(spacing: 4) {
+                RegisterShapeTile(shape: shape, frame: shapeFrame, selected: selected, accent: accent)
+                    .aspectRatio(4 / 3, contentMode: .fit)
+                HStack(spacing: 3) {
+                    Text(shape.source == .manual ? "✎" : "◎")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                    Text(shape.displayName)
+                        .font(.system(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    private func shapeDetailCard(_ shape: DetectedShape) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                RegisterShapeTile(shape: shape, frame: shapeFrame, selected: false, accent: accent)
+                    .frame(width: 30, height: 24)
+                TextField("Shape name", text: Binding(
+                    get: { shape.name ?? "" },
+                    set: { new in update(shape.id) { $0.name = new.isEmpty ? nil : new }; onShapesEdited(false) }))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14, weight: .bold))
+                    .onSubmit { onShapesEdited(true) }
+                Spacer(minLength: 0)
+                Button("Remove") {
+                    selectedShapeID = nil
+                    shapes.removeAll { $0.id == shape.id }
+                    onShapesEdited(true)
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+            }
+            Text(shapeCaption(shape))
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if shape.kind == .quad {
+                Toggle(isOn: $squareLock) {
+                    Text("Square lock").font(.system(size: 13.5, weight: .semibold))
+                }
+                #if os(macOS)
+                .toggleStyle(.checkbox)
+                #endif
+                .tint(accent)
+                Text(squareLock ? "Corner drags scale the whole shape, so a square stays square."
+                                : "Each corner moves on its own — a rectangle, or a quad seen at an angle.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Drag the centre to move it, the axis handles to size it, the stalk to turn it.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 10) {
+                if shape.kind == .ellipse {
+                    Button {
+                        onUseAsMask(shape)
+                    } label: {
+                        Label("Use as Radial mask", systemImage: "circle.dashed")
+                            .font(.system(size: 12.5, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(accent)
+                } else {
+                    Text("Rectangle masks come later.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func shapeCaption(_ shape: DetectedShape) -> String {
+        let origin = shape.source == .manual ? "drawn here" : "found by Find shapes"
+        let px = Int(shape.majorAxis * Double(max(shapeFrame.width, 1)))
+        switch shape.kind {
+        case .ellipse:
+            return "\(shape.family.title) · \(origin) · \(px) px across · \(String(format: "%.0f%%", shape.obliquity * 100)) round"
+        case .quad:
+            let w = Int((shape.aspect >= 1 ? shape.majorAxis : shape.minorAxis) * Double(max(shapeFrame.width, 1)))
+            let h = Int((shape.aspect >= 1 ? shape.minorAxis : shape.majorAxis) * Double(max(shapeFrame.width, 1)))
+            return "\(shape.family.title) · \(origin) · \(w)×\(h) px"
+        }
+    }
+
+    private func update(_ id: UUID, _ change: (inout DetectedShape) -> Void) {
+        guard let i = shapes.firstIndex(where: { $0.id == id }) else { return }
+        change(&shapes[i])
     }
 
     private func toolButton(_ kind: MaskShapeKind) -> some View {
@@ -163,6 +362,7 @@ struct OverlayMasksPanel: View {
             // Clicking the selected tile deselects: nothing is analysed until
             // a region is chosen, and stepping back out has to be possible.
             inspectedRegion = selected ? nil : mask.ref.placement(inverted: false)
+            if !selected { selectedShapeID = nil }
             detailSegment = .shape
         } label: {
             VStack(spacing: 4) {
@@ -690,4 +890,43 @@ enum MaskDetailSegment: String, CaseIterable, Identifiable {
     case shape = "Shape"
     case text = "Text"
     var id: String { rawValue }
+}
+
+
+/// An ink tile with the shape's outline in white — the register's own idiom,
+/// beside the mask tiles it sits next to.
+struct RegisterShapeTile: View {
+    let shape: DetectedShape
+    let frame: CGSize
+    var selected: Bool = false
+    var accent: Color = LL.accent
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let aspect = frame.height > 0 ? frame.width / frame.height : 4 / 3
+            let fw = min(size.width, size.height * aspect), fh = fw / aspect
+            let ox = (size.width - fw) / 2, oy = (size.height - fh) / 2
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color(cgColor: MaskThumbnails.ink))
+                Canvas { ctx, _ in
+                    var path = Path()
+                    if let c = shape.corners, c.count == 4 {
+                        let pts = c.map { CGPoint(x: ox + $0.x * fw, y: oy + $0.y * fh) }
+                        path.move(to: pts[0]); for p in pts.dropFirst() { path.addLine(to: p) }; path.closeSubpath()
+                    } else {
+                        let cx = ox + shape.centre.x * fw, cy = oy + shape.centre.y * fh
+                        let a = shape.majorAxis * fw / 2, b = shape.minorAxis * fw / 2
+                        path = Path(ellipseIn: CGRect(x: -a, y: -b, width: 2 * a, height: 2 * b))
+                            .applying(CGAffineTransform(translationX: cx, y: cy).rotated(by: shape.rotation))
+                    }
+                    ctx.fill(path, with: .color(.white.opacity(0.9)))
+                    ctx.stroke(Path(CGRect(x: ox, y: oy, width: fw, height: fh)), with: .color(.white.opacity(0.25)), lineWidth: 0.5)
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(selected ? accent : Color.clear, lineWidth: 2))
+        }
+    }
 }

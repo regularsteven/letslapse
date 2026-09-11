@@ -271,6 +271,34 @@ struct PhotoViewerView: View {
     /// True while a handle drag owns the picture, so the pan gesture stands
     /// down for its duration.
     @State private var maskGestureActive = false
+    // MARK: Shapes — the project's register, edited from the Masks tab
+    /// `shapes.json` for this project, or nil until a shape is drawn.
+    @State private var shapeRegister: ShapeRegister?
+    @State private var persistedShapeRegister: ShapeRegister?
+    /// The register shape whose handles are on the picture (exclusive with a mask).
+    @State private var selectedShapeID: UUID?
+    /// The + Shape tool, armed until it draws one. `LL_SHAPETOOL=ellipse|rect|square`
+    /// arms it at launch, as `LL_MASKTOOL` does for the mask tools.
+    @State private var shapeTool: DetectedShape.Kind? = {
+        #if DEBUG
+        switch ProcessInfo.processInfo.environment["LL_SHAPETOOL"] {
+        case "ellipse": return .ellipse
+        case "rect", "square": return .quad
+        default: return nil
+        }
+        #else
+        return nil
+        #endif
+    }()
+    @State private var shapeSquareLock: Bool = {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["LL_SHAPETOOL"] == "square"
+        #else
+        return false
+        #endif
+    }()
+    /// The register shape being drawn right now, committed or discarded on release.
+    @State private var drawingRegisterShapeID: UUID?
     /// The armed field's value when its drag began. Absolute against a frozen
     /// base, never accumulated — the same discipline `OverlayDragState.base`
     /// and `BoxResizeBase` set for the text layers.
@@ -944,6 +972,8 @@ struct PhotoViewerView: View {
             // in, so a sidecar written mid-edit still opens consistent.
             overlayDocument.resolveFollows()
             persistedDocument = overlayDocument
+            shapeRegister = ShapeRegister.load(inProjectFolder: model.projectFolderURL(for: capture))
+            persistedShapeRegister = shapeRegister
             selectedOverlayID = overlayDocument.overlays.first?.id
             importedFonts = model.importedOverlayFonts(for: capture)
             segModelIdentity = CoreMLSceneSegmenter.locate()?.identity
@@ -1058,12 +1088,14 @@ struct PhotoViewerView: View {
         #if os(macOS)
         .onExitCommand {
             maskTool = nil
+            shapeTool = nil
             armedMaskField = nil
         }
         #endif
         .onChange(of: railTab) { _, _ in
             // A tool or an armed label belongs to the tab it was armed in.
             maskTool = nil
+            shapeTool = nil
             armedMaskField = nil
             maskHUD = nil
         }
@@ -1377,6 +1409,20 @@ struct PhotoViewerView: View {
                     },
                     onHUD: { maskHUD = $0 })
             }
+            // A register shape's handles — the Masks tab's Shapes selection.
+            if railTab == .masks, let index = selectedRegisterShapeIndex {
+                RegisterShapeOverlay(
+                    shape: registerShapeBinding(index),
+                    drawn: drawn,
+                    native: registerFrame,
+                    accent: LL.amber,
+                    squareLock: shapeSquareLock,
+                    onEditing: { editing in
+                        maskGestureActive = editing
+                        if !editing { shapesEdited(commit: true) }
+                    },
+                    onHUD: { maskHUD = $0 })
+            }
         }
         .frame(width: drawn.width, height: drawn.height)
         .coordinateSpace(name: MaskShapeOverlay.space)
@@ -1413,6 +1459,10 @@ struct PhotoViewerView: View {
         if railTab == .masks, let tool = maskTool {
             return "Drag to draw a \(tool.displayName.lowercased()) mask · esc to cancel"
         }
+        if railTab == .masks, let tool = shapeTool {
+            let what = tool == .ellipse ? "an ellipse" : (shapeSquareLock ? "a square" : "a rectangle")
+            return "Drag to draw \(what) shape · esc to cancel"
+        }
         if railTab == .editor, let field = armedMaskField, supportsDragToAdjust {
             let name = expandedGradeID
                 .flatMap { overlayDocument.maskGrade(id: $0) }
@@ -1439,7 +1489,10 @@ struct PhotoViewerView: View {
         let drawn = geometry.drawnSize(scale: zoom.scale)
         return DragGesture(minimumDistance: 0, coordinateSpace: .named(MaskShapeOverlay.space))
             .onChanged { value in
-                if railTab == .masks, let kind = maskTool {
+                if railTab == .masks, let kind = shapeTool {
+                    continueDrawingShape(kind, from: value.startLocation,
+                                         to: value.location, in: drawn)
+                } else if railTab == .masks, let kind = maskTool {
                     continueDrawing(kind, from: value.startLocation,
                                     to: value.location, in: drawn)
                 } else if let field = armedMaskField {
@@ -1452,7 +1505,7 @@ struct PhotoViewerView: View {
     /// Whether that gesture should claim the drag at all — with nothing armed
     /// the picture belongs to pan and zoom, as it always has.
     private var maskGestureWantsDrag: Bool {
-        (railTab == .masks && maskTool != nil)
+        (railTab == .masks && (maskTool != nil || shapeTool != nil))
             || (railTab == .editor && armedMaskField != nil && supportsDragToAdjust)
     }
 
@@ -1529,9 +1582,147 @@ struct PhotoViewerView: View {
             drawingShapeID = nil
             maskTool = nil
         }
+        if let id = drawingRegisterShapeID {
+            let drawn = drawnPictureSize
+            if let index = shapeRegister?.shapes.firstIndex(where: { $0.id == id }),
+               let shape = shapeRegister?.shapes[index],
+               shape.majorAxis * Double(drawn.width) < 8 {
+                shapeRegister?.shapes.remove(at: index)
+                selectedShapeID = nil
+            }
+            drawingRegisterShapeID = nil
+            shapeTool = nil
+            shapesEdited(commit: true)
+        }
         armedDragBase = nil
         maskHUD = nil
         overlayEdited(commit: true)
+    }
+
+    // MARK: Register shapes
+
+    /// The frame the register measures in: the register's own, else the
+    /// capture's oriented pixel size, else the picture as drawn.
+    private var registerFrame: CGSize {
+        if let f = shapeRegister?.frameSize, f.width > 0, f.height > 0 { return f }
+        if let capture, let w = capture.sourceWidth, let h = capture.sourceHeight, w > 0, h > 0 {
+            return CGSize(width: w, height: h)
+        }
+        return drawnPictureSize
+    }
+
+    private var selectedRegisterShapeIndex: Int? {
+        guard let id = selectedShapeID else { return nil }
+        return shapeRegister?.shapes.firstIndex { $0.id == id }
+    }
+
+    private func registerShapeBinding(_ index: Int) -> Binding<DetectedShape> {
+        Binding(
+            get: {
+                guard let shapes = shapeRegister?.shapes, index < shapes.count else {
+                    return DetectedShape(kind: .ellipse, centre: CGPoint(x: 0.5, y: 0.5), majorAxis: 0.1, minorAxis: 0.1,
+                                         rotation: 0, corners: nil, confidence: 0, nativeDiameterPx: 0)
+                }
+                return shapes[index]
+            },
+            set: { new in
+                guard let count = shapeRegister?.shapes.count, index < count else { return }
+                shapeRegister?.shapes[index] = new
+            })
+    }
+
+    /// The Masks panel edits the register through this; a project without
+    /// one gets a manual register the first time a shape is written.
+    private var shapesBinding: Binding<[DetectedShape]> {
+        Binding(
+            get: { shapeRegister?.shapes ?? [] },
+            set: { new in
+                ensureShapeRegister()
+                shapeRegister?.shapes = new
+            })
+    }
+
+    private func ensureShapeRegister() {
+        guard shapeRegister == nil, let capture else { return }
+        let folder = model.projectFolderURL(for: capture)
+        let media = model.mediaURL(for: capture)
+        let relative: String = media.map { url in
+            url.path.hasPrefix(folder.path) ? String(url.path.dropFirst(folder.path.count + 1)) : url.lastPathComponent
+        } ?? ""
+        let source: ShapeRegister.Representative.Source = capture.kind == .video ? .blendVideo : .sourceFrame
+        let frame = registerFrame
+        shapeRegister = ShapeRegister.manual(representative: .init(
+            relativePath: relative, source: source, frameFraction: nil,
+            width: Int(frame.width), height: Int(frame.height)))
+    }
+
+    /// Draws — and keeps redrawing — a register shape under a create drag,
+    /// the way `continueDrawing` does for a mask.
+    private func continueDrawingShape(_ kind: DetectedShape.Kind, from start: CGPoint, to end: CGPoint, in drawn: CGSize) {
+        guard drawn.width > 0, drawn.height > 0 else { return }
+        let native = registerFrame
+        var shape: DetectedShape
+        switch kind {
+        case .ellipse:
+            let radius = max(Double(hypot(end.x - start.x, end.y - start.y)), 1)
+            shape = DetectedShape.ellipse(centre: start, semiAxisX: radius, semiAxisY: radius, rotation: 0, frame: drawn)
+        case .quad:
+            var dx = end.x - start.x, dy = end.y - start.y
+            if shapeSquareLock {
+                let side = max(abs(dx), abs(dy))
+                dx = side * (dx < 0 ? -1 : 1); dy = side * (dy < 0 ? -1 : 1)
+            }
+            let x0 = min(start.x, start.x + dx), x1 = max(start.x, start.x + dx)
+            let y0 = min(start.y, start.y + dy), y1 = max(start.y, start.y + dy)
+            shape = DetectedShape.quad(corners: [CGPoint(x: x0, y: y0), CGPoint(x: x1, y: y0),
+                                                 CGPoint(x: x1, y: y1), CGPoint(x: x0, y: y1)], frame: drawn)
+        }
+        shape = shape.remeasured(frame: native)
+        ensureShapeRegister()
+        if let id = drawingRegisterShapeID, let index = shapeRegister?.shapes.firstIndex(where: { $0.id == id }) {
+            shape.id = id
+            shape.name = shapeRegister?.shapes[index].name
+            shapeRegister?.shapes[index] = shape
+        } else {
+            shapeRegister?.shapes.append(shape)
+            drawingRegisterShapeID = shape.id
+            selectedShapeID = shape.id
+            inspectedRegion = nil
+        }
+        maskHUD = "\(shape.displayName) · \(Int(shape.nativeDiameterPx)) px"
+    }
+
+    private func shapesEdited(commit: Bool) {
+        if commit { persistShapeRegister() }
+    }
+
+    private func persistShapeRegister() {
+        guard let capture, let register = shapeRegister, register != persistedShapeRegister else { return }
+        do {
+            try register.save(inProjectFolder: model.projectFolderURL(for: capture))
+            persistedShapeRegister = register
+        } catch {
+            showOverlayToast("Could not save shapes: \(error.localizedDescription)")
+        }
+    }
+
+    /// "Use as Radial mask": a copy of an ellipse as a drawn mask, same
+    /// centre, radii and turn, the default feather — selected so its handles
+    /// come up at once.
+    private func useShapeAsMask(_ shape: DetectedShape) {
+        guard shape.kind == .ellipse else { return }
+        let frame = registerFrame
+        let radiusX = shape.majorAxis / 2
+        let radiusY = frame.height > 0 ? shape.minorAxis / 2 * Double(frame.width) / Double(frame.height) : shape.minorAxis / 2
+        let maskShape = MaskShape(kind: .radial, center: shape.centre, radiusX: radiusX, radiusY: radiusY,
+                                  rotationDegrees: max(-90, min(90, shape.rotation * 180 / .pi)))
+        let mask = ShapeMask(name: shape.displayName, shape: maskShape)
+        overlayDocument.shapeMasks.append(mask)
+        selectedShapeID = nil
+        inspectedRegion = .shape(mask.id)
+        maskDetailSegment = .shape
+        overlayEdited(commit: true)
+        showOverlayToast("Radial mask made from \(shape.displayName)")
     }
 
     /// The draggable stand-in over the baked overlay. At rest it is an
@@ -2266,7 +2457,14 @@ struct PhotoViewerView: View {
             },
             onEdited: overlayEdited,
             onImportMask: importCustomMask,
-            onGradeInEditor: { ref, inverted in openGrade(for: ref, inverted: inverted) })
+            onGradeInEditor: { ref, inverted in openGrade(for: ref, inverted: inverted) },
+            shapes: shapesBinding,
+            selectedShapeID: $selectedShapeID,
+            shapeTool: $shapeTool,
+            squareLock: $shapeSquareLock,
+            shapeFrame: registerFrame,
+            onShapesEdited: shapesEdited,
+            onUseAsMask: useShapeAsMask)
     }
 
     #if DEBUG

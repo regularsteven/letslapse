@@ -77,6 +77,8 @@ struct CreateView: View {
     /// and the import door — managed from here, one row under the ladders.
     /// `LL_PRESETS` opens it pushed to a preset, a LUT, or onto the chooser.
     @State private var showPresets = false
+    @State private var showShapemation = false
+    @State private var shapemationInitialPath: [ShapemationRoute] = []
     @State private var presetsInitialPath: [PresetRoute] = []
     @State private var presetsInitialImport = false
     #if os(iOS)
@@ -287,6 +289,17 @@ struct CreateView: View {
                 }
                 showPresets = true
             }
+            // `LL_SHAPEMATION=home|find|build|list` — the Shape-mation sheet on
+            // the requested screen, over whatever the library holds.
+            if let screen = environment["LL_SHAPEMATION"] {
+                switch screen {
+                case "find": shapemationInitialPath = [.find]
+                case "build": shapemationInitialPath = [.build]
+                case "list": shapemationInitialPath = [.list]
+                default: shapemationInitialPath = []
+                }
+                showShapemation = true
+            }
         }
         #endif
         .capturePresentation(isPresented: $showCapture, intent: captureIntent)
@@ -371,8 +384,32 @@ struct CreateView: View {
             Divider().padding(.leading, 58)
 
             presetsRow
+
+            Divider().padding(.leading, 58)
+
+            shapemationRow
         }
         .llCard(cornerRadius: 18)
+    }
+
+    /// The Shape-mation sheet (`ShapemationHomeView`): find shapes across the
+    /// library, build a shape slideshow, list the videos. A sheet on every
+    /// platform like the two rows above it. Code first 2026-09-10; SVG owed.
+    private var shapemationRow: some View {
+        Button {
+            showShapemation = true
+        } label: {
+            SourceRow(
+                icon: "circle.square",
+                iconColor: Color(red: 0x6E / 255, green: 0x5A / 255, blue: 0xC8 / 255),
+                title: "Create Shape-mation"
+            )
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showShapemation) {
+            ShapemationHomeView(initialPath: shapemationInitialPath)
+                .environmentObject(model)
+        }
     }
 
     /// The Presets sheet (`ManagePresetsView`). A sheet on every platform,

@@ -11,6 +11,71 @@ live inline.
 
 ## Open
 
+### Shape-mation — from spike to feature: timing, accuracy, design mirrors, collections
+
+**Raised:** 2026-09-10 · **Size:** medium
+
+The spike (`tools/shapeseq`, findings in `docs/shape-sequence-spike/report.md`)
+became a product spike the same day: Create ▸ *Create Shape-mation* opens a
+sheet with **Find shapes** (one representative picture per project through
+`ShapeDetector` → `shapes.json`, only projects without a register), **Create
+shape slideshow** (family → projects and the instance in each → mode → output
+size from the picked pictures → render) and **List Shape-mations** (play, share,
+delete; videos in `<root>/Shapemations/`). Kit: `Shapes/` (geometry, fit,
+detector, register, `ShapemationPlan` + renderer, unit-tested). Verified on the
+Mac and the iPhone simulator against a 13-project scratch library (registers
+identical on both); 1 s per photo, hard cuts, no rotation for circles.
+
+- **Design mirrors are owed.** Code first by Steven's call; the four Shape-mation
+  screens are rows marked ⏳ in the iOS/iPadOS/macOS INDEX files, and the Masks
+  tab's `photo-viewer.masks.svg` (macOS) is stale: **＋ Shape** in the toolbar, a
+  **Shapes** card (the project's register, ◎ found / ✎ drawn) and a shape detail
+  card (name, caption, Square lock, Use as Radial mask, Remove) shipped 2026-09-10
+  for hand CRUD of shapes — Steven's answer to shapes being missed. Ellipses edit
+  like Radial (centre, axis handles, rotation stalk); rectangles are four corner
+  handles with a Square lock. `LL_SHAPETOOL=ellipse|rect|square` arms the tool.
+- **Rectangle shapes as masks.** Only an ellipse can become a mask today (a Radial
+  copy); a quad needs a polygon mask kind through `MaskShapeRenderer`, the
+  thumbnails and the export bake.
+- **Timing and logic** (Steven: "we will work on the timing and logic later"):
+  per-item duration, transitions, ordering choices (chronological / by size),
+  and asking for the output frame *first* so it filters which photos qualify.
+- **Accuracy** (Steven: "we will optimise this"): circles that are not quite
+  circles and rectangles that are not square. Known levers from the spike: the
+  residual gate (0.04 here), an edge-point ellipse detector for textured dials,
+  a texture gate on quad interiors (blank sky and night shadows still pass
+  `VNDetectRectanglesRequest`), a `CVPixelBuffer` overload for a live viewfinder.
+- **Collections** cannot hold a Shape-mation yet — they hold blended clips, not
+  photo assets; adding photo-asset support is the route to putting one in a
+  collection.
+- **Mode 2 (crop) refuses an empty intersection** with a message rather than a
+  fallback; a picker that shows the crop live would let people trim the outlier.
+- **An iPad run and a device run are owed**; the Mac was verified on a Debug
+  build pointed at a scratch root via `-storage.libraryRootPath`.
+
+### Batch import / export between devices and the Mac library
+
+**Raised:** 2026-09-10 · **Size:** medium
+
+A one-off filesystem import proved the shape on 2026-09-10: 77 Photo-mode
+projects shot on the iPhone 16 Pro since 2026-09-07 were pulled with
+`xcrun devicectl device copy from` (whole project folders, ~909 MB) straight
+into `/Volumes/letslapse/Projects/<newUUID>/` and registered by hand the way
+`AppModel.installStagedProject` does — record copied verbatim, fresh `id`,
+`importedFromID` = the phone's id, `addedAt` = now, `createdAt` kept — with
+the Mac app quit for the `library.json` write and relaunched after. Every
+file was checked against `devicectl device info files --json-output`
+(recursive, with byte sizes).
+
+**What the feature should do:** select many projects (a date range, a mode,
+"everything since my last pull") on either side and move them in one job —
+the network transfer (`ProjectTransferClient`) already installs a staged
+tree per project, so the work is a multi-select picker over the catalogue,
+a queue with per-project progress and resume, and the matching batch `.lapse`
+export. The cabled fast path (USB via devicectl) is a Mac-side nicety, not
+the product path.
+
+
 ### Presets — the photo × preset matrix's remaining doors
 
 **Raised:** 2026-09-08 · **Detail:**
