@@ -178,6 +178,45 @@ final class DNGExposureTests: XCTestCase {
     /// up — what the 2026-09-04 readout runaway had to be reconstructed
     /// without (the commanded pair lived only in `frames.timestamps`, the
     /// refusal reason only on a console).
+    /// A Photo capture's conditions — lens, crop, format, thermal — ride in
+    /// the session document and read back; a log from before the field
+    /// exists decodes with them absent.
+    func testTheShutterConditionsTravelWithTheSession() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("capture-log-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        var conditions = CaptureExposureLog.Conditions()
+        conditions.stop = "10×"
+        conditions.stopKind = "digital-2x"
+        conditions.lens = "Back Telephoto Camera"
+        conditions.zoomFactor = 10
+        conditions.lensCrop = 2
+        conditions.horizontalFieldOfView = 8.6
+        conditions.format = "jpeg-flat"
+        conditions.thermalState = "fair"
+        conditions.thermalStateAtEnd = "serious"
+        conditions.systemPressure = "serious(systemTemperature)"
+        conditions.shapeSearch = "circular/high/all"
+        XCTAssertEqual(conditions.summary,
+                       "10× digital-2x · Back Telephoto Camera · zoom 10.0 (2.0× digital) · 8.6° · jpeg-flat · thermal fair→serious · pressure serious(systemTemperature) · shapes circular/high/all")
+
+        let session = CaptureExposureLog.Session(
+            sessionID: "photo", deviceModel: "iPhone17,1", captureMode: "photo", blendMode: "off",
+            captureFlat: true, frames: [CaptureExposureLog.Entry(frameIndex: 0, exposure: exposure)],
+            conditions: conditions)
+        let url = try XCTUnwrap(CaptureExposureLog.write(session, toDirectory: directory))
+        let back = try CaptureExposureLog.loadSession(from: url)
+        XCTAssertEqual(back.conditions, conditions)
+        XCTAssertEqual(back.captureMode, "photo")
+
+        let legacy = try JSONSerialization.data(withJSONObject: [
+            "sessionID": "old", "deviceModel": "iPhone13,3", "captureMode": "interval", "blendMode": "5", "frames": [],
+        ])
+        XCTAssertNil(try CaptureExposureLog.makeDecoder().decode(CaptureExposureLog.Session.self, from: legacy).conditions)
+    }
+
     func testTheRampRecordTravelsWithTheSession() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("capture-log-\(UUID().uuidString)")

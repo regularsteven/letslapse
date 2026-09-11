@@ -263,6 +263,10 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
     public var analysedAt: Date?
     public var representative: Representative
     public var shapes: [DetectedShape]
+    /// Auto shape mode's account of the capture, when the register was
+    /// written at the shutter — see `ViewfinderTrail`. Nil for Find shapes
+    /// and hand-drawn registers.
+    public var viewfinder: ViewfinderTrail?
     /// Why analysis produced nothing usable, when it did (kept so "Find shapes"
     /// does not retry a project whose picture cannot be read).
     public var failure: String?
@@ -274,7 +278,7 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, detectorVersion, analysedAt, representative, shapes, failure
+        case version, detectorVersion, analysedAt, representative, shapes, failure, viewfinder
     }
 
     public init(from decoder: Decoder) throws {
@@ -285,6 +289,7 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
         representative = try c.decode(Representative.self, forKey: .representative)
         shapes = try c.decodeIfPresent([DetectedShape].self, forKey: .shapes) ?? []
         failure = try c.decodeIfPresent(String.self, forKey: .failure)
+        viewfinder = try c.decodeIfPresent(ViewfinderTrail.self, forKey: .viewfinder)
     }
 
     /// A register that has never been through Find shapes — a home for shapes drawn by hand.

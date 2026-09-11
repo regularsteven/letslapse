@@ -35,7 +35,11 @@ USAGE:
       --contrast A,B        Contour contrast sweep (file 1,2,3; live 2)
       --edges A,B           CIEdges thresholds for the edge-map passes (file 0.06,0.15; live none)
       --contour-dimension N Vision's tracer resolution (file 512, live 384)
-      --verbose             Also list ellipses only the residual gate refused
+      --verbose             Also print what each pass looked at and refused, and why
+      --json                The pass's shapes, diagnostics and the register as JSON
+      --trail               First print the register beside a project picture: its
+                            shapes, and the viewfinder's account of the capture
+                            (dials, lens, samples, what the live and file passes refused)
 
   lapse framing <project-or-source-dir> [options]   Review the framing of an
                             interval shoot's stills: where each sits against one
@@ -640,9 +644,11 @@ do {
             guard let v = ShapeSearch.Size(rawValue: raw) else { fail("--size needs all | large | mid | small") }
             search.size = v
         }
+        let trail = takeFlag(["--trail"])
+        let json = takeFlag(["--json"])
         guard args.count == 1 else { fail("shapes needs one image") }
         try runShapes(path: args[0], residual: residual, live: live, longEdge: longEdge, verbose: verbose,
-                      contrasts: contrasts, edges: edges, contourDimension: contourDimension, search: search)
+                      contrasts: contrasts, edges: edges, contourDimension: contourDimension, search: search, trail: trail, json: json)
 
     case "framing":
         let apply = takeFlag(["--apply"])

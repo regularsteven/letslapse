@@ -341,6 +341,13 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         /// False on Holy Grail runs: the ramp already owns that file and
         /// appends richer entries (scene EV) per window from CameraController.
         var writesFrameTimestamps: Bool = true
+        /// The camera and the phone at the start of the run, for the
+        /// session document; `thermalStateAtEnd` is filled at the close.
+        var conditions: CaptureExposureLog.Conditions? = nil
+        /// What the session document calls this run when the capture screen
+        /// knows better than the pipeline — "photo" for a Photo-mode
+        /// one-shot that rides this engine. nil = the pipeline's own label.
+        var captureModeName: String? = nil
 
         /// What readouts show before the first window resolves: the fixed
         /// count, or 0 (unlimited/unresolved) for the adaptive depths.
@@ -1300,7 +1307,8 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 // ramped run is handed a commanded exposure. The old
                 // hardcoded "interval" made the 2026-08-23 A/B pair
                 // indistinguishable from unramped shoots in their own logs.
-                captureMode: configuration.rampExposure != nil ? "dynamic" : "interval",
+                captureMode: configuration.captureModeName
+                    ?? (configuration.rampExposure != nil ? "dynamic" : "interval"),
                 blendMode: configuration.blendDepth.token,
                 // Zone genuinely is what this path's Auto runs (`zoneBlend`);
                 // the strategy picker only reaches the DNG pipeline today.
@@ -1325,7 +1333,10 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 startedAt: runStartedAt,
                 endedAt: Date(),
                 frames: sessionFrameLog,
-                issues: sessionIssues.isEmpty ? nil : sessionIssues)
+                issues: sessionIssues.isEmpty ? nil : sessionIssues,
+                conditions: configuration.conditions.map {
+                    var c = $0; c.thermalStateAtEnd = Self.thermalStateName(); return c
+                })
             if CaptureExposureLog.write(
                 session, toDirectory: configuration.outputDirectory) == nil {
                 LLog("liveblend: could not write \(CaptureExposureLog.sessionFileName)")

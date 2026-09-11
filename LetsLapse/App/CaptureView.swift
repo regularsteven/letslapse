@@ -2242,12 +2242,20 @@ struct CaptureView: View {
     /// starts — because the capture start detaches the tap and the tracks
     /// would otherwise age out before the finish handler runs.
     private func takeViewfinderShapes() {
-        guard mode == .photo, autoShapesEnabled else { pendingViewfinderShapes = nil; return }
+        guard mode == .photo, autoShapesEnabled else {
+            pendingViewfinderShapes = nil
+            camera.shapeSearchTokenForNextRun = nil
+            return
+        }
         pendingViewfinderShapes = liveShapes.snapshot()
+        // The dials ride into the capture's `capture_log.json` too, so the
+        // conditions record can be read on its own.
+        camera.shapeSearchTokenForNextRun = liveShapes.search.token
         pendingViewfinderShapes?.horizontalFieldOfView = camera.currentHorizontalFieldOfView
         if let shapes = pendingViewfinderShapes {
-            LLog(String(format: "shapes: shutter with %d kept, %d dismissed (%@), lens %.1f° wide",
-                        shapes.kept.count, shapes.dismissed.count, shapes.search.token, shapes.horizontalFieldOfView ?? 0))
+            LLog(String(format: "shapes: shutter with %d kept, %d dismissed (%@), lens %.1f° wide, %d of %d samples found anything",
+                        shapes.kept.count, shapes.dismissed.count, shapes.search.token, shapes.horizontalFieldOfView ?? 0,
+                        shapes.samplesWithShapes, shapes.samples))
         }
     }
 
@@ -4573,7 +4581,8 @@ struct CaptureView: View {
                 every: Self.photoBulbDNGInterval,
                 depth: .unthrottled,
                 preferDNG: true,
-                options: liveBlendDNGOptions)
+                options: liveBlendDNGOptions,
+                captureModeName: "photo")
             return
         }
         // Uncapped plain-still burst on the photo-output timer: the engine
@@ -4619,7 +4628,8 @@ struct CaptureView: View {
                 every: Self.photoDNGWindowSeconds(forFrames: frames),
                 depth: .fixed(frames),
                 preferDNG: true,
-                options: options)
+                options: options,
+                captureModeName: "photo")
             return
         }
         startIntervalCapture(photoModeFrameCap: max(1, photoBlendDepth))

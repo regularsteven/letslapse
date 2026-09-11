@@ -242,6 +242,7 @@ extension AppModel {
                 horizontalFieldOfView: viewfinder.horizontalFieldOfView ?? RepresentativeLoader.horizontalFieldOfView(rep))
             var register = ShapeRegister(analysedAt: nil, representative: representative,
                                          shapes: ShapeReconciler.provisional(viewfinder, photoSize: size)).rectifyingQuads()
+            register.viewfinder = ViewfinderTrail(viewfinder)
             do { try register.save(inProjectFolder: folder) } catch {
                 LLog("shapes: could not write the provisional register for \(title): \(error)")
                 return
@@ -256,9 +257,11 @@ extension AppModel {
                 return
             }
             let started = Date()
-            let found = (try? detector.detect(in: image, nativeSize: size)) ?? []
+            let pass = try? detector.detectWithDiagnostics(in: image, nativeSize: size)
+            let found = pass?.shapes ?? []
             register.shapes = ShapeReconciler.reconcile(viewfinder, photoDetections: found, photoSize: size)
             register = register.rectifyingQuads()
+            register.viewfinder?.file = pass?.diagnostics
             register.analysedAt = Date()
             do { try register.save(inProjectFolder: folder) } catch {
                 LLog("shapes: could not write the refined register for \(title): \(error)")
@@ -268,6 +271,9 @@ extension AppModel {
             let extras = register.shapes.count - captured
             LLog(String(format: "shapes: %@ — %d kept on the viewfinder, %d found in the file (%@), register %d captured + %d detected (%.1f s)",
                         title, viewfinder.kept.count, found.count, viewfinder.search.token, captured, extras, Date().timeIntervalSince(started)))
+            if found.isEmpty, let d = pass?.diagnostics {
+                LLog("shapes: the file pass refused — \(d.summary)" + (d.refusals.isEmpty ? "" : "; " + d.refusals.prefix(6).map { "\($0.kind) \(Int($0.size * 100))% \($0.reason)" }.joined(separator: "; ")))
+            }
             await MainActor.run { self?.shapeRegisterDidChange(for: capture) }
         }
     }

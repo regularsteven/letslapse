@@ -85,6 +85,11 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         /// The camera's own pressure reading, stamped on each window at
         /// close — see the twin in `LiveBlendController.Configuration`.
         var systemPressure: (() -> String?)? = nil
+        /// The camera and the phone at the start of the run, for the
+        /// session document; `thermalStateAtEnd` is filled at the close.
+        var conditions: CaptureExposureLog.Conditions? = nil
+        /// See the twin in `LiveBlendController.Configuration`.
+        var captureModeName: String? = nil
 
         /// What readouts show before the first window resolves: the fixed
         /// count, or 0 (unlimited/unresolved) for the adaptive depths.
@@ -1500,7 +1505,8 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 // "dynamic" when the Holy Grail ramp drove the run — only a
                 // ramped run is handed a commanded exposure. `captureFlat`
                 // stays absent here: the setting is never offered for DNG.
-                captureMode: configuration.rampExposure != nil ? "dynamic" : "interval",
+                captureMode: configuration.captureModeName
+                    ?? (configuration.rampExposure != nil ? "dynamic" : "interval"),
                 blendMode: configuration.blendDepth.token,
                 algorithm: configuration.blendDepth == .auto
                     ? configuration.blendStrategy.rawValue : nil,
@@ -1518,7 +1524,10 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 startedAt: runStartedAt,
                 endedAt: Date(),
                 frames: sessionFrameLog,
-                issues: sessionIssues.isEmpty ? nil : sessionIssues)
+                issues: sessionIssues.isEmpty ? nil : sessionIssues,
+                conditions: configuration.conditions.map {
+                    var c = $0; c.thermalStateAtEnd = LiveBlendController.thermalStateName(); return c
+                })
             // Written into the staging directory, which is where project
             // registration looks for named sidecars — so it lands in the
             // project's `source/` folder under its own name.

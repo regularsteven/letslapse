@@ -334,6 +334,33 @@ final class CameraController: NSObject, ObservableObject {
     /// `LiveBlendController.Configuration.writesFrameTimestamps`); Holy Grail
     /// and Scanner keep their richer writers below. sessionQueue-confined.
     private var intervalWriter: FrameTimestampWriter?
+    /// The plain still path's session document — what the blend pipelines
+    /// have always written and this path never did, so a Photo-mode capture
+    /// carried no record of its lens, format or the phone's temperature
+    /// (2026-09-11). Opened at `startInterval`, one entry per still that
+    /// lands (the photo's own EXIF), written into the staging directory at
+    /// the finish, where registration picks it up. sessionQueue-confined.
+    private var plainRunLog: PlainRunLog?
+    struct PlainRunLog {
+        var sessionID = UUID().uuidString
+        var startedAt = Date()
+        var conditions: CaptureExposureLog.Conditions
+        var entries: [CaptureExposureLog.Entry] = []
+        var issues: [CaptureExposureLog.Issue] = []
+        /// Photo mode's capped burst, or an open Interval shoot.
+        var isPhoto: Bool
+        /// The spacing an Interval run was asked for.
+        var intervalSeconds: Double
+    }
+    /// The auto shape mode dials at the shutter, set by the capture screen
+    /// right before it starts a Photo capture (nil = the toggle was off) —
+    /// stamped into the session document's `conditions`. Main-thread write,
+    /// read on the way into the session queue.
+    var shapeSearchTokenForNextRun: String?
+    /// What the capture screen called the blend run it just started ("photo"
+    /// for a Photo-mode one-shot) and the shape dials at its shutter — read
+    /// when the pipeline's configuration is built. sessionQueue-confined.
+    private var blendRunLabel: (captureModeName: String?, shapeSearch: String?) = (nil, nil)
     // Holy Grail — the auto-ramping interval shoot. All sessionQueue-confined.
     // `holyGrailEngine` is the exposure policy (a pure struct in the Kit);
     // `holyGrailWriter` appends the per-frame sidecar; `holyGrailPending`
@@ -1820,6 +1847,72 @@ final class CameraController: NSObject, ObservableObject {
         // they appear on screen (the footer says so).
         return nil
         #endif
+    }
+
+    /// sessionQueue-confined. The camera and the phone as they stand at a
+    /// shutter, for `capture_log.json` — see `CaptureExposureLog.Conditions`.
+    /// `format` is what the run writes: "jpeg", "jpeg-flat" or "dng".
+    func captureConditions(format: String, shapeSearch: String?) -> CaptureExposureLog.Conditions {
+        var c = CaptureExposureLog.Conditions()
+        c.stop = selectedStop?.chipLabel
+        c.stopKind = selectedStop?.kind.rawValue
+        c.format = format
+        c.thermalState = LiveBlendController.thermalStateName()
+        c.appVersion = LiveBlendController.appVersion()
+        c.osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        c.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+        c.stabilization = videoStabilizationStatus
+        c.exposureLocked = exposureLocked
+        c.shapeSearch = shapeSearch
+        switch latestCaptureOrientation {
+        case .portrait: c.orientation = "portrait"
+        case .portraitUpsideDown: c.orientation = "portraitUpsideDown"
+        case .landscapeLeft: c.orientation = "landscapeLeft"
+        case .landscapeRight: c.orientation = "landscapeRight"
+        @unknown default: break
+        }
+        guard let device = videoDevice else { return c }
+        var physical = device
+        #if os(iOS)
+        var base = 1.0
+        if device.isVirtualDevice, let primary = device.activePrimaryConstituent {
+            physical = primary
+            let constituents = device.constituentDevices
+            let switchOvers = device.virtualDeviceSwitchOverVideoZoomFactors.map { $0.doubleValue }
+            if let i = constituents.firstIndex(of: primary), i > 0, i - 1 < switchOvers.count {
+                base = switchOvers[i - 1]
+            }
+        }
+        let zoom = Double(device.videoZoomFactor)
+        c.zoomFactor = zoom
+        c.lensCrop = max(1, zoom / base)
+        c.horizontalFieldOfView = currentHorizontalFieldOfView
+        if let fov = c.horizontalFieldOfView, fov > 0 {
+            c.focalLength35mm = 18 / tan(fov * .pi / 360)
+        }
+        c.lensPosition = Double(device.lensPosition)
+        c.focusPinnedByTap = isFocusPinnedByTap
+        c.systemPressure = Self.systemPressureName(device.systemPressureState)
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let battery = UIDevice.current.batteryLevel
+        if battery >= 0 { c.batteryLevel = Double(battery) }
+        #endif
+        c.lens = physical.localizedName
+        c.lensType = physical.deviceType.rawValue
+        switch device.focusMode {
+        case .locked: c.focusMode = "locked"
+        case .autoFocus: c.focusMode = "autoFocus"
+        case .continuousAutoFocus: c.focusMode = "continuousAutoFocus"
+        @unknown default: break
+        }
+        switch device.exposureMode {
+        case .locked: c.exposureMode = "locked"
+        case .autoExpose: c.exposureMode = "autoExpose"
+        case .continuousAutoExposure: c.exposureMode = "continuousAutoExposure"
+        case .custom: c.exposureMode = "custom"
+        @unknown default: break
+        }
+        return c
     }
 
     /// Photo mode on or off — see `photoViewfinderActive`. Re-applies the
@@ -6087,6 +6180,8 @@ final class CameraController: NSObject, ObservableObject {
     /// runs at a faster fixed rate than an open-ended Interval shoot, so it
     /// allows a shorter minimum spacing.
     func startInterval(every seconds: Double, frameCap: Int? = nil) {
+        let shapeSearch = shapeSearchTokenForNextRun
+        shapeSearchTokenForNextRun = nil
         sessionQueue.async {
             guard self.intervalTimer == nil else { return }
             if Self.stopsAtThermalCritical, ProcessInfo.processInfo.thermalState == .critical {
@@ -6123,6 +6218,10 @@ final class CameraController: NSObject, ObservableObject {
             self.photoDirectory = directory
             self.photoURLs = []
             self.intervalWriter = FrameTimestampWriter(directory: directory)
+            let conditions = self.captureConditions(
+                format: FlatCapture.isEnabled(.stills) ? "jpeg-flat" : "jpeg", shapeSearch: shapeSearch)
+            self.plainRunLog = PlainRunLog(conditions: conditions, isPhoto: frameCap != nil, intervalSeconds: seconds)
+            LLog("capture: \(frameCap != nil ? "photo" : "interval") — \(conditions.summary)")
             self.intervalFrameCap = frameCap
             self.intervalFramesRequested = 0
             self.intervalActive = true
@@ -6209,6 +6308,7 @@ final class CameraController: NSObject, ObservableObject {
         // sidecar from beside the frames, and it must be complete by then.
         self.intervalWriter?.close()
         self.intervalWriter = nil
+        self.writePlainRunLog(endReason: reason, dropTrailing: dropTrailing)
         // A thermal stop trims the tail — the stills the lens moved in (see
         // `tooHotTrailingWindows`), with their sidecar lines.
         if dropTrailing > 0, !self.photoURLs.isEmpty {
@@ -6234,6 +6334,42 @@ final class CameraController: NSObject, ObservableObject {
             if urls.count >= 1 {
                 self.onFinishPhotos?(urls)
             }
+        }
+    }
+
+    /// sessionQueue-confined. The plain still path's `capture_log.json`,
+    /// written into the staging directory so registration carries it into
+    /// the project's `source/` (the same file, same place, the blend
+    /// pipelines write). One document per run, Photo or Interval.
+    private func writePlainRunLog(endReason: String, dropTrailing: Int) {
+        guard var run = self.plainRunLog, let directory = self.photoDirectory else { return }
+        self.plainRunLog = nil
+        if dropTrailing > 0 { run.entries.removeLast(min(dropTrailing, run.entries.count)) }
+        run.conditions.thermalStateAtEnd = LiveBlendController.thermalStateName()
+        if run.conditions.thermalStateAtEnd != run.conditions.thermalState {
+            run.issues.append(CaptureExposureLog.Issue(
+                at: Date(), windowIndex: nil, kind: "thermal", severity: "info",
+                detail: "\(run.conditions.thermalState ?? "?") → \(run.conditions.thermalStateAtEnd ?? "?") over the run"))
+        }
+        let dimensions = self.selectedPhotoDimensions
+        let session = CaptureExposureLog.Session(
+            sessionID: run.sessionID,
+            deviceModel: LiveBlendController.deviceModelIdentifier(),
+            captureMode: run.isPhoto ? "photo" : "interval",
+            blendMode: "off",
+            captureFlat: FlatCapture.isEnabled(.stills),
+            cameraName: self.videoDevice?.localizedName ?? "unknown camera",
+            captureWidth: dimensions.map { Int($0.width) },
+            captureHeight: dimensions.map { Int($0.height) },
+            intervalSeconds: run.isPhoto ? nil : run.intervalSeconds,
+            endReason: endReason,
+            startedAt: run.startedAt,
+            endedAt: Date(),
+            frames: run.entries,
+            issues: run.issues.isEmpty ? nil : run.issues,
+            conditions: run.conditions)
+        if CaptureExposureLog.write(session, toDirectory: directory) == nil {
+            LLog("capture: could not write \(CaptureExposureLog.sessionFileName) for the run")
         }
     }
 
@@ -8813,9 +8949,12 @@ final class CameraController: NSObject, ObservableObject {
     /// `ladderRung` is the operator's rung where the ladder is stepped by
     /// hand (the Mac — `armLadderByHand`); the phone resolves the rung from
     /// the light and ignores it.
-    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false, autoInterval: Bool = false, ladder: LightLadder? = nil, ladderRung: Int? = nil) {
+    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false, autoInterval: Bool = false, ladder: LightLadder? = nil, ladderRung: Int? = nil, captureModeName: String? = nil) {
+        let shapeSearch = shapeSearchTokenForNextRun
+        shapeSearchTokenForNextRun = nil
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
+            self.blendRunLabel = (captureModeName, shapeSearch)
             // A DNG Photo shot arrives here with the viewfinder's shape pass
             // still attached: detached inline like every other capture start,
             // so the blend stream is the only tap running while frames are
@@ -9095,7 +9234,12 @@ final class CameraController: NSObject, ObservableObject {
                 captureFlat: FlatCapture.isEnabled(.stills),
                 // Holy Grail owns the sidecar on ramped runs — the ramp
                 // appends richer entries (scene EV) per window.
-                writesFrameTimestamps: !self.holyGrailRequestedForRun)
+                writesFrameTimestamps: !self.holyGrailRequestedForRun,
+                conditions: self.captureConditions(
+                    format: FlatCapture.isEnabled(.stills) ? "jpeg-flat" : "jpeg",
+                    shapeSearch: self.blendRunLabel.shapeSearch),
+                captureModeName: self.blendRunLabel.captureModeName)
+            LLog("liveblend: \(configuration.captureModeName ?? "interval") — \(configuration.conditions?.summary ?? "")")
 
             let controller: LiveBlendController
             do {
@@ -9366,7 +9510,10 @@ final class CameraController: NSObject, ObservableObject {
             // Holy Grail owns the sidecar on ramped runs — the ramp appends
             // richer entries (scene EV) per window.
             writesFrameTimestamps: !holyGrailRequestedForRun,
-            systemPressure: systemPressureProvider())
+            systemPressure: systemPressureProvider(),
+            conditions: captureConditions(format: "dng", shapeSearch: blendRunLabel.shapeSearch),
+            captureModeName: blendRunLabel.captureModeName)
+        LLog("liveblend-dng: \(configuration.captureModeName ?? "interval") — \(configuration.conditions?.summary ?? "")")
         let controller = LiveBlendRawController(
             configuration: configuration,
             photoOutput: photoOutput,
@@ -9808,6 +9955,12 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
                     captureTime: Date(),
                     shutter: shutter,
                     iso: iso))
+                // The session document's line: the camera's own EXIF for
+                // this still (what the file carries — or carried, before
+                // the flat grade re-encoded it).
+                self.plainRunLog?.entries.append(CaptureExposureLog.Entry(
+                    frameIndex: self.photoURLs.count - 1,
+                    exposure: DNGAuthor.DNGExposure(photoMetadata: photo.metadata, capturedAt: Date())))
                 let count = self.photoURLs.count
                 self.publishLiveExposure()
                 let bankedAt = Date()

@@ -314,6 +314,83 @@ public struct CaptureExposureLog {
         }
     }
 
+    /// What the camera and the phone were doing at the shutter — the record
+    /// a Photo-mode capture never had (2026-09-11, Steven: interval shoots
+    /// log far more than photo shoots; a shape field test needs the lens,
+    /// the format and the phone's temperature beside every picture, so a
+    /// miss can be read against its conditions). Stamped once per run at
+    /// the first shutter; `thermalStateAtEnd` says whether the run heated.
+    /// Every field is optional so a log from any platform decodes.
+    public struct Conditions: Codable, Equatable, Sendable {
+        /// The stop as the app names it: "1×", "2×", "5×", "10×".
+        public var stop: String?
+        /// `optical` (a lens at its native length), `sensor-crop` (the
+        /// sensor's own binned crop) or `digital-2x` (a crop-and-upscale) —
+        /// whether the stop IS a lens or a crop of one.
+        public var stopKind: String?
+        /// The physical camera behind the frame — the virtual device's
+        /// active constituent, or the device itself — and its type.
+        public var lens: String?
+        public var lensType: String?
+        /// The device's zoom factor, and what that is relative to the
+        /// physical lens's own native factor: 1 = native, 2 = a 2× digital
+        /// crop of it (the wide at 2×, the telephoto at 10×).
+        public var zoomFactor: Double?
+        public var lensCrop: Double?
+        /// The horizontal field of view actually captured, in degrees, and
+        /// its 35 mm-equivalent focal length.
+        public var horizontalFieldOfView: Double?
+        public var focalLength35mm: Double?
+        /// `jpeg`, `jpeg-flat` or `dng`.
+        public var format: String?
+        /// `ProcessInfo.thermalState` at the first shutter and at the end of
+        /// the run — nominal / fair / serious / critical.
+        public var thermalState: String?
+        public var thermalStateAtEnd: String?
+        /// The camera's own pressure reading, level plus factors —
+        /// "serious(systemTemperature)". iOS only.
+        public var systemPressure: String?
+        public var batteryLevel: Double?
+        public var lowPowerMode: Bool?
+        /// Focus at the shutter: the device's mode, whether the app had
+        /// pinned it from a tap, and the lens position (0 = nearest).
+        public var focusMode: String?
+        public var focusPinnedByTap: Bool?
+        public var lensPosition: Double?
+        public var exposureMode: String?
+        public var exposureLocked: Bool?
+        public var stabilization: String?
+        /// The pose the frames were captured in — portrait, landscapeLeft…
+        public var orientation: String?
+        public var appVersion: String?
+        public var osVersion: String?
+        /// The auto shape mode dials at the shutter (`family/sensitivity/
+        /// size`), when the toggle was on — the cross-reference into
+        /// `shapes.json` without opening it. Absent when it was off.
+        public var shapeSearch: String?
+
+        public init() {}
+
+        /// One line, for the console: "5× optical · Back Telephoto Camera ·
+        /// zoom 5.0 (native) · 17.2° · jpeg-flat · thermal fair · pressure nominal".
+        public var summary: String {
+            var parts: [String] = []
+            if let stop { parts.append(stop + (stopKind.map { " " + $0 } ?? "")) }
+            if let lens { parts.append(lens) }
+            if let zoomFactor {
+                var z = String(format: "zoom %.1f", zoomFactor)
+                if let lensCrop { z += lensCrop > 1.01 ? String(format: " (%.1f× digital)", lensCrop) : " (native)" }
+                parts.append(z)
+            }
+            if let horizontalFieldOfView { parts.append(String(format: "%.1f°", horizontalFieldOfView)) }
+            if let format { parts.append(format) }
+            if let thermalState { parts.append("thermal " + thermalState + (thermalStateAtEnd.map { $0 == thermalState ? "" : "→" + $0 } ?? "")) }
+            if let systemPressure { parts.append("pressure " + systemPressure) }
+            if let shapeSearch { parts.append("shapes " + shapeSearch) }
+            return parts.joined(separator: " · ")
+        }
+    }
+
     /// The whole session, as `capture_log.json` holds it.
     public struct Session: Codable, Equatable, Sendable {
         public var sessionID: String
@@ -359,6 +436,9 @@ public struct CaptureExposureLog {
         /// The shoot's recorded issue trail, oldest first. Absent (not empty)
         /// on clean runs and in logs from before it existed.
         public var issues: [Issue]?
+        /// The camera and the phone at the shutter. Absent in logs from
+        /// before it existed.
+        public var conditions: Conditions?
 
         public init(
             sessionID: String,
@@ -380,7 +460,8 @@ public struct CaptureExposureLog {
             startedAt: Date? = nil,
             endedAt: Date? = nil,
             frames: [Entry] = [],
-            issues: [Issue]? = nil
+            issues: [Issue]? = nil,
+            conditions: Conditions? = nil
         ) {
             self.sessionID = sessionID
             self.deviceModel = deviceModel
@@ -402,6 +483,7 @@ public struct CaptureExposureLog {
             self.endedAt = endedAt
             self.frames = frames
             self.issues = issues
+            self.conditions = conditions
         }
     }
 

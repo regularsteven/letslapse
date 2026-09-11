@@ -90,11 +90,72 @@ public struct ShapeDetector: Sendable {
     public var settings = Settings()
     public init(settings: Settings = Settings()) { self.settings = settings }
 
+    /// What a pass looked at and turned away — the story behind an empty
+    /// result, kept with the capture so a miss in the field can be read at
+    /// the desk (2026-09-11: a clean clock dial at 5×, High, nothing traced,
+    /// and nothing to say why). Refusals are capped at the biggest 24; the
+    /// counts are the whole picture.
+    public struct Diagnostics: Codable, Equatable, Sendable {
+        public struct Refusal: Codable, Equatable, Sendable {
+            /// "quad", "ellipse" (a traced contour) or "rim" (an edge-point circle).
+            public var kind: String
+            /// Normalised centre, top-left origin.
+            public var centre: CGPoint
+            /// Diameter or longer side as a fraction of the frame's width.
+            public var size: Double
+            public var reason: String
+            /// How far from passing, 0 at the line, 1 at twice the gate —
+            /// the trail keeps the nearest misses, which are the ones worth
+            /// a look. Hard refusals (border, off-frame) are 1.
+            public var margin: Double
+            public init(kind: String, centre: CGPoint, size: Double, reason: String, margin: Double = 1) {
+                self.kind = kind; self.centre = centre; self.size = size; self.reason = reason; self.margin = margin
+            }
+        }
+        public var longEdge = 0
+        public var quadsOffered = 0
+        public var quadsKept = 0
+        public var contourPasses = 0
+        public var contours = 0
+        public var ellipseFits = 0
+        public var ellipsesKept = 0
+        public var rimPeaks = 0
+        public var rimsKept = 0
+        public var milliseconds = 0
+        public var refusals: [Refusal] = []
+        public init() {}
+
+        mutating func refuse(_ kind: String, _ centre: CGPoint, _ size: Double, _ reason: String, margin: Double = 1) {
+            refusals.append(Refusal(kind: kind, centre: centre, size: size, reason: reason, margin: max(0, min(1, margin))))
+        }
+
+        /// The 24 nearest misses, the rest dropped — a textured wall offers
+        /// hundreds of hopeless fits and none of them is the story.
+        mutating func trim() {
+            refusals.sort { $0.margin == $1.margin ? $0.size > $1.size : $0.margin < $1.margin }
+            if refusals.count > 24 { refusals = Array(refusals.prefix(24)) }
+        }
+
+        /// One line per refusal, for a log or the CLI.
+        public var summary: String {
+            "\(quadsOffered) quads offered, \(quadsKept) kept · \(contours) contours over \(contourPasses) passes, \(ellipseFits) fits, \(ellipsesKept) ellipses · \(rimPeaks) rim peaks, \(rimsKept) rims · \(milliseconds) ms"
+        }
+    }
+
     /// `image` may be any size (it is downscaled to `detectionLongEdge`);
     /// `nativeSize` is the frame's oriented pixel size, which the size gate and
     /// `nativeDiameterPx` are measured in.
     public func detect(in input: CGImage, nativeSize: CGSize) throws -> [DetectedShape] {
+        try detectWithDiagnostics(in: input, nativeSize: nativeSize).shapes
+    }
+
+    /// The same pass, with what it turned away.
+    public func detectWithDiagnostics(in input: CGImage, nativeSize: CGSize) throws -> (shapes: [DetectedShape], diagnostics: Diagnostics) {
+        var diag = Diagnostics()
+        let started = Date()
+        defer { _ = started }
         let image = Self.downscale(input, longEdge: settings.detectionLongEdge)
+        diag.longEdge = max(image.width, image.height)
         let w = Double(image.width), h = Double(image.height)
         let nativeScale = Double(nativeSize.width) / w
         let shortEdgeNative = Double(min(nativeSize.width, nativeSize.height))
@@ -115,6 +176,7 @@ public struct ShapeDetector: Sendable {
             let handler = VNImageRequestHandler(cgImage: image, options: [:])
             try handler.perform([rect])
             var quads: [DetectedShape] = []
+            diag.quadsOffered = rect.results?.count ?? 0
             let supportMap = settings.quadEdgeSupport > 0 ? Self.edgeMap(image, threshold: settings.quadEdgeThreshold) : nil
             let support = supportMap.flatMap(EdgeSupport.init)
             if let supportMap, let dump = ProcessInfo.processInfo.environment["LAPSE_SHAPES_DEBUG"], dump.hasSuffix(".png"),
@@ -129,7 +191,14 @@ public struct ShapeDetector: Sendable {
                 let major = metrics.major, minor = metrics.minor
                 let margin = 0.03
                 let onBorder = pts.allSatisfy { p in (p.x < margin || p.x > 1 - margin) && (p.y < margin || p.y > 1 - margin) }
-                if onBorder || major * nativeScale < minDiameterNative || major * nativeScale > maxDiameterNative { continue }
+                let quadCentre = CGPoint(x: (pts[0].x + pts[1].x + pts[2].x + pts[3].x) / 4, y: (pts[0].y + pts[1].y + pts[2].y + pts[3].y) / 4)
+                if onBorder { diag.refuse("quad", quadCentre, major / w, "on the frame's border"); continue }
+                if major * nativeScale < minDiameterNative {
+                    diag.refuse("quad", quadCentre, major / w, String(format: "%.0f px < %.0f floor", major * nativeScale, minDiameterNative), margin: 1 - major * nativeScale / minDiameterNative); continue
+                }
+                if major * nativeScale > maxDiameterNative {
+                    diag.refuse("quad", quadCentre, major / w, String(format: "%.0f px > %.0f ceiling", major * nativeScale, maxDiameterNative)); continue
+                }
                 if let support {
                     // ±0.5 % of the long edge: Vision's sides land 0–5 px off the
                     // real edge at 1024 (measured on windows and the test card).
@@ -152,7 +221,9 @@ public struct ShapeDetector: Sendable {
                         }
                         print("    " + report.joined(separator: "; "))
                     }
-                    if whole < settings.quadEdgeSupport || weakest < settings.quadEdgeSupportPerSide { continue }
+                    if whole < settings.quadEdgeSupport || weakest < settings.quadEdgeSupportPerSide {
+                        diag.refuse("quad", quadCentre, major / w, String(format: "edge support %.2f < %.2f", whole, settings.quadEdgeSupport), margin: 1 - whole / settings.quadEdgeSupport); continue
+                    }
                 }
                 let centre = CGPoint(x: (pts[0].x + pts[1].x + pts[2].x + pts[3].x) / 4, y: (pts[0].y + pts[1].y + pts[2].y + pts[3].y) / 4)
                 quads.append(DetectedShape(kind: .quad, centre: centre, majorAxis: major / w, minorAxis: minor / w,
@@ -160,8 +231,12 @@ public struct ShapeDetector: Sendable {
                                            nativeDiameterPx: major * nativeScale, wide: metrics.wide))
             }
             out += Self.dedupe(quads.sorted { $0.confidence > $1.confidence })
+            diag.quadsKept = out.count
         }
-        guard settings.detectEllipses else { return out }
+        guard settings.detectEllipses else {
+            diag.milliseconds = Int(Date().timeIntervalSince(started) * 1000); diag.trim()
+            return (out, diag)
+        }
 
         // Ellipses: region contours, then edge-map contours.
         var passes: [(CGImage, Float, Bool)] = []
@@ -176,7 +251,9 @@ public struct ShapeDetector: Sendable {
             req.detectsDarkOnLight = dark
             req.maximumImageDimension = settings.contourImageDimension
             try VNImageRequestHandler(cgImage: source, options: [:]).perform([req])
+            diag.contourPasses += 1
             guard let obs = req.results?.first else { continue }
+            diag.contours += obs.contourCount
             for i in 0..<obs.contourCount {
                 guard let contour = try? obs.contour(at: i) else { continue }
                 let npts = contour.normalizedPoints
@@ -188,14 +265,17 @@ public struct ShapeDetector: Sendable {
                 if let approx = try? contour.polygonApproximation(epsilon: 0.004), approx.pointCount <= 6 { continue }
                 let pts = npts.map { SIMD2<Double>(Double($0.x) * w, (1 - Double($0.y)) * h) }
                 guard let e = EllipseFit.fit(pts) else { continue }
+                diag.ellipseFits += 1
                 let q = EllipseFit.quality(e, pts)
-                if simd_length(pts[0] - pts[pts.count - 1]) > 0.05 * 2 * e.semiMajor { continue }
-                if q.residual > settings.maxFitResidual || q.coverage < settings.minCoverage { continue }
-                if e.ratio < settings.minObliquity { continue }
-                if 2 * e.semiMajor * nativeScale < minDiameterNative { continue }
-                if 2 * e.semiMajor * nativeScale > maxDiameterNative { continue }
-                if e.centre.x < 0 || e.centre.x > w || e.centre.y < 0 || e.centre.y > h { continue }
-                if 2 * e.semiMajor > 0.97 * max(w, h) && 2 * e.semiMinor > 0.97 * min(w, h) { continue }
+                let ec = CGPoint(x: e.centre.x / w, y: e.centre.y / h), esize = 2 * e.semiMajor / w
+                if simd_length(pts[0] - pts[pts.count - 1]) > 0.05 * 2 * e.semiMajor { diag.refuse("ellipse", ec, esize, "open contour"); continue }
+                if q.residual > settings.maxFitResidual { diag.refuse("ellipse", ec, esize, String(format: "residual %.3f > %.3f", q.residual, settings.maxFitResidual), margin: q.residual / settings.maxFitResidual - 1); continue }
+                if q.coverage < settings.minCoverage { diag.refuse("ellipse", ec, esize, String(format: "coverage %.2f < %.2f", q.coverage, settings.minCoverage), margin: 1 - q.coverage / settings.minCoverage); continue }
+                if e.ratio < settings.minObliquity { diag.refuse("ellipse", ec, esize, String(format: "obliquity %.2f < %.2f", e.ratio, settings.minObliquity), margin: 1 - e.ratio / settings.minObliquity); continue }
+                if 2 * e.semiMajor * nativeScale < minDiameterNative { diag.refuse("ellipse", ec, esize, String(format: "%.0f px < %.0f floor", 2 * e.semiMajor * nativeScale, minDiameterNative), margin: 1 - 2 * e.semiMajor * nativeScale / minDiameterNative); continue }
+                if 2 * e.semiMajor * nativeScale > maxDiameterNative { diag.refuse("ellipse", ec, esize, String(format: "%.0f px > %.0f ceiling", 2 * e.semiMajor * nativeScale, maxDiameterNative)); continue }
+                if e.centre.x < 0 || e.centre.x > w || e.centre.y < 0 || e.centre.y > h { diag.refuse("ellipse", ec, esize, "centre off the frame"); continue }
+                if 2 * e.semiMajor > 0.97 * max(w, h) && 2 * e.semiMinor > 0.97 * min(w, h) { diag.refuse("ellipse", ec, esize, "fills the frame"); continue }
                 let conf = Float(max(0, min(1, q.coverage * (1 - q.residual / settings.maxFitResidual))))
                 ellipses.append((DetectedShape(kind: .ellipse, centre: CGPoint(x: e.centre.x / w, y: e.centre.y / h),
                                                majorAxis: 2 * e.semiMajor / w, minorAxis: 2 * e.semiMinor / w,
@@ -227,7 +307,12 @@ public struct ShapeDetector: Sendable {
                 exclusions.append(EdgeCircleDetector.Exclusion(centre: SIMD2<Double>(cx, cy), semiMajor: semiMajor,
                                                                semiMinor: semiMinor, rotation: e.rotation))
             }
-            for circle in EdgeCircleDetector.detect(in: image, settings: hs, exclusions: exclusions) {
+            let rims = EdgeCircleDetector.detect(in: image, settings: hs, exclusions: exclusions)
+            diag.rimPeaks = rims.peaks
+            for r in rims.refusals {
+                diag.refuse("rim", CGPoint(x: r.centre.x / houghScale / w, y: r.centre.y / houghScale / h), 2 * r.radius / houghScale / w, r.reason, margin: r.margin)
+            }
+            for circle in rims.circles {
                 // Back to the detection picture's pixels, then the same fit
                 // as the contour path on the rim's own points — a rim seen a
                 // little off-axis comes back as the ellipse it is. A fit
@@ -243,8 +328,11 @@ public struct ShapeDetector: Sendable {
                         centre = e.centre; a = e.semiMajor; b = e.semiMinor; rot = e.rotation
                     }
                 }
-                if 2 * a * nativeScale < minDiameterNative || 2 * a * nativeScale > maxDiameterNative { continue }
-                if centre.x < 0 || centre.x > w || centre.y < 0 || centre.y > h { continue }
+                let rc = CGPoint(x: centre.x / w, y: centre.y / h)
+                if 2 * a * nativeScale < minDiameterNative || 2 * a * nativeScale > maxDiameterNative {
+                    diag.refuse("rim", rc, 2 * a / w, String(format: "%.0f px outside %.0f–%.0f", 2 * a * nativeScale, minDiameterNative, maxDiameterNative)); continue
+                }
+                if centre.x < 0 || centre.x > w || centre.y < 0 || centre.y > h { diag.refuse("rim", rc, 2 * a / w, "centre off the frame"); continue }
                 let shape = DetectedShape(kind: .ellipse, centre: CGPoint(x: centre.x / w, y: centre.y / h),
                                           majorAxis: 2 * a / w, minorAxis: 2 * b / w, rotation: rot, corners: nil,
                                           confidence: Float(min(1, circle.support) * circle.coverage),
@@ -264,19 +352,27 @@ public struct ShapeDetector: Sendable {
                     let ratio = min(r1, r2) / max(r1, r2)
                     return Self.overlap(other, shape) > 0.5 || (distance < 0.6 * max(r1, r2) && ratio > 0.5)
                 }
-                if sameRim { continue }
+                if sameRim { diag.refuse("rim", rc, 2 * a / w, "same rim as a kept ellipse"); continue }
                 keptEllipses.append(shape)
+                diag.rimsKept += 1
             }
         }
+        diag.ellipsesKept = keptEllipses.count - diag.rimsKept
         // One object, one shape. A quad over the same bounds as an ellipse is
         // the rectangle request reading the ellipse's silhouette (a circle's
         // circumscribed square), and the ellipse — residual-gated, fitted to
         // the outline — is the more specific claim. Second guard after the
         // edge-support gate: a large oval's cage can still score up to ~0.4
         // there, this one does not depend on the number.
+        for quad in out where keptEllipses.contains(where: { Self.overlap($0, quad) >= 0.6 }) {
+            diag.refuse("quad", quad.centre, quad.majorAxis, "the same bounds as an ellipse")
+            diag.quadsKept -= 1
+        }
         out.removeAll { quad in keptEllipses.contains { Self.overlap($0, quad) >= 0.6 } }
         out += keptEllipses
-        return out
+        diag.milliseconds = Int(Date().timeIntervalSince(started) * 1000)
+        diag.trim()
+        return (out, diag)
     }
 
     /// A preview frame straight off the camera: the buffer arrives in the
@@ -306,8 +402,8 @@ public struct ShapeDetector: Sendable {
     /// one Core Image render. Rendered rather than handed to Vision as a
     /// buffer-plus-orientation so every pass — including the CIEdges maps a
     /// fuller profile adds — sees one upright picture and reports in one space.
-    static func uprightImage(_ buffer: CVPixelBuffer, orientation: CGImagePropertyOrientation,
-                             longEdge: Int) -> CGImage? {
+    public static func uprightImage(_ buffer: CVPixelBuffer, orientation: CGImagePropertyOrientation,
+                                    longEdge: Int) -> CGImage? {
         var ci = CIImage(cvPixelBuffer: buffer).oriented(orientation)
         let extent = ci.extent
         let scale = Double(longEdge) / Double(max(extent.width, extent.height))

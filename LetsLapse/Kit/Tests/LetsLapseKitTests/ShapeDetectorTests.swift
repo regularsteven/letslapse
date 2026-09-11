@@ -358,4 +358,35 @@ final class ShapeDetectorTests: XCTestCase {
                            "\(name): the arch came back as a circle")
         }
     }
+    /// The register keeps the viewfinder's account of a capture — dials,
+    /// lens, samples, what was refused — and the detector explains itself.
+    func testViewfinderTrailRoundTripsAndDiagnosticsExplainAMiss() throws {
+        let (image, _, _, _, _, _) = card()
+        var strict = ShapeSearch(family: .circular, sensitivity: .low).fileSettings()
+        strict.maxFitResidual = 0.0001   // nothing passes; every fit must say why
+        let (shapes, diag) = try ShapeDetector(settings: strict).detectWithDiagnostics(in: image, nativeSize: CGSize(width: 3000, height: 2000))
+        XCTAssertTrue(shapes.filter { $0.kind == DetectedShape.Kind.ellipse }.isEmpty)
+        XCTAssertGreaterThan(diag.ellipseFits, 0)
+        XCTAssertTrue(diag.refusals.contains { $0.kind == "ellipse" && $0.reason.hasPrefix("residual") }, "\(diag.refusals.map(\.reason))")
+        XCTAssertLessThanOrEqual(diag.refusals.count, 24)
+        XCTAssertGreaterThan(diag.milliseconds, 0)
+
+        var viewfinder = ViewfinderShapes(kept: [], dismissed: [], frameSize: CGSize(width: 1080, height: 1440),
+                                          search: ShapeSearch(family: .circular, sensitivity: .high), horizontalFieldOfView: 24.9,
+                                          samples: 212, samplesWithShapes: 3, lastSample: diag)
+        viewfinder.dismissed = []
+        var trail = ViewfinderTrail(viewfinder)
+        trail.file = diag
+        XCTAssertEqual(trail.summary, "circular/high/all · lens 24.9° · 212 samples, 3 with shapes · 0 kept, 0 dismissed")
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("shapes-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var reg = ShapeRegister(representative: .init(relativePath: "source/frame-00001.jpg", source: .sourceFrame, width: 3024, height: 4032, horizontalFieldOfView: 24.9), shapes: [])
+        reg.viewfinder = trail
+        try reg.save(inProjectFolder: dir)
+        let back = try XCTUnwrap(ShapeRegister.load(inProjectFolder: dir))
+        XCTAssertEqual(back.viewfinder, trail, "a miss is still a record")
+        XCTAssertEqual(back.viewfinder?.file?.refusals.first?.reason, diag.refusals.first?.reason)
+    }
 }

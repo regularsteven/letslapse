@@ -145,6 +145,64 @@ Release build**: Debug samples were 200–1000 ms (`-Onone` Kit) and heated the
 phone to `camera pressure serious`; Release samples are 35–50 ms at 5 Hz on the
 same scene (`xcodebuild … -configuration Release -derivedDataPath <scratch>`).
 
+**Field-test intelligence (2026-09-11, Steven from the street: "the more that
+we log, the more that we can know has a good strike ratio").** Every capture
+made with the toggle on now writes a `viewfinder` block into its
+`shapes.json` — `ViewfinderTrail`: the dials, the lens, samples landed and
+samples that found anything, kept/dismissed, and `ShapeDetector.Diagnostics`
+for the live pass's last sample and for the file pass: counts (quads offered,
+contours, fits, rim peaks, ms) plus the 24 nearest-miss refusals with the
+gate each failed ("residual 0.093 > 0.080", "rim support 0.29 < 0.35", "4 wide
+holes in the rim > 2"). Written even when nothing was found — a viewfinder
+that was on and never sampled records that too. Read it back with
+`lapse shapes <project>/source/frame-00001.jpg --trail` (and `--verbose` to
+re-run any profile on the file with the same explanations). The console
+logs the last sample's refusals when a sample finds nothing, and the file
+pass's when it does. Owed: the clock-dial miss from the street (5×,
+All/High/All) — pull the log and the photo, run `--trail`, tune from it.
+
+**Review of the 37 "Shape testing" shots (2026-09-11 evening, Mac library, read
+only).** Provenance: 20 registers with `captured` shapes (toggle on), 11
+`detected`-only (Find shapes / the file pass), 6 empty; no `manual` shapes in
+the Mac copies. Today's file pass finds the main round target in ~26 of the
+30 pictures that have one (medallions ×3, rose windows, round signs, manholes,
+the wheel, the doorbell, the oval window, the camera lens); of the 50 shapes
+kept on the viewfinder only 17 (34 %) are confirmed by the file pass — the
+live 384 px pass is generous and the 5 s hold keeps skewed quads (cobbles,
+building corners) that a person did not tap away; the older Find-shapes
+registers' extras confirm at 57 %. Explained misses (from `--verbose`): the
+Bohemia sign's rim is broken by its bracket ("rim gap 70° > 60°"), the small
+no-parking sign at 1/8 frame has 0.24–0.26 support (< 0.35; SIZE Small would
+look at 512 px), the valve's ellipse residual is 0.056 (> Medium's 0.040,
+< High's 0.06), the clock dial is found on the still by the live profile but
+was never sampled at 5× in the street (the trail will say why next time).
+False-positive classes: tram windscreens (an arc + roofline), building corner
++ sky, cobble rings, the yellow doorbell box read as circles. **A rim-polarity
+gate was tried and rejected** (share of rim points whose gradient agrees on
+which side is brighter): real rims score 0.50–0.79 (stone relief lit from one
+side, a black lens with a bright ring, signs with a dark border) and the false
+ones 0.52–0.72 — no threshold separates them; reverted.
+
+**Photo captures now write `capture_log.json` (2026-09-11 evening, Steven:
+"a lot more information is captured in interval shoots, but not in photo
+shoots").** The plain still path (Photo one-shot/burst/Bulb and unblended
+Interval) writes the same session document the blend pipelines always did,
+with a new `conditions` block on every path: the stop ("5×") and whether it is
+optical / sensor-crop / digital-2x, the physical lens, zoom and crop relative
+to that lens (the wide at 2×, the tele at 10×), field of view and 35 mm
+equivalent, format (jpeg / jpeg-flat / dng), thermal state at the shutter and
+at the end, camera pressure, battery, low-power, focus mode + tap pin + lens
+position, exposure mode/lock, stabilisation, pose, app/OS, and the shape dials
+when the toggle was on; `frames[]` carry each still's own EXIF (ISO, shutter,
+aperture, EV). **Capture Flat used to strip the camera EXIF** (the re-encode
+wrote orientation + GPS only — every flat shot in the review has no lens,
+focal length, ISO or shutter): EXIF/TIFF/ExifAux/MakerApple now ride through.
+`lapse shapes --trail` prints the conditions; `tools/shape_field_report.py
+<projects> [--tag "Shape testing"]` joins register + trail + conditions + a
+fresh pass per shot and groups strike ratios by stop, lens kind, format,
+thermal, pressure, dials and focus — the tool the next field shoot is read
+with. Note iOS gives a thermal *state*, never a temperature.
+
 Owed after the field test: design mirrors (the six `shutter-cluster.photo-*`
 component states lose the Hand and gain the shapes glyph; `capture-photo.shapes`
 mirrors in both orientations with the three dials; the idle Interval/Video

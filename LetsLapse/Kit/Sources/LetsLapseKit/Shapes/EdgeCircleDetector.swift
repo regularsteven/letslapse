@@ -68,12 +68,25 @@ struct EdgeCircleDetector {
         var rotation: Double
     }
 
-    static func detect(in image: CGImage, settings: Settings, exclusions: [Exclusion] = []) -> [Circle] {
+    struct Refusal {
+        var centre: SIMD2<Double>
+        var radius: Double
+        var reason: String
+        var margin: Double
+    }
+    struct Result {
+        var circles: [Circle] = []
+        var refusals: [Refusal] = []
+        var peaks = 0
+    }
+
+    static func detect(in image: CGImage, settings: Settings, exclusions: [Exclusion] = []) -> Result {
+        var result = Result()
         let debug = ProcessInfo.processInfo.environment["LAPSE_SHAPES_DEBUG"] != nil
         let t0 = Date()
         func lap(_ what: String) { if debug { print(String(format: "    hough %@: %.0f ms", what, Date().timeIntervalSince(t0) * 1000)) } }
         let (w, h, gray) = grayscale(image, longEdge: settings.longEdge)
-        guard w > 8, h > 8 else { return [] }
+        guard w > 8, h > 8 else { return result }
         let count = w * h
         // Sobel gradients through vDSP's 3×3 filter, on a float copy.
         var floats = [Float](repeating: 0, count: count)
@@ -93,7 +106,7 @@ struct EdgeCircleDetector {
         // is at least its two neighbours along its own gradient direction.
         var maxMag: Float = 0
         vDSP_maxv(mag, 1, &maxMag, vDSP_Length(count))
-        guard maxMag > 0 else { return [] }
+        guard maxMag > 0 else { return result }
         // The percentile from every fourth pixel: the estimate is the same to
         // within a bin and the loop is a quarter of the price in -Onone.
         var histogram = [Int](repeating: 0, count: 256)
@@ -146,11 +159,11 @@ struct EdgeCircleDetector {
         }
         if debug { print("    hough: \(w)×\(h), \(edges.count) edge points, radii \(Int(settings.minRadius))–\(Int(settings.maxRadius)), threshold \(Int(threshold))") }
         lap("edges")
-        guard edges.count > 20 else { return [] }
+        guard edges.count > 20 else { return result }
 
         // Vote: along the gradient, both ways (polarity unknown), every radius.
         let rmin = Int(settings.minRadius.rounded()), rmax = Int(settings.maxRadius.rounded())
-        guard rmax > rmin else { return [] }
+        guard rmax > rmin else { return result }
         let step = rmax - rmin > 60 ? 2 : 1
         var votes = [Int32](repeating: 0, count: count)
         votes.withUnsafeMutableBufferPointer { votes in
@@ -205,6 +218,7 @@ struct EdgeCircleDetector {
         }
         peaks.sort { $0.2 > $1.2 }
         peaks = Array(peaks.prefix(settings.maxCandidates))
+        result.peaks = peaks.count
         lap("peaks (\(peaks.count))")
 
         // Edge points already explained: by the tracer's ellipses now, by
@@ -258,7 +272,13 @@ struct EdgeCircleDetector {
             if debug {
                 print(String(format: "    hough peak (%d, %d): r %d support %.2f (%d edges of %d)", px, py, best.r, best.score, hist[max(0, best.r - 1)] + hist[best.r] + hist[min(hist.count - 1, best.r + 1)], edges.count))
             }
-            guard best.r > 0, best.score >= settings.minSupport else { continue }
+            guard best.r > 0 else { continue }
+            guard best.score >= settings.minSupport else {
+                result.refusals.append(Refusal(centre: SIMD2(Double(px), Double(py)), radius: Double(best.r),
+                                               reason: String(format: "rim support %.2f < %.2f", best.score, settings.minSupport),
+                                               margin: 1 - best.score / settings.minSupport))
+                continue
+            }
             let pts = radial.filter { abs(Int($0.d.rounded()) - best.r) <= 1 }
             // Angular coverage, in 36 bins — a bin counts from its second
             // point, so a stray edge crossing the rim does not fill it — and
@@ -308,7 +328,15 @@ struct EdgeCircleDetector {
                 wideHoles = 36
             }
             if debug { print(String(format: "      coverage %.2f, largest gap %d bins, %d wide holes  %@", coverage, gap, wideHoles, bins.map { String($0) }.joined(separator: " "))) }
-            guard coverage >= settings.minCoverage, gap <= settings.maxGapBins, wideHoles <= settings.maxWideHoles else { continue }
+            guard coverage >= settings.minCoverage, gap <= settings.maxGapBins, wideHoles <= settings.maxWideHoles else {
+                let why: String
+                let margin: Double
+                if coverage < settings.minCoverage { why = String(format: "rim coverage %.2f < %.2f", coverage, settings.minCoverage); margin = 1 - coverage / settings.minCoverage }
+                else if gap > settings.maxGapBins { why = "rim gap \(gap * 10)° > \(settings.maxGapBins * 10)°"; margin = Double(gap - settings.maxGapBins) / Double(settings.maxGapBins) }
+                else { why = "\(wideHoles) wide holes in the rim > \(settings.maxWideHoles)"; margin = Double(wideHoles - settings.maxWideHoles) / Double(max(1, settings.maxWideHoles)) }
+                result.refusals.append(Refusal(centre: SIMD2(Double(px), Double(py)), radius: Double(best.r), reason: why, margin: margin))
+                continue
+            }
             // Accepted: its rim is spoken for. Candidates come strongest
             // vote first, so a rim's own centre claims it before the centres
             // a pixel or two off it, or a smaller circle leaning on it, are
@@ -318,7 +346,8 @@ struct EdgeCircleDetector {
                                   support: min(1, best.score), coverage: coverage, points: points))
         }
         lap("rims")
-        return circles
+        result.circles = circles
+        return result
     }
 
     /// 8-bit grey at the Hough resolution — one CoreGraphics draw does the

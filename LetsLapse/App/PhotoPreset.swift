@@ -1119,6 +1119,14 @@ enum FlatCapture {
     /// baking in the source orientation and carrying an optional GPS dictionary.
     /// Returns false if any step fails so the caller can fall back to writing the
     /// original bytes untouched.
+    ///
+    /// The camera's own metadata rides along: until 2026-09-11 the re-encode
+    /// wrote orientation and GPS and nothing else, so every flat capture lost
+    /// its lens, focal length, ISO and shutter — a whole field test's worth of
+    /// stills that could not say which lens took them. EXIF, TIFF, ExifAux and
+    /// the Apple maker note are copied from the source; only the orientation
+    /// (now baked into the pixels) and the EXIF pixel dimensions (which the
+    /// bake may have swapped) are restated.
     static func write(jpegData: Data, to url: URL, gps: Any?, quality: CGFloat = 0.95) -> Bool {
         guard let image = CIImage(data: jpegData, options: [.applyOrientationProperty: true]) else {
             return false
@@ -1136,6 +1144,24 @@ enum FlatCapture {
             // don't rotate again.
             kCGImagePropertyOrientation: 1,
         ]
+        if let source = CGImageSourceCreateWithData(jpegData as CFData, nil),
+           let sourceProperties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] {
+            if var exif = sourceProperties[kCGImagePropertyExifDictionary] as? [CFString: Any] {
+                exif[kCGImagePropertyExifPixelXDimension] = cgImage.width
+                exif[kCGImagePropertyExifPixelYDimension] = cgImage.height
+                properties[kCGImagePropertyExifDictionary] = exif
+            }
+            if var tiff = sourceProperties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
+                tiff[kCGImagePropertyTIFFOrientation] = 1
+                properties[kCGImagePropertyTIFFDictionary] = tiff
+            }
+            if let aux = sourceProperties[kCGImagePropertyExifAuxDictionary] {
+                properties[kCGImagePropertyExifAuxDictionary] = aux
+            }
+            if let maker = sourceProperties[kCGImagePropertyMakerAppleDictionary] {
+                properties[kCGImagePropertyMakerAppleDictionary] = maker
+            }
+        }
         if let gps { properties[kCGImagePropertyGPSDictionary] = gps }
         CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
         return CGImageDestinationFinalize(destination)

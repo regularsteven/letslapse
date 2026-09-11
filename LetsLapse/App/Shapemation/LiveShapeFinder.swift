@@ -98,6 +98,7 @@ final class ShapeSampler: @unchecked Sendable {
         var frameSize: CGSize
         var measuredIn: QuadOrientation
         var seconds: Double
+        var diagnostics: ShapeDetector.Diagnostics
     }
 
     private let lock = NSLock()
@@ -125,11 +126,16 @@ final class ShapeSampler: @unchecked Sendable {
             (self.imageOrientation, self.quadOrientation, self.detector)
         }
         let started = Date()
-        let shapes = (try? detector.detect(in: buffer, orientation: image)) ?? []
-        return Result(shapes: shapes,
-                      frameSize: ShapeDetector.uprightSize(of: buffer, orientation: image),
-                      measuredIn: quad,
-                      seconds: Date().timeIntervalSince(started))
+        let size = ShapeDetector.uprightSize(of: buffer, orientation: image)
+        var shapes: [DetectedShape] = []
+        var diagnostics = ShapeDetector.Diagnostics()
+        if let upright = ShapeDetector.uprightImage(buffer, orientation: image, longEdge: detector.settings.detectionLongEdge),
+           let result = try? detector.detectWithDiagnostics(in: upright, nativeSize: size) {
+            shapes = result.shapes
+            diagnostics = result.diagnostics
+        }
+        return Result(shapes: shapes, frameSize: size, measuredIn: quad,
+                      seconds: Date().timeIntervalSince(started), diagnostics: diagnostics)
     }
 }
 
@@ -185,6 +191,10 @@ final class LiveShapeFinder {
     /// observed: they change on every sample and nothing on screen shows them.
     @ObservationIgnored private(set) var lastSampleSeconds: Double = 0
     @ObservationIgnored private(set) var sampleCount = 0
+    /// Samples that found at least one shape, and the last sample's own
+    /// account — what it looked at and refused. Both go with the shutter.
+    @ObservationIgnored private(set) var samplesWithShapes = 0
+    @ObservationIgnored private(set) var lastDiagnostics: ShapeDetector.Diagnostics?
 
     /// Shapes tapped away. A later detection overlapping one of these is
     /// swallowed and the entry follows it, so a dismissed shape stays gone as
@@ -225,7 +235,7 @@ final class LiveShapeFinder {
             let result = sampler.sample(buffer)
             Task { @MainActor in
                 self?.ingest(result.shapes, frameSize: result.frameSize,
-                             measuredIn: result.measuredIn, seconds: result.seconds)
+                             measuredIn: result.measuredIn, seconds: result.seconds, diagnostics: result.diagnostics)
             }
         }
     }
@@ -259,18 +269,24 @@ final class LiveShapeFinder {
     /// live track updates it; the rest start tracks. Tracks unseen for
     /// `holdFor` are dropped.
     func ingest(_ shapes: [DetectedShape], frameSize: CGSize, measuredIn pose: QuadOrientation,
-                seconds: Double, at now: Date = Date()) {
+                seconds: Double, diagnostics: ShapeDetector.Diagnostics? = nil, at now: Date = Date()) {
         sampleCount += 1
         lastSampleSeconds = seconds
+        if !shapes.isEmpty { samplesWithShapes += 1 }
+        if let diagnostics { lastDiagnostics = diagnostics }
         if let last = lastIngestAt {
             let gap = now.timeIntervalSince(last)
             if gap > 0 { samplePeriod = 0.5 * samplePeriod + 0.5 * gap }
         }
         lastIngestAt = now
         if sampleCount == 1 || sampleCount % 25 == 0 {
-            LLog(String(format: "shapes: sample %d took %.0f ms every %.2f s (%@), %d found, %d tracked, %d dismissed; tap saw %.1f fps, camera period %.1f ms (%.0f fps)",
+            LLog(String(format: "shapes: sample %d took %.0f ms every %.2f s (%@), %d found, %d tracked, %d dismissed; %d of %d samples found anything; tap saw %.1f fps, camera period %.1f ms (%.0f fps)",
                         sampleCount, seconds * 1000, samplePeriod, search.token, shapes.count, tracks.count, dismissed.count,
+                        samplesWithShapes, sampleCount,
                         tap.deliveredFPS, tap.cameraPeriod * 1000, tap.cameraPeriod > 0 ? 1 / tap.cameraPeriod : 0))
+            if let diagnostics, shapes.isEmpty {
+                LLog("shapes: last sample refused — \(diagnostics.summary)" + (diagnostics.refusals.isEmpty ? "" : "; " + diagnostics.refusals.prefix(4).map { "\($0.kind) \(Int($0.size * 100))% \($0.reason)" }.joined(separator: "; ")))
+            }
         }
         // A sample measured in a pose that has since changed is a quarter turn
         // off; the next one will be right.
@@ -316,7 +332,9 @@ final class LiveShapeFinder {
         tracks.removeAll()
         dismissed.removeAll()
         sampleCount = 0
+        samplesWithShapes = 0
         lastSampleSeconds = 0
+        lastDiagnostics = nil
     }
 
     /// What the shutter takes with it: the confirmed shapes on screen and the
@@ -327,9 +345,12 @@ final class LiveShapeFinder {
     /// finds as plain detections (2026-09-11: a medallion the live pass lost
     /// to a blurred 10 fps preview was in the photo at 0.77 and never
     /// recorded because the shutter had nothing to carry).
+    /// … and a viewfinder that never got a sample still reports that it
+    /// was on, with its dials: the register's trail is the field-test
+    /// record, and "on, High, nothing landed" is a finding.
     func snapshot() -> ViewfinderShapes? {
-        guard frameSize.width > 0, frameSize.height > 0 else { return nil }
-        return ViewfinderShapes(kept: visible.map(\.shape), dismissed: dismissed, frameSize: frameSize, search: search)
+        ViewfinderShapes(kept: frameSize.width > 0 ? visible.map(\.shape) : [], dismissed: dismissed, frameSize: frameSize,
+                         search: search, samples: sampleCount, samplesWithShapes: samplesWithShapes, lastSample: lastDiagnostics)
     }
 
     // MARK: - Screenshot staging
