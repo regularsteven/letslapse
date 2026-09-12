@@ -7157,9 +7157,12 @@ final class AppModel: ObservableObject {
             relativeNames.append(relativeName)
         }
 
+        // The sidecar is found by its fixed path (`source(for:)`), never
+        // through the frame list — it used to be appended to `relativeNames`
+        // too, which is what the v4 migration's `.json` repair undoes for the
+        // ramp shoots already registered.
         let metadataName = "source/sequence.json"
         try copyReplacingItem(at: result.metadataURL, to: root.appendingPathComponent(metadataName))
-        relativeNames.append(metadataName)
 
         let capture = CaptureProject(
             id: id,
@@ -7935,7 +7938,15 @@ final class AppModel: ObservableObject {
             try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
             guard FileManager.default.fileExists(atPath: manifestURL.path) else { return }
             let data = try Data(contentsOf: manifestURL)
-            let manifest = try JSONDecoder().decode(LibraryManifest.self, from: data)
+            // The JSON-level migrations run BEFORE the decoder sees the bytes
+            // (Phase 1 W4): a repair that has to survive a strict decoder
+            // cannot be made after it. Step 4 backfills `originID`, links DNG
+            // clones to their parent's origin and drops the `.json` names
+            // misregistered as frames.
+            let migration = try ManifestMigrations.apply(to: data) { [self] id in
+                UUID(uuidString: id).map { captureFolderURL(for: $0) }
+            }
+            let manifest = try JSONDecoder().decode(LibraryManifest.self, from: migration.data)
             captures = manifest.captures.sorted { $0.createdAt > $1.createdAt }
             blends = manifest.blends.sorted { $0.createdAt > $1.createdAt }
             // Oldest first — a collection list reads in creation order.
@@ -7944,6 +7955,7 @@ final class AppModel: ObservableObject {
             stampLegacyDefaultPresetsIfNeeded()
             stampPresetStatesIfNeeded()
             stampAddedDatesIfNeeded()
+            stampManifestVersionIfNeeded(migration)
             for capture in captures
             where capture.kind == .video
                 && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil
@@ -8015,6 +8027,19 @@ final class AppModel: ObservableObject {
     /// right answer for anything captured on this device anyway.
     ///
     /// One `stat` per project, once, on the launch that migrates.
+    /// Carries the counter to the current JSON-level version once the
+    /// Swift-level stamps above have run, and persists the migrated content
+    /// once. The content itself was changed by `ManifestMigrations` before
+    /// the decode; a manifest that arrived below v3 had its counter left
+    /// alone there so the stamps above would still fire.
+    private func stampManifestVersionIfNeeded(_ migration: ManifestMigrations.Outcome) {
+        for line in migration.log.prefix(12) { LLog("manifest migration: \(line)") }
+        if migration.log.count > 12 { LLog("manifest migration: … \(migration.log.count - 12) more") }
+        guard gradingSchemaVersion < ManifestMigrations.current || !migration.log.isEmpty else { return }
+        gradingSchemaVersion = max(gradingSchemaVersion, ManifestMigrations.current)
+        try? persistLibrary()
+    }
+
     private func stampAddedDatesIfNeeded() {
         guard gradingSchemaVersion < 3 else { return }
         gradingSchemaVersion = 3
@@ -9081,7 +9106,10 @@ final class AppModel: ObservableObject {
         capture.id = newID
         capture.importedFromID = originID
         capture.originID = archiveOrigin
-        // `originDeviceID` and `derivedFromOriginID` stay as sent.
+        // `originDeviceID` and `derivedFromOriginID` stay as sent. A sender
+        // from before the v4 repair still lists sidecars among its frames;
+        // they are not frames here either.
+        capture.sourceFileNames.removeAll { $0.hasSuffix(".json") }
         // The record came off another device, so its own stamp says when the
         // project landed THERE. `createdAt` is left alone on purpose — that is
         // the shoot's date and it travels — but "added" is a fact about this
