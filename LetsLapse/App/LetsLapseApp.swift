@@ -290,6 +290,17 @@ struct ContentView: View {
         ZStack {
             tabs
 
+            // W7: the library on disk could not be read and was set aside.
+            // Over every tab, until the app is relaunched against a repaired
+            // manifest — there is no repair to offer before Phase 4.
+            if let failure = model.libraryLoadFailure {
+                VStack {
+                    LibraryUnreadableBanner(failure: failure)
+                    Spacer()
+                }
+                .zIndex(50)
+            }
+
             // On iOS the flow is a full-screen overlay and the tab bar steps
             // aside. On macOS the flow lives inside the Create tab instead
             // (see `tabs`), so the native tab bar stays visible and clickable
@@ -1569,3 +1580,34 @@ enum CreateCameraSetting {
     }
 }
 
+
+/// The W7 banner: the manifest could not be decoded, it was set aside, and
+/// nothing is being saved. Named the file, because the file is the only copy
+/// of every edit and the person has to know where it went.
+/// (SVG mirror owed after sign-off — docs/design/README.md.)
+struct LibraryUnreadableBanner: View {
+    var failure: AppModel.LibraryLoadFailure
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(LL.amber)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Library not loaded — nothing is being saved")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("\(failure.reason) The manifest was set aside as \(failure.setAsideName) in the Projects folder; every grade, tag and blend record is still in it. Quit, repair or restore it, and relaunch.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(LL.amber.opacity(0.6), lineWidth: 1))
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+        .accessibilityElement(children: .combine)
+    }
+}

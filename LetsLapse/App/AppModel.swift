@@ -7946,10 +7946,21 @@ final class AppModel: ObservableObject {
             // cannot be made after it. Step 4 backfills `originID`, links DNG
             // clones to their parent's origin and drops the `.json` names
             // misregistered as frames.
-            let migration = try ManifestMigrations.apply(to: data) { [self] id in
-                UUID(uuidString: id).map { captureFolderURL(for: $0) }
+            let migration: ManifestMigrations.Outcome
+            let manifest: LibraryManifest
+            do {
+                migration = try ManifestMigrations.apply(to: data) { [self] id in
+                    UUID(uuidString: id).map { captureFolderURL(for: $0) }
+                }
+                manifest = try JSONDecoder().decode(LibraryManifest.self, from: migration.data)
+            } catch {
+                // W7: a manifest this build cannot decode is set aside, never
+                // overwritten. Until Phase 4's rebuild-from-folders there is
+                // no repair here, only the guard: an empty library, every
+                // write refused, and a banner naming the file.
+                setAsideUnreadableManifest(error)
+                return
             }
-            let manifest = try JSONDecoder().decode(LibraryManifest.self, from: migration.data)
             captures = manifest.captures.sorted { $0.createdAt > $1.createdAt }
             blends = manifest.blends.sorted { $0.createdAt > $1.createdAt }
             // Oldest first — a collection list reads in creation order.
@@ -7979,8 +7990,36 @@ final class AppModel: ObservableObject {
                 }
             }
         } catch {
-            errorMessage = "Couldn't load the project library: \(error.localizedDescription)"
+            // Could not even read the bytes (a permission, a volume): the
+            // file stays where it is and so does everything in it.
+            let why = "Couldn't load the project library: \(error.localizedDescription)"
+            errorMessage = why
+            persister.refuseWrites = why
+            LLog("library: load failed, writes refused — \(error)")
         }
+    }
+
+    /// Moves an undecodable `library.json` to `library.json.unreadable-<stamp>`
+    /// and locks the persister. The set-aside file is the only copy of every
+    /// grade, tag, blend record and collection; the next persist of an empty
+    /// library would have been the R1 data loss.
+    private func setAsideUnreadableManifest(_ error: Error) {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let name = "library.json.unreadable-\(formatter.string(from: Date()))"
+        let destination = projectsRootURL.appendingPathComponent(name)
+        do {
+            try FileManager.default.moveItem(at: manifestURL, to: destination)
+        } catch {
+            LLog("library: could not set the unreadable manifest aside: \(error)")
+        }
+        let reason = error.localizedDescription
+        let why = "The project library couldn't be read (\(reason)). It was set aside as \(name); nothing will be saved until it is repaired."
+        libraryLoadFailure = LibraryLoadFailure(setAsideName: name, reason: reason)
+        persister.refuseWrites = why
+        errorMessage = why
+        LLog("library: manifest undecodable, set aside as \(name) — \(error)")
     }
 
     /// One-time migration for the engine rebuild's default flip: projects
@@ -8059,6 +8098,17 @@ final class AppModel: ObservableObject {
     /// drops anything older than what is already on disk. See
     /// `LibraryPersister`.
     let persister = LibraryPersister()
+
+    /// Set when the manifest on disk could not be decoded (Phase 1 W7): the
+    /// file was moved aside under `setAsideName`, the library is empty in
+    /// memory, and the persister refuses every write until the app is
+    /// relaunched against a repaired manifest. The banner in `ContentView`
+    /// says so.
+    struct LibraryLoadFailure: Equatable {
+        var setAsideName: String
+        var reason: String
+    }
+    @Published private(set) var libraryLoadFailure: LibraryLoadFailure?
 
     /// Synchronous: the manifest is on disk when this returns, and the size
     /// and existence caches are dropped first. Every path that adds,
