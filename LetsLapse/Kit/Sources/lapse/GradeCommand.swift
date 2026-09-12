@@ -25,8 +25,8 @@ func parseRecipe(json: String) throws -> GradeRecipe {
     let knownKeys = [
         "exposure", "contrast", "highlights", "shadows", "whites", "blacks",
         "temperature", "tint", "vibrance", "saturation", "clarity", "vignette",
-        "texture", "sharpen", "masking", "noise", "noisedetail", "colornoise",
-        "chromanoise", "declaredkelvin", "declaredtint", "dehaze",
+        "vignettemidpoint", "texture", "sharpen", "masking", "noise", "noisedetail",
+        "colornoise", "chromanoise", "declaredkelvin", "declaredtint", "dehaze",
     ]
     for key in values.keys where !knownKeys.contains(key) {
         fail("unknown recipe key '\(key)' — choose from: \(knownKeys.joined(separator: ", "))")
@@ -56,7 +56,13 @@ func parseRecipe(json: String) throws -> GradeRecipe {
     // Cb/Cr pass takes its own rather than quietly changing what an existing
     // command line means.
     recipe.colorNoise = scaled("chromanoise")
+    // Signed, like the recipe: positive darkens the corners, negative lightens
+    // them — the app's stored convention, NOT Lightroom's (whose post-crop
+    // Amount is negative to darken), so `-40` here is a lightened edge.
     recipe.vignette = scaled("vignette")
+    // Lightroom's Midpoint, 0…100 with 50 in the middle — like `noisedetail`,
+    // an omitted key means the middle of the travel, not zero.
+    recipe.vignetteMidpoint = Float(values["vignettemidpoint"] ?? 50) / 100
     // The declared anchor is absolute, so it is NOT scaled and NOT defaulted:
     // absent means "as shot", which is a different thing from zero.
     recipe.declaredKelvin = values["declaredkelvin"].map(Float.init)

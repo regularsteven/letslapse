@@ -501,6 +501,59 @@ final class LightroomImportControlsTests: XCTestCase {
         XCTAssertFalse(map.unsupported.contains { $0.contains("Crop") })
     }
 
+    // MARK: Vignette
+
+    func testADarkeningPostCropVignetteImportsPositiveWithItsMidpoint() throws {
+        // Lightroom's −40 DARKENS the corners; ours is positive-darkens, so
+        // the sign flips. Midpoint 70 of 100 is our 0.7.
+        let map = LightroomImport.map(sidecar([
+            "PostCropVignetteAmount": "-40", "PostCropVignetteMidpoint": "70",
+            "PostCropVignetteFeather": "50", "PostCropVignetteRoundness": "0", "PostCropVignetteStyle": "1",
+        ]))
+        XCTAssertEqual(try XCTUnwrap(map.adjustments["vignetteIntensity"]), 0.4, accuracy: 1e-12)
+        XCTAssertEqual(try XCTUnwrap(map.adjustments["vignetteMidpoint"]), 0.7, accuracy: 1e-12)
+        XCTAssertTrue(map.applied.contains { $0.contains("PostCropVignetteAmount -40.00") && $0.contains("0.400") },
+                      "got \(map.applied)")
+        XCTAssertTrue(map.applied.contains { $0.contains("PostCropVignetteMidpoint") && $0.contains("0.700") })
+        XCTAssertFalse(map.unsupported.contains { $0.lowercased().contains("vignette") }, "got \(map.unsupported)")
+    }
+
+    func testALighteningLensVignetteImportsNegativeAndAMiddleMidpointIsNotWritten() throws {
+        let map = LightroomImport.map(sidecar(["VignetteAmount": "+25", "VignetteMidpoint": "50"]))
+        XCTAssertEqual(try XCTUnwrap(map.adjustments["vignetteIntensity"]), -0.25, accuracy: 1e-12)
+        XCTAssertNil(map.adjustments["vignetteMidpoint"], "50 is the middle, and the middle is the default")
+        XCTAssertTrue(map.applied.contains { $0.contains("VignetteAmount +25.00") && $0.contains("-0.250") })
+    }
+
+    func testBothVignettesMovedCarriesThePostCropOneAndSaysSo() throws {
+        let map = LightroomImport.map(sidecar(["PostCropVignetteAmount": "-30", "VignetteAmount": "+10",
+                                               "PostCropVignetteRoundness": "+40"]))
+        XCTAssertEqual(try XCTUnwrap(map.adjustments["vignetteIntensity"]), 0.3, accuracy: 1e-12)
+        XCTAssertTrue(map.unsupported.contains { $0.contains("Lens vignette +10.00") })
+        XCTAssertTrue(map.unsupported.contains { $0.contains("roundness") })
+    }
+
+    func testNoVignetteWritesNothing() {
+        let map = LightroomImport.map(sidecar(["PostCropVignetteAmount": "0", "VignetteAmount": "0",
+                                               "PostCropVignetteMidpoint": "50"]))
+        XCTAssertNil(map.adjustments["vignetteIntensity"])
+        XCTAssertNil(map.adjustments["vignetteMidpoint"])
+        XCTAssertFalse(map.unsupported.contains { $0.lowercased().contains("vignette") })
+    }
+
+    func testAParsedSidecarNoLongerReportsThePostCropVignetteAsLost() throws {
+        let xml = """
+        <x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+        <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+          crs:Exposure2012="0.00" crs:PostCropVignetteAmount="-35" crs:PostCropVignetteMidpoint="50"/>
+        </rdf:RDF></x:xmpmeta>
+        """
+        let sidecar = try LightroomSidecar.parse(Data(xml.utf8))
+        XCTAssertFalse(sidecar.unsupported.contains { $0.contains("Post-crop vignette") }, "got \(sidecar.unsupported)")
+        let map = LightroomImport.map(sidecar)
+        XCTAssertEqual(try XCTUnwrap(map.adjustments["vignetteIntensity"]), 0.35, accuracy: 1e-12)
+    }
+
     func testDehazeIsCarriedThroughTheFittedResponse() throws {
         let map = LightroomImport.map(sidecar(["Dehaze": "+45"]))
         let amount = try XCTUnwrap(map.adjustments["dehaze"])

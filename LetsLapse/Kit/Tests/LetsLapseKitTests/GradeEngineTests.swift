@@ -563,6 +563,91 @@ final class GradeEngineTests: XCTestCase {
         }
     }
 
+    /// The signed vignette and its midpoint on a mid-grey frame: darkening
+    /// leaves the centre alone and takes the corner down, lightening takes
+    /// the same corner up, and a wide midpoint leaves a pixel at 40 % of the
+    /// half-diagonal exactly where it was.
+    func testVignetteIsSignedAndItsMidpointMovesTheStart() throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("no Metal device available") }
+        let engine = try GradeEngine()
+        let width = 128, height = 96
+        let grey: Float = 0.5
+        let texture = try makeTexture(
+            engine, pixels: uniformPixels(SIMD3(grey, grey, grey), width: width, height: height),
+            width: width, height: height)
+        let stored = Float(Float16(grey))
+        // Display-referred, so neutral is identity and the untouched pixels
+        // read back as exactly the grey that went in.
+        let reference = GradeReference(displayReferred: true)
+
+        func render(vignette: Float, midpoint: Float) throws -> [Float16] {
+            var recipe = GradeRecipe()
+            recipe.vignette = vignette
+            recipe.vignetteMidpoint = midpoint
+            return readBack(try engine.makeRenderer(recipe, reference: reference).apply(to: texture))
+        }
+        func sample(_ output: [Float16], x: Int, y: Int) -> Float {
+            Float(output[(y * width + x) * 4])
+        }
+        let centre = (x: width / 2, y: height / 2)
+        // "Untouched" means identical to the same render with no vignette —
+        // the neutral tone pass itself rounds through half floats, so the
+        // comparison is against its output, not the input value.
+        let plain = try render(vignette: 0, midpoint: 0.5)
+        XCTAssertEqual(sample(plain, x: centre.x, y: centre.y), stored, accuracy: 1e-3)
+
+        // Darken at the default midpoint: centre unchanged, corner down.
+        let dark = try render(vignette: 0.5, midpoint: 0.5)
+        XCTAssertEqual(sample(dark, x: centre.x, y: centre.y), sample(plain, x: centre.x, y: centre.y),
+                       "the centre is untouched")
+        XCTAssertLessThan(sample(dark, x: 0, y: 0), stored - 0.1, "the corner is darker")
+
+        // Lighten: the same corner goes UP, centre still untouched.
+        let light = try render(vignette: -0.5, midpoint: 0.5)
+        XCTAssertEqual(sample(light, x: centre.x, y: centre.y), sample(plain, x: centre.x, y: centre.y))
+        XCTAssertGreaterThan(sample(light, x: 0, y: 0), stored + 0.1, "the corner is lighter")
+
+        // At the neutral midpoint the kernel is the formula it always had —
+        // `rgb × (1 − 0.85·v · smoothstep(0.3, 1, d))` — pinned here on the
+        // CPU at a spread of pixels, to within the half-float readback.
+        func legacyFalloff(x: Int, y: Int) -> Float {
+            let offset = SIMD2<Float>(Float(x) + 0.5 - Float(width) / 2, Float(y) + 0.5 - Float(height) / 2)
+            let d = simd_length(offset) / (0.5 * simd_length(SIMD2<Float>(Float(width), Float(height))))
+            let t = min(max((d - 0.3) / 0.7, 0), 1)
+            return 1 - 0.5 * 0.85 * (t * t * (3 - 2 * t))
+        }
+        for (x, y) in [(0, 0), (width - 1, height - 1), (10, 80), (100, 20), (40, 48), (64, 5)] {
+            XCTAssertEqual(sample(dark, x: x, y: y), sample(plain, x: x, y: y) * legacyFalloff(x: x, y: y),
+                           accuracy: 6e-4, "legacy shape at (\(x), \(y))")
+        }
+
+        // The neutral midpoint leaves the cache token exactly as it was, so
+        // every key minted before the control existed still reads the same.
+        var legacy = GradeRecipe()
+        legacy.vignette = 0.5
+        XCTAssertEqual(legacy.vignetteMidpoint, 0.5)
+        XCTAssertFalse(legacy.cacheToken.contains("|vm"))
+        legacy.vignetteMidpoint = 0.9
+        XCTAssertTrue(legacy.cacheToken.contains("|vm0.9000"))
+
+        // Midpoint 0.9 starts the falloff at 0.54 of the half-diagonal, so a
+        // pixel at 40 % of it is untouched — where at the default (start 0.3)
+        // it is already attenuated. The pixel is picked along the diagonal,
+        // the kernel's own measure: offset = 0.4 × (w/2, h/2).
+        let wide = try render(vignette: 0.8, midpoint: 0.9)
+        let px = width / 2 + Int(0.4 * Float(width) / 2)
+        let py = height / 2 + Int(0.4 * Float(height) / 2)
+        let offset = SIMD2<Float>(Float(px) + 0.5 - Float(width) / 2, Float(py) + 0.5 - Float(height) / 2)
+        let distanceNorm = simd_length(offset) / (0.5 * simd_length(SIMD2<Float>(Float(width), Float(height))))
+        XCTAssertGreaterThan(distanceNorm, 0.3)
+        XCTAssertLessThan(distanceNorm, 0.54)
+        XCTAssertEqual(sample(wide, x: px, y: py), sample(plain, x: px, y: py),
+                       "40 % of the half-diagonal is inside a 0.9 midpoint's start")
+        XCTAssertLessThan(sample(dark, x: px, y: py), sample(plain, x: px, y: py) - 1e-3,
+                          "the same pixel is already shaded at the default midpoint")
+        XCTAssertLessThan(sample(wide, x: 0, y: 0), stored - 0.1, "the corner still falls off")
+    }
+
     /// The dither pass: adds sub-LSB noise (so 8-bit output can't band)
     /// without moving the mean or leaving the range.
     func testDitherAddsNoiseWithoutShiftingTheMean() throws {

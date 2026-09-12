@@ -615,12 +615,19 @@ final class AppModel: ObservableObject {
     private struct SegmentNormalization {
         var renderSize: CGSize
         /// The shoot's output shape. Defaults to the clip's own, in which case
-        /// the canvas pass finds nothing to crop and becomes a pure scale.
-        var canvas: CanvasRatio
+        /// the canvas pass finds nothing to crop and becomes a pure scale;
+        /// nil when the project crop is the shape (no canvas chosen), so the
+        /// pass cuts the crop and fits no box inside it.
+        var canvas: CanvasRatio?
         var canvasOffset: Double
         /// The project's fine rotation, levelled into every segment before
         /// its crop — the same order the tail passes use.
         var rotationDegrees: Double = 0
+        /// The project's crop, cut from each segment after its level and
+        /// before the canvas box — the same order the tail pass uses. nil on
+        /// the punch path, where it is set aside (the keys were authored over
+        /// the uncropped picture), and whenever the project has none.
+        var crop: FrameCrop?
         /// nil = no punch-in; segments are only scaled (and canvas-cropped) to
         /// `renderSize`.
         var reframe: Reframe?
@@ -2192,17 +2199,28 @@ final class AppModel: ObservableObject {
         blendCanvasRatio ?? sourceCanvasRatio()
     }
 
+    /// The source's display size after the Edit screen's crop — the picture
+    /// the canvas is fitted inside (`VideoCanvasCropper`: the crop first,
+    /// then the canvas box on what it kept), so the captions below measure
+    /// the same frame the render does.
+    func projectCroppedDisplaySize() -> CGSize? {
+        guard let size = sourceDisplaySize() else { return nil }
+        guard let capture = currentCapture,
+              let crop = photoGrade(for: capture).crop, !crop.isFull else { return size }
+        return crop.outputSize(for: size)
+    }
+
     /// Whether creating the clip will crop — the chosen canvas disagrees with
-    /// the source's own shape beyond tolerance.
+    /// the (project-cropped) source's shape beyond tolerance.
     func blendCanvasNeedsCrop() -> Bool {
-        guard let size = sourceDisplaySize() else { return false }
+        guard let size = projectCroppedDisplaySize() else { return false }
         return VideoCanvasCropper.cropSize(displaySize: size, canvas: effectiveBlendCanvas()) != nil
     }
 
     /// The pixels the chosen canvas keeps (centred, source scale) — the created
     /// clip's dimensions, and the picker caption's number. nil when no crop.
     func blendCanvasCropSize() -> CGSize? {
-        guard let size = sourceDisplaySize() else { return nil }
+        guard let size = projectCroppedDisplaySize() else { return nil }
         return VideoCanvasCropper.cropSize(displaySize: size, canvas: effectiveBlendCanvas())
     }
 
@@ -4461,6 +4479,16 @@ final class AppModel: ObservableObject {
         // gets one composition pass over the finished clip. The capture's own
         // files are never touched.
         let grade = currentCapture.map { photoGrade(for: $0) } ?? .identity
+        // The project's crop — the Edit screen's frame — when it takes
+        // anything off. The OPENING moment's: a clip renders at one size, and
+        // the crop is static by decision (the timeline carries it whole, never
+        // eased), so no later moment can say otherwise. A movie source
+        // carries it on whichever geometry pass runs last, exactly as it
+        // carries its level (`VideoCanvasCropper`, `VideoGrader.bakedCopy`);
+        // a stills blend cuts it in a tail pass of its own over the finished
+        // clip, because `ImageStacker` writes every output frame into a pool
+        // at the source's size and the per-frame bake cannot change that.
+        let projectCrop: FrameCrop? = grade.crop.flatMap { $0.isFull ? nil : $0 }
         // Resolved once, here: the project's own ramp when it has one, else the
         // app default, else none. Only the legacy (Advanced-ramp) path stitches
         // with it — the warp's seams carry their own eases inside the schedules.
@@ -4477,9 +4505,26 @@ final class AppModel: ObservableObject {
         // matching canvas when a cap is set (scale-only).
         let exportEdge = source.isVideo ? exportShortEdge : nil
         // The Adjust canvas, resolved before the job starts so a selection
-        // change mid-render can't retarget it. nil = the clip keeps its shape.
+        // change mid-render can't retarget it. A canvas the user chose is
+        // re-fitted inside the project crop — the crop first, then the canvas
+        // box on what it kept (the one composition rule the two crops have,
+        // `VideoCanvasCropper`) — so a canvas that happened to match the
+        // SOURCE still runs once the crop has changed the shape.
+        //
+        // Two values, because the pass and the box are different questions.
+        // `runsCanvasPass` says whether the canvas pass runs at all (a real
+        // canvas crop, a resolution cap to scale to, or a chosen canvas over
+        // a project crop). `cropCanvas` is the box it fits — and it is nil
+        // when the user chose NO canvas and the project has a crop: the
+        // "as shot" default is the source's nearest ratio, which is nothing
+        // to crop on an uncropped clip but would cut a 4:3 box out of the
+        // middle of a 16:9 project crop. With no chosen canvas the crop IS
+        // the shape.
         let cropIsReal = blendCanvasNeedsCrop()
-        let cropCanvas = source.isVideo && (cropIsReal || exportEdge != nil)
+        let userCanvas = blendCanvasRatio
+        let runsCanvasPass = source.isVideo
+            && (cropIsReal || exportEdge != nil || (projectCrop != nil && userCanvas != nil))
+        let cropCanvas: CanvasRatio? = runsCanvasPass && !(projectCrop != nil && userCanvas == nil)
             ? effectiveBlendCanvas() : nil
         // Where that crop sits along the free axis, resolved with the canvas
         // itself. The reframe path doesn't read it — its wide framings already
@@ -4507,13 +4552,24 @@ final class AppModel: ObservableObject {
             guard case .liveSequence(let liveSource) = source,
                   liveSource.sequence.hasMixedSegmentResolutions,
                   let baseSize = reframeSourceSize else { return nil }
-            let canvas = effectiveBlendCanvas()
+            // The canvas box: the user's choice, or the source's own shape —
+            // and NO box at all over a project crop the user chose no canvas
+            // for, the same rule as `cropCanvas` above (the crop is the
+            // shape; the "as shot" default must not re-cut it).
+            let canvas: CanvasRatio? = projectCrop != nil && userCanvas == nil
+                ? nil : effectiveBlendCanvas()
             // Derived from the BASE resolution: the finished clip is the size
             // it always was, and the burst's extra pixels are spent on the crop
-            // rather than on the file.
+            // rather than on the file. The project crop is cut first on the
+            // no-punch path, so the canvas is fitted inside what it keeps; a
+            // punch-in sets it aside instead — the keys were authored over the
+            // uncropped picture (see the tail pass below).
+            let framedBase = reframeTrack == nil
+                ? (projectCrop?.outputSize(for: baseSize) ?? baseSize) : baseSize
             let keptSize: CGSize? = reframeTrack != nil
                 ? ReframeVideoCropper.renderSize(displaySize: baseSize, aspect: reframeAspect)
-                : (VideoCanvasCropper.cropSize(displaySize: baseSize, canvas: canvas) ?? baseSize)
+                : (canvas.flatMap { VideoCanvasCropper.cropSize(displaySize: framedBase, canvas: $0) }
+                    ?? framedBase)
             guard let keptSize else { return nil }
             let renderSize = exportEdge
                 .flatMap { ReframeVideoCropper.scaledDown(keptSize, shortEdge: $0) } ?? keptSize
@@ -4522,6 +4578,7 @@ final class AppModel: ObservableObject {
                 canvas: canvas,
                 canvasOffset: cropOffset,
                 rotationDegrees: grade.rotationDegrees,
+                crop: reframeTrack == nil ? projectCrop : nil,
                 reframe: reframeTrack.flatMap { track in
                     guard !reframeFrameTimesBySegment.isEmpty,
                           !reframeFrameTimes.isEmpty else { return nil }
@@ -4569,7 +4626,10 @@ final class AppModel: ObservableObject {
         }()
         // The reframe, the crop and the grade are all tail passes over the
         // finished clip; the plan reserves its tail band when any will run.
-        let hasTailPass = willBakeGrade || cropCanvas != nil || reframeTrack != nil
+        // The project crop is one of them on a stills blend (a movie source
+        // already counts it in `willBakeGrade`).
+        let hasTailPass = willBakeGrade || runsCanvasPass || reframeTrack != nil
+            || projectCrop != nil
         // The time-slicing recipe, resolved with the other job inputs. It runs
         // as the LAST tail pass (docs/time-slicing.md §2) — over the finished,
         // verified clip — so a single image (the whole-shoot stack) can't
@@ -4686,9 +4746,12 @@ final class AppModel: ObservableObject {
                         return
                     }
                     // Stills bake their grade frame by frame inside the blend,
-                    // so no separate grade band exists on this path.
+                    // so no separate grade band exists on this path — only the
+                    // crop's tail pass, over the sequence output (the single
+                    // stack cuts its still inline).
+                    let stillsCropPass = projectCrop != nil && photoDepth < filteredURLs.count
                     self.beginProgressPlan(.make(
-                        clipFrames: [filteredURLs.count], hasStitch: false, hasGrade: false,
+                        clipFrames: [filteredURLs.count], hasStitch: false, hasGrade: stillsCropPass,
                         hasSlice: sliceSettings != nil && photoDepth < filteredURLs.count))
                     self.processingPhase = .blending(clip: 1, of: 1)
                     // The project's text overlays, resolved up front — mask
@@ -4735,6 +4798,19 @@ final class AppModel: ObservableObject {
                 // level as they crop. Whichever did it, the standalone grade
                 // pass must not turn the picture a second time.
                 var rotationBaked = output.geometryBaked && grade.hasRotation
+                // Whether the project crop is settled: cut by a geometry pass,
+                // or set aside because one ran that it cannot follow. The
+                // per-segment normalisation cut it ahead of its canvas on the
+                // no-punch path and set it aside on the punch path (see
+                // `SegmentNormalization.crop`); either way the standalone
+                // bake must not cut it again — into a canvas box or a punch
+                // it was never measured over.
+                var cropSettled = output.geometryBaked && projectCrop != nil
+                if output.geometryBaked, projectCrop != nil, reframeTrack != nil {
+                    output.summary += Self.cropSetAsideSummary
+                } else if output.geometryBaked, let projectCrop {
+                    output.summary += Self.cropSummary(projectCrop)
+                }
                 // The punch-in reframe bakes the animated crop into the
                 // finished clip — per-frame, at the source moments the
                 // compiled schedule says each output frame shows. It renders
@@ -4786,6 +4862,17 @@ final class AppModel: ObservableObject {
                         rotationBaked = true
                         output.summary += Self.levelSummary(grade)
                     }
+                    // The punch's keys were authored over the UNCROPPED
+                    // levelled picture (the Adjust preview levels but does
+                    // not crop — `AdjustPreviewLevel`), so the crop cannot
+                    // go before the punch without remapping the keys, nor
+                    // after it without cutting a rect measured over a frame
+                    // that no longer exists. It is set aside, said in the
+                    // summary, and owed in docs/TODO.md.
+                    if projectCrop != nil {
+                        cropSettled = true
+                        output.summary += Self.cropSetAsideSummary
+                    }
                     if !grade.isColorIdentity {
                         gradeBaked = true
                         output.summary += " · \(grade.preset.displayName) grade baked in"
@@ -4800,26 +4887,51 @@ final class AppModel: ObservableObject {
                 // output, whichever engine produced it. The grade rides this
                 // pass (it is the last geometry pass when it runs), so the
                 // kept pixels are cropped, graded and encoded exactly once.
-                if let cropCanvas, output.kind == .video, reframeTrack == nil,
+                //
+                // The project's crop rides it too, cut FIRST — the canvas box
+                // is then fitted inside it (`VideoCanvasCropper`). And on a
+                // stills blend the pass runs for the crop ALONE: the stills'
+                // colour, level, masks and text are already baked into every
+                // frame, so that pass carries an identity grade, levels
+                // nothing, and only cuts — in the clip's own encode, so a
+                // 10-bit HEVC blend stays 10-bit.
+                let stillsCrop = !source.isVideo && projectCrop != nil
+                if runsCanvasPass || stillsCrop, output.kind == .video, reframeTrack == nil,
                    !output.geometryBaked {
-                    self.statusMessage = grade.isColorIdentity
-                        ? "Cropping to \(cropCanvas.rawValue)..."
-                        : "Cropping to \(cropCanvas.rawValue) and baking the \(grade.preset.displayName) grade..."
+                    let passGrade = source.isVideo ? grade : .identity
+                    let passLevel = source.isVideo ? grade.rotationDegrees : 0
+                    self.statusMessage = Self.cropStatusMessage(
+                        canvas: cropCanvas, crop: projectCrop,
+                        grade: passGrade.isColorIdentity ? nil : grade.preset.displayName)
                     self.processingPhase = .grading
                     self.tailPhaseStartedAt = Date()
                     self.processingETADate = nil
                     let cropBand = tailBand
                     let uncropped = output.url
-                    let cropped = try await VideoCanvasCropper.croppedCopy(
-                        of: uncropped, canvas: cropCanvas, offset: cropOffset,
-                        shortEdge: exportEdge, grade: grade, gradeMap: gradeMap,
-                        rotationDegrees: grade.rotationDegrees,
-                        outputFPS: fps
-                    ) { fraction in
+                    let report: @Sendable (Double) -> Void = { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let cropBand else { return }
                             self.reportTailProgress(band: cropBand, fraction: fraction)
                         }
+                    }
+                    let cropped: (url: URL, renderSize: CGSize?)
+                    if runsCanvasPass {
+                        // `cropCanvas` may be nil here — a resolution cap
+                        // over a project crop with no chosen canvas: the
+                        // pass cuts the crop and scales, fitting no box.
+                        cropped = try await VideoCanvasCropper.croppedCopy(
+                            of: uncropped, canvas: cropCanvas, offset: cropOffset,
+                            shortEdge: exportEdge, grade: passGrade, gradeMap: gradeMap,
+                            rotationDegrees: passLevel, crop: projectCrop,
+                            outputFPS: fps, progress: report)
+                    } else if let projectCrop {
+                        cropped = try await VideoCanvasCropper.croppedCopy(
+                            of: uncropped, crop: projectCrop, grade: passGrade,
+                            gradeMap: gradeMap, rotationDegrees: passLevel, outputFPS: fps,
+                            profile: self.blendProfileOverride ?? self.defaultBlendProfile,
+                            progress: report)
+                    } else {
+                        cropped = (uncropped, nil)
                     }
                     if let cropBand {
                         self.reportTailProgress(band: cropBand, fraction: 1)
@@ -4833,14 +4945,22 @@ final class AppModel: ObservableObject {
                         output.url = cropped.url
                         output.width = Int(renderSize.width)
                         output.height = Int(renderSize.height)
-                        if cropIsReal {
-                            output.summary += " · cropped to \(cropCanvas.rawValue)"
+                        if let projectCrop {
+                            cropSettled = true
+                            output.summary += Self.cropSummary(projectCrop)
                         }
-                        if grade.hasRotation {
+                        // "Fitted" after a project crop: the canvas box was
+                        // taken from inside the crop, not from the source.
+                        if let cropCanvas, cropIsReal || projectCrop != nil {
+                            output.summary += projectCrop != nil
+                                ? " · fitted to \(cropCanvas.rawValue)"
+                                : " · cropped to \(cropCanvas.rawValue)"
+                        }
+                        if source.isVideo, grade.hasRotation {
                             rotationBaked = true
                             output.summary += Self.levelSummary(grade)
                         }
-                        if !grade.isColorIdentity {
+                        if source.isVideo, !grade.isColorIdentity {
                             gradeBaked = true
                             output.summary += " · \(grade.preset.displayName) grade baked in"
                         }
@@ -4854,15 +4974,20 @@ final class AppModel: ObservableObject {
                 // carry it (a nil crop renderSize means the crop pass no-oped
                 // and baked nothing). Still one short pass over a few seconds
                 // of output, never a re-encode of the original source.
-                // The level rides whichever pass ran; what is left for this
-                // one is the colour, and — when nothing geometric ran at all —
-                // the level as well.
-                let standaloneGrade = rotationBaked ? grade.withoutRotation : grade
+                // The level and the crop ride whichever pass ran; what is
+                // left for this one is the colour, and — when nothing
+                // geometric ran at all — the level and the crop as well
+                // (`VideoGrader.composition` cuts the crop). A settled crop is
+                // stripped with the level: every pass that settles it levels
+                // first, so there is never a level left over on its own.
+                let standaloneGrade = cropSettled
+                    ? grade.withoutGeometry
+                    : (rotationBaked ? grade.withoutRotation : grade)
                 let standaloneNeeded = !standaloneGrade.isIdentity
                     && (!gradeBaked || (standaloneGrade.hasRotation && !rotationBaked))
                 if source.isVideo, output.kind == .video, standaloneNeeded {
                     self.statusMessage = standaloneGrade.isColorIdentity
-                        ? "Levelling the clip..."
+                        ? (standaloneGrade.hasCrop ? "Cropping the clip..." : "Levelling the clip...")
                         : "Baking the \(grade.preset.displayName) grade..."
                     self.processingPhase = .grading
                     self.tailPhaseStartedAt = Date()
@@ -4882,6 +5007,21 @@ final class AppModel: ObservableObject {
                     }
                     if standaloneGrade.hasRotation {
                         output.summary += Self.levelSummary(grade)
+                    }
+                    // The bake changed the size when it cut the crop: read the
+                    // file for it, since the recorded width/height follow their
+                    // own convention per path and the crop's pixels were
+                    // measured over the oriented frame.
+                    if let projectCrop, standaloneGrade.hasCrop, output.url != ungraded,
+                       let size = await MediaGeometry.videoDisplaySize(asset: AVURLAsset(url: output.url)) {
+                        if let oldWidth = output.width, let oldHeight = output.height {
+                            output.summary = output.summary.replacingOccurrences(
+                                of: "\(oldWidth)×\(oldHeight)",
+                                with: "\(Int(size.width))×\(Int(size.height))")
+                        }
+                        output.width = Int(size.width)
+                        output.height = Int(size.height)
+                        output.summary += Self.cropSummary(projectCrop)
                     }
                     if !standaloneGrade.isColorIdentity {
                         output.summary += " · \(grade.preset.displayName) grade baked in"
@@ -5288,12 +5428,19 @@ final class AppModel: ObservableObject {
             posterParameters.createdAt = Date()
             posterParameters.timeSlice = item.recipe
             let geometryNote = item.result.grid.map { " · \($0.summary)" } ?? ""
+            // The poster renders its master frames at the source size and
+            // returns before the crop's tail pass, so the Edit screen's crop
+            // is not in it — said in the summary rather than dropped silently
+            // (docs/TODO.md: cut the crop on each master frame after the
+            // overlay bake).
+            let cropNote = grade.hasCrop ? Self.cropSetAsidePosterSummary : ""
             let output = ProcessingOutput(
                 kind: .image,
                 url: item.url,
                 image: nil,
                 summary: "\(item.recipe.posterDisplayName) · \(item.result.width)×\(item.result.height)"
-                    + " · \(item.framesRendered) of \(masterFrames) frames rendered" + geometryNote,
+                    + " · \(item.framesRendered) of \(masterFrames) frames rendered" + geometryNote
+                    + cropNote,
                 inputFrames: urls.count,
                 outputFrames: nil,
                 width: item.result.width,
@@ -5593,6 +5740,7 @@ final class AppModel: ObservableObject {
             canvas: normalization.canvas,
             offset: normalization.canvasOffset,
             rotationDegrees: normalization.rotationDegrees,
+            crop: normalization.crop,
             outputFPS: outputFPS,
             renderSizeOverride: normalization.renderSize)
         return cropped.url
@@ -6482,6 +6630,39 @@ final class AppModel: ObservableObject {
         )
     }
 
+    /// The summary fragment for a baked crop: " · cropped to 16:9" for a
+    /// locked aspect, " · cropped" for a free one. The pixels are already in
+    /// the summary's size.
+    nonisolated static func cropSummary(_ crop: FrameCrop) -> String {
+        crop.aspect.ratio == nil ? " · cropped" : " · cropped to \(crop.aspect.label)"
+    }
+
+    /// The summary fragment for a crop a render could not honour — a
+    /// punch-in reframe ran, whose keys were authored over the uncropped
+    /// picture. Said out loud rather than dropped silently.
+    nonisolated static let cropSetAsideSummary = " · crop not applied (punch-in reframe)"
+    /// The poster fast path's twin: the master frames come out at the
+    /// source size, before any tail pass.
+    nonisolated static let cropSetAsidePosterSummary = " · crop not applied (poster fast path)"
+
+    /// The status line for the canvas / crop tail pass, whichever of the
+    /// three it is doing.
+    nonisolated static func cropStatusMessage(
+        canvas: CanvasRatio?, crop: FrameCrop?, grade: String?
+    ) -> String {
+        var line: String
+        switch (canvas, crop) {
+        case (.some(let canvas), .some):
+            line = "Cropping and fitting to \(canvas.rawValue)"
+        case (.some(let canvas), .none):
+            line = "Cropping to \(canvas.rawValue)"
+        case (.none, _):
+            line = "Cropping the clip"
+        }
+        if let grade { line += " and baking the \(grade) grade" }
+        return line + "..."
+    }
+
     /// The summary fragment for a baked level, e.g. " · levelled +2.5°", or
     /// " · levelled +2.5° → −1.0°" when the level travels across the clip.
     nonisolated static func levelSummary(_ grade: PhotoGrade) -> String {
@@ -6548,13 +6729,27 @@ final class AppModel: ObservableObject {
         // whole shoot folds into one moment, so every reveal is complete.
         // A @Sendable closure rather than a nested func: it runs inside the
         // detached stack task, off this model's actor.
+        //
+        // The crop is cut LAST, from the finished still: after the level and
+        // after the overlays and masks, which are stored in the full levelled
+        // frame and so keep their coordinates. A still has no pool size to
+        // respect, which is why this path needs no tail pass. The opening
+        // moment's crop, like every other export path: the editor carries
+        // one crop onto every moment (`GradeTimeline.carryCrop`), so the
+        // opening one IS the crop, and reading it here keeps the stack and
+        // the sequence blend of one project cutting the same frame.
+        let crop = grade.crop.flatMap { $0.isFull ? nil : $0 }
         let baked: @Sendable (CGImage) -> CGImage = { image in
-            guard let overlayBake else { return image }
-            return SceneAwareCompositor.bakeStill(
-                image, overlays: overlayBake.overlays(at: 1),
-                maskGrades: overlayBake.maskGrades,
-                masks: overlayBake.masks, settings: overlayBake.settings,
-                rotationDegrees: overlayBake.rotation(at: 1)) ?? image
+            var out = image
+            if let overlayBake {
+                out = SceneAwareCompositor.bakeStill(
+                    out, overlays: overlayBake.overlays(at: 1),
+                    maskGrades: overlayBake.maskGrades,
+                    masks: overlayBake.masks, settings: overlayBake.settings,
+                    rotationDegrees: overlayBake.rotation(at: 1)) ?? out
+            }
+            if let crop { out = FrameCrop.apply(crop, to: out) }
+            return out
         }
         // A single frame has nothing to accumulate — the stacker needs at least
         // two — so load it straight through (blend=1 / one-frame-burst edge).
@@ -6573,7 +6768,7 @@ final class AppModel: ObservableObject {
                 kind: .image,
                 url: output,
                 image: image,
-                summary: "1 photo · \(image.width)×\(image.height)",
+                summary: "1 photo · \(image.width)×\(image.height)" + (crop.map(Self.cropSummary) ?? ""),
                 inputFrames: 1,
                 outputFrames: 1,
                 width: image.width,
@@ -6612,6 +6807,9 @@ final class AppModel: ObservableObject {
         }
         if grade.hasRotation {
             summary += Self.levelSummary(grade)
+        }
+        if let crop {
+            summary += Self.cropSummary(crop)
         }
         return ProcessingOutput(
             kind: .image,
@@ -9104,7 +9302,9 @@ final class AppModel: ObservableObject {
         // takes the shoot back to one look — the keyframes go with the manual
         // adjustments they were made of. (Inside the editor, where there is a
         // playhead to aim at, a chip writes at the playhead instead.) The
-        // level is geometry, not a look, and stays — at every moment it had.
+        // level is geometry, not a look, and stays — at every moment it had;
+        // so does the crop, which `rotationOnly` keeps beside it for the same
+        // reason (a preset applied to a cropped photograph must not uncrop it).
         let current = photoGrade(for: captures[index]).rotationOnly
         write(
             preset: preset, adjustments: current.adjustments, state: state,
@@ -9115,11 +9315,14 @@ final class AppModel: ObservableObject {
     /// plus the snapshot that pins what "this preset" meant at this moment.
     func applyCustomPreset(_ preset: CustomPreset, for capture: CaptureProject) {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
-        // The preset's look over the project's own level and its own white,
-        // which the preset never carried (see `PresetSnapshot.matches`).
+        // The preset's look over the project's own level, its own crop and its
+        // own white, none of which the preset ever carried (see
+        // `PresetSnapshot.matches`) — so all three are re-applied from the
+        // project, the crop included, or applying a look would uncrop it.
         let current = photoGrade(for: captures[index]).rotationOnly
-        var adjustments = preset.adjustments.withoutRotation.withoutWhite
+        var adjustments = preset.adjustments.withoutGeometry.withoutWhite
         adjustments.rotationDegrees = current.adjustments.rotationDegrees
+        adjustments.crop = current.adjustments.crop
         adjustments.whiteMired = current.adjustments.whiteMired
         adjustments.whiteTint = current.adjustments.whiteTint
         write(
@@ -9312,9 +9515,13 @@ final class AppModel: ObservableObject {
         // promise about the bytes that leave the app, not a fact derived from
         // whatever numbers happen to be sitting on the project.
         let grade = photoGrade(for: capture)
-        // A levelled project is rendered even when its look is Original —
-        // the rotation is as much "how I'm looking at it" as a preset is.
-        guard !presetState(for: capture).isOriginal || grade.hasRotation else { return (url, false) }
+        // A levelled or cropped project is rendered even when its look is
+        // Original — the rotation and the crop are as much "how I'm looking
+        // at it" as a preset is, and an export that handed over the source
+        // bytes would silently uncrop it.
+        guard !presetState(for: capture).isOriginal || grade.hasRotation || grade.hasCrop else {
+            return (url, false)
+        }
         guard !grade.isIdentity else { return (url, false) }
         let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
         let graded: URL

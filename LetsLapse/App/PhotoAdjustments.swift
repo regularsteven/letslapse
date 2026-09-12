@@ -77,8 +77,20 @@ struct PhotoAdjustments: Codable, Equatable {
     /// Chroma noise reduction: a spatial Gaussian on Cb/Cr with luma left
     /// alone — purple shadow haze and colour speckle go, detail stays. 0…1.
     var colorNoise: Float
-    /// Darkens the corners. 0…1.
+    /// The vignette, −1…+1: **positive darkens** the corners — the convention
+    /// every stored project and preset already means, so nothing migrates —
+    /// and negative lightens them (new 2026-09-12, with the signed engine).
+    /// The panel shows it the other way up, Lightroom-style (up = lighten =
+    /// "+"), by negating at the control the way the Temp slider negates
+    /// mired; the stored sign is this one.
     var vignetteIntensity: Float
+    /// Where the vignette's falloff begins, 0…1 as a fraction of the way from
+    /// the centre to the corner. Neutral is the MIDDLE of its travel, 0.5 —
+    /// the shape the engine always had — so, like `noiseDetail`, anything
+    /// resetting it asks `PhotoAdjustmentField.neutralValue` rather than
+    /// writing a zero, and a preset layers it as an offset from the middle.
+    /// Inert while `vignetteIntensity` is 0.
+    var vignetteMidpoint: Float
     /// Haze removal (positive) or added haze (negative). −1…+1. Rendered
     /// after the tone engine by the Kit's `EnginePostPasses` — a dark-channel
     /// prior over the finished picture — so it reaches the preview, a JPEG
@@ -113,11 +125,34 @@ struct PhotoAdjustments: Codable, Equatable {
     /// compare time) and out of the Original/Edited verdict, and the colour
     /// engine never sees it (`recipe(over:)` ignores it). −10…+10.
     var rotationDegrees: Float
+    /// The Edit screen's crop — a rectangle of the LEVELLED frame's unit
+    /// square plus the aspect it was drawn under (`FrameCrop`) — or nil for
+    /// the whole frame. The second geometry field, and treated like the
+    /// first: a correction of one photograph rather than a look, so it is
+    /// kept out of presets and out of the Original/Edited verdict
+    /// (`withoutGeometry` at save and compare time), and the colour engine
+    /// never sees it. Unlike the rotation it is NOT keyframed: the timeline
+    /// carries it whole from the earlier keyframe, like `hsl` and `lut`,
+    /// never blending it — a frame that slides between moments is an
+    /// animation, not a crop (static by decision, 2026-09-12; the board
+    /// treats it as static). In the editor the picture is never resized by
+    /// it — the crop is drawn over the full picture — so every coordinate
+    /// space (zoom, 1:1, text layers, masks) stays where it was; the render
+    /// paths cut it on the way out. Encoded only when set, so an uncropped
+    /// project keeps its payload byte for byte — and a whole frame under
+    /// `.original` IS "not set": the two are one state, normalised here the
+    /// way a neutral `hsl` is, so `==`, `isNeutral` and the store agree. A
+    /// whole frame under any OTHER aspect is a choice (Custom before a drag,
+    /// 16:9 on a 16:9 movie) and is kept, so the chip round-trips; it still
+    /// cuts nothing (`hasCrop`), so it is neutral to the render.
+    var crop: FrameCrop? {
+        didSet { if let frame = crop, frame.isFull, frame.aspect == .original { crop = nil } }
+    }
 
     /// Every slider at its no-op value — the preset alone, ungarnished. Every
-    /// field is 0 except `noiseDetail`, whose no-op is the middle of its
-    /// travel — so anything resetting one control asks
-    /// `PhotoAdjustmentField.neutralValue` rather than writing a zero.
+    /// field is 0 except `noiseDetail` and `vignetteMidpoint`, whose no-ops
+    /// are the middle of their travel — so anything resetting one control
+    /// asks `PhotoAdjustmentField.neutralValue` rather than writing a zero.
     static var neutral: PhotoAdjustments {
         .init(exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0,
               blacks: 0, whiteMired: 0, whiteTint: 0,
@@ -125,29 +160,46 @@ struct PhotoAdjustments: Codable, Equatable {
               clarity: 0, texture: 0, sharpen: 0, sharpenMasking: 0,
               noiseReduction: 0, noiseDetail: neutralNoiseDetail,
               colorNoiseReduction: 0, colorNoise: 0, vignetteIntensity: 0,
-              dehaze: 0, hsl: nil, lut: nil, rotationDegrees: 0)
+              vignetteMidpoint: neutralVignetteMidpoint,
+              dehaze: 0, hsl: nil, lut: nil, rotationDegrees: 0, crop: nil)
     }
 
     /// True when the rotation would change a pixel.
     var hasRotation: Bool { FrameRotation.isActive(Double(rotationDegrees)) }
 
-    /// These values with the rotation taken out — what a preset stores, what
-    /// the Original/Edited verdict looks at, and what a path that levels
-    /// separately hands the colour engine.
+    /// True when the crop would take a pixel off — a crop that keeps the
+    /// whole frame is the same picture, whatever aspect chip drew it.
+    var hasCrop: Bool { crop.map { !$0.isFull } ?? false }
+
+    /// These values with the rotation taken out — rotation ONLY; the crop
+    /// stays. For a path that levels frames itself and hands the rest on,
+    /// which still has to know where the crop falls once it has levelled.
+    /// `withoutGeometry` is the one presets and the look verdict use.
     var withoutRotation: PhotoAdjustments {
         var copy = self
         copy.rotationDegrees = 0
         return copy
     }
 
-    /// True when no COLOUR control has moved, whatever the rotation says. An
-    /// owned white counts: it moves pixels, so a render cannot be skipped.
-    var isColorNeutral: Bool { withoutRotation == .neutral }
+    /// These values with BOTH geometry corrections taken out — no rotation,
+    /// no crop — what a preset stores, what the Original/Edited verdict looks
+    /// at, and what the blend loader hands the colour engine (it levels and
+    /// crops per OUTPUT frame, afterwards).
+    var withoutGeometry: PhotoAdjustments {
+        var copy = self
+        copy.rotationDegrees = 0
+        copy.crop = nil
+        return copy
+    }
 
-    /// True when no LOOK has been applied — rotation and the owned white set
-    /// aside, both being corrections of the capture rather than treatments of
-    /// it. The Original/Edited verdict asks this.
-    var isLookNeutral: Bool { withoutRotation.withoutWhite == .neutral }
+    /// True when no COLOUR control has moved, whatever the geometry says. An
+    /// owned white counts: it moves pixels, so a render cannot be skipped.
+    var isColorNeutral: Bool { withoutGeometry == .neutral }
+
+    /// True when no LOOK has been applied — the geometry and the owned white
+    /// set aside, all being corrections of the capture rather than
+    /// treatments of it. The Original/Edited verdict asks this.
+    var isLookNeutral: Bool { withoutGeometry.withoutWhite == .neutral }
 
     /// True when this moment owns its white rather than taking the camera's.
     var ownsWhite: Bool { whiteMired > 0 }
@@ -174,9 +226,23 @@ struct PhotoAdjustments: Codable, Equatable {
     /// engine used before the control existed.
     static let neutralNoiseDetail: Float = 0.5
 
+    /// The middle of the vignette midpoint's travel — the falloff start the
+    /// engine used before the control existed, so a project that never
+    /// touched it renders bit-identical.
+    static let neutralVignetteMidpoint: Float = 0.5
+
     /// True when nothing here would change a pixel, so the grader can skip the
     /// whole chain (and the export can save the original bytes untouched).
-    var isNeutral: Bool { self == .neutral }
+    /// True when nothing here moves a pixel. A crop that keeps the whole
+    /// frame (an aspect chip chosen, nothing cut) is a choice, not a change,
+    /// so it does not count — the cache token and the fast paths would
+    /// otherwise treat the same pixels as two renders.
+    var isNeutral: Bool {
+        guard !hasCrop else { return false }
+        var copy = self
+        copy.crop = nil
+        return copy == .neutral
+    }
 
     // MARK: - Slider ranges
     //
@@ -204,7 +270,10 @@ struct PhotoAdjustments: Codable, Equatable {
     static let noiseDetailRange: ClosedRange<Float> = 0...1
     static let colorNoiseReductionRange: ClosedRange<Float> = 0...1
     static let colorNoiseRange: ClosedRange<Float> = 0...1
-    static let vignetteRange: ClosedRange<Float> = 0...1
+    /// Signed since 2026-09-12: positive darkens the corners, which is what
+    /// every stored project already means; negative lightens them.
+    static let vignetteRange: ClosedRange<Float> = -1...1
+    static let vignetteMidpointRange: ClosedRange<Float> = 0...1
     static let dehazeRange: ClosedRange<Float> = -1...1
     static let rotationRange: ClosedRange<Float> =
         Float(FrameRotation.range.lowerBound)...Float(FrameRotation.range.upperBound)
@@ -241,7 +310,13 @@ struct PhotoAdjustments: Codable, Equatable {
             max(base.noiseDetail + (noiseDetail - Self.neutralNoiseDetail), 0), 1)
         recipe.colorNoiseReduction = min(max(base.colorNoiseReduction + colorNoiseReduction, 0), 1)
         recipe.colorNoise = min(max(base.colorNoise + colorNoise, 0), 1)
-        recipe.vignette = min(max(base.vignette + vignetteIntensity, 0), 1)
+        // Signed both sides since the engine learned to lighten: a preset's
+        // darkening and a slider's lightening can cancel, which is the point.
+        recipe.vignette = min(max(base.vignette + vignetteIntensity, -1), 1)
+        // Centred at 0.5 like `noiseDetail`: the offset from the middle is what
+        // layers onto the preset's own falloff start.
+        recipe.vignetteMidpoint = min(
+            max(base.vignetteMidpoint + (vignetteMidpoint - Self.neutralVignetteMidpoint), 0), 1)
         recipe.dehaze = min(max(base.dehaze + dehaze, -1), 1)
         // A panel replaces a preset's rather than adding to it: twenty-four
         // sliders summed would land past their travel with no way to say so.
@@ -264,8 +339,13 @@ struct PhotoAdjustments: Codable, Equatable {
             + (hasRotation ? String(format: ",r%.2f", rotationDegrees) : "")
             + (ownsWhite ? String(format: ",w%.2f,%.1f", whiteMired, whiteTint) : "")
             + (dehaze != 0 ? String(format: ",dh%.3f", dehaze) : "")
+            // Only when moved, so every token a project printed before the
+            // midpoint existed is the token it prints now.
+            + (vignetteMidpoint != Self.neutralVignetteMidpoint
+                ? String(format: ",vm%.3f", vignetteMidpoint) : "")
             + (hsl.map { $0.isNeutral ? "" : ",hsl" + $0.cacheToken } ?? "")
             + (lut.map { ",lut" + $0.cacheToken } ?? "")
+            + (crop.map { $0.isFull ? "" : "," + $0.cacheToken } ?? "")
     }
 
     // MARK: - Codable
@@ -283,8 +363,10 @@ struct PhotoAdjustments: Codable, Equatable {
          noiseReduction: Float = 0,
          noiseDetail: Float = PhotoAdjustments.neutralNoiseDetail,
          colorNoiseReduction: Float = 0, colorNoise: Float = 0,
-         vignetteIntensity: Float, dehaze: Float = 0, hsl: HSLAdjustments? = nil,
-         lut: LUTLayer? = nil, rotationDegrees: Float = 0) {
+         vignetteIntensity: Float,
+         vignetteMidpoint: Float = PhotoAdjustments.neutralVignetteMidpoint,
+         dehaze: Float = 0, hsl: HSLAdjustments? = nil,
+         lut: LUTLayer? = nil, rotationDegrees: Float = 0, crop: FrameCrop? = nil) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -306,10 +388,12 @@ struct PhotoAdjustments: Codable, Equatable {
         self.colorNoiseReduction = colorNoiseReduction
         self.colorNoise = colorNoise
         self.vignetteIntensity = vignetteIntensity
+        self.vignetteMidpoint = vignetteMidpoint
         self.dehaze = dehaze
         self.hsl = hsl.flatMap { $0.isNeutral ? nil : $0 }
         self.lut = lut
         self.rotationDegrees = rotationDegrees
+        self.crop = crop.flatMap { $0.isFull && $0.aspect == .original ? nil : $0 }
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -320,7 +404,9 @@ struct PhotoAdjustments: Codable, Equatable {
         case sharpenMasking, noiseDetail
         case whiteMired, whiteTint
         case dehaze, hsl, lut
+        case vignetteMidpoint
         case rotationDegrees = "rotation"
+        case crop
         case whiteBalance  // v1 only; never written by v2
     }
 
@@ -372,10 +458,14 @@ struct PhotoAdjustments: Codable, Equatable {
                 colorNoiseReduction: field(.colorNoiseReduction),
                 colorNoise: field(.colorNoise),
                 vignetteIntensity: field(.vignetteIntensity),
+                // Same story as the gate: a payload from before the midpoint
+                // existed carries the falloff the engine had, mid-travel.
+                vignetteMidpoint: field(.vignetteMidpoint, default: Self.neutralVignetteMidpoint),
                 dehaze: field(.dehaze),
                 hsl: try? container.decodeIfPresent(HSLAdjustments.self, forKey: .hsl),
                 lut: try? container.decodeIfPresent(LUTLayer.self, forKey: .lut),
-                rotationDegrees: field(.rotationDegrees))
+                rotationDegrees: field(.rotationDegrees),
+                crop: try? container.decodeIfPresent(FrameCrop.self, forKey: .crop))
             return
         }
         let legacyWB = (try? container.decodeIfPresent(LegacyWhiteBalance.self, forKey: .whiteBalance)) ?? .asShot
@@ -429,6 +519,10 @@ struct PhotoAdjustments: Codable, Equatable {
         if dehaze != 0 {
             try container.encode(dehaze, forKey: .dehaze)
         }
+        // Only when moved off the middle, for the same reason.
+        if vignetteMidpoint != Self.neutralVignetteMidpoint {
+            try container.encode(vignetteMidpoint, forKey: .vignetteMidpoint)
+        }
         if let hsl, !hsl.isNeutral {
             try container.encode(hsl, forKey: .hsl)
         }
@@ -439,6 +533,13 @@ struct PhotoAdjustments: Codable, Equatable {
         // payload it always did.
         if hasRotation {
             try container.encode(rotationDegrees, forKey: .rotationDegrees)
+        }
+        // And only when set — the whole frame under `.original` never is
+        // (normalised to nil above) — so an uncropped project keeps its
+        // payload byte for byte. A whole frame under a chosen aspect IS
+        // written: the chip is a choice the editor must find again.
+        if let crop {
+            try container.encode(crop, forKey: .crop)
         }
         // Same rule for the white: a project that never owned one keeps its
         // payload byte for byte.
@@ -470,6 +571,7 @@ extension PhotoAdjustments {
         grade.saturation = saturation
         grade.clarity = clarity
         grade.vignette = vignetteIntensity
+        grade.vignetteMidpoint = vignetteMidpoint
         grade.dehaze = dehaze
         grade.hsl = hsl
         grade.lut = lut
@@ -508,10 +610,10 @@ struct PhotoGrade: Equatable, Sendable {
     /// with every slider at zero.
     var hasDeclaredWhiteBalance: Bool { !whiteBalance.source.isAsShot }
 
-    /// True when nothing here would move a pixel — no filter in the chain and
-    /// no rotation at any moment — so every render can be skipped and every
-    /// export can hand over the original bytes.
-    var isIdentity: Bool { isColorIdentity && !hasRotation }
+    /// True when nothing here would move a pixel — no filter in the chain, no
+    /// rotation and no crop at any moment — so every render can be skipped
+    /// and every export can hand over the original bytes.
+    var isIdentity: Bool { isColorIdentity && !hasRotation && !hasCrop }
 
     /// True when the colour chain alone is a no-op, whatever the geometry.
     var isColorIdentity: Bool {
@@ -557,23 +659,61 @@ struct PhotoGrade: Equatable, Sendable {
     /// True when the rotation changes across the clip.
     var hasKeyframedRotation: Bool { timeline.keyframedFields.contains(.rotation) }
 
-    /// This grade with its rotation taken out everywhere — for the paths that
-    /// level frames themselves, once per OUTPUT frame, and must not have the
-    /// colour renderer level them a second time on the way in.
+    // MARK: Crop
+    //
+    // The crop rides in `PhotoAdjustments` beside the rotation, but unlike
+    // the rotation it is ONE value for the whole shoot: the editors stamp a
+    // changed crop onto the baseline and every keyframe
+    // (`GradeTimeline.carryCrop`), so `crop`, `crop(at:)` and `hasCrop`
+    // are one answer for a grade the editor wrote.
+
+    /// The crop, or nil for the whole frame — read from the opening moment,
+    /// which by the invariant above is every moment. What every export and
+    /// single-image surface cuts.
+    var crop: FrameCrop? { adjustments.crop }
+
+    /// The crop at one moment of the source — the same value everywhere
+    /// for a grade the editor wrote; per-moment only for a timeline
+    /// assembled by hand.
+    func crop(at position: Double) -> FrameCrop? {
+        adjustments(at: position).crop
+    }
+
+    /// True when the crop would take a pixel off at ANY moment.
+    var hasCrop: Bool {
+        adjustments.hasCrop || timeline.keyframes.contains { $0.adjustments.hasCrop }
+    }
+
+    /// This grade with its rotation taken out everywhere — rotation ONLY, the
+    /// crop stays — for the paths that level frames themselves, once per
+    /// OUTPUT frame, and must not have the colour renderer level them a
+    /// second time on the way in, but still need to know where the crop
+    /// falls once they have.
     var withoutRotation: PhotoGrade {
         PhotoGrade(
             preset: preset, adjustments: adjustments.withoutRotation,
             timeline: timeline.withoutRotation, whiteBalance: whiteBalance)
     }
 
-    /// Only the corrections of this grade — the level and the owned white —
-    /// with Original colour, kept at every moment. What an Original project
-    /// renders through: neither is a filter, and a shoot whose camera would
-    /// not hold its white is still Original once somebody has told it which
-    /// white it was.
+    /// This grade with BOTH geometry corrections taken out everywhere — what
+    /// the blend loader hands the colour engine per INPUT frame: the stacker
+    /// levels and crops each OUTPUT frame afterwards, so neither may happen
+    /// on the way in.
+    var withoutGeometry: PhotoGrade {
+        PhotoGrade(
+            preset: preset, adjustments: adjustments.withoutGeometry,
+            timeline: timeline.withoutGeometry, whiteBalance: whiteBalance)
+    }
+
+    /// Only the corrections of this grade — the level, the crop and the
+    /// owned white — with Original colour, kept at every moment. What an
+    /// Original project renders through: none of them is a filter, and a
+    /// shoot whose camera would not hold its white is still Original once
+    /// somebody has told it which white it was, just as a cropped one is.
     var rotationOnly: PhotoGrade {
         var neutral = PhotoAdjustments.neutral
         neutral.rotationDegrees = adjustments.rotationDegrees
+        neutral.crop = adjustments.crop
         neutral.whiteMired = adjustments.whiteMired
         neutral.whiteTint = adjustments.whiteTint
         return PhotoGrade(preset: .original, adjustments: neutral, timeline: timeline.rotationOnly)

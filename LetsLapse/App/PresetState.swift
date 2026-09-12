@@ -80,14 +80,14 @@ struct PresetSnapshot: Codable, Equatable, Sendable {
     /// Exact match, field for field: anything else is a divergence, and the
     /// project is Edited from that instant.
     ///
-    /// Blind to the level and to the owned white on both sides: both are
-    /// corrections of the capture the project carries whatever look is on
-    /// it, so neither belongs in a snapshot nor makes a project diverge from
-    /// one.
+    /// Blind to the geometry — the level and the crop — and to the owned
+    /// white on both sides: all are corrections of the capture the project
+    /// carries whatever look is on it, so none belongs in a snapshot nor
+    /// makes a project diverge from one.
     func matches(preset: PhotoPreset, adjustments: PhotoAdjustments) -> Bool {
         basePreset == preset
-            && self.adjustments.withoutRotation.withoutWhite
-                == adjustments.withoutRotation.withoutWhite
+            && self.adjustments.withoutGeometry.withoutWhite
+                == adjustments.withoutGeometry.withoutWhite
     }
 }
 
@@ -162,9 +162,9 @@ enum PresetStateResolver {
         if !timeline.isLookEmpty { return .edited }
         // Original is "no filter": no preset, no sliders, nothing to bake.
         // The level is not a filter — a levelled Original stays Original —
-        // and nor is the owned white: telling a shoot which light it was is a
-        // correction, not a treatment.
-        let adjustments = adjustments.withoutRotation.withoutWhite
+        // nor is the crop, and nor is the owned white: telling a shoot which
+        // light it was is a correction, not a treatment.
+        let adjustments = adjustments.withoutGeometry.withoutWhite
         if preset == .original, adjustments.isNeutral { return .original }
         // Still exactly what the applied preset gave us — including when that
         // preset has been reworked or deleted since.
@@ -180,7 +180,7 @@ enum PresetStateResolver {
         }
         // A saved preset the values happen to match exactly.
         if let custom = customPresets.first(where: {
-            $0.basePreset == preset && $0.adjustments.withoutRotation.withoutWhite == adjustments
+            $0.basePreset == preset && $0.adjustments.withoutGeometry.withoutWhite == adjustments
         }) {
             return .named(id: custom.id, snapshot: custom.snapshot)
         }

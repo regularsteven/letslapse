@@ -91,6 +91,16 @@ extension UTType {
 final class PresetThumbnailCache: ObservableObject {
     @Published private(set) var images: [String: CGImage] = [:]
     private var inFlight: Set<String> = []
+    /// Insertion order, oldest first — the eviction order.
+    private var order: [String] = []
+
+    /// The editors keep one cache for a whole session and re-key every tile
+    /// on each settled edit, so a long grading session would otherwise pile
+    /// up a fresh set of 160 px images per adjustment token. A couple of
+    /// hundred tiles is a dozen-plus complete strips: the ones on screen and
+    /// the last few states, which is all "this preset + my edits" ever needs
+    /// to show again.
+    static let capacity = 240
 
     func image(for key: String) -> CGImage? { images[key] }
 
@@ -100,6 +110,10 @@ final class PresetThumbnailCache: ObservableObject {
         defer { inFlight.remove(key) }
         if let image = await Self.render(frame: frame, grade: grade, maxDimension: maxDimension) {
             images[key] = image
+            order.append(key)
+            while order.count > Self.capacity {
+                images.removeValue(forKey: order.removeFirst())
+            }
         }
     }
 
@@ -429,7 +443,7 @@ struct ManagePresetsView: View {
             let name = presetStore.uniqueName(for: url.deletingPathExtension().lastPathComponent)
             let preset = CustomPreset(
                 name: name, basePreset: .original,
-                adjustments: result.adjustments.withoutRotation.withoutWhite)
+                adjustments: result.adjustments.withoutGeometry.withoutWhite)
             presetStore.add(preset)
             path.append(.custom(preset.id))
             var lines = [result.summary]
@@ -721,7 +735,13 @@ enum PresetChangeRows {
         add("Vibrance", recipe.vibrance)
         add("Saturation", recipe.saturation)
         add("Clarity", recipe.clarity)
-        add("Vignette", recipe.vignette, unipolar: true)
+        // Shown the way the panel shows it — Lightroom's way up, lighten is
+        // "+" — so the recipe's positive-darkens value reads negative here.
+        add("Vignette", -recipe.vignette)
+        if abs(recipe.vignetteMidpoint - PhotoAdjustments.neutralVignetteMidpoint) > 1e-4 {
+            rows.append(Row(
+                label: "Vignette midpoint", value: hundred(recipe.vignetteMidpoint, unipolar: true)))
+        }
         return rows
     }
 
@@ -752,6 +772,7 @@ enum PresetChangeRows {
         case .saturation: return "Saturation"
         case .clarity: return "Clarity"
         case .vignetteIntensity: return "Vignette"
+        case .vignetteMidpoint: return "Vignette midpoint"
         case .texture: return "Texture"
         case .sharpen: return "Sharpen"
         case .sharpenMasking: return "Masking"
@@ -770,9 +791,17 @@ enum PresetChangeRows {
             return String(format: "%+.2f EV", value)
         case .temperature:
             return mired(value)
+        // The midpoint is unipolar 0…100 with 50 in the middle; `rows` and
+        // `movedCount` already know 0.5 is its neutral through
+        // `neutralValue`, so only a moved one gets this far.
         case .sharpen, .sharpenMasking, .noiseReduction, .noiseDetail,
-             .colorNoiseReduction, .colorNoise, .vignetteIntensity:
+             .colorNoiseReduction, .colorNoise, .vignetteMidpoint:
             return hundred(value, unipolar: true)
+        // Signed since 2026-09-12, and shown the way the panel shows it —
+        // Lightroom's way up, lighten is "+" — so the stored positive-darkens
+        // value is negated here exactly as the control negates it.
+        case .vignetteIntensity:
+            return hundred(-value, unipolar: false)
         default:
             return hundred(value, unipolar: false)
         }

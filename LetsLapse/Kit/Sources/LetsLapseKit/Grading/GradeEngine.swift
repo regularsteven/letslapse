@@ -143,6 +143,13 @@ public final class GradeRenderer {
         var radius: Int32
     }
 
+    /// Mirror of the Metal `VignetteParams` struct — layouts must match: two
+    /// floats, 8 bytes, 4-aligned on both sides.
+    private struct GPUVignetteParams {
+        var strength: Float
+        var midpoint: Float
+    }
+
     private let core: GradeCore
     private let commandQueue: MTLCommandQueue
     public private(set) var recipe: GradeRecipe
@@ -528,14 +535,19 @@ public final class GradeRenderer {
             swap(&current, &spare)
         }
 
-        if recipe.vignette > 0 {
-            var vignetteParams = Float(recipe.vignette) * 0.85
+        if recipe.vignette != 0 {
+            // Signed: the kernel darkens for a positive strength and lightens
+            // for a negative one. The 0.85 keeps full travel short of a
+            // black (or white) corner.
+            var vignetteParams = GPUVignetteParams(
+                strength: Float(recipe.vignette) * 0.85,
+                midpoint: min(max(recipe.vignetteMidpoint, 0), 1))
             guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
                 throw LapseError.gpuSetupFailed("could not encode the vignette pass")
             }
             encoder.setTexture(current, index: 0)
             encoder.setTexture(spare, index: 1)
-            encoder.setBytes(&vignetteParams, length: MemoryLayout<Float>.stride, index: 0)
+            encoder.setBytes(&vignetteParams, length: MemoryLayout<GPUVignetteParams>.stride, index: 0)
             core.dispatch(core.vignettePipeline, encoder: encoder, width: source.width, height: source.height)
             encoder.endEncoding()
             swap(&current, &spare)

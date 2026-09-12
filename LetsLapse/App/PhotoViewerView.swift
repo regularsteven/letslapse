@@ -13,20 +13,24 @@ struct PhotoEditorWindowRequest: Hashable, Codable {
 }
 #endif
 
-/// The full-screen photo editor: the graded image, the preset chip strip, and
-/// the adjustment sliders, which re-render the preview live.
+/// The full-screen photo editor: the graded image, six main buttons — Presets
+/// · Light · Color · Effects · Detail · Crop — and the one group panel they
+/// open, which re-renders the preview live.
 ///
-/// On iOS/iPadOS it is a `fullScreenCover` on black — the asset pinned at the
-/// top at its true aspect ratio, the controls scrolling beneath it, and a
-/// floating back button top-left. The asset never scrolls: you can always see
-/// what you are grading. On macOS it is the content of its own resizable window
+/// On iOS/iPadOS it is a `fullScreenCover` on black with a floating back
+/// button top-left; on macOS it is the content of its own resizable window
 /// (`PhotoEditorWindowRequest` scene in `LetsLapseApp`), so the window chrome
 /// owns the title and close.
 ///
-/// Layout follows the available width rather than the device: past
-/// `wideLayoutThreshold` the controls move into a side rail beside the image
-/// (iPhone landscape, iPad, always on the Mac); below it the image is pinned
-/// above a scrolling control stack.
+/// The Editor page has three dressings, chosen from the container's size and
+/// shape (`editorLayout(for:)`): the phone's bottom stack over a picture that
+/// has the whole screen (boards 2a / 6a — iPad portrait follows it), the
+/// landscape iPad's floating card beside an anchored picture (5a / 6b), and
+/// the rail beside the picture (3b / 6c on the Mac, drawn dark on a landscape
+/// iPhone). The Text, Frames and Masks pages keep the older split: past
+/// `wideLayoutThreshold` a side rail, below it the picture pinned above a
+/// scrolling control stack. A panel opens on a snapshot of the grade and its
+/// ✓ / ✕ keep or restore it (`openPanel(for:)`, `commitPanel`, `cancelPanel`).
 struct PhotoViewerView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -400,7 +404,74 @@ struct PhotoViewerView: View {
     private let previewLongEdge: CGFloat = 2000
     /// Where the drag handle sits, as a fraction between the floor and the
     /// ceiling. 1 = the ceiling, which is where every presentation starts.
+    /// Only the Text / Frames / Masks pages still have a handle: the Editor
+    /// page's layouts give the picture the whole screen.
     @State private var mediaScale: CGFloat = 1
+
+    // MARK: Editor groups
+    //
+    // The redesign's Editor page: six main buttons, one group's panel open
+    // at a time, and a ✓/✕ on the panel that keeps or throws away what was
+    // done since it opened. The state below is the page's, not the panel's —
+    // the panel is torn down and rebuilt as it opens and closes, so anything
+    // that has to outlive one opening lives here.
+
+    /// The group whose panel is open. Nil shows the main buttons alone on
+    /// the phone; the iPad and the Mac keep the buttons up either way.
+    @State private var openGroup: EditorGroup?
+    /// Which tool chip each group has up, for the session (spec §3).
+    @State private var toolSelection: [EditorGroup: EditorTool] = [:]
+    /// What the grade was when the open panel opened — restored by ✕.
+    @State private var editorSnapshot: EditorSnapshot?
+    /// iPad: how far the floating card has been dragged from its default
+    /// bottom-right seat, kept across groups for the session. Nil = never
+    /// moved.
+    @State private var floatingPanelOffset: CGSize?
+    /// The offset a header drag started from — absolute against a frozen
+    /// base, never accumulated, the `MediaResizeHandle` discipline.
+    @State private var floatingDragBase: CGSize?
+    /// The floating card's measured size, for keeping it on screen.
+    @State private var floatingPanelSize: CGSize = .zero
+    /// The editor's container, for clamping the card and for the one
+    /// decision that depends on the layout in use rather than the tap.
+    @State private var containerSize: CGSize = .zero
+    /// True while a crop handle or the crop body owns the picture, so pan
+    /// and pinch stand down for the duration — the same arbitration
+    /// `maskGestureActive` gives a mask's handles.
+    @State private var cropEditing = false
+    /// The phone's bottom stack — timeline card plus buttons or sheet — as
+    /// measured, so the picture's own corner chrome can sit above it.
+    @State private var phoneFootHeight: CGFloat = 0
+    /// The Presets panel's tile renders. Owned here so they survive the
+    /// phone sheet being torn down between opens.
+    @StateObject private var presetThumbnails = PresetThumbnailCache()
+
+    /// Everything ✕ has to put back. With a timeline an edit lands in the
+    /// keyframes, not in `adjustments`; a preset tap moves `preset` and the
+    /// state; a rotation change carries the text layers with it; and the
+    /// Color group's menu can switch the shoot's white-balance source, which
+    /// is a project field of its own. Snapshotting fewer than all of these
+    /// would restore numbers the renderer then ignores.
+    private struct EditorSnapshot {
+        var preset: PhotoPreset
+        var adjustments: PhotoAdjustments
+        var timeline: GradeTimeline
+        var presetState: PresetState
+        var whiteBalanceSource: WhiteBalanceSource
+    }
+
+    /// Which of the three Editor-page dressings the container gets.
+    private enum EditorLayout {
+        /// 2a / 6a: the phone — every iPhone portrait, Slide Over, a narrow
+        /// split.
+        case phone
+        /// 5a / 6b: iPad landscape — the floating card.
+        case floating
+        /// 3b / 6c: the Mac, and the dark rail of a landscape iPhone, a wide
+        /// split and iPad portrait (settled 2026-09-13: wide enough for a
+        /// rail, too tall for the sheet to reach the picture).
+        case rail
+    }
 
     /// Below this width the image is pinned above the controls instead of
     /// sitting beside them.
@@ -417,13 +488,38 @@ struct PhotoViewerView: View {
     private var metrics: MediaPaneMetrics { MediaPaneMetrics(aspect: aspect) }
 
     /// Side-rail width. Fixed on macOS — resizing the window grows the photo,
-    /// never the controls. Capped-proportional on iOS/iPadOS.
+    /// never the controls — at the redesign's 330 (board 3b). Capped-
+    /// proportional on iOS/iPadOS.
     private func railWidth(in totalWidth: CGFloat) -> CGFloat {
         #if os(macOS)
-        return 340
+        return 330
         #else
         return min(340, totalWidth * 0.42)
         #endif
+    }
+
+    /// Which Editor-page layout a container gets. Width AND shape, because
+    /// the touch layouts are about where the hand is: a landscape iPad is
+    /// the floating card (5a); anything else at least `wideLayoutThreshold`
+    /// wide — a landscape iPhone, a wide split, iPad portrait — is the dark
+    /// rail; the rest — every iPhone portrait, Slide Over — is the phone's
+    /// bottom stack (2a). No idiom check anywhere: the size decides. The Mac
+    /// is always the rail.
+    private func editorLayout(for size: CGSize) -> EditorLayout {
+        #if os(macOS)
+        return .rail
+        #else
+        if size.width >= 900, size.width > size.height { return .floating }
+        if size.width >= wideLayoutThreshold { return .rail }
+        return .phone
+        #endif
+    }
+
+    /// The page on screen. Frames only exists once frames do (see
+    /// `availableRailTabs`), so a request for it on a single still falls
+    /// back to the Editor rather than an empty rail.
+    private var effectiveRailTab: RailTab {
+        railTab == .frames && allFrames.count <= 1 ? .editor : railTab
     }
 
     /// Amber over the dark editor, per the "highlights over dark" rule the rest
@@ -862,13 +958,24 @@ struct PhotoViewerView: View {
 
     /// One frame back / one frame on, drawn to match the strip's own play
     /// button so the three read as one row of transport controls.
+    /// The Mac's light rail is the one light surface the strip sits on.
+    private var stepsOnLightSurface: Bool {
+        #if os(macOS)
+        return stepColorScheme == .light
+        #else
+        return false
+        #endif
+    }
+    @Environment(\.colorScheme) private var stepColorScheme
+
     @ViewBuilder private func stepControl(by delta: Int, compact: Bool) -> some View {
         let size: CGFloat = compact ? 26 : 30
         let index = frameIndex(at: position)
         let enabled = delta < 0 ? index > 0 : index < frames.count - 1
         Button { stepFrame(by: delta) } label: {
             ZStack {
-                Circle().fill(LL.cardBackground)
+                // The strip's own disc fill, so the three read as one row.
+                Circle().fill(GradeTimelineView.controlFill(onLightSurface: stepsOnLightSurface))
                     .shadow(color: .black.opacity(0.14), radius: 1.5, y: 1)
                 Image(systemName: delta < 0 ? "chevron.left" : "chevron.right")
                     .font(.system(size: compact ? 11 : 12.5, weight: .semibold))
@@ -920,44 +1027,23 @@ struct PhotoViewerView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let isWide = proxy.size.width >= wideLayoutThreshold
             Group {
-                if isWide {
-                    HStack(spacing: 0) {
-                        VStack(spacing: 0) {
-                            imagePane
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .overlay(alignment: .top) { chrome }
-                                .overlay(alignment: .bottom) { overlayToastView }
-                            // The scrubber belongs to the media, so it takes the
-                            // media pane's width rather than the rail's — which
-                            // keeps the rail identical to the photo editor's and
-                            // the whole photo/interval difference to exactly one
-                            // component.
-                            if hasTimeline {
-                                timelineStrip(compact: true)
-                                    .padding(.horizontal, 18)
-                                    .padding(.top, 9)
-                                    .padding(.bottom, 4)
-                                // The layer lanes belong to the media too: one
-                                // band per text layer, under the strip's own
-                                // axis, while the Text tab is the work.
-                                if showsOverlayLanes {
-                                    overlayLanes(compact: true)
-                                        .padding(.horizontal, 18)
-                                        .padding(.bottom, 4)
-                                }
-                            }
-                        }
-                        Divider()
-                        controlRail
-                            .frame(width: railWidth(in: proxy.size.width))
+                // The Editor page has the redesign's three layouts; the other
+                // pages keep the rail-or-stacked split they were drawn with.
+                if effectiveRailTab == .editor {
+                    switch editorLayout(for: proxy.size) {
+                    case .phone: phoneEditorBody(in: proxy.size)
+                    case .floating: floatingEditorBody(in: proxy.size)
+                    case .rail: railBody(in: proxy.size)
                     }
+                } else if proxy.size.width >= wideLayoutThreshold {
+                    railBody(in: proxy.size)
                 } else {
                     stackedBody(in: proxy.size)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .onChange(of: proxy.size, initial: true) { _, size in containerSize = size }
         }
         .background(editorBackground)
         #if os(iOS)
@@ -1021,7 +1107,9 @@ struct PhotoViewerView: View {
             #if DEBUG
             if ProcessInfo.processInfo.environment["LL_VIEWER"] == "expanded" {
                 // The handle dragged all the way up — the state the "expanded"
-                // design spec draws.
+                // design spec draws. Only the Text / Frames / Masks pages
+                // still have a handle: on the Editor page the picture already
+                // has the whole screen, so there this is a no-op.
                 mediaScale = 0
             }
             applyKeyframeHook()
@@ -1030,6 +1118,7 @@ struct PhotoViewerView: View {
             applyMaskHook()
             applyLightroomHook()
             applyMixerHook()
+            applySectionsHook()
             #endif
             renderToken += 1
         }
@@ -1108,6 +1197,10 @@ struct PhotoViewerView: View {
             shapeTool = nil
             armedMaskField = nil
             maskHUD = nil
+            // And so does an open panel: leaving the Editor tab keeps what
+            // it holds (✓), so a Text or Masks edit made meanwhile can never
+            // be thrown away by a ✕ on the way back.
+            if openGroup != nil { commitPanel() }
         }
         // A page asked for from outside — the Gallery panel's Text and Shapes
         // buttons. `onReceive` rather than a value at init because on the Mac
@@ -1203,7 +1296,7 @@ struct PhotoViewerView: View {
         let media = metrics.frame(in: container, scale: isTypingCopy ? 0 : mediaScale)
         let span = metrics.dragSpan(in: container)
         return VStack(spacing: 0) {
-            imagePane
+            imagePane()
                 .frame(width: media.width, height: media.height)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .top) { chrome }
@@ -1265,15 +1358,7 @@ struct PhotoViewerView: View {
         #if os(iOS)
         if showsBackButton {
             HStack {
-                Button { requestExit() } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(.black.opacity(0.4), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back")
+                backButton
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)
@@ -1285,9 +1370,483 @@ struct PhotoViewerView: View {
         #endif
     }
 
+    /// The 36 pt disc the fullscreen player uses too.
+    private var backButton: some View {
+        Button { requestExit() } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(.black.opacity(0.4), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Back")
+    }
+
+    // MARK: - Editor page layouts
+    //
+    // Three dressings of one page (boards 2a / 5a / 3b, with the timeline on
+    // 6a / 6b / 6c). Everything below is Editor-page only: the Text, Frames
+    // and Masks pages keep `stackedBody` / `railBody` with their own rail.
+
+    /// The touch editors' top row over the picture: the back button leading,
+    /// the tab pill trailing (2a / 5a). The floating layout puts the marquee
+    /// badge — and, while zoomed, the zoom pill — beside the back button.
+    /// Inside the fullscreen sheet the sheet's own bar sits at this height
+    /// (close, page counter, share), so the row drops below it instead of
+    /// stacking on it.
+    private func touchChrome(showsBadge: Bool) -> some View {
+        HStack(spacing: 8) {
+            if showsBackButton { backButton }
+            if showsBadge {
+                marqueeBadge
+                if !zoom.isFitted { zoomPill }
+            }
+            Spacer(minLength: 8)
+            EditorTabPill(selection: $railTab, tabs: availableRailTabs, accent: accentColor)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .padding(.top, showsBackButton ? 0 : 48)
+    }
+
+    /// `INTERVAL · 2 h 14 min · 58 frames` — what the strip is measuring.
+    private var marqueeBadge: some View {
+        EditorMarqueeBadge(
+            kind: capture?.kind == .video ? .video : (hasTimeline ? .interval : .photo),
+            durationSeconds: shootDurationSeconds,
+            frameCount: hasTimeline ? frames.count : nil)
+    }
+
+    /// The shoot's length as the strip reads it — the frames' own clock,
+    /// else the recorded duration — or nil where neither exists.
+    private var shootDurationSeconds: Double? {
+        if let last = frameSeconds.last, last > 0 { return last }
+        if let duration = uniformVisibleDuration, duration > 0 { return duration }
+        return nil
+    }
+
+    /// 5a: "2.5× · tap to fit" beside the back button while the picture is
+    /// released from its anchor.
+    private var zoomPill: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.22)) { zoom = .fitted }
+        } label: {
+            Text("\(Double(zoom.scale).formatted(.number.precision(.fractionLength(1))))× · tap to fit")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(accentColor)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .background(EditorPalette.rgb(0x1C1C1E).opacity(0.85), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Fit to screen")
+    }
+
+    /// The six main buttons' selection: a tap opens that group's panel
+    /// through `openPanel(for:)`, which is where the ✓/✕ snapshot is taken.
+    /// The bar never sets nil — closing is the panel's ✓/✕.
+    private var groupSelection: Binding<EditorGroup?> {
+        Binding(
+            get: { openGroup },
+            set: { group in
+                if let group { openPanel(for: group) }
+            })
+    }
+
+    /// Which buttons carry the dot — the panel's own header rule, asked per
+    /// group at the moment under the playhead.
+    private var nonNeutralGroups: Set<EditorGroup> {
+        let values = displayedAdjustments
+        return Set(EditorGroup.allCases.filter {
+            !PhotoAdjustmentsPanel.isNeutral(
+                $0, adjustments: values, keyframedFields: timeline.keyframedFields,
+                whiteBalanceSource: whiteBalanceSource, presetState: presetState)
+        })
+    }
+
+    /// The levelled picture's width ÷ height — the source's, since the level
+    /// keeps the frame's dimensions. What a locked crop aspect is fitted
+    /// into, and what the floating layout sizes the pane from.
+    private var pictureAspect: Double {
+        if let aspect, aspect > 0 { return aspect }
+        let source = sourcePixelSize
+        return source.height > 0 ? source.width / source.height : 4 / 3
+    }
+
+    // MARK: Phone (2a / 6a)
+
+    /// The picture fills the safe area and everything else floats over it.
+    /// Its foot carries the timeline card and then EITHER the six main
+    /// buttons or the open group's sheet — one or the other, because on a
+    /// phone the sheet needs the buttons' room. The foot's height is measured
+    /// so the picture's own corner chrome (1:1, the toast) can sit above it
+    /// rather than under it.
+    private func phoneEditorBody(in container: CGSize) -> some View {
+        // While the Crop panel is open the picture is fitted into the room
+        // ABOVE the foot rather than centred behind it: a tall picture's
+        // bottom handles would otherwise lie under the sheet's material,
+        // where the sheet takes the touch. The zoom controls then need no
+        // lift of their own — the pane already ends at the foot.
+        let cropRoom = openGroup == .crop ? phoneFootHeight : 0
+        return ZStack(alignment: .bottom) {
+            imagePane(footInset: phoneFootHeight - cropRoom, topInset: Self.touchChromeHeight)
+                .padding(.bottom, cropRoom)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .top) { touchChrome(showsBadge: false) }
+            overlayToastView
+                .padding(.bottom, phoneFootHeight)
+            phoneFoot(in: container)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: EditorFootHeightKey.self, value: proxy.size.height)
+                    }
+                }
+        }
+        .onPreferenceChange(EditorFootHeightKey.self) { phoneFootHeight = $0 }
+    }
+
+    @ViewBuilder private func phoneFoot(in container: CGSize) -> some View {
+        VStack(spacing: 0) {
+            if hasTimeline { phoneTimelineCard }
+            if let group = openGroup {
+                // The sheet's own material already runs under the home
+                // indicator; it is placed at the safe area's foot and not
+                // padded again.
+                groupPanel(group, layout: .phone, style: .dark)
+            } else if expandedGradeID != nil {
+                touchMasksCard(maxHeight: container.height * 0.5)
+            } else {
+                EditorGroupBar(
+                    selection: groupSelection, nonNeutral: nonNeutralGroups,
+                    style: .phone, accent: accentColor)
+            }
+        }
+    }
+
+    /// 6a: the marquee badge over the strip, in a card of black 60 % over
+    /// material. No `.clipped()` anywhere on it — the strip's elapsed bubble
+    /// and its delete affordance float above its top edge.
+    private var phoneTimelineCard: some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return VStack(alignment: .leading, spacing: 20) {
+            marqueeBadge
+            timelineStrip(compact: false)
+        }
+        .padding(.top, 10)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+        .background {
+            ZStack {
+                shape.fill(.ultraThinMaterial)
+                shape.fill(Color.black.opacity(0.6))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+
+    /// A masked grade opened from the Masks tab ("Grade this in Editor")
+    /// needs somewhere to be graded on the touch layouts, whose boards keep
+    /// the masks on their own page and draw no card on the Editor page.
+    /// Until that page gets one, the card takes the open panel's slot for
+    /// exactly as long as a grade is expanded — collapsing it (the card's
+    /// own tap on the tile) brings the main buttons back. Not a board of
+    /// the redesign; a stopgap so the flow has a landing.
+    private func touchMasksCard(maxHeight: CGFloat) -> some View {
+        let shape = UnevenRoundedRectangle(topLeadingRadius: 22, topTrailingRadius: 22, style: .continuous)
+        return ScrollView(.vertical, showsIndicators: false) {
+            masksCard
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(maxHeight: maxHeight)
+        .background {
+            ZStack {
+                shape.fill(.ultraThinMaterial)
+                shape.fill(EditorPalette.rgb(0x1C1C1E).opacity(0.86))
+            }
+            .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    // MARK: iPad landscape (5a / 6b)
+
+    /// The picture anchored top-left at the size its aspect gives it, the
+    /// chrome in the corners, the strip and the buttons along the foot, and
+    /// the open group as a card floating above the buttons — draggable by
+    /// its header, or filling the height when it is Presets.
+    private func floatingEditorBody(in container: CGSize) -> some View {
+        let frame = floatingPictureFrame(in: container)
+        // The pane's corner chrome (1:1, the spinner, the loupe) is lifted
+        // clear of the foot row and the chrome row by however far the pane
+        // reaches under them — a height-limited picture ends at the foot,
+        // a width-limited one may not reach it.
+        let footInset = max(0, frame.maxY - (container.height - Self.floatingFootHeight))
+        return ZStack(alignment: .topLeading) {
+            Color.black
+            imagePane(footInset: footInset, topInset: Self.touchChromeHeight)
+                .frame(width: frame.width, height: frame.height)
+                .offset(x: frame.minX, y: frame.minY)
+            // 5a draws no chip on a photo; 6b's INTERVAL chip is the strip's.
+            touchChrome(showsBadge: hasTimeline)
+                .frame(maxWidth: .infinity)
+            floatingFootRow
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            overlayToastView
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 96)
+            floatingPanel(in: container)
+        }
+        .onPreferenceChange(EditorPanelSizeKey.self) { floatingPanelSize = $0 }
+    }
+
+    /// The foot row's reach on the floating layout: the buttons pill and
+    /// the strip capsule sit 16 pt off the bottom, and the panel seats 96 pt
+    /// up — everything under that line is covered.
+    private static let floatingFootHeight: CGFloat = 96
+    /// The touch chrome row's reach: 12 pt of padding, the 36 pt back disc
+    /// and tab pill, 12 pt more.
+    private static let touchChromeHeight: CGFloat = 60
+
+    /// 5a: full height for a tall picture, full width for a wide one, at the
+    /// top-left. While the Crop panel is open the picture is fitted inside a
+    /// margin and centred instead, so the handles have room to be dragged
+    /// into: 48 pt at the sides, and enough at the top and the foot to clear
+    /// the chrome row and the foot row — a corner handle under the buttons
+    /// pill cannot be grabbed.
+    private func floatingPictureFrame(in container: CGSize) -> CGRect {
+        if openGroup == .crop {
+            let side: CGFloat = 48
+            let top = Self.touchChromeHeight + 8
+            let bottom = Self.floatingFootHeight + 48
+            let room = CGSize(
+                width: max(1, container.width - 2 * side),
+                height: max(1, container.height - top - bottom))
+            let size = Self.fit(aspect: pictureAspect, in: room)
+            return CGRect(
+                x: (container.width - size.width) / 2,
+                y: top + (room.height - size.height) / 2,
+                width: size.width, height: size.height)
+        }
+        return CGRect(origin: .zero, size: Self.fit(aspect: pictureAspect, in: container))
+    }
+
+    /// The largest `aspect` rectangle inside `room`.
+    private static func fit(aspect: Double, in room: CGSize) -> CGSize {
+        let ratio = max(aspect, 0.01)
+        let byHeight = CGSize(width: room.height * ratio, height: room.height)
+        if byHeight.width <= room.width { return byHeight }
+        return CGSize(width: room.width, height: room.width / ratio)
+    }
+
+    /// 6b: the compact strip in a 66 pt capsule from the left edge to 18 pt
+    /// short of the buttons pill, both 16 pt off the foot.
+    private var floatingFootRow: some View {
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        return HStack(alignment: .bottom, spacing: 18) {
+            if hasTimeline {
+                timelineStrip(compact: true)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 66)
+                    .background {
+                        ZStack {
+                            shape.fill(.ultraThinMaterial)
+                            shape.fill(EditorPalette.rgb(0x1C1C1E).opacity(0.85))
+                        }
+                    }
+            } else {
+                Spacer(minLength: 0)
+            }
+            EditorGroupBar(
+                selection: groupSelection, nonNeutral: nonNeutralGroups,
+                style: .padPill, accent: accentColor)
+        }
+        .padding(16)
+    }
+
+    /// The floating card: Presets fills the height between the tab pill and
+    /// the buttons (top 62 / bottom 96 / right 16); every other group sits
+    /// bottom-right above the buttons and follows wherever its header has
+    /// been dragged, held on screen.
+    @ViewBuilder private func floatingPanel(in container: CGSize) -> some View {
+        if let group = openGroup {
+            if group == .presets {
+                groupPanel(group, layout: .floating, style: .dark)
+                    .frame(maxHeight: .infinity)
+                    .padding(.top, 62)
+                    .padding(.bottom, 96)
+                    .padding(.trailing, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            } else {
+                groupPanel(group, layout: .floating, style: .dark)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: EditorPanelSizeKey.self, value: proxy.size)
+                        }
+                    }
+                    .offset(clampedFloatingOffset(floatingPanelOffset ?? .zero, in: container))
+                    .padding(.bottom, 96)
+                    .padding(.trailing, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            }
+        } else if expandedGradeID != nil {
+            touchMasksCard(maxHeight: container.height - 62 - 96)
+                .frame(width: 400)
+                .padding(.bottom, 96)
+                .padding(.trailing, 16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        }
+    }
+
+    /// The offset that keeps the card inside the container: it may go as far
+    /// left and up as the screen allows, and no further right or down than
+    /// its default seat's margins.
+    private func clampedFloatingOffset(_ offset: CGSize, in container: CGSize) -> CGSize {
+        let card = floatingPanelSize
+        guard card.width > 0, card.height > 0, container.width > 0, container.height > 0 else {
+            return offset
+        }
+        let seatX = container.width - 16 - card.width
+        let seatY = container.height - 96 - card.height
+        return CGSize(
+            width: min(max(offset.width, -max(seatX, 0)), 16),
+            height: min(max(offset.height, -max(seatY, 0)), 96))
+    }
+
+    /// The header drag, as the panel reports it: translation since the drag
+    /// began, `ended` on the last call. Applied to the offset the drag
+    /// started from — frozen at its first event — and clamped once it ends,
+    /// so the stored seat is always one that is on screen.
+    private func floatingHeaderDragged(_ translation: CGSize, ended: Bool) {
+        let base = floatingDragBase ?? (floatingPanelOffset ?? .zero)
+        floatingDragBase = base
+        let moved = CGSize(width: base.width + translation.width, height: base.height + translation.height)
+        floatingPanelOffset = ended ? clampedFloatingOffset(moved, in: containerSize) : moved
+        if ended { floatingDragBase = nil }
+    }
+
+    // MARK: Rail (3b / 6c, and the wide non-Editor pages)
+
+    /// The wide layout: the media column beside the rail. On the Editor page
+    /// the rail is the redesign's (3b / 6c) and the strip sits in the board's
+    /// 54 pt row under the picture; every other page keeps the rail and the
+    /// strip it was drawn with.
+    private func railBody(in container: CGSize) -> some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                imagePane()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .top) { chrome }
+                    .overlay(alignment: .bottom) { overlayToastView }
+                    .overlay(alignment: .bottomLeading) { railMarqueeBadge }
+                // The scrubber belongs to the media, so it takes the media
+                // pane's width rather than the rail's — which keeps the rail
+                // identical to the photo editor's and the whole
+                // photo/interval difference to exactly one component.
+                if hasTimeline {
+                    if effectiveRailTab == .editor {
+                        timelineStrip(compact: true)
+                            .padding(.top, 6)
+                            .padding(.horizontal, 16)
+                            .frame(height: 54, alignment: .top)
+                    } else {
+                        timelineStrip(compact: true)
+                            .padding(.horizontal, 18)
+                            .padding(.top, 9)
+                            .padding(.bottom, 4)
+                        // The layer lanes belong to the media too: one band
+                        // per text layer, under the strip's own axis, while
+                        // the Text tab is the work.
+                        if showsOverlayLanes {
+                            overlayLanes(compact: true)
+                                .padding(.horizontal, 18)
+                                .padding(.bottom, 4)
+                        }
+                    }
+                }
+            }
+            Divider()
+            controlRail
+                .frame(width: railWidth(in: container.width))
+        }
+    }
+
+    /// 6c: the marquee badge bottom-left of the Mac's media pane — on an
+    /// interval project only; 3b draws nothing over a photo. The touch rail
+    /// (a landscape iPhone) has no board with one and shows none.
+    @ViewBuilder private var railMarqueeBadge: some View {
+        #if os(macOS)
+        if effectiveRailTab == .editor, hasTimeline {
+            marqueeBadge.padding(12)
+        }
+        #endif
+    }
+
+    /// The panel's dressing on the rail: the Mac's light card, the iPhone's
+    /// dark one.
+    private var railPanelStyle: XYPadStyle {
+        #if os(macOS)
+        return .light
+        #else
+        return .dark
+        #endif
+    }
+
+    /// The Editor page's rail (3b / 6c), top to bottom: the tab pill, the
+    /// six main buttons, the open group's card, the masks, "Reset
+    /// adjustments", and the save offer where there is no exit to make it
+    /// on. All of it scrolls.
+    @ViewBuilder private var railEditorStack: some View {
+        railTabBar
+        EditorGroupBar(
+            selection: groupSelection, nonNeutral: nonNeutralGroups,
+            style: .macCard, accent: accentColor)
+        if let group = openGroup {
+            groupPanel(group, layout: .rail, style: railPanelStyle)
+        }
+        masksCard
+        #if os(macOS)
+        Button("Reset adjustments") { resetEverything() }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(accentColor)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .disabled(!canResetEverything)
+            .opacity(canResetEverything ? 1 : 0.4)
+        #endif
+        // The Presets panel hosts the offer itself while it is open.
+        if presetState.isEdited, !ownsExit, !declinedPresetSave, openGroup != .presets {
+            presetSaveOffer
+        }
+        if let error = presetStore.lastError {
+            Text(error)
+                .font(.footnote)
+                .foregroundStyle(.red)
+        }
+    }
+
+    /// Whether "Reset adjustments" has anything to do — anything that would
+    /// change a pixel (`hasCrop`: a set-but-full crop keeps its aspect for
+    /// the chip yet takes no pixel off) or a moment.
+    private var canResetEverything: Bool {
+        let values = displayedAdjustments
+        return !values.withoutGeometry.isNeutral || values.hasRotation || values.hasCrop
+            || !timeline.isEmpty
+    }
+
     // MARK: - Image
 
-    private var imagePane: some View {
+    /// The picture and its corner chrome. `footInset` lifts the bottom
+    /// chrome (1:1, the mask hint) above whatever a layout stacks over the
+    /// picture's foot; `topInset` drops the top chrome (the spinner, the
+    /// loupe) below whatever it overlays on the head — the touch layouts'
+    /// tab pill sits exactly where the loupe would otherwise appear.
+    private func imagePane(footInset: CGFloat = 0, topInset: CGFloat = 0) -> some View {
         GeometryReader { proxy in
             let geometry = zoomGeometry(in: proxy.size)
             ZStack {
@@ -1304,6 +1863,7 @@ struct PhotoViewerView: View {
                         .background(.black.opacity(0.4), in: Circle())
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                         .padding(16)
+                        .padding(.top, topInset)
                         .allowsHitTesting(false)
                 }
                 if showsLoupe {
@@ -1313,9 +1873,13 @@ struct PhotoViewerView: View {
                         side: loupeSide(in: proxy.size))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                         .padding(12)
+                        .padding(.top, topInset)
                         .transition(.opacity)
                 }
+                // The foot inset lifts the corner chrome above whatever the
+                // phone layout stacks over the picture's foot.
                 zoomControls(in: geometry)
+                    .padding(.bottom, footInset)
                 if let maskHUD {
                     MaskHUDPill(text: maskHUD)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -1324,14 +1888,21 @@ struct PhotoViewerView: View {
                 if let hint = maskModeHint {
                     MaskModeHint(text: hint)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, 12)
+                        .padding(.bottom, 12 + footInset)
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
             .contentShape(Rectangle())
             .onTapGesture(count: 2) { toggleActualPixels(in: geometry) }
-            .gesture(magnifyGesture(in: geometry))
+            // The crop frame's own pinch scales the crop, not the picture:
+            // the whole time the Crop panel is open (it fitted the picture
+            // on opening, and a pinch there is for the frame), not only once
+            // the overlay has reported a change — the first events of a
+            // pinch would otherwise reach both and the picture would leave
+            // fit scale under the frame being scaled.
+            .gesture(magnifyGesture(in: geometry),
+                     including: cropEditing || openGroup == .crop ? .subviews : .all)
             // Ahead of pan, and only while something is armed: with no tool
             // and no armed label the picture behaves exactly as it always
             // has. A handle inside the overlay takes the drag before either,
@@ -1341,9 +1912,12 @@ struct PhotoViewerView: View {
                                  including: maskGestureWantsDrag ? .all : .subviews)
             // Only claimed once there is something to pan: at fit scale a drag
             // over the picture still belongs to whatever is presenting it —
-            // the fullscreen sheet pages between photos with one.
+            // the fullscreen sheet pages between photos with one. A crop
+            // handle owning the picture stands it down the same way a mask's
+            // handle does.
             .gesture(panGesture(in: geometry),
                      including: zoom.isFitted || maskGestureActive || maskGestureWantsDrag
+                         || cropEditing
                          ? .subviews : .all)
             .onAppear { paneSize = proxy.size }
             .onChange(of: proxy.size) { _, size in
@@ -1423,6 +1997,19 @@ struct PhotoViewerView: View {
                         }
                     },
                     onHUD: { maskHUD = $0 })
+            }
+            // The crop, over the whole levelled picture (decision 3): the
+            // frame with its handles while the Crop panel is open, a dim
+            // reminder of it once closed. The picture itself is never cut
+            // here, so every other overlay keeps its coordinate space.
+            if effectiveRailTab == .editor, openGroup == .crop || displayedAdjustments.hasCrop {
+                CropFrameOverlay(
+                    crop: cropBinding,
+                    frameAspect: drawn.height > 0 ? drawn.width / drawn.height : pictureAspect,
+                    drawn: drawn,
+                    isEditing: openGroup == .crop,
+                    onEditing: { editing in cropEditing = editing },
+                    onChanged: { persist() })
             }
             // What "Find in this picture" found, as lines, before it is added.
             if railTab == .masks, let find = lastFind, !find.found.isEmpty {
@@ -2259,13 +2846,24 @@ struct PhotoViewerView: View {
     /// The side rail is tall and narrow, so it scrolls on its own, with the
     /// tab switcher pinned above the scroll. (The stacked layout's scroll
     /// view lives in `stackedBody`, outside the media.)
-    private var controlRail: some View {
-        VStack(spacing: 0) {
-            railTabBar
+    @ViewBuilder private var controlRail: some View {
+        if effectiveRailTab == .editor {
+            // 3b / 6c: the whole rail scrolls, tab pill included, padded 14
+            // top / 16 sides / 20 bottom with 12 between cards.
+            ScrollView {
+                VStack(spacing: 12) {
+                    railEditorStack
+                }
+                .padding(.top, 14)
                 .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 6)
-            ScrollViewReader { proxy in
+                .padding(.bottom, 20)
+            }
+        } else {
+            VStack(spacing: 0) {
+                railTabBar
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 6)
                 ScrollView {
                     controlStack(isWide: true)
                         .padding(.horizontal, 16)
@@ -2273,36 +2871,8 @@ struct PhotoViewerView: View {
                         .padding(.bottom, 14)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onAppear { scrollRailForHook(proxy) }
             }
         }
-    }
-
-    /// `LL_SECTIONS=<section>` on the wide layout: the rail shows every
-    /// section open, so "open this card" means "scroll the rail to it" —
-    /// which is what a design screenshot of anything below the fold needs,
-    /// and what no headless run can do with a scroll wheel. The panel gives
-    /// each section its `PanelSection` as an id; a beat's delay lets the
-    /// panel lay out first. The axis suffix (`mixer:hue`) is the panel's.
-    private func scrollRailForHook(_ proxy: ScrollViewProxy) {
-        #if DEBUG
-        guard let hook = ProcessInfo.processInfo.environment["LL_SECTIONS"] else { return }
-        let name = hook.split(separator: ":").first.map(String.init) ?? hook
-        let section: PhotoAdjustmentsPanel.PanelSection? = switch name {
-        case "wb": .whiteBalance
-        case "light": .light
-        case "color": .color
-        case "mixer": .mixer
-        case "effects": .effects
-        case "detail": .detail
-        case "rotation": .rotation
-        default: nil
-        }
-        guard let section else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            withAnimation(nil) { proxy.scrollTo(section, anchor: .top) }
-        }
-        #endif
     }
 
     /// The rail's pages. Frames exists only where frames do — a single still
@@ -2336,70 +2906,19 @@ struct PhotoViewerView: View {
         }
     }
 
+    /// The non-Editor pages' content. The Editor page never comes through
+    /// here — `body` gives it its own layouts — and Frames on a single still
+    /// is folded back to the Editor before the switch (`effectiveRailTab`).
     @ViewBuilder private func controlStack(isWide: Bool) -> some View {
         switch railTab {
         case .editor:
-            editorTab(isWide: isWide)
+            EmptyView()
         case .text:
             textTab
         case .frames:
-            if allFrames.count > 1 { framesTab } else { editorTab(isWide: isWide) }
+            if allFrames.count > 1 { framesTab } else { EmptyView() }
         case .masks:
             masksTab
-        }
-    }
-
-    /// The grading page — everything the rail held before it grew tabs.
-    private func editorTab(isWide: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            stateRow
-            lightroomCard
-            presetStrip
-
-            // Masks sit between the chips and the whole-picture panel: a
-            // preset is the look, a masked grade is a correction inside it,
-            // and the panel below is the frame as a whole.
-            masksCard
-
-            // While a masked grade is open the panel below needs saying out
-            // loud, or "Exposure" appears twice on one screen with nothing
-            // to tell the two apart.
-            if expandedGradeID != nil {
-                Text("Whole picture")
-                    .font(.system(size: 11, weight: .semibold))
-                    .textCase(.uppercase)
-                    .kerning(0.5)
-                    .foregroundStyle(.secondary)
-                    .padding(.bottom, -6)
-            }
-
-            // No disclosure to open: with the picture pinned and the controls
-            // scrolling, hiding the sliders behind an accordion only adds a tap.
-            sliderPanel(expanded: isWide)
-
-            // Where there is no exit of ours to intercept, the offer lives
-            // here instead — see `ownsExit`.
-            if presetState.isEdited, !ownsExit, !declinedPresetSave {
-                presetSaveOffer
-            }
-
-            Button {
-                newPresetName = ""
-                isNamingPreset = true
-            } label: {
-                Label("Save as Preset", systemImage: "square.and.arrow.down")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(accentColor)
-            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            if let error = presetStore.lastError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-            }
         }
     }
 
@@ -3023,61 +3542,14 @@ struct PhotoViewerView: View {
             set: { model.setHideBadFrames($0, for: captureID) })
     }
 
-    /// The live state readout. It is the only thing on screen that can say
-    /// "Edited", which is a state no chip stands for.
-    private var stateRow: some View {
-        HStack(spacing: 8) {
-            Text("Preset")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
-            PresetStatePill(state: presetState, accent: accentColor, onAccent: pillTextColor)
-            Spacer(minLength: 0)
-        }
-    }
-
-    /// Black on the editors' amber, white on the Mac's accent — the same pair
-    /// the chips use.
+    /// Black on the editors' amber, white on the Mac's accent — the pair the
+    /// rail's tab bar uses.
     private var pillTextColor: Color {
         #if os(iOS)
         return .black
         #else
         return .white
         #endif
-    }
-
-    private var presetStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(PhotoPreset.strip) { candidate in
-                    // The chips follow the state: a preset lights up only when
-                    // the values on screen are still exactly what it gave us.
-                    chip(
-                        label: candidate.displayName,
-                        isActive: candidate == .original
-                            ? presetState.isOriginal
-                            : presetState.isNamed(candidate.presetID)
-                    ) {
-                        request(.builtIn(candidate))
-                    }
-                    .accessibilityLabel("\(candidate.displayName) grade")
-                }
-                ForEach(presetStore.presets) { custom in
-                    chip(label: custom.name, isActive: presetState.isNamed(custom.id)) {
-                        request(.custom(custom))
-                    }
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            presetPendingDelete = custom
-                        } label: {
-                            Label("Delete preset", systemImage: "trash")
-                        }
-                    }
-                    .accessibilityLabel("\(custom.name) saved grade")
-                }
-            }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
-        }
     }
 
     /// "Save as preset?" — the offer made when an Edited grade is about to be
@@ -3122,24 +3594,22 @@ struct PhotoViewerView: View {
         .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func chip(label: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundStyle(isActive ? Color.black : Color.primary)
-                .lineLimit(1)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Capsule().fill(isActive ? accentColor : LL.cardBackground))
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
+    // MARK: - The group panel
 
-    private func sliderPanel(expanded: Bool) -> some View {
+    /// The one `PhotoAdjustmentsPanel` call site, dressed for the layout in
+    /// use. Every parameter the old always-open panel took is still here;
+    /// the redesign adds the group, the chip selection, the Presets group's
+    /// data, WB Auto, the crop's frame aspect, ✓/✕ and the floating header's
+    /// drag.
+    private func groupPanel(
+        _ group: EditorGroup, layout: EditorPanelLayout, style: XYPadStyle
+    ) -> some View {
         PhotoAdjustmentsPanel(
             adjustments: editedAdjustments,
-            alwaysExpanded: expanded,
+            group: group,
+            layout: layout,
+            style: style,
+            toolSelection: $toolSelection,
             frameWhiteKelvin: frameWhite.kelvin,
             frameWhiteTint: frameWhite.tint,
             whiteBalanceSource: whiteBalanceSource,
@@ -3150,7 +3620,164 @@ struct PhotoViewerView: View {
             hasKeyframes: !timeline.isEmpty,
             onResetField: hasTimeline ? resetField : nil,
             onResetAll: hasTimeline ? resetEverything : nil,
-            onFieldEditing: fieldEditingChanged)
+            onFieldEditing: fieldEditingChanged,
+            presets: presetsContext,
+            autoWhite: capture == nil ? nil : { await autoWhiteEstimate() },
+            cropFrameAspect: pictureAspect,
+            onCommit: commitPanel,
+            onCancel: cancelPanel,
+            // The Presets card is pinned (top 62 / bottom 96) and ignores
+            // the seat, so its header must not move it for the next group.
+            onHeaderDrag: layout == .floating && group != .presets ? floatingHeaderDragged : nil,
+            initialBand: hookBand)
+    }
+
+    /// What the Presets group renders and does: the frame under the
+    /// playhead for the tiles, the built-in and saved presets, and the same
+    /// apply / delete / save paths the chip strip used to drive. The
+    /// Lightroom card and the inline save offer go in here too, since the
+    /// Presets panel is the page that is about the look as a whole.
+    private var presetsContext: EditorPresetsContext {
+        EditorPresetsContext(
+            frame: capture.map { capture in
+                PresetPreviewFrame(
+                    captureID: capture.id, title: capture.displayTitle,
+                    fileName: displayedURL.lastPathComponent,
+                    source: .still(displayedURL), isChosen: true)
+            },
+            presetState: presetState,
+            customPresets: presetStore.presets,
+            cache: presetThumbnails,
+            onSelect: { request($0) },
+            onDelete: { presetPendingDelete = $0 },
+            onSaveAsPreset: {
+                newPresetName = ""
+                isNamingPreset = true
+            },
+            saveOffer: presetState.isEdited && !ownsExit && !declinedPresetSave
+                ? AnyView(presetSaveOffer) : nil,
+            lightroomCard: lightroomSidecar != nil ? AnyView(lightroomCard) : nil)
+    }
+
+    // MARK: Opening, keeping, reverting
+
+    /// A main button tapped. A different group already open is committed
+    /// first — its snapshot dropped, its values kept — and the new group
+    /// gets a fresh snapshot of them (spec §3: switching group commits and
+    /// re-snapshots; the board's `openGroup`). The open group tapped again
+    /// is left exactly as it is. Crop opens on a fitted picture, so the
+    /// frame and its handles are all on screen.
+    private func openPanel(for group: EditorGroup) {
+        if let open = openGroup {
+            guard open != group else { return }
+            editorSnapshot = nil
+            persist()
+            persistOverlays()
+        }
+        editorSnapshot = takeSnapshot()
+        openGroup = group
+        if group == .crop, !zoom.isFitted {
+            withAnimation(.easeInOut(duration: 0.22)) { zoom = .fitted }
+        }
+        // The editing crop overlay may have been torn down mid-gesture; its
+        // `onEditing(false)` then never arrives, and the pane's pan and
+        // pinch would stay masked. The overlay is gone, so nothing is
+        // editing.
+        cropEditing = false
+    }
+
+    private func takeSnapshot() -> EditorSnapshot {
+        EditorSnapshot(
+            preset: preset, adjustments: adjustments, timeline: timeline,
+            presetState: presetState, whiteBalanceSource: whiteBalanceSource)
+    }
+
+    /// ✓ / Done: the values stay, the snapshot goes, the panel closes.
+    /// Persisted here as a finished gesture rather than left to the safety
+    /// net — the panel may be the last thing before the back button.
+    private func commitPanel() {
+        editorSnapshot = nil
+        openGroup = nil
+        cropEditing = false
+        persist()
+        persistOverlays()
+    }
+
+    /// ✕ / Revert: the grade back to what it was when the panel opened.
+    /// Every release since opening has already been persisted, so the
+    /// restore is persisted too.
+    ///
+    /// The overlay document is NOT snapshotted and restored: the panel can
+    /// stay open while the Text and Masks tabs add or move layers, and a
+    /// wholesale restore would throw that work away and persist the loss.
+    /// The only thing the panel itself does to the document is carry the
+    /// layers with the opening level (`carryOverlays`), so undoing the level
+    /// carries them back — the same remap the write applied, run in reverse.
+    private func cancelPanel() {
+        if let snapshot = editorSnapshot {
+            stopPlayback()
+            let openingBefore = openingRotation
+            preset = snapshot.preset
+            adjustments = snapshot.adjustments
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) {
+                timeline = snapshot.timeline
+            }
+            presetState = snapshot.presetState
+            carryOverlays(fromRotation: openingBefore, to: openingRotation)
+            if whiteBalanceSource != snapshot.whiteBalanceSource {
+                setWhiteBalanceSource(snapshot.whiteBalanceSource)
+            }
+            refreshState()
+            scheduleUpdate()
+            persist()
+            persistOverlays()
+        }
+        editorSnapshot = nil
+        openGroup = nil
+        cropEditing = false
+    }
+
+    /// The crop as the picture's overlay edits it: `.full` while there is
+    /// none, and nothing again once a drag has put the whole frame back with
+    /// no ratio to keep — an all-of-it crop with no aspect is no crop. A full
+    /// frame under a chosen aspect is kept, so the chip stays on the choice.
+    private var cropBinding: Binding<FrameCrop> {
+        Binding(
+            get: { displayedAdjustments.crop ?? .full },
+            set: { crop in
+                var values = displayedAdjustments
+                values.crop = crop.isFull && crop.aspect == .original ? nil : crop
+                editedAdjustments.wrappedValue = values
+            })
+    }
+
+    /// WB Auto (spec §8): the frame under the playhead through the grade in
+    /// hand at 256 px, read for its grey-world white. Off the main actor on
+    /// the shared media lane, since a raw decode is behind it. The panel
+    /// writes the estimate through the binding like a menu pick, which is
+    /// what seeds every other moment's white (`seedUnownedWhites`).
+    private func autoWhiteEstimate() async -> AutoWhiteBalance.Estimate? {
+        let preset = preset
+        let graded: PhotoAdjustments = {
+            var moment = displayedAdjustments
+            moment.crop = nil
+            return moment
+        }()
+        let url = displayedURL
+        let whiteBalance = frozenWhiteBalance(at: position)
+        // The white the estimate corrects FROM: the owned one when there is
+        // one, else the white the frame is rendering at.
+        let current: (kelvin: Double, tint: Double) = graded.ownsWhite
+            ? (1e6 / Double(graded.whiteMired), Double(graded.whiteTint))
+            : frameWhite
+        let image = await MediaWorkQueue.shared.run { () -> CGImage? in
+            PhotoGrader.render(
+                url: url, preset: preset, adjustments: graded,
+                whiteBalance: whiteBalance, maxDimension: 256, cropped: false)
+        }
+        guard let image, let image else { return nil }
+        return AutoWhiteBalance.estimate(
+            image: image, currentKelvin: current.kelvin, currentTint: current.tint)
     }
 
     // MARK: Rotation and the text layers
@@ -3264,22 +3891,38 @@ struct PhotoViewerView: View {
     /// is where the concept lives — `GradeTimeline.write` decides, from where
     /// the playhead is standing, whether an edit grades the shoot or grades a
     /// moment of it, and materialises the first two moments when it has to.
+    ///
+    /// The crop is the exception: static by decision, one value for the whole
+    /// shoot, so a changed crop is lifted out of the write and stamped onto
+    /// every moment (`GradeTimeline.carryCrop`) — the way the owned white is
+    /// seeded — and a crop-only change makes no keyframe at all. Written at
+    /// the playhead it would cut only that moment, and the blend, the hero
+    /// and every still export read the opening one.
     private var editedAdjustments: Binding<PhotoAdjustments> {
         Binding(
             get: { displayedAdjustments },
-            set: { values in
+            set: { incoming in
                 let openingBefore = openingRotation
                 defer { carryOverlays(fromRotation: openingBefore, to: openingRotation) }
                 guard hasTimeline else {
-                    adjustments = values
+                    adjustments = incoming
                     refreshState()
                     scheduleUpdate()
                     return
                 }
                 stopPlayback()
+                let shown = displayedAdjustments
+                let cropChanged = incoming.crop != shown.crop
+                var values = incoming
+                values.crop = shown.crop
                 var baseline = adjustments
                 var updated = timeline
-                let outcome = updated.write(values, at: position, baseline: &baseline)
+                let outcome: GradeTimeline.EditOutcome = values == shown
+                    ? .none
+                    : updated.write(values, at: position, baseline: &baseline)
+                if cropChanged {
+                    updated.carryCrop(incoming.crop, baseline: &baseline)
+                }
                 if values.ownsWhite {
                     // After the write, so the moment it may have just
                     // materialised from the old baseline is seeded too; then
@@ -3458,7 +4101,15 @@ struct PhotoViewerView: View {
     /// flattening a graded shoot back to one look because a chip was tapped —
     /// throws away work that took scrubbing to make. Clearing the timeline is
     /// still one tap away, on Original.
-    private func applyPresetValues(_ values: PhotoAdjustments) {
+    ///
+    /// The geometry stays: a preset carries no level and no crop (they are
+    /// stripped at save), so the ones in hand are re-attached rather than
+    /// let fall to nil — tapping Cinema must not uncrop the picture.
+    private func applyPresetValues(_ preset: PhotoAdjustments) {
+        var values = preset
+        let now = displayedAdjustments
+        values.crop = now.crop
+        values.rotationDegrees = now.rotationDegrees
         guard hasTimeline, !timeline.isEmpty else {
             adjustments = values
             return
@@ -3626,7 +4277,13 @@ struct PhotoViewerView: View {
         let sequenceFrames = frames
         let frameURL = displayedURL
         let preset = preset
-        let adjustments = adjustments
+        // The mask is fetched over the whole frame, as the composite applies
+        // it: the crop is drawn over the picture here, never cut from it.
+        let adjustments: PhotoAdjustments = {
+            var whole = self.adjustments
+            whole.crop = nil
+            return whole
+        }()
         // A beat of stillness first, so a scrub in per-frame mode asks for
         // the frame it settles on rather than one inference per step.
         try? await Task.sleep(for: .milliseconds(200))
@@ -3643,7 +4300,8 @@ struct PhotoViewerView: View {
                     sampleCount: SceneMaskService.sequenceSampleCount, presetID: preset.presetID.uuidString,
                     render: { url in
                         PhotoGrader.render(
-                            url: url, preset: preset, adjustments: adjustments, maxDimension: 512)
+                            url: url, preset: preset, adjustments: adjustments, maxDimension: 512,
+                            cropped: false)
                     },
                     progress: { done, total in
                         Task { @MainActor in
@@ -3653,7 +4311,8 @@ struct PhotoViewerView: View {
             } else {
                 mask = try await SceneMaskService.shared.skyMask(forKey: key) {
                     PhotoGrader.render(
-                        url: frameURL, preset: preset, adjustments: adjustments, maxDimension: 512)
+                        url: frameURL, preset: preset, adjustments: adjustments, maxDimension: 512,
+                        cropped: false)
                 }
             }
             guard !Task.isCancelled else { return }
@@ -3678,10 +4337,10 @@ struct PhotoViewerView: View {
     private func saveCurrentAsPreset() {
         // A preset is a look, and the look on screen is the one at the
         // playhead — which is the whole grade when nothing is keyframed. The
-        // level is not part of a look.
+        // level and the crop are not part of a look.
         if let saved = presetStore.save(
             name: newPresetName, basePreset: preset,
-            adjustments: displayedAdjustments.withoutRotation) {
+            adjustments: displayedAdjustments.withoutGeometry) {
             // Naming a look is what takes a project out of Edited: the values
             // haven't moved, but they now have a preset behind them. A grade
             // that travels stays Edited whatever gets named — one preset can't
@@ -3727,8 +4386,16 @@ struct PhotoViewerView: View {
     private func render() async {
         let preset = preset
         // The moment on screen, not the project's stored grade: with keyframes
-        // those are only the same thing at the head of the clip.
-        let adjustments = timeline.adjustments(at: renderedPosition, baseline: adjustments)
+        // those are only the same thing at the head of the clip. Less its
+        // crop: the editor never cuts the picture (decision 3) — the crop is
+        // drawn over the whole levelled frame — and stripping it here rather
+        // than only asking for the frame uncut keeps the grader's cache key,
+        // and so the picture, exactly where they were through a crop drag.
+        let adjustments: PhotoAdjustments = {
+            var moment = timeline.adjustments(at: renderedPosition, baseline: self.adjustments)
+            moment.crop = nil
+            return moment
+        }()
         let url = hasTimeline ? frames[frameIndex(at: renderedPosition)] : url
         // This frame's own declared white. Frozen to a fixed one before the
         // hop: the render is off the main actor, and a smoothed track's answer
@@ -3765,7 +4432,7 @@ struct PhotoViewerView: View {
             // masks turn to match.
             guard let graded = PhotoGrader.render(
                 url: url, preset: preset, adjustments: adjustments,
-                whiteBalance: whiteBalance, maxDimension: longEdge)
+                whiteBalance: whiteBalance, maxDimension: longEdge, cropped: false)
             else { return nil }
             return SceneAwareCompositor.compositedPreview(
                 base: graded, overlays: overlays, maskGrades: maskGrades,
@@ -3938,6 +4605,10 @@ struct PhotoViewerView: View {
         var frameCount: Int
         var live: Bool
     }
+
+    /// `LL_SECTIONS=color:mixer:<band>` (DEBUG), handed to the panel as its
+    /// opening band; nil in every other build.
+    @State private var hookBand: HSLAdjustments.Band?
 
     #if DEBUG
     /// `LL_PERFWIGGLE=<seconds>` drives the exposure control through the same
@@ -4127,11 +4798,19 @@ struct PhotoViewerView: View {
             return
         }
         func moment(
-            temperature: Float, exposure: Float, highlights: Float,
+            kelvin: Double, exposure: Float, highlights: Float,
             shadows: Float, vibrance: Float
         ) -> PhotoAdjustments {
             var values = PhotoAdjustments.neutral
-            values.temperature = temperature
+            // An OWNED white: the Temp and Tint controls bind `whiteMired` /
+            // `whiteTint`, and the legacy `temperature` offset — which this
+            // hook used to stage — has no control left to show it, so the
+            // boards' keyframed Temp could never be reproduced. Every moment
+            // owns one, which is the invariant `seedUnownedWhites` keeps for
+            // real edits (a 0 beside an owned white would ease toward
+            // infinite Kelvin).
+            values.whiteMired = Float(1e6 / kelvin)
+            values.whiteTint = 0
             values.exposure = exposure
             values.highlights = highlights
             values.shadows = shadows
@@ -4142,15 +4821,15 @@ struct PhotoViewerView: View {
         var baseline = PhotoAdjustments.neutral
         var staged = GradeTimeline.empty
         staged.write(
-            moment(temperature: -42, exposure: 0, highlights: -0.20,
+            moment(kelvin: 6100, exposure: 0, highlights: -0.20,
                    shadows: 0.10, vibrance: 0.12),
             at: 0.10, baseline: &baseline)
         staged.write(
-            moment(temperature: 63, exposure: -0.20, highlights: -0.35,
+            moment(kelvin: 7600, exposure: -0.20, highlights: -0.35,
                    shadows: 0.18, vibrance: 0.38),
             at: 0.52, baseline: &baseline)
         staged.write(
-            moment(temperature: 9, exposure: -0.50, highlights: -0.10,
+            moment(kelvin: 5400, exposure: -0.50, highlights: -0.10,
                    shadows: 0.30, vibrance: 0.10),
             at: 0.86, baseline: &baseline)
         timeline = staged
@@ -4159,5 +4838,63 @@ struct PhotoViewerView: View {
         renderedPosition = 0.30
         refreshState()
     }
+
+    /// `LL_SECTIONS=<group>[:<tool>[:<band>]]` opens a group's panel with a
+    /// tool chip up, the way the screenshot recipes ask for it (spec §7):
+    /// `presets|light|color|effects|detail|crop`, with `expcon|highwhites|
+    /// shadblacks|wb|vibsat|mixer|texclar|vignette|dehaze|sharpen|noise` as
+    /// the chip. The old names still answer — `wb` → color:wb,
+    /// `mixer[:axis]` → color:mixer, `rotation` → crop, `all` → light — so
+    /// the existing design recipes keep working. The band suffix is parsed
+    /// and dropped: the panel holds its mixer band privately and offers no
+    /// way in. On every layout this is "open the panel"; there is nothing to
+    /// scroll to any more.
+    private func applySectionsHook() {
+        guard let hook = ProcessInfo.processInfo.environment["LL_SECTIONS"] else { return }
+        let parts = hook.split(separator: ":").map { String($0).lowercased() }
+        guard let name = parts.first else { return }
+        var tool = parts.count > 1 ? EditorTool.allCases.first { $0.hookName == parts[1] } : nil
+        // `mixer:<band>` — the band by its Lightroom name, in either form.
+        let bandNames = parts.dropFirst(name == "mixer" ? 1 : 2)
+        hookBand = bandNames.first.flatMap { token in
+            HSLAdjustments.Band.allCases.first { $0.lightroomName.lowercased() == token }
+        }
+        let group: EditorGroup?
+        switch name {
+        case "wb":
+            group = .color
+            tool = .whiteBalance
+        case "mixer":
+            group = .color
+            tool = .mixer
+        case "rotation":
+            group = .crop
+        case "all":
+            group = .light
+        default:
+            group = EditorGroup.allCases.first { $0.hookName == name }
+        }
+        guard let group else { return }
+        if let tool, tool.group == group { toolSelection[group] = tool }
+        openPanel(for: group)
+    }
     #endif
+}
+
+/// The phone layout's bottom stack, measured so the picture's corner chrome
+/// can clear it.
+private struct EditorFootHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// The floating card's size, measured so a drag can keep it on screen.
+private struct EditorPanelSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
 }

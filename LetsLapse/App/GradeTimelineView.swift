@@ -93,6 +93,24 @@ struct GradeTimelineView: View {
     /// vanish into the black editor it has to float over.
     private var chrome: Color { Color(red: 43 / 255, green: 43 / 255, blue: 46 / 255) }
 
+    /// The Mac's light rail (6c) draws the strip on a light surface: the
+    /// play / step discs `#E9E9EB` and the elapsed bubble white with a shadow
+    /// and black text, where every dark surface keeps the chrome grey. Colour
+    /// only — the metrics are the same table.
+    private var onLightSurface: Bool {
+        #if os(macOS)
+        return colorScheme == .light
+        #else
+        return false
+        #endif
+    }
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The play / step disc fill — shared with `PhotoViewerView.stepControl`.
+    static func controlFill(onLightSurface: Bool) -> Color {
+        onLightSurface ? EditorPalette.pillFillOnLight : LL.cardBackground
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let lead = showsPlayControl ? Self.leadInset(compact: compact) : 0
@@ -144,7 +162,7 @@ struct GradeTimelineView: View {
     private var playControl: some View {
         Button(action: onPlayToggle) {
             ZStack {
-                Circle().fill(LL.cardBackground)
+                Circle().fill(Self.controlFill(onLightSurface: onLightSurface))
                     .shadow(color: .black.opacity(0.14), radius: 1.5, y: 1)
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: compact ? 11 : 12.5, weight: .semibold))
@@ -234,10 +252,11 @@ struct GradeTimelineView: View {
         Text(label(position))
             .font(.system(size: 10, weight: .semibold))
             .monospacedDigit()
-            .foregroundStyle(.white)
+            .foregroundStyle(onLightSurface ? Color.black : .white)
             .padding(.horizontal, 7)
             .padding(.vertical, 1.5)
-            .background(Capsule().fill(chrome.opacity(0.9)))
+            .background(Capsule().fill(onLightSurface ? Color.white : chrome.opacity(0.9)))
+            .shadow(color: .black.opacity(onLightSurface ? 0.2 : 0), radius: 3, y: 1)
             .fixedSize()
             .animation(isScrubbing ? nil : .easeOut(duration: 0.15), value: position)
     }

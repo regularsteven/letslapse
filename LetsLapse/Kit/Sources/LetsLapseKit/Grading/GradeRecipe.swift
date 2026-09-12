@@ -4,10 +4,11 @@ import Foundation
 /// engine renders. This is the *engine's* model — the app's `PhotoAdjustments`
 /// (UI ranges, persistence, legacy migration) converts into it.
 ///
-/// Every field's neutral value is 0 bar `noiseDetail`, which is a two-sided
-/// control centred at 0.5 (and means nothing at all while its parent slider
-/// sits at 0). `neutral` is still a constant, so a caller can skip the whole
-/// render when nothing would change a pixel.
+/// Every field's neutral value is 0 bar two: `noiseDetail` and
+/// `vignetteMidpoint` are two-sided controls centred at 0.5 (and mean nothing
+/// at all while their parent slider sits at 0). `neutral` is still a
+/// constant, so a caller can skip the whole render when nothing would change
+/// a pixel.
 public struct GradeRecipe: Codable, Equatable, Sendable {
     /// Exposure in EV stops. −5…+5.
     public var exposure: Float = 0
@@ -85,8 +86,18 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     /// alone, which is what dissolves purple shadow haze and colour speckle
     /// without costing any detail. 0…1.
     public var colorNoise: Float = 0
-    /// Darkens the corners. 0…1.
+    /// The corners: positive darkens them, negative lightens them toward
+    /// white. −1…+1. Positive is the convention every stored project and
+    /// preset already uses; the lightening half arrived with the editor's
+    /// signed Vignette pad, and a UI that shows it Lightroom-style (up =
+    /// lighten = "+") negates at the control, never here.
     public var vignette: Float = 0
+    /// Where the vignette's falloff begins, 0…1 as a fraction of the
+    /// half-diagonal: 0 starts fading at the centre, 1 leaves only the
+    /// corners. Neutral 0.5 — which reproduces the fixed start the kernel
+    /// had before the control existed (`0.6 × 0.5 = 0.3`), so every render
+    /// made without it is bit-identical. Means nothing while `vignette` is 0.
+    public var vignetteMidpoint: Float = 0.5
     /// Haze removal (positive) or haze (negative), −1…+1 — Lightroom's
     /// Dehaze ÷ 100. The one control the Metal kernel does NOT render: it is
     /// a dark-channel prior over the finished picture (`Dehaze`), run by
@@ -159,6 +170,7 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
         // Appended only when set, so every key minted before the control
         // existed reads exactly as it did.
         let post = (dehaze != 0 ? String(format: "|dh%.4f", dehaze) : "")
+            + (vignetteMidpoint != 0.5 ? String(format: "|vm%.4f", vignetteMidpoint) : "")
             + (hasHSL ? "|hsl" + (hsl?.cacheToken ?? "") : "")
             + (hasLUT ? "|lut" + (lut?.cacheToken ?? "") : "")
         return "e\(Self.engineVersion)|\(joined)\(declaredToken)\(post)"

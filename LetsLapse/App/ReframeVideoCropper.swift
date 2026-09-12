@@ -209,7 +209,10 @@ enum ReframeVideoCropper {
         // it is rebuilt per frame, at the SOURCE moment `gradeMap` says that
         // frame came from, because this pass runs over a clip whose clock the
         // warp has already rewritten.
-        let chain: ((CIImage) -> CIImage)? = grade.isIdentity || grade.isKeyframed
+        // Gated on the COLOUR identity: this pass levels the frames itself and
+        // sets the project crop aside (see docs/TODO.md), so a grade that
+        // carries only geometry has no chain worth building.
+        let chain: ((CIImage) -> CIImage)? = grade.isColorIdentity || grade.isKeyframed
             ? nil : PhotoGrader.filterChain(grade, asShotKelvin: PhotoGrader.neutralKelvin)
         let keyframedGrade: PhotoGrade? = grade.isKeyframed ? grade : nil
         let gradedDuration = (try? await asset.load(.duration))?.seconds ?? 0

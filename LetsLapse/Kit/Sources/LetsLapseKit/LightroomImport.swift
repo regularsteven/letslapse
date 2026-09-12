@@ -128,7 +128,8 @@ public struct LightroomImport: Equatable, Sendable {
         ("SharpenEdgeMasking", "sharpenMasking", 100),
         ("LuminanceSmoothing", "noiseReduction", 100),
         ("ColorNoiseReduction", "colorNoiseReduction", 100),
-        ("VignetteAmount", "vignetteIntensity", 100),
+        // The vignette is not here: its sign flips and it has a midpoint —
+        // see the block in `map`.
     ]
 
     /// The local (per-mask) map. Lightroom's local sliders are already
@@ -226,6 +227,55 @@ public struct LightroomImport: Equatable, Sendable {
                 entry.divisor == 1
                     ? "\(entry.crs) \(signed(value)) → \(entry.field) (exact)"
                     : "\(entry.crs) \(signed(value)) → \(entry.field) \(trimmed(value / entry.divisor))")
+        }
+
+        // The vignette. Lightroom has two — the Effects panel's post-crop
+        // vignette (`PostCropVignetteAmount`, the creative one; eight of the
+        // fifteen corpus files use it) and the Lens Corrections manual
+        // vignette (`VignetteAmount`, a falloff correction) — and both are
+        // signed the opposite way from ours: Adobe's NEGATIVE darkens the
+        // corners, ours is positive-darkens, as every stored project and
+        // preset has it. Until 2026-09-12 the lens amount transferred with
+        // its sign intact and the app clamped the result to 0…1, so a
+        // darkening vignette imported as none at all. Now the sign flips and
+        // both halves arrive. There is one vignette control here, so the
+        // post-crop one wins when both moved and the lens one is reported
+        // rather than summed. The midpoint travels with whichever amount was
+        // carried — Lightroom's 0…100 with 50 in the middle is our 0…1 with
+        // 0.5 — and is written only when it moved off the middle. Feather,
+        // roundness and style have no control to land in and are said so.
+        let postCropAmount = sidecar.double("PostCropVignetteAmount") ?? 0
+        let lensAmount = sidecar.double("VignetteAmount") ?? 0
+        if postCropAmount != 0 || lensAmount != 0 {
+            let usesPostCrop = postCropAmount != 0
+            let amountKey = usesPostCrop ? "PostCropVignetteAmount" : "VignetteAmount"
+            let midpointKey = usesPostCrop ? "PostCropVignetteMidpoint" : "VignetteMidpoint"
+            let amount = usesPostCrop ? postCropAmount : lensAmount
+            let intensity = -amount / 100
+            out.adjustments["vignetteIntensity"] = intensity
+            out.applied.append(
+                "\(amountKey) \(signed(amount)) → vignetteIntensity \(trimmed(intensity)) "
+                + "(Adobe's negative darkens; ours is positive)")
+            if let midpoint = sidecar.double(midpointKey), midpoint != 50 {
+                let ours = min(max(midpoint / 100, 0), 1)
+                out.adjustments["vignetteMidpoint"] = ours
+                out.applied.append("\(midpointKey) \(trimmed(midpoint)) → vignetteMidpoint \(trimmed(ours))")
+            }
+            if usesPostCrop, lensAmount != 0 {
+                out.unsupported.append(
+                    "Lens vignette \(signed(lensAmount)) — not combined with the post-crop "
+                        + "vignette (one vignette control)")
+            }
+            if usesPostCrop {
+                let feather = sidecar.double("PostCropVignetteFeather") ?? 50
+                let roundness = sidecar.double("PostCropVignetteRoundness") ?? 0
+                let style = sidecar.int("PostCropVignetteStyle") ?? 1
+                if feather != 50 || roundness != 0 || style != 1 {
+                    out.unsupported.append(
+                        "Post-crop vignette feather / roundness / style — not modelled "
+                            + "(amount and midpoint are carried)")
+                }
+            }
         }
 
         // Straighten. Lightroom's `CropAngle` is positive for a picture turned

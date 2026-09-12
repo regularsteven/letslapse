@@ -1,4 +1,5 @@
 import Foundation
+import LetsLapseKit
 
 /// One control of the adjustment panel, as a value both the timeline and the
 /// panel can name.
@@ -7,6 +8,14 @@ import Foundation
 /// needs it to reset one property at one moment. Raw values are written into
 /// nothing persistent — the keyframes store whole `PhotoAdjustments` — so this
 /// is free to change with the panel.
+///
+/// Three properties of `PhotoAdjustments` are deliberately NOT here: `hsl`,
+/// `lut` and `crop`. None is a Float the timeline could ease, and the crop
+/// would not want easing if it could be — a frame that slides between
+/// moments is an animation, not a crop. All three are carried whole from
+/// the earlier keyframe (static by decision, 2026-09-12; the board treats
+/// the crop as static), compared by `==` when a keyframe asks whether it
+/// still says anything, and never given a diamond.
 enum PhotoAdjustmentField: String, CaseIterable, Sendable {
     case exposure, contrast, highlights, shadows, whites, blacks
     case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
@@ -19,6 +28,10 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
     /// Haze removal — rendered after the engine (`EnginePostPasses`), keyframed
     /// like the rest.
     case dehaze
+    /// Where the vignette's falloff starts — the pad's other axis beside
+    /// `vignetteIntensity`, neutral mid-travel like `noiseDetail`. A look,
+    /// keyframed like the rest.
+    case vignetteMidpoint
     /// The fine rotation — the one geometry control, keyframed like the rest.
     case rotation
 
@@ -46,13 +59,15 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .whiteMired: return \.whiteMired
         case .whiteTint: return \.whiteTint
         case .dehaze: return \.dehaze
+        case .vignetteMidpoint: return \.vignetteMidpoint
         case .rotation: return \.rotationDegrees
         }
     }
 
     /// The value that means "this control is saying nothing" — 0 for every
-    /// field but the two-sided `noiseDetail`, whose no-op is mid-travel. Every
-    /// reset goes through here rather than writing a zero.
+    /// field but the two-sided `noiseDetail` and `vignetteMidpoint`, whose
+    /// no-ops are mid-travel. Every reset goes through here rather than
+    /// writing a zero.
     var neutralValue: Float { PhotoAdjustments.neutral[keyPath: keyPath] }
 
     var range: ClosedRange<Float> {
@@ -79,6 +94,7 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .whiteMired: return PhotoAdjustments.whiteMiredRange
         case .whiteTint: return PhotoAdjustments.whiteTintRange
         case .dehaze: return PhotoAdjustments.dehazeRange
+        case .vignetteMidpoint: return PhotoAdjustments.vignetteMidpointRange
         case .rotation: return PhotoAdjustments.rotationRange
         }
     }
@@ -163,17 +179,19 @@ struct GradeTimeline: Codable, Equatable, Sendable {
     var isEmpty: Bool { keyframes.isEmpty }
 
     /// True when no LOOK travels: no keyframes, or keyframes that only ever
-    /// move the rotation or the owned white. The Original/Edited verdict asks
-    /// this, because a level that changes over the clip is still "no filter"
-    /// — and so is a white that does: both correct the capture rather than
-    /// treat it.
+    /// move the rotation, the crop or the owned white. The Original/Edited
+    /// verdict asks this, because a level that changes over the clip is still
+    /// "no filter" — and so is a white that does, and a crop: all correct the
+    /// capture rather than treat it. (The crop is not a field, so it is
+    /// `isLookNeutral` — which strips geometry — that keeps it out here.)
     var isLookEmpty: Bool {
         keyframes.allSatisfy { $0.adjustments.isLookNeutral }
             && keyframedFields.subtracting([.rotation, .whiteMired, .whiteTint]).isEmpty
     }
 
-    /// The same moments with the rotation zeroed in each — for a pass that
-    /// levels frames itself and hands the colour engine the rest.
+    /// The same moments with the rotation zeroed in each — rotation ONLY, the
+    /// crop kept — for a pass that levels frames itself and hands the colour
+    /// engine the rest.
     var withoutRotation: GradeTimeline {
         GradeTimeline(
             keyframes: keyframes.map {
@@ -182,13 +200,25 @@ struct GradeTimeline: Codable, Equatable, Sendable {
             baselineAnchor: baselineAnchor)
     }
 
-    /// The same moments with everything BUT the corrections — the rotation
-    /// and the owned white — neutral: what an Original project still carries.
+    /// The same moments with both geometry corrections taken out of each —
+    /// for the blend loader, which levels and crops per OUTPUT frame.
+    var withoutGeometry: GradeTimeline {
+        GradeTimeline(
+            keyframes: keyframes.map {
+                GradeKeyframe(id: $0.id, position: $0.position, adjustments: $0.adjustments.withoutGeometry)
+            },
+            baselineAnchor: baselineAnchor)
+    }
+
+    /// The same moments with everything BUT the corrections — the rotation,
+    /// the crop and the owned white — neutral: what an Original project still
+    /// carries.
     var rotationOnly: GradeTimeline {
         GradeTimeline(
             keyframes: keyframes.map {
                 var neutral = PhotoAdjustments.neutral
                 neutral.rotationDegrees = $0.adjustments.rotationDegrees
+                neutral.crop = $0.adjustments.crop
                 neutral.whiteMired = $0.adjustments.whiteMired
                 neutral.whiteTint = $0.adjustments.whiteTint
                 return GradeKeyframe(id: $0.id, position: $0.position, adjustments: neutral)
@@ -230,6 +260,13 @@ struct GradeTimeline: Codable, Equatable, Sendable {
         if position >= last.position { return last.adjustments }
         for (before, after) in zip(frames, frames.dropFirst())
         where position >= before.position && position <= after.position {
+            // Standing ON a moment is that moment, whole — including what
+            // the blend below carries from the earlier keyframe rather than
+            // eases (the mixer, the LUT, the crop). The strip lands exactly
+            // on a keyframe when tapped or snapped, so without this the
+            // panel would read the previous moment's mixer and crop there,
+            // and a write would store that stale carry into the keyframe.
+            if position == after.position { return after.adjustments }
             let span = after.position - before.position
             guard span > 0 else { return after.adjustments }
             let u = (position - before.position) / span
@@ -240,11 +277,16 @@ struct GradeTimeline: Codable, Equatable, Sendable {
 
     /// Smoothstep: zero slope at both ends, so a keyframe is a moment the grade
     /// arrives at and leaves from rather than a corner it turns.
+    ///
+    /// Starting from `a` is what carries the non-field properties — the
+    /// mixer, the LUT, the crop — whole from the earlier keyframe: they hold
+    /// until the playhead reaches the next moment, then switch. At `u == 1`
+    /// the playhead HAS reached it, so the later moment is the one carried.
     private static func blend(
         _ a: PhotoAdjustments, _ b: PhotoAdjustments, _ u: Double
     ) -> PhotoAdjustments {
         let t = Float(u * u * (3 - 2 * u))
-        var out = a
+        var out = u >= 1 ? b : a
         for field in PhotoAdjustmentField.allCases {
             let path = field.keyPath
             out[keyPath: path] = a[keyPath: path] + (b[keyPath: path] - a[keyPath: path]) * t
@@ -377,6 +419,7 @@ struct GradeTimeline: Codable, Equatable, Sendable {
             abs(values[keyPath: $0.keyPath] - without[keyPath: $0.keyPath]) <= $0.epsilon
         } && values.hsl == without.hsl   // the mixer is not a field, but it is a value
           && values.lut == without.lut   // nor is the LUT
+          && values.crop == without.crop // nor is the crop
         // A moment that no longer says anything retires — including the last
         // one, which by the reference above has been reset to neutral, so what
         // it leaves behind is an ungraded clip rather than a discarded grade.
@@ -387,6 +430,28 @@ struct GradeTimeline: Codable, Equatable, Sendable {
         update(target.id, to: values)
         baseline = adjustments(at: 0, baseline: baseline)
         return .updated(target.id)
+    }
+
+    /// Stamps one crop onto every moment — the baseline and each keyframe —
+    /// because the crop is one value for the whole shoot (static by decision:
+    /// a frame that slides between moments is an animation, not a crop).
+    ///
+    /// This is the ONLY way a crop should reach a timeline. `write` stores a
+    /// whole panel at one moment, which for a crop would mean the moment
+    /// under the playhead cut differently from every other — and the single-
+    /// image surfaces and the blend read the opening moment's crop, so a crop
+    /// drawn anywhere else would never export. Stamping it everywhere keeps
+    /// `PhotoGrade.crop` (opening moment), `crop(at:)` (any moment) and
+    /// `hasCrop` (every moment) one answer. The pattern is the owned white's
+    /// `seedUnownedWhites`, without the per-moment value. Creates no keyframe:
+    /// a crop is not an edit at a moment.
+    mutating func carryCrop(_ crop: FrameCrop?, baseline: inout PhotoAdjustments) {
+        baseline.crop = crop
+        for keyframe in keyframes {
+            var values = keyframe.adjustments
+            values.crop = crop
+            update(keyframe.id, to: values)
+        }
     }
 
     /// Replaces one keyframe's values wholesale.

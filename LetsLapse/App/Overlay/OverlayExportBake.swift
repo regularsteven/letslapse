@@ -33,6 +33,13 @@ struct OverlayExportBake: Sendable {
 
     /// True when the bake changes any pixel at all: text, a masked grade, the
     /// project's level, or a post-engine pass (dehaze, HSL).
+    ///
+    /// The project's crop is deliberately NOT counted. This hook writes every
+    /// output frame into the writer's pool at the source's size, so a crop
+    /// that changes the size cannot happen here; it is cut by a tail pass
+    /// over the finished clip (`VideoCanvasCropper`, from `AppModel`'s blend
+    /// orchestration) that runs whether or not this bake does, and the single
+    /// stack cuts its still after `bakeStill`.
     var hasWork: Bool {
         !overlays.isEmpty || maskGrades.contains(where: \.isActive) || grade.hasRotation
             || grade.needsPostPasses
@@ -154,8 +161,12 @@ extension AppModel {
                     forKey: key, modelIdentity: source.identity, frames: frames,
                     sampleCount: SceneMaskService.sequenceSampleCount, presetID: preset.presetID.uuidString
                 ) { url in
+                    // Uncropped: the mask lives in the full levelled frame,
+                    // which is the frame the bake composites over — the crop
+                    // is cut afterwards, by the tail pass.
                     PhotoGrader.render(
-                        url: url, preset: preset, adjustments: adjustments, maxDimension: 512)
+                        url: url, preset: preset, adjustments: adjustments, maxDimension: 512,
+                        cropped: false)
                 }
             } catch {
                 LLog("overlay bake: segmentation unavailable (\(error.localizedDescription)) — baking text without occlusion")

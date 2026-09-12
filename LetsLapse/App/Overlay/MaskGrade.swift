@@ -226,6 +226,53 @@ struct MaskGrade: Identifiable, Codable, Equatable {
         adjustments[keyPath: field.keyPath] == field.neutralValue
     }
 
+    /// The fields this grade has moved off neutral, in `fields` order — the
+    /// walkable answer to "what does this mask do" that `summary` (text, at
+    /// most three parts, its own order) is not.
+    var touchedFields: [PhotoAdjustmentField] {
+        Self.fields.filter { !isNeutral($0) }
+    }
+
+    // MARK: - As the Edit screen's tools
+    //
+    // The Mac rail's compact Masks row (board 3b, item 4) says what a grade
+    // does with the tool icons of the whole-picture panel rather than with
+    // words, so the nine masked fields need a home among the eleven tools.
+    // Eight find it by lookup; Temp and Tint do not, because inside a mask
+    // they are the RELATIVE `.temperature`/`.tint` offsets while the panel's
+    // White Balance tool binds the absolute `.whiteMired`/`.whiteTint` — the
+    // same control seen from two sides, so it is mapped by hand.
+
+    /// The Edit screen tool a masked field belongs to, or nil for a field no
+    /// tool shows.
+    static func tool(for field: PhotoAdjustmentField) -> EditorTool? {
+        switch field {
+        case .temperature, .tint:
+            return .whiteBalance
+        default:
+            return EditorTool.allCases.first { $0.fields.contains(field) }
+        }
+    }
+
+    /// Every tool a masked grade can reach, in `fields` order and each once:
+    /// White Balance, Exp · Con, High · Wh, Shad · Bl, Vib · Sat, Tex · Clar,
+    /// Dehaze. Derived from `fields` so a field added to a mask brings its
+    /// tool along by itself.
+    static let tools: [EditorTool] = {
+        var out: [EditorTool] = []
+        for field in fields {
+            if let tool = tool(for: field), !out.contains(tool) { out.append(tool) }
+        }
+        return out
+    }()
+
+    /// The tools whose fields this grade has moved — what the compact row
+    /// lights, in `tools` order and each once.
+    var touchedTools: [EditorTool] {
+        let touched = Set(touchedFields.compactMap(Self.tool(for:)))
+        return Self.tools.filter(touched.contains)
+    }
+
     /// The grade with every field of one section put back to neutral.
     mutating func reset(fields: [PhotoAdjustmentField]) {
         for field in fields {

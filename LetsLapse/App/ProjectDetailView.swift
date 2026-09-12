@@ -1613,8 +1613,14 @@ private struct ProjectHeroPane: View {
             // the screen doesn't lose its top card.
             let preview = preview(for: capture)
             let grade = model.photoGrade(for: capture)
+            // The slot takes the CROPPED shape: the render underneath is cut
+            // to the Edit screen's crop, so a slot the source's shape would
+            // letterbox it over the uncropped thumbnail — strips of sky and
+            // ground the photographer took out, back around the picture.
+            let sourceAspect = probedAspect ?? knownAspect(for: capture, preview: preview)
+            let cropAspect = grade.crop.flatMap { $0.isFull ? nil : $0.width / $0.height } ?? 1
             let metrics = MediaPaneMetrics(
-                aspect: probedAspect ?? knownAspect(for: capture, preview: preview),
+                aspect: sourceAspect.map { $0 * cropAspect },
                 ceilingFraction: 1,
                 floorFraction: floorFraction)
             let size = metrics.frame(in: box, scale: mediaScale)
@@ -1713,7 +1719,8 @@ private struct ProjectHeroPane: View {
             // The ungraded thumbnail stays underneath for the life of the pane:
             // it fills the slot before the first grade lands, and it is what
             // remains if a render fails — so the picture never blanks and never
-            // changes size.
+            // changes size. Filling a crop-shaped slot it shows roughly the
+            // cropped region; the cropped render covers it once it lands.
             ProjectThumbnailView(
                 url: preview?.url,
                 kind: preview?.isMovie == true ? .video : .image,

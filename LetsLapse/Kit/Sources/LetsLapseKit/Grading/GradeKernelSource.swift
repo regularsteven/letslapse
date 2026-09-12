@@ -647,10 +647,21 @@ enum GradeKernelSource {
         destination.write(float4(outv, 1.0), gid);
     }
 
+    // Mirrored by `GradeRenderer.GPUVignetteParams` — layouts must match.
     struct VignetteParams {
-        float strength;
+        float strength;   // signed: positive darkens, negative lightens
+        float midpoint;   // 0…1, where the falloff starts; 0.5 = the historic 0.3
     };
 
+    // The falloff is a smoothstep over the distance from the centre as a
+    // fraction of the half-diagonal, so it reaches exactly 1 at the corners
+    // whatever the aspect. Its start is 0.6 × midpoint: at the neutral 0.5
+    // that is the 0.3 the kernel always had, and 0.6 × 0.5 is exact in
+    // binary, so a recipe without a midpoint renders bit for bit as before.
+    // Darkening multiplies, as it always did. Lightening cannot multiply
+    // (nothing lifts a black corner that way) so it moves each channel
+    // toward 1.0 by the same fraction instead — headroom above 1.0 is left
+    // where it is.
     kernel void applyVignette(
         texture2d<float, access::read> source [[texture(0)]],
         texture2d<float, access::write> destination [[texture(1)]],
@@ -663,8 +674,15 @@ enum GradeKernelSource {
         float2 size = float2(destination.get_width(), destination.get_height());
         float2 offset = float2(gid) + 0.5 - size * 0.5;
         float distanceNorm = length(offset) / (0.5 * length(size));
-        float falloff = 1.0 - p.strength * smoothstep(0.3, 1.0, distanceNorm);
-        float3 outv = source.read(gid).rgb * falloff;
+        float start = 0.6 * p.midpoint;
+        float s = smoothstep(start, 1.0, distanceNorm);
+        float3 rgb = source.read(gid).rgb;
+        float3 outv;
+        if (p.strength >= 0.0) {
+            outv = rgb * (1.0 - p.strength * s);
+        } else {
+            outv = rgb + max(float3(0.0), 1.0 - rgb) * (-p.strength) * s;
+        }
         destination.write(float4(outv, 1.0), gid);
     }
 

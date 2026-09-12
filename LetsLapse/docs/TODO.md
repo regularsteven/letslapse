@@ -11,6 +11,84 @@ live inline.
 
 ## Open
 
+### Post-crop vignette centring — the still and blend paths centre the vignette on the whole frame
+
+**Raised:** 2026-09-12 (editor-controls redesign, stage D2) · known
+limitation, by decision · **Size:** medium · seams: `PhotoGrader.engineRender`
+(`App/PhotoPreset.swift`), `SceneAwareCompositor.bakeExportFrameBody`
+(`App/Overlay/SceneAwareCompositor.swift`), `VideoGrader.composition`
+
+The Crop panel (`PhotoAdjustments.crop`, a `FrameCrop`) is cut AFTER the
+colour engine on the still path — `engineRenderFlat` → `rotated` → `FrameCrop
+.apply` — and after the per-frame bake on the stills blend (a tail pass over
+the finished clip, `VideoCanvasCropper.croppedCopy(of:crop:…)`). The vignette
+is part of the engine, so on both paths it is centred on the FULL picture and
+its falloff reaches the full picture's corners; a crop then takes an
+off-centre slice of it. Lightroom's post-crop vignette centres on the crop.
+The order was kept on purpose: the engine keys its spatial footprints (NR,
+texture, sharpen) to the whole picture's long edge (`GradeEngine.encode`,
+`reference.longEdge`) and grading a crop with the crop's own edge changes
+their scale — the trap the engine's comment warns about. The video path
+(`VideoGrader.composition`, `VideoCanvasCropper`) crops BEFORE it grades and
+has the Lightroom behaviour already, so a cropped still and its blended clip
+disagree on the vignette.
+
+The fix is a vignette that knows the crop: pass the crop rect into
+`GradeRecipe`/`GPUVignetteParams` (centre + half-diagonal of the crop in
+texture space) and into `DisplayGrade` (`CIVignetteEffect` has a centre), and
+put the same numbers on the masked-grade stage. Kit change with GradeEngine
+parity tests; the `lapse` CLI recipe would need the rect too.
+
+### Crop through the Adjust screen — a preview crop twin, and the punch-in reframe composed with the crop
+
+**Raised:** 2026-09-12 (stage D2) · **Size:** medium · owner: `App/
+AdjustPreviewLevel.swift`, `App/ReframeVideoCropper.swift`, the blend
+orchestration in `App/AppModel.swift` (the reframe tail pass and
+`SegmentNormalization`)
+
+`AdjustPreviewLevel` levels the Adjust and Guided screens' source-frame
+previews (`WarpPreviewLoader`, `ExactFrameLoader`, `GuidedFramingBox`) so a
+punch or a canvas box is composed on the picture the render will crop. It has
+no crop twin: with a project crop set, those previews still show the whole
+levelled frame, so the canvas box and the punch-in keys are authored over a
+picture the render then crops out from under them. Two consequences today:
+
+- **The canvas** composes honestly but blind: the render cuts the project
+  crop first and fits the canvas box inside what is left
+  (`VideoCanvasCropper`, "crop first, then the canvas on the cropped clip"),
+  while the Adjust preview drew the box over the uncropped frame.
+- **The punch-in reframe is not composed with the crop at all.** When a
+  `ReframeTrack` runs (the tail pass, or per segment in
+  `SegmentNormalization`), the project crop is SET ASIDE: it cannot go before
+  the punch without remapping every key (`ReframeMath.baseCrop` and the keys'
+  `cx/cy` through `FrameCrop.mapPointIn`, `sourceSize` becoming the cropped
+  size), nor after it without cutting a rect measured over a frame that no
+  longer exists. The summary says " · crop not applied (punch-in reframe)" so
+  nothing is dropped silently.
+
+The job: an `AdjustPreviewLevel.crop` (provider + `apply` cutting after the
+level) so the previews show the cropped picture; then either author the
+reframe keys in the cropped frame and cut the crop first in
+`ReframeVideoCropper.croppedCopy` (pass the crop, remap `rects` once), or
+decide the reframe wins and keep today's set-aside. Design mirrors for the
+Adjust and Guided screens follow whichever is chosen.
+
+### Time-slice poster fast path ignores the project crop
+
+**Raised:** 2026-09-12 (stage D2) · **Size:** small · owner:
+`AppModel.renderPosterFastPath`, `StillsWindowProvider`
+
+A run that keeps nothing but a time-slice poster (`sliceSettings.output ==
+.image`, no regular clip) renders its master frames through
+`StillsWindowProvider` + the stacker's frame hook, which write every frame at
+the source's size — the crop cannot be cut per frame there, and this path
+never reaches the tail pass that cuts it on the clip. The poster is therefore
+built from UNCROPPED frames. The full render (clip + poster from the clip)
+slices the cropped clip and is right. Fix: cut `grade.crop` on each master
+frame as the provider hands it over (`FrameCrop.apply(_:to: CGImage)` after
+the overlay bake — the same order `stackPhotos` uses), and let the ladder
+sizes follow the cropped frame.
+
 ### Server as the source of truth — sync-ready records (Part 3 of the data-model audit)
 
 **Detail:** [data-model-server-portability-2026-09-12.md](data-model-server-portability-2026-09-12.md) ·

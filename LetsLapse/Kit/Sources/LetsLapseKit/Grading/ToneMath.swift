@@ -34,9 +34,11 @@ import simd
 ///
 /// After the tone stage come the detail passes — texture (mid-frequency
 /// band) and sharpen (capture acutance) — then vignette and the optional
-/// dither. They are pure spatial high-pass work with no per-pixel CPU
-/// mirror; on a flat field they are exact no-ops, which is how the
-/// uniform-image parity test still covers the whole chain.
+/// dither. They are spatial work with no per-pixel CPU mirror. The detail
+/// passes are exact no-ops on a flat field, which is how the uniform-image
+/// parity test still covers the whole chain; the vignette shades the corners
+/// of anything, flat or not, so the parity recipes keep it at 0 and its own
+/// test in `GradeEngineTests` pins its shape.
 public enum ToneMath {
     // MARK: - Constants
 

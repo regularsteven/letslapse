@@ -19,4 +19,14 @@ enum LayoutSettings {
     /// you are auditing a library and noise the rest of the time, and at five
     /// filters they are what pushes the bar's labels to their limit.
     static let projectCountsKey = "layout.showsProjectCounts"
+
+    /// Whether the Editor's paired adjustments share an XY pad (Exposure ·
+    /// Contrast, Highlights · Whites, Temp · Tint, …) or each renders as its
+    /// own slider. **On by default**: the pads are the design; the sliders are
+    /// for anyone who wants one number under one finger. Off changes the
+    /// control and nothing else — the grouping, the presets and the timeline
+    /// are the same either way — on iPhone, iPad and Mac alike. The
+    /// `LL_PADS=off` hook overrides it for a screenshot without writing here,
+    /// so the Mac driver never disturbs a real setting.
+    static let editorPadsKey = "layout.editorPads"
 }

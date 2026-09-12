@@ -939,7 +939,7 @@ struct SettingsView: View {
     private var advancedCard: some View {
         VStack(spacing: 0) {
             NavigationLink(value: SettingsDestination.layout) {
-                LLRow(title: "Layout", subtitle: "Which tabs and filters the app shows") {
+                LLRow(title: "Layout", subtitle: "Which tabs, filters and editor controls the app shows") {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.tertiary)
@@ -1382,11 +1382,13 @@ private struct LargeOriginalsView: View {
 
 /// What the shell shows. Everything here is about where things are listed, not
 /// about what the engine does with them — which is why the Scans switch turns a
-/// tab into a filter rather than turning scanning off.
+/// tab into a filter rather than turning scanning off, and the pads switch
+/// changes the Editor's controls without changing what they control.
 private struct LayoutSettingsView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage(LayoutSettings.scansMenuKey) private var scansMenuEnabled = true
     @AppStorage(LayoutSettings.projectCountsKey) private var showsCounts = false
+    @AppStorage(LayoutSettings.editorPadsKey) private var usesPads = true
 
     var body: some View {
         Form {
@@ -1400,6 +1402,21 @@ private struct LayoutSettingsView: View {
                 Toggle("Display count in Projects", isOn: $showsCounts)
             } footer: {
                 Text("Spells out how many projects each filter holds — “All 292”, “Photos 18”. The counts follow the search, so they always match what tapping a filter shows.")
+            }
+
+            // Board 6d: the row carries its own subtitle, the section its
+            // footer — the copy verbatim.
+            Section {
+                Toggle(isOn: $usesPads) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Use Pads in Editor")
+                        Text("Paired adjustments share an XY pad. Off shows plain sliders.")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } footer: {
+                Text("Applies to the Editor on iPhone, iPad and Mac. Grouping, presets and the timeline are unchanged either way.")
             }
         }
         .navigationTitle("Layout")

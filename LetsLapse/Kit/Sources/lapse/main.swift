@@ -160,7 +160,9 @@ USAGE:
   lapse grade <image> [options]                 Grade one frame through the tone engine
       --recipe JSON         Slider values, Lightroom-style ±100 numbers, e.g.
                             '{"highlights":-100,"shadows":49,"vibrance":53}'
-                            (exposure is EV; temperature is a mired offset)
+                            (exposure is EV; temperature is a mired offset;
+                            vignette is signed with POSITIVE darkening, and
+                            vignettemidpoint is 0…100, default 50)
       --lut FILE.cube       A 3D LUT applied last, as an imported LUT preset is;
                             --lut-strength 0…1 mixes it back toward the input
       --out PATH            Write the graded JPEG here (Display P3 for raw,
@@ -850,6 +852,8 @@ func runLightroomRender(
     recipe.noiseReduction = value("noiseReduction")
     recipe.colorNoiseReduction = value("colorNoiseReduction")
     recipe.vignette = value("vignetteIntensity")
+    // Centred at 0.5, so an absent midpoint is the middle, not zero.
+    recipe.vignetteMidpoint = Float(mapped.adjustments["vignetteMidpoint"] ?? 0.5)
     // The import's dehaze, through the fitted response — a control now, not
     // a bench axis. The axis below still adds the sidecar's raw value × scale
     // on top, which is what `--axes dehaze=` sweeps and what retired `G`.

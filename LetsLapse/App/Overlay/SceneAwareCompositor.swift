@@ -554,6 +554,19 @@ enum SceneAwareCompositor {
         // The post-engine passes go on the graded frame BEFORE it is levelled
         // or masked: they are part of the whole-picture grade, and the
         // editor's preview runs them in the same place (`PhotoGrader`).
+        //
+        // Geometry order, for the record: grade → post passes → level →
+        // overlays and masks → (later, elsewhere) the project's crop. Every
+        // overlay and mask is stored in the full LEVELLED frame's unit
+        // square, so they are composited here at that size and the crop is
+        // cut AFTER them — by the tail pass over the finished clip, never in
+        // this hook, whose output must be the pool's size (`base.extent`).
+        // No coordinate is remapped for the crop anywhere; a layer in the
+        // cropped-away margin simply leaves with it. The one cost of this
+        // order is the vignette: it is part of the grade, so on this path
+        // and the still path it is centred on the whole frame, not on the
+        // crop (Lightroom's post-crop vignette centres on the crop) — a known
+        // limitation, listed in docs/TODO.md.
         var graded = CIImage(cvPixelBuffer: buffer)
         if passes, let recipe = postPasses {
             graded = EnginePostPasses.apply(graded, recipe: recipe, context: context)

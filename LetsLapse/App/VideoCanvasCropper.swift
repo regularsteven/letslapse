@@ -14,6 +14,17 @@ import LetsLapseKit
 /// inherent — the crop works on the clip's display-oriented picture (the CI
 /// composition applies the `preferredTransform` before the handler sees a
 /// frame), so a metadata-rotated capture crops the way it looks.
+///
+/// The same pass also cuts the project's own **crop** — the Edit screen's
+/// frame (`FrameCrop`, 2026-09-12) — and can run for that alone. The order is
+/// level → project crop → canvas box → scale: the project crop was drawn over
+/// the levelled picture, and the canvas is then the largest box of its shape
+/// inside what the photographer kept, which is the one composition rule the
+/// two crops have ("crop first, then the canvas on the cropped clip"). The
+/// stills blend needs this pass for the crop alone: `ImageStacker` writes
+/// every output frame into a pool at the source's size, so a crop that
+/// changes the size cannot ride the per-frame bake and is cut here, over the
+/// finished clip, exactly as the canvas is.
 enum VideoCanvasCropper {
     /// GPU-backed and thread-safe; the composition handler runs on
     /// AVFoundation's own queues.
@@ -43,12 +54,17 @@ enum VideoCanvasCropper {
     /// unconditionally and tell the two apart — a nil size also means a
     /// `grade` was NOT baked.
     ///
+    /// `canvas` nil = no box: the pass still levels, cuts the project `crop`
+    /// and scales to `shortEdge`, which is what a resolution cap over a
+    /// project crop with no chosen canvas wants — the crop is the shape,
+    /// and the "as shot" default must not re-cut it.
+    ///
     /// A non-identity `grade` rides the same pass — every frame is already
     /// decoded and re-encoded here, so folding the colour chain in saves the
     /// separate grade generation.
     static func croppedCopy(
         of sourceURL: URL,
-        canvas: CanvasRatio,
+        canvas: CanvasRatio?,
         offset: Double = 0.5,
         shortEdge: Int? = nil,
         grade: PhotoGrade = .identity,
@@ -58,6 +74,13 @@ enum VideoCanvasCropper {
         /// per-segment normalisation, which runs with an identity grade, can
         /// still level — and a level on its own is reason enough to run.
         rotationDegrees: Double = 0,
+        /// The project's own crop — the Edit screen's frame, in the LEVELLED
+        /// picture's unit square — cut after the level and before the canvas
+        /// box is fitted. Its own parameter for the same reason as the
+        /// rotation: the stills blend runs this pass with an identity grade
+        /// (its colour is already baked per frame) and still has to cut. A
+        /// full crop is a no-op, so callers can pass it unconditionally.
+        crop: FrameCrop? = nil,
         /// The rate the job asked for. Stated by the caller rather than probed
         /// off `sourceURL`: this pass runs over an intermediate, and reading the
         /// clock back from it propagates whatever an upstream stage did to it
@@ -71,6 +94,55 @@ enum VideoCanvasCropper {
         renderSizeOverride: CGSize? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, renderSize: CGSize?) {
+        try await croppedCopy(
+            of: sourceURL, canvas: canvas, offset: offset, shortEdge: shortEdge,
+            grade: grade, gradeMap: gradeMap, rotationDegrees: rotationDegrees,
+            crop: crop, outputFPS: outputFPS, renderSizeOverride: renderSizeOverride,
+            profile: .h264High8Bit, progress: progress)
+    }
+
+    /// The project's crop alone: the Edit screen's frame cut from the
+    /// LEVELLED clip, no canvas box, no scale — the stills blend's tail pass
+    /// (see the type comment). Returns `sourceURL` with a nil size when the
+    /// crop keeps the whole frame and nothing else asks for the pass.
+    ///
+    /// `profile` is the encode the clip was written with: a 10-bit HEVC
+    /// stills blend stays 10-bit through its crop rather than landing as
+    /// 8-bit H.264 the way the canvas pass (video sources, 8-bit) does.
+    static func croppedCopy(
+        of sourceURL: URL,
+        crop: FrameCrop,
+        grade: PhotoGrade = .identity,
+        gradeMap: GradeSourceMap = .direct,
+        rotationDegrees: Double = 0,
+        outputFPS: Double? = nil,
+        profile: VideoEncodePolicy.Profile = .h264High8Bit,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> (url: URL, renderSize: CGSize?) {
+        try await croppedCopy(
+            of: sourceURL, canvas: nil, offset: 0.5, shortEdge: nil,
+            grade: grade, gradeMap: gradeMap, rotationDegrees: rotationDegrees,
+            crop: crop, outputFPS: outputFPS, renderSizeOverride: nil,
+            profile: profile, progress: progress)
+    }
+
+    /// The one body behind both entry points. `canvas` nil = no canvas box,
+    /// only whatever the project crop, the level, the scale and the override
+    /// ask for.
+    private static func croppedCopy(
+        of sourceURL: URL,
+        canvas: CanvasRatio?,
+        offset: Double,
+        shortEdge: Int?,
+        grade: PhotoGrade,
+        gradeMap: GradeSourceMap,
+        rotationDegrees: Double,
+        crop: FrameCrop?,
+        outputFPS: Double?,
+        renderSizeOverride: CGSize?,
+        profile: VideoEncodePolicy.Profile,
+        progress: (@Sendable (Double) -> Void)?
+    ) async throws -> (url: URL, renderSize: CGSize?) {
         let asset = AVURLAsset(url: sourceURL)
         guard let assetTrack = try await asset.loadTracks(withMediaType: .video).first else {
             throw CropError.exportFailed("the clip has no video track")
@@ -79,19 +151,26 @@ enum VideoCanvasCropper {
         let natural = try await assetTrack.load(.naturalSize)
         let orientedRect = CGRect(origin: .zero, size: natural).applying(preferred)
         let orientedSize = CGSize(width: abs(orientedRect.width), height: abs(orientedRect.height))
-        // The kept pixels: the centred canvas crop, or the whole frame when
-        // the clip already matches — the pass still runs then if a size cap
-        // asks for a downscale.
-        let cropped = cropSize(displaySize: orientedSize, canvas: canvas)
+        // The project crop first. Its pixels are measured over the oriented
+        // natural size, which is also the extent every request's frame
+        // arrives at, so the rect the handler cuts (`FrameCrop.apply`) and
+        // the size everything below is fitted to agree to the pixel.
+        let projectCrop = crop.flatMap { $0.isFull ? nil : $0 }
+        let framedSize = projectCrop?.outputSize(for: orientedSize) ?? orientedSize
+        // The kept pixels: the centred canvas crop inside what the project
+        // crop left, or the whole (project-cropped) frame when the clip
+        // already matches — the pass still runs then if a size cap asks for a
+        // downscale.
+        let cropped = canvas.flatMap { cropSize(displaySize: framedSize, canvas: $0) }
         let keptSize = cropped ?? CGSize(
-            width: CGFloat(max(2, Int(orientedSize.width.rounded()) & ~1)),
-            height: CGFloat(max(2, Int(orientedSize.height.rounded()) & ~1)))
+            width: CGFloat(max(2, Int(framedSize.width.rounded()) & ~1)),
+            height: CGFloat(max(2, Int(framedSize.height.rounded()) & ~1)))
         let target = renderSizeOverride
             ?? shortEdge.flatMap { ReframeVideoCropper.scaledDown(keptSize, shortEdge: $0) }
         // An override that already matches the kept pixels asks for nothing:
         // let a base-resolution segment out untouched rather than paying a
         // full re-encode to arrive where it already is.
-        let needsCrop = cropped != nil
+        let needsCrop = cropped != nil || projectCrop != nil
         let needsScale = target != nil && target != keptSize
         // ...unless this pass is normalising a mixed-resolution shoot, where
         // matching SIZE is not enough — the pieces must also agree on how they
@@ -112,27 +191,24 @@ enum VideoCanvasCropper {
         let needsLevelling = FrameRotation.isActive(rotationDegrees) || grade.hasRotation
         guard needsCrop || needsScale || needsOrienting || needsLevelling else { return (sourceURL, nil) }
         let renderSize = target ?? keptSize
-        let boxRect = CollectionMath.cropBox(
-            clipSize: orientedSize, canvas: canvas, offset: offset)?.rect
-            ?? CGRect(origin: .zero, size: orientedSize)
+        // The canvas box, fitted inside the project-cropped frame.
+        let boxRect = canvas.flatMap {
+            CollectionMath.cropBox(clipSize: framedSize, canvas: $0, offset: offset)?.rect
+        } ?? CGRect(origin: .zero, size: framedSize)
 
         // The grade's chain, built once — the movie carries no as-shot
         // temperature tag, so white balance anchors at D65 like every video
         // grade (see `VideoGrader`). A grade that travels can't be built once:
         // it is rebuilt per frame, at the SOURCE moment `gradeMap` says that
         // frame came from, because this pass runs over a clip whose clock the
-        // warp has already rewritten.
-        let chain: ((CIImage) -> CIImage)? = grade.isIdentity || grade.isKeyframed
+        // warp has already rewritten. Colour only — a grade that is nothing
+        // but geometry (a level, a crop) builds no chain, since this pass
+        // applies its geometry itself.
+        let chain: ((CIImage) -> CIImage)? = grade.isColorIdentity || grade.isKeyframed
             ? nil : PhotoGrader.filterChain(grade, asShotKelvin: PhotoGrader.neutralKelvin)
         let keyframedGrade: PhotoGrade? = grade.isKeyframed ? grade : nil
         let gradedDuration = (try? await asset.load(.duration))?.seconds ?? 0
         let composition = AVMutableVideoComposition(asset: asset) { request in
-            let extent = request.sourceImage.extent
-            // The box is authored top-left on the display-oriented picture;
-            // Core Image runs bottom-left.
-            let flipped = CGRect(
-                x: boxRect.minX, y: extent.height - boxRect.maxY,
-                width: max(1, boxRect.width), height: max(1, boxRect.height))
             // The level this frame gets: the grade's own moment when it
             // travels, else the constant handed in.
             let angle = keyframedGrade.map {
@@ -141,7 +217,16 @@ enum VideoCanvasCropper {
                     outputDuration: gradedDuration))
             } ?? rotationDegrees
             let levelled = FrameRotation.rotated(request.sourceImage, degrees: angle)
-            let croppedImage = levelled.cropped(to: flipped)
+            // The project crop, cut from the levelled frame and moved to the
+            // origin, so the canvas box below is measured in its pixels.
+            let kept = projectCrop.map { FrameCrop.apply($0, to: levelled) } ?? levelled
+            let extent = kept.extent
+            // The box is authored top-left on the display-oriented picture;
+            // Core Image runs bottom-left.
+            let flipped = CGRect(
+                x: boxRect.minX, y: extent.height - boxRect.maxY,
+                width: max(1, boxRect.width), height: max(1, boxRect.height))
+            let croppedImage = kept.cropped(to: flipped)
                 .transformed(by: CGAffineTransform(translationX: -flipped.minX, y: -flipped.minY))
             // Lanczos, like the reframe pass — the layer-instruction transform
             // this replaces resampled bilinearly, so a downscaled crop landed
@@ -186,7 +271,7 @@ enum VideoCanvasCropper {
         // colour tags, where the export-session preset chose its own and
         // wrote none.
         let policy = VideoEncodePolicy(
-            profile: .h264High8Bit,
+            profile: profile,
             width: Int(renderSize.width), height: Int(renderSize.height), fps: fps)
         let isMP4 = sourceURL.pathExtension.lowercased() == "mp4"
         let outputURL = FileManager.default.temporaryDirectory

@@ -54,8 +54,12 @@ public struct DisplayGrade: Equatable, Sendable {
     public var saturation: Float = 0
     /// ±1. Only the positive half acts here: an unsharp mask cannot smooth.
     public var clarity: Float = 0
-    /// 0…1.
+    /// −1…1: positive darkens the corners, negative lightens them — the
+    /// engine's `GradeRecipe.vignette` convention.
     public var vignette: Float = 0
+    /// Where the vignette's falloff starts, 0…1, neutral 0.5 — the engine's
+    /// `GradeRecipe.vignetteMidpoint`, mapped onto `CIVignette`'s radius.
+    public var vignetteMidpoint: Float = 0.5
     /// Haze removal, −1…1 — the same dark-channel prior the whole-picture
     /// `GradeRecipe.dehaze` runs, here so a masked grade can carry it
     /// (Lightroom's LocalDehaze; three of the corpus's sky masks use it).
@@ -96,9 +100,29 @@ public struct DisplayGrade: Equatable, Sendable {
     /// Clarity 1.0 maps to this unsharp-mask intensity. Calibrated to stop
     /// short of haloing on a high-contrast edge.
     static let clarityMaxIntensity: CGFloat = 0.5
-    /// Vignette 1.0 maps to this `CIVignette` intensity.
+    /// Vignette ±1.0 maps to this `CIVignette` intensity; the filter takes a
+    /// negative intensity and lightens the edges with it.
     static let vignetteMaxIntensity: CGFloat = 2.0
+    /// `CIVignette`'s radius at the neutral midpoint (0.5) — the constant
+    /// this path always used.
     static let vignetteRadius: CGFloat = 1.5
+
+    /// The filter's radius for a midpoint. `CIVignette`'s radius runs the
+    /// OPPOSITE way to the engine's midpoint — measured 2026-09-12 on a flat
+    /// grey: a larger radius shades MORE of the picture (corner 0.109 → 0.027
+    /// from radius 1 to 2 at intensity 1), and the filter clamps it at 2. A
+    /// wider midpoint means the falloff starts further out and shades less,
+    /// so the radius has to fall as the midpoint rises, and it must stay
+    /// inside 0…2 or a quarter of the pad's travel would render alike. Two
+    /// lines through the neutral 1.5: 2.0 at midpoint 0 (the filter's whole
+    /// reach), 0.5 at midpoint 1 (closest to the engine's corner-only
+    /// falloff on the same frame). Loose parity by nature — the two vignette
+    /// maths were never the same shape — but the axis points the same way
+    /// on a still and on a video.
+    static func vignetteRadius(midpoint: Float) -> CGFloat {
+        let m = CGFloat(min(max(midpoint, 0), 1))
+        return m <= 0.5 ? 2.0 - m : 1.5 - (m - 0.5) * 2.0
+    }
 
     // MARK: - Applying it
 
@@ -212,7 +236,7 @@ public struct DisplayGrade: Equatable, Sendable {
             filter.setValue(out, forKey: kCIInputImageKey)
             filter.setValue(CGFloat(grade.vignette) * vignetteMaxIntensity,
                             forKey: kCIInputIntensityKey)
-            filter.setValue(vignetteRadius, forKey: kCIInputRadiusKey)
+            filter.setValue(vignetteRadius(midpoint: grade.vignetteMidpoint), forKey: kCIInputRadiusKey)
             out = filter.outputImage ?? out
         }
 
@@ -260,7 +284,8 @@ public enum MaskedGradeStage {
         out.vibrance = clamp(grade.vibrance, unitRange)
         out.whites = clamp(grade.whites, unitRange)
         out.blacks = clamp(grade.blacks, unitRange)
-        out.vignette = clamp(grade.vignette, 0...1)
+        out.vignette = clamp(grade.vignette, unitRange)
+        out.vignetteMidpoint = clamp(grade.vignetteMidpoint, 0...1)
         out.dehaze = clamp(grade.dehaze, unitRange)
         out.hsl = grade.hsl?.clamped
         out.lut = grade.lut

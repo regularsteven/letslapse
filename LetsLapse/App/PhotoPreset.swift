@@ -275,7 +275,15 @@ enum PhotoGrader {
         /// is every single-still surface's behaviour and every project's until
         /// somebody pins a white.
         whiteBalance: WhiteBalanceTrack = .asShot,
-        maxDimension: CGFloat? = nil
+        maxDimension: CGFloat? = nil,
+        /// Whether the crop inside `adjustments` is cut on the way out. True —
+        /// the default — for every surface that shows the finished picture:
+        /// exports, the hero, the grid, the project card. The EDITOR passes
+        /// false: it draws the crop as a scrim over the full levelled picture
+        /// so zoom, 1:1, text layers and masks keep their coordinate space,
+        /// and so must be handed the whole frame. A false with no crop is a
+        /// no-op, so callers can pass it unconditionally.
+        cropped: Bool = true
     ) -> CGImage? {
         var adjustments = adjustments
         if let rotationDegrees { adjustments.rotationDegrees = Float(rotationDegrees) }
@@ -288,12 +296,13 @@ enum PhotoGrader {
         let resolved = whiteBalance.pinned(forFile: url.lastPathComponent)
         let key = cacheKey(
             url: url, preset: preset, adjustments: adjustments,
-            whiteBalance: resolved, maxDimension: maxDimension)
+            whiteBalance: resolved, maxDimension: maxDimension, cropped: cropped)
         if let cached = cache.object(forKey: key) { return cached.image }
         do {
             let grade = PhotoGrade(
                 preset: preset, adjustments: adjustments, whiteBalance: resolved)
-            let cgImage = try engineRender(url: url, grade: grade, maxDimension: maxDimension)
+            let cgImage = try engineRender(
+                url: url, grade: grade, maxDimension: maxDimension, cropped: cropped)
             if maxDimension != nil {
                 cache.setObject(Box(cgImage), forKey: key, cost: cgImage.bytesPerRow * cgImage.height)
             }
@@ -307,11 +316,30 @@ enum PhotoGrader {
     }
 
     /// The engine path shared by previews, exports and the blend loader. The
-    /// grade's rotation, when it has one, is applied to the graded result —
-    /// callers on the blend path hand in `grade.withoutRotation`.
-    static func engineRender(url: URL, grade: PhotoGrade, maxDimension: CGFloat?) throws -> CGImage {
+    /// grade's geometry is applied to the graded result in the order the
+    /// photographer made it — levelled first, then the crop, which was drawn
+    /// over the LEVELLED picture — and only when asked (`cropped`; see
+    /// `render`). Callers on the blend path hand in `grade.withoutGeometry`
+    /// and get neither.
+    ///
+    /// Known limitation: the colour engine — the vignette included — runs on
+    /// the WHOLE frame and the crop is cut afterwards, so a vignette is
+    /// centred on the full picture rather than on the crop (Lightroom's
+    /// post-crop vignette centres on the crop). The order stays: the engine
+    /// keys its footprints to the whole picture's edge, and grading a crop
+    /// with the crop's own edge is the trap `GradeEngine` warns about. Listed
+    /// in docs/TODO.md ("post-crop vignette centring"); the video path
+    /// (`VideoGrader.composition`) crops before it grades and has no such
+    /// limitation.
+    static func engineRender(
+        url: URL, grade: PhotoGrade, maxDimension: CGFloat?, cropped: Bool = true
+    ) throws -> CGImage {
         let graded = try engineRenderFlat(url: url, grade: grade, maxDimension: maxDimension)
-        return rotated(graded, degrees: grade.rotationDegrees)
+        var image = rotated(graded, degrees: grade.rotationDegrees)
+        if cropped, let crop = grade.adjustments.crop, !crop.isFull {
+            image = FrameCrop.apply(crop, to: image)
+        }
+        return image
     }
 
     /// `engineRender` before any geometry: the colour engine alone.
@@ -840,12 +868,15 @@ enum PhotoGrader {
     }
 
     static func renderForBlend(url: URL, grade: PhotoGrade) throws -> CGImage {
-        // Never the rotation here: a blend levels each OUTPUT frame once, in
-        // the stacker's frame hook (`OverlayExportBake`), and levelling every
-        // input on the way in as well would turn the picture twice.
-        let flat = grade.withoutRotation
+        // Never the geometry here: a blend levels each OUTPUT frame once, in
+        // the stacker's frame hook (`OverlayExportBake`), and crops it after
+        // levelling — so levelling or cropping every input on the way in as
+        // well would turn the picture twice and cut the crop out of an
+        // already-cut frame. `withoutGeometry` strips both, and an identity
+        // that is left is the plain still.
+        let flat = grade.withoutGeometry
         guard !flat.isIdentity else { return try ImageStacker.loadImage(at: url) }
-        return try engineRender(url: url, grade: flat, maxDimension: nil)
+        return try engineRender(url: url, grade: flat, maxDimension: nil, cropped: false)
     }
 
     /// The pieces the linear blend path needs: a decode closure handing the
@@ -1016,7 +1047,8 @@ enum PhotoGrader {
         preset: PhotoPreset,
         adjustments: PhotoAdjustments,
         whiteBalance: WhiteBalanceTrack,
-        maxDimension: CGFloat?
+        maxDimension: CGFloat?,
+        cropped: Bool
     ) -> NSString {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970 ?? 0
@@ -1024,8 +1056,14 @@ enum PhotoGrader {
         // The engine version is in the key so cached renders self-invalidate
         // whenever the engine's math changes — and the decode path is in it for
         // the same reason: flipping the toggle changes the pixels, so a cached
-        // render from the previous path must not survive the switch.
-        return "e\(GradeRecipe.engineVersion)|\(RawDecodePath.current.rawValue)|\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)\(whiteBalance.cacheToken)|\(size)" as NSString
+        // render from the previous path must not survive the switch. The crop
+        // itself is in `adjustments.cacheToken`; whether it was CUT is not, so
+        // the editor's uncropped frame and the hero's cropped one of the same
+        // grade are two entries. Marked only when a crop was actually taken
+        // off, so every key an uncropped project made before is the key it
+        // makes now.
+        let cut = cropped && adjustments.hasCrop ? "|cut" : ""
+        return "e\(GradeRecipe.engineVersion)|\(RawDecodePath.current.rawValue)|\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)\(whiteBalance.cacheToken)|\(size)\(cut)" as NSString
     }
 }
 

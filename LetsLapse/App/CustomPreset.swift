@@ -69,8 +69,11 @@ final class CustomPresetStore: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         // A look is a way of treating light, not a claim about which light it
-        // was: the owned white stays with the shoot it was measured on.
-        let adjustments = adjustments.withoutWhite
+        // was: the owned white stays with the shoot it was measured on — and
+        // so does its geometry, the level and the crop, which belong to one
+        // photograph rather than to a look. Stripped here as well as at the
+        // editors' call sites, so no path can save either into a preset.
+        let adjustments = adjustments.withoutGeometry.withoutWhite
 
         if let index = presets.firstIndex(where: {
             $0.name.caseInsensitiveCompare(trimmed) == .orderedSame

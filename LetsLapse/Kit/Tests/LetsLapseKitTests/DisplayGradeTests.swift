@@ -66,17 +66,45 @@ final class DisplayGradeTests: XCTestCase {
         XCTAssertEqual(DisplayGrade.apply(image, grade).extent, image.extent)
     }
 
+    /// The signed vignette on this path: positive takes a corner down,
+    /// negative takes the same corner up, the centre stays put either way,
+    /// and the midpoint moves `CIVignette`'s radius the way the engine's
+    /// start moves — a wider midpoint shades the corner less.
+    func testTheVignetteIsSignedAndTheMidpointWidensIt() {
+        let width = 128, height = 96
+        let extent = CGRect(x: 0, y: 0, width: width, height: height)
+        let image = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: extent)
+        let corner = CGRect(x: 0, y: 0, width: 4, height: 4)
+        let centre = CGRect(x: width / 2 - 2, y: height / 2 - 2, width: 4, height: 4)
+        let flat = mean(image, in: corner)
+
+        var dark = DisplayGrade(); dark.vignette = 0.5
+        var light = DisplayGrade(); light.vignette = -0.5
+        var wide = DisplayGrade(); wide.vignette = 0.5; wide.vignetteMidpoint = 1
+        XCTAssertLessThan(mean(DisplayGrade.apply(image, dark), in: corner), flat - 0.05)
+        XCTAssertGreaterThan(mean(DisplayGrade.apply(image, light), in: corner), flat + 0.05)
+        XCTAssertEqual(mean(DisplayGrade.apply(image, dark), in: centre), flat, accuracy: 0.02)
+        XCTAssertEqual(mean(DisplayGrade.apply(image, light), in: centre), flat, accuracy: 0.02)
+        XCTAssertGreaterThan(mean(DisplayGrade.apply(image, wide), in: corner),
+                             mean(DisplayGrade.apply(image, dark), in: corner),
+                             "a wider midpoint shades the corner less")
+        XCTAssertEqual(DisplayGrade.vignetteRadius(midpoint: 0.5), DisplayGrade.vignetteRadius,
+                       "the neutral midpoint is the radius this path always used")
+    }
+
     func testTheMaskTravelClampIsTheEditorsOwn() {
         var grade = DisplayGrade()
         grade.exposure = 4          // Lightroom's local +4 EV
         grade.temperatureMired = 60 // past the ±25 nudge
         grade.shadows = 1.4
-        grade.vignette = -1
+        grade.vignette = -1.6          // the vignette is signed; ±1 is its travel
+        grade.vignetteMidpoint = 1.4
         let held = MaskedGradeStage.clampedToMaskTravel(grade)
         XCTAssertEqual(held.exposure, MaskedGradeStage.exposureRange.upperBound)
         XCTAssertEqual(held.temperatureMired, MaskedGradeStage.temperatureRange.upperBound)
         XCTAssertEqual(held.shadows, 1)
-        XCTAssertEqual(held.vignette, 0)
+        XCTAssertEqual(held.vignette, -1)
+        XCTAssertEqual(held.vignetteMidpoint, 1)
         XCTAssertEqual(MaskedGradeStage.exposureRange, -2...2)
         XCTAssertEqual(MaskedGradeStage.temperatureRange, -25...25)
     }

@@ -223,7 +223,8 @@ public struct LightroomSidecar: Equatable, Sendable {
         // non-zero here means somebody moved it.
         let missing: [(key: String, label: String)] = [
             ("GrainAmount", "Grain"),
-            ("PostCropVignetteAmount", "Post-crop vignette"),
+            // The post-crop vignette is carried since 2026-09-12 (amount and
+            // midpoint, through `LightroomImport`), so it is no longer here.
             ("ParametricShadows", "Parametric curve · shadows"),
             ("ParametricDarks", "Parametric curve · darks"),
             ("ParametricLights", "Parametric curve · lights"),

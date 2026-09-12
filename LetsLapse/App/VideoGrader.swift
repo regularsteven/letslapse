@@ -55,9 +55,14 @@ enum VideoGrader {
             return nil
         }
         guard !grade.isIdentity else { return frame }
-        // Levelled first, graded second — the same order every bake uses, so
-        // the vignette sits on the frame that ships.
-        let source = FrameRotation.rotated(CIImage(cgImage: frame), degrees: grade.rotationDegrees)
+        // Levelled first, cropped second, graded third — the same order
+        // `composition` bakes in, so the vignette sits on the frame that
+        // ships. The crop was drawn over the LEVELLED picture, which is why
+        // it follows the rotation.
+        var source = FrameRotation.rotated(CIImage(cgImage: frame), degrees: grade.rotationDegrees)
+        if let crop = grade.crop, !crop.isFull {
+            source = FrameCrop.apply(crop, to: source)
+        }
         // A card's one frame is the clip's opening moment, which is the moment
         // a keyframed grade answers for when it is only asked once.
         let output = filterChain(grade.frozen(at: 0))(source)
@@ -78,35 +83,74 @@ enum VideoGrader {
     /// position to grade at, so the grade freezes at the opening moment rather
     /// than guessing; that is a visible flattening, never a silent smear across
     /// the wrong frames.
+    ///
+    /// The project's **crop** is cut here too — after the level, because it
+    /// was drawn over the levelled picture, and before the colour, so the
+    /// vignette centres on the frame that ships (the still path grades first
+    /// and cuts after; see `PhotoGrader.engineRender`). It is the OPENING
+    /// moment's crop for every frame: a composition renders at one size, and
+    /// the crop is static by decision — the timeline carries it whole, never
+    /// eased — so no later moment can disagree. The composition comes back
+    /// with `renderSize` already at the cropped size, measured over the size
+    /// the initializer gave it: the track's DISPLAY-oriented natural size,
+    /// which is also the extent every request's `sourceImage` arrives at
+    /// (verified on a 90°-tagged clip, 2026-09-12), so the rect the handler
+    /// cuts and the size the composition promised agree to the pixel. A
+    /// player takes that size as is; `bakedCopy` keeps it.
     static func composition(
         for asset: AVAsset,
         grade: PhotoGrade,
         durationSeconds: Double? = nil,
-        map: GradeSourceMap = .direct
+        map: GradeSourceMap = .direct,
+        /// Whether the crop is cut. The default is NOT to — the opposite of
+        /// `PhotoGrader.render(cropped:)`, because a composition's usual home
+        /// is a player: the video editor's, which is the editor's preview and
+        /// keeps the whole levelled frame so the text layers drawn over it
+        /// keep their coordinate space (spec decision 3 — the editor never
+        /// resizes the picture for a crop; its Crop panel says "shown on
+        /// export"). The surfaces that show the finished picture ask for the
+        /// cut: `bakedCopy`, and the motion preview. A true with no crop is a
+        /// no-op.
+        cropped: Bool = false
     ) -> AVMutableVideoComposition? {
-        guard !grade.isIdentity else { return nil }
         // The project's level, applied to every frame before its colour: the
-        // geometry keeps the frame's size, so the writer sees nothing new.
+        // geometry keeps the frame's size, so the writer sees nothing new —
+        // the crop is what changes the size, and `renderSize` says so below.
         let rotation = grade.rotationDegrees
-        guard grade.isKeyframed, let duration = durationSeconds, duration > 0 else {
+        let crop = cropped ? grade.crop.flatMap { $0.isFull ? nil : $0 } : nil
+        // Nothing to do — including a crop-only grade the caller asked to
+        // leave uncut — is no composition, not a pass that renders every
+        // frame through nothing.
+        guard !grade.isColorIdentity || grade.hasRotation || crop != nil else { return nil }
+        let composition: AVMutableVideoComposition
+        if grade.isKeyframed, let duration = durationSeconds, duration > 0 {
+            composition = AVMutableVideoComposition(asset: asset) { request in
+                let position = map.position(
+                    outputSeconds: request.compositionTime.seconds, outputDuration: duration)
+                let moment = grade.frozen(at: position)
+                let chain = filterChain(moment)
+                let levelled = FrameRotation.rotated(
+                    request.sourceImage, degrees: moment.rotationDegrees)
+                let framed = crop.map { FrameCrop.apply($0, to: levelled) } ?? levelled
+                let graded = chain(framed).cropped(to: framed.extent)
+                request.finish(with: graded, context: context)
+            }
+        } else {
             let chain = filterChain(grade.frozen(at: 0))
-            return AVMutableVideoComposition(asset: asset) { request in
+            composition = AVMutableVideoComposition(asset: asset) { request in
                 let levelled = FrameRotation.rotated(request.sourceImage, degrees: rotation)
+                let framed = crop.map { FrameCrop.apply($0, to: levelled) } ?? levelled
                 // Filters like the unsharp mask and the vignette grow the extent;
-                // the frame has to come back the size the writer expects.
-                let graded = chain(levelled).cropped(to: request.sourceImage.extent)
+                // the frame has to come back the size the writer expects — the
+                // cropped one, when there is a crop.
+                let graded = chain(framed).cropped(to: framed.extent)
                 request.finish(with: graded, context: context)
             }
         }
-        return AVMutableVideoComposition(asset: asset) { request in
-            let position = map.position(
-                outputSeconds: request.compositionTime.seconds, outputDuration: duration)
-            let moment = grade.frozen(at: position)
-            let chain = filterChain(moment)
-            let levelled = FrameRotation.rotated(request.sourceImage, degrees: moment.rotationDegrees)
-            let graded = chain(levelled).cropped(to: request.sourceImage.extent)
-            request.finish(with: graded, context: context)
+        if let crop {
+            composition.renderSize = crop.outputSize(for: composition.renderSize)
         }
+        return composition
     }
 
     /// Writes a copy of `sourceURL` with `grade` baked in and returns the new
@@ -135,7 +179,8 @@ enum VideoGrader {
         let duration = grade.isKeyframed
             ? (try? await asset.load(.duration))?.seconds : nil
         guard let composition = composition(
-            for: asset, grade: grade, durationSeconds: duration, map: map) else { return sourceURL }
+            for: asset, grade: grade, durationSeconds: duration, map: map, cropped: true)
+        else { return sourceURL }
         guard let assetTrack = try await asset.loadTracks(withMediaType: .video).first else {
             throw GradeError.exportFailed("the clip has no video track")
         }
@@ -146,12 +191,29 @@ enum VideoGrader {
         let preferred = try await assetTrack.load(.preferredTransform)
         let natural = try await assetTrack.load(.naturalSize)
         let orientedRect = CGRect(origin: .zero, size: natural).applying(preferred)
-        let width = max(2, Int(abs(orientedRect.width).rounded()) & ~1)
-        let height = max(2, Int(abs(orientedRect.height).rounded()) & ~1)
-        guard width > 2 || height > 2 else {
+        let orientedWidth = max(2, Int(abs(orientedRect.width).rounded()) & ~1)
+        let orientedHeight = max(2, Int(abs(orientedRect.height).rounded()) & ~1)
+        guard orientedWidth > 2 || orientedHeight > 2 else {
             throw GradeError.exportFailed("the clip's size couldn't be read")
         }
-        composition.renderSize = CGSize(width: width, height: height)
+        // With a crop the composition has already sized itself, off the same
+        // oriented natural size its handler measures every frame against —
+        // `pixelRect` keeps that even, so the encoder is happy — and that
+        // size is kept rather than re-derived from the probe here, which
+        // could round a crop edge two pixels away from the handler's on an
+        // odd-sized source. The probe stands in only if the composition
+        // could not read one.
+        let oriented = CGSize(width: orientedWidth, height: orientedHeight)
+        let rendered: CGSize
+        if let crop = grade.crop, !crop.isFull {
+            let sized = composition.renderSize
+            rendered = sized.width >= 2 && sized.height >= 2 ? sized : crop.outputSize(for: oriented)
+        } else {
+            rendered = oriented
+        }
+        let width = Int(rendered.width)
+        let height = Int(rendered.height)
+        composition.renderSize = rendered
         let fps: Double
         if let outputFPS, outputFPS > 0 {
             fps = outputFPS
@@ -207,3 +269,4 @@ enum VideoGrader {
         }
     }
 }
+

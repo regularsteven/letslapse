@@ -95,18 +95,23 @@ private struct CaptureAssetTile: View {
         }
     }
 
-    /// A graded still is rendered per tile; everything else comes from the shared
-    /// thumbnail cache. Tile-sized renders are cheap, and only a project whose
-    /// grade is actually set pays for them.
+    /// A graded asset is rendered per tile — a still through the grader, a
+    /// movie's poster frame through `VideoGrader.gradedFrame`, so a cropped
+    /// or levelled video project's tile shows the same picture as its hero;
+    /// everything else comes from the shared thumbnail cache. Tile-sized
+    /// renders are cheap, and only a project whose grade is actually set
+    /// pays for them.
     private func load(_ hero: (url: URL, kind: AppModel.MediaKind)) async -> Image? {
-        guard let grade, !grade.isIdentity, hero.kind == .image else {
+        guard let grade, !grade.isIdentity else {
             return await ProjectThumbnailCache.shared.thumbnail(for: hero.url, kind: hero.kind)
         }
         let rendered = await MediaWorkQueue.shared.run {
-            PhotoGrader.render(
-                url: hero.url, preset: grade.preset, adjustments: grade.adjustments,
-                rotationDegrees: grade.rotationDegrees,
-                whiteBalance: grade.whiteBalance, maxDimension: 480)
+            hero.kind == .video
+                ? VideoGrader.gradedFrame(at: hero.url, grade: grade, maxDimension: 480)
+                : PhotoGrader.render(
+                    url: hero.url, preset: grade.preset, adjustments: grade.adjustments,
+                    rotationDegrees: grade.rotationDegrees,
+                    whiteBalance: grade.whiteBalance, maxDimension: 480)
         }
         // The outer nil is the work queue's "didn't run", the inner one a failed
         // render; either way fall back to the ungraded thumbnail rather than

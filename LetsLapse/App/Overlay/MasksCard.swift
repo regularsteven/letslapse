@@ -3,11 +3,13 @@ import LetsLapseKit
 
 /// The Editor tab's Masks card — where a grade gets applied inside a mask.
 ///
-/// It sits between the preset chips and the whole-picture grade panel, and it
-/// is closed by default: one strip of thumbnails saying what the picture is
-/// carrying. Click a thumbnail and the card expands into that mask's own
-/// adjustments — the same sections and controls as the panel below, over a
-/// region instead of the frame.
+/// It sits under the open group's panel on the rail, and it is closed by
+/// default: one strip of thumbnails saying what the picture is carrying —
+/// or, on the Mac rail (`compactRows`), one row per grade that also says
+/// what each grade DOES, as the tool icons of the whole-picture panel. Click
+/// a thumbnail or a row and the card expands into that mask's own
+/// adjustments — the same sections and controls as the panel, over a region
+/// instead of the frame.
 ///
 /// The division of labour is the design's: **this card owns a mask's grade,
 /// the Masks tab owns its shape.** Same mask, two sides of it. Nothing here
@@ -37,19 +39,45 @@ struct MasksCard: View {
     /// "New Linear mask…" / "New Radial mask…" — the Masks tab with the tool
     /// already armed, so the next drag on the picture draws one.
     let onNewShape: (MaskShapeKind) -> Void
+    /// The Mac rail's compact list (board 3b, rail item 4): one row per
+    /// grade — tile, name, kind · enabled, the tool icons its grade lights,
+    /// a chevron — in place of the thumbnail strip. Off, the card keeps the
+    /// strip exactly as the stacked layouts draw it (the iPhone mask mirror
+    /// still specifies that strip). Defaulted per platform so the viewer
+    /// needs no edit: the Mac gets the board's rows, every touch layout the
+    /// strip. The board is drawn light; the rows take its sizes and the
+    /// system's inks (`.primary` / `.secondary`) rather than its hex values,
+    /// because the Mac rail follows the system appearance and an `LL.ink`
+    /// name on a dark card is invisible (seen 2026-09-12).
+    var compactRows: Bool = MasksCard.defaultCompactRows
+
+    /// The board's rows are the Mac rail's; the touch layouts keep the strip.
+    static var defaultCompactRows: Bool {
+        #if os(macOS)
+        return true
+        #else
+        return false
+        #endif
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
             if !document.maskGrades.isEmpty {
-                thumbnailStrip
+                if compactRows {
+                    compactList
+                } else {
+                    thumbnailStrip
+                }
                 if let grade = expandedGrade {
                     Divider().padding(.vertical, 2)
                     expandedPanel(for: grade)
                 }
             }
         }
-        .padding(14)
+        // The board's card is padded 12 like the panel card above it; the
+        // strip keeps the 14 its own mirrors were measured at.
+        .padding(compactRows ? 12 : 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
@@ -59,13 +87,21 @@ struct MasksCard: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Masks")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: compactRows ? 13.5 : 13, weight: .semibold))
                 .foregroundStyle(.secondary)
             if !document.maskGrades.isEmpty {
-                Text("\(document.maskGrades.count) applied")
-                    .font(.system(size: 11))
-                    .monospaced()
-                    .foregroundStyle(.secondary)
+                // The board sets the count in the caption face; the strip's
+                // mirrors were measured with it monospaced.
+                if compactRows {
+                    Text("\(document.maskGrades.count) applied")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(document.maskGrades.count) applied")
+                        .font(.system(size: 11))
+                        .monospaced()
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 0)
             if document.maskGrades.isEmpty {
@@ -74,12 +110,124 @@ struct MasksCard: View {
                 Button {
                     onManage(expandedGrade?.mask)
                 } label: {
-                    Text("Manage ›").font(.system(size: 12, weight: .semibold))
+                    Text("Manage ›").font(.system(size: compactRows ? 12.5 : 12, weight: .semibold))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(accent)
             }
         }
+    }
+
+    // MARK: - The compact list (Mac rail)
+
+    /// One row per grade, in list order. The board draws no add tile here:
+    /// a second grade is added from the Masks tab (Manage ›), which owns the
+    /// mask vocabulary on this layout.
+    private var compactList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(document.maskGrades) { grade in
+                compactRow(for: grade)
+            }
+        }
+    }
+
+    @ViewBuilder private func compactRow(for grade: MaskGrade) -> some View {
+        if let mask = document.projectMask(grade.mask) {
+            let expanded = expandedGradeID == grade.id
+            Button {
+                // The same tap as the strip's tile: a second click on the
+                // open one closes the card.
+                expandedGradeID = expanded ? nil : grade.id
+                onArmField?(nil)
+            } label: {
+                // 8 rather than the board's 10 between the row's parts: the
+                // name column is what is left of 274 pt after the tile, four
+                // icons and the chevron, and at 10 the longest built-in
+                // caption ("Land · AUTO · disabled") lost its last letters
+                // (measured 2026-09-12); at 8 it fits with a few points over.
+                HStack(spacing: 8) {
+                    MaskTile(
+                        mask: mask, inverted: grade.inverted,
+                        size: CGSize(width: 44, height: 36), sources: sources,
+                        isSelected: expanded,
+                        isDisabled: !grade.isEnabled, accent: accent)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(mask.name(inverted: grade.inverted))
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        // The kind alone under the name — the inversion is
+                        // already in the name and on the tile's ⊘, and the
+                        // column has about 120 pt beside four icons.
+                        // Allowed to shrink a little before it truncates: the
+                        // column sits within a few points of the longest
+                        // built-in caption, and the rail's scroller takes
+                        // those points back once a grade is expanded.
+                        Text("\(mask.kind.caption) · \(grade.isEnabled ? "enabled" : "disabled")")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .minimumScaleFactor(0.85)
+                    }
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    toolIcons(for: grade)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("\(mask.name(inverted: grade.inverted)) · \(grade.summary)")
+            .accessibilityLabel(compactRowLabel(grade, mask: mask))
+            .accessibilityAddTraits(expanded ? .isSelected : [])
+        }
+    }
+
+    /// The grade as tool icons: every tool it moves at full ink, and for
+    /// each section it leaves alone that section's first tool at 35 % — the
+    /// board's "wb · ec lit, tc dimmed". Dimming every one of the seven
+    /// tools a mask can reach would say the same thing in 130 pt, which the
+    /// 330 pt rail cannot spare beside the name; one placeholder per silent
+    /// section keeps the common row to four icons.
+    private func toolIcons(for grade: MaskGrade) -> some View {
+        HStack(spacing: 3) {
+            ForEach(Self.iconTools(for: grade), id: \.tool) { entry in
+                EditorToolIcon(glyph: .tool(entry.tool), ink: .primary, size: 16)
+                    .opacity(entry.touched ? 1 : 0.35)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// The row's icons, in `MaskGrade.tools` order: the touched tools, plus
+    /// one dimmed lead tool per section nothing in it has moved.
+    static func iconTools(for grade: MaskGrade) -> [(tool: EditorTool, touched: Bool)] {
+        let touched = grade.touchedTools
+        var placeholders: [EditorTool] = []
+        for section in MaskGrade.sections {
+            let sectionTools = section.fields.compactMap(MaskGrade.tool(for:))
+            guard !sectionTools.contains(where: touched.contains),
+                  let lead = sectionTools.first else { continue }
+            placeholders.append(lead)
+        }
+        return MaskGrade.tools.compactMap { tool in
+            if touched.contains(tool) { return (tool, true) }
+            if placeholders.contains(tool) { return (tool, false) }
+            return nil
+        }
+    }
+
+    private func compactRowLabel(_ grade: MaskGrade, mask: ProjectMask) -> String {
+        var parts = [
+            mask.name(inverted: grade.inverted),
+            mask.caption(inverted: grade.inverted),
+            grade.isEnabled ? "enabled" : "disabled",
+        ]
+        let tools = grade.touchedTools.map(\.title)
+        parts.append(tools.isEmpty ? "no adjustments yet" : "adjusts " + tools.joined(separator: ", "))
+        return parts.joined(separator: ", ")
     }
 
     // MARK: - The strip
@@ -402,6 +550,8 @@ struct MaskGradeSection: View {
         case .shadows: return "Shadows"
         case .saturation: return "Saturation"
         case .clarity: return "Clarity"
+        case .vignetteIntensity: return "Vignette"
+        case .vignetteMidpoint: return "Midpoint"
         default: return field.rawValue.capitalized
         }
     }
@@ -410,6 +560,10 @@ struct MaskGradeSection: View {
         switch field {
         case .exposure:
             return value == 0 ? "0" : String(format: "%+.2f", value)
+        case .vignetteMidpoint:
+            // Unipolar 0…100 with 50 in the middle, never signed. Masks do
+            // not offer it today; the arm keeps the readout honest if one does.
+            return String(format: "%.0f", value * 100)
         case .temperature:
             // Mired, shown as the Kelvin shift it is worth at daylight — the
             // number a photographer can reason about. Positive warms, so the

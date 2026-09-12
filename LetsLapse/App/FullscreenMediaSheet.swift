@@ -451,10 +451,12 @@ private struct FullscreenVideoPage: View {
         // and the player IS the source here, so output time is source time and
         // the default direct map is the right one.
         let duration = grade.isKeyframed ? (try? await asset.load(.duration))?.seconds : nil
+        // Cropped: the motion preview shows the shoot as it will leave the
+        // app, like the hero and the grid, not the editor's whole frame.
         return PreparedTimeline(
             asset: asset,
             videoComposition: VideoGrader.composition(
-                for: asset, grade: grade, durationSeconds: duration))
+                for: asset, grade: grade, durationSeconds: duration, cropped: true))
     }
 
     /// One file plays as itself; several play as one timeline.
