@@ -233,6 +233,12 @@ final class AppModel: ObservableObject {
         var deletedAt: Date?
         /// Which install deleted it (`DeviceIdentity.id`).
         var deletedBy: UUID?
+        /// The server-assigned revision (Phase 1 W8); absent means 0. Never
+        /// bumped locally — the server owns it from Phase 6.
+        var revision: Int?
+        /// Which install made the last human edit — stamped wherever
+        /// `modifiedAt` is (`DeviceIdentity.id`).
+        var modifiedBy: UUID?
         /// When this project arrived in THIS library — shot here, imported
         /// from a file, or received from another device.
         ///
@@ -508,6 +514,12 @@ final class AppModel: ObservableObject {
         /// file moves to `.trash/<captureID>/blends/`.
         var deletedAt: Date?
         var deletedBy: UUID?
+        /// W8 — see `CaptureProject.revision` / `.modifiedBy`. A blend's
+        /// human edits are its crops, canvas, reframe, warp and time-slice
+        /// recipe; `storeBlend` stamps neither (a render is a creation).
+        var revision: Int?
+        var modifiedAt: Date?
+        var modifiedBy: UUID?
 
         /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
         var sourceCodecLabel: String? {
@@ -1431,6 +1443,7 @@ final class AppModel: ObservableObject {
         captures[index].nominatedBadFrameNames = names.isEmpty ? nil : Array(names).sorted()
         // A person changed this project — see CaptureProject.modifiedAt.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         try? persistLibrary()
     }
 
@@ -1473,6 +1486,7 @@ final class AppModel: ObservableObject {
         captures[index].hideBadFrames = value
         // A person changed this project — see CaptureProject.modifiedAt.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         try? persistLibrary()
     }
 
@@ -1612,6 +1626,7 @@ final class AppModel: ObservableObject {
         captures[index].scannerPaper = paper.rawValue
         // A person changed this project — see CaptureProject.modifiedAt.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         try? persistLibrary()
     }
 
@@ -1794,6 +1809,7 @@ final class AppModel: ObservableObject {
         }
         // A person changed this project — see CaptureProject.modifiedAt.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         do {
             try persistLibrary()
         } catch {
@@ -2128,6 +2144,8 @@ final class AppModel: ObservableObject {
         // Clips joining a collection that has met Ken Burns arrive with
         // their moves already dealt.
         if collection.kenBurns != nil { dealKenBurnsMoves(&collection) }
+        collection.modifiedAt = Date()
+        collection.modifiedBy = DeviceIdentity.id
         collections[index] = collection
         persistCollectionsQuietly()
         return setRatio
@@ -2350,10 +2368,13 @@ final class AppModel: ObservableObject {
         var crops = blends[blendIndex].defaultCrops ?? [:]
         crops[ratio.rawValue] = min(max(0, offset), 1)
         blends[blendIndex].defaultCrops = crops
+        markBlendEdited(blendIndex)
         if let collectionID,
            let index = collections.firstIndex(where: { $0.id == collectionID }),
            let entryIndex = collections[index].entries.firstIndex(where: { $0.blendID == blendID }) {
             collections[index].entries[entryIndex].crops.removeValue(forKey: ratio.rawValue)
+            collections[index].modifiedAt = Date()
+            collections[index].modifiedBy = DeviceIdentity.id
         }
         persistCollectionsQuietly()
     }
@@ -2636,8 +2657,17 @@ final class AppModel: ObservableObject {
         guard let index = collections.firstIndex(where: { $0.id == id }) else { return }
         var collection = collections[index]
         mutate(&collection)
+        // W8: every human change to a collection goes through here.
+        collection.modifiedAt = Date()
+        collection.modifiedBy = DeviceIdentity.id
         collections[index] = collection
         persistCollectionsQuietly()
+    }
+
+    /// W8: a human edit to a blend record — a crop, a canvas, a reframe.
+    private func markBlendEdited(_ index: Int) {
+        blends[index].modifiedAt = Date()
+        blends[index].modifiedBy = DeviceIdentity.id
     }
 
     /// Collection edits are frequent and small; a failed write surfaces like
@@ -3916,6 +3946,7 @@ final class AppModel: ObservableObject {
         captures[index].name = trimmed.isEmpty ? nil : trimmed
         // A person changed this project — see CaptureProject.modifiedAt.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         try? persistLibrary()
     }
 
@@ -3938,6 +3969,7 @@ final class AppModel: ObservableObject {
         // tags there in the first place (`applyAutomaticTags`) is not stamped —
         // nobody chose it.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         try? persistLibrary()
     }
 
@@ -3970,6 +4002,7 @@ final class AppModel: ObservableObject {
         // marker comes off the card, exactly as accepting a proposal does.
         captures[index].sceneTaggedAutomatically = nil
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         try? persistLibrary()
         // Tags are keywords (Part 2 §4.5): the same list lands in the project record's edited
         // layer, where an export will read `dc:subject` from and where "from file / edited here"
@@ -4076,6 +4109,7 @@ final class AppModel: ObservableObject {
             captures[index].burstRampDuration = normalized
             // A person changed this project — see CaptureProject.modifiedAt.
             captures[index].modifiedAt = Date()
+            captures[index].modifiedBy = DeviceIdentity.id
             try? persistLibrary()
         }
         // "Use default" is the absence of a choice — there is nothing to
@@ -4403,6 +4437,7 @@ final class AppModel: ObservableObject {
     func markEdited(_ captureID: UUID) {
         guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
     }
 
     /// Whether the stored size can still be believed: never measured, or
@@ -8745,6 +8780,7 @@ final class AppModel: ObservableObject {
         captures[index].clipEncodings = map
         // A person changed this project — see CaptureProject.modifiedAt.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         try persistLibrary()
         return outputURL
     }
@@ -8775,6 +8811,7 @@ final class AppModel: ObservableObject {
         captures[index].clipEncodings = map.isEmpty ? nil : map
         // A person changed this project — see CaptureProject.modifiedAt.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         try persistLibrary()
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
@@ -9867,6 +9904,7 @@ final class AppModel: ObservableObject {
         // "files changed" timestamp to avoid it would be a worse trade than
         // one directory walk on a deliberate, occasional gesture.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         // Not `persistLibrary()`: a grade write changes numbers, never files,
         // so it must not clear the size caches — and the editors call this at
         // gesture cadence, so the manifest encode cannot run on the main
@@ -9888,6 +9926,7 @@ final class AppModel: ObservableObject {
         captures[index].whiteBalanceSource = stored
         // A person changed this project — see CaptureProject.modifiedAt.
         captures[index].modifiedAt = Date()
+        captures[index].modifiedBy = DeviceIdentity.id
         Self.forgetWhiteBalanceTrack(capture.id)
         persistLibraryOffMain()
     }

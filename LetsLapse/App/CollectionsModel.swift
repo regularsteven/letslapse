@@ -202,6 +202,11 @@ struct LapseCollection: Identifiable, Codable, Equatable {
     /// The render folder moves to `Projects/.trash/collections/<id>/`.
     var deletedAt: Date?
     var deletedBy: UUID?
+    /// W8 — see `AppModel.CaptureProject.revision` / `.modifiedBy`; stamped
+    /// by `AppModel.mutateCollection`.
+    var revision: Int?
+    var modifiedAt: Date?
+    var modifiedBy: UUID?
 
     init(id: UUID = UUID(), name: String, createdAt: Date = Date(), ratioRaw: String? = nil,
          entries: [Entry] = [], lastExport: ExportRecord? = nil, kenBurns: KenBurnsSettings? = nil) {

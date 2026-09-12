@@ -142,6 +142,9 @@ extension AppModel {
                     var stamps = metadata.editedAt ?? [:]
                     stamps[field.rawValue] = cleaned == nil ? nil : Date()
                     metadata.editedAt = stamps.isEmpty ? nil : stamps
+                    var devices = metadata.editedBy ?? [:]
+                    devices[field.rawValue] = cleaned == nil ? nil : DeviceIdentity.id
+                    metadata.editedBy = devices.isEmpty ? nil : devices
                 }
             case .frame(let name):
                 try assetStore.update(inProjectFolder: folder, name: name) { record in
@@ -151,6 +154,9 @@ extension AppModel {
                     var stamps = record.editedAt ?? [:]
                     stamps[field.rawValue] = cleaned == nil ? nil : Date()
                     record.editedAt = stamps.isEmpty ? nil : stamps
+                    var devices = record.editedBy ?? [:]
+                    devices[field.rawValue] = cleaned == nil ? nil : DeviceIdentity.id
+                    record.editedBy = devices.isEmpty ? nil : devices
                 }
             }
         } catch {
@@ -199,6 +205,9 @@ extension AppModel {
             var stamps = metadata.editedAt ?? [:]
             stamps[MetadataField.keywords.rawValue] = edited.keywords == nil ? nil : Date()
             metadata.editedAt = stamps.isEmpty ? nil : stamps
+            var devices = metadata.editedBy ?? [:]
+            devices[MetadataField.keywords.rawValue] = edited.keywords == nil ? nil : DeviceIdentity.id
+            metadata.editedBy = devices.isEmpty ? nil : devices
         }
         metadataRevision += 1
     }

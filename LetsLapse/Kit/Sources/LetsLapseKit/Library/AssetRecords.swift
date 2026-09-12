@@ -30,6 +30,8 @@ public struct AssetRecord: Codable, Equatable, Sendable {
     public var edited: AssetMetadata?
     /// Per edited field (its `MetadataField` raw value), when it was set.
     public var editedAt: [String: Date]?
+    /// Per edited field, which install set it (the app's device id).
+    public var editedBy: [String: UUID]?
 
     public init(name: String) {
         self.name = name
@@ -148,6 +150,7 @@ public struct ProjectMetadata: Codable, Equatable, Sendable {
     public var importedAt: Date?
     public var edited: AssetMetadata?
     public var editedAt: [String: Date]?
+    public var editedBy: [String: UUID]?
 
     public init() {}
 
