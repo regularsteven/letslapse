@@ -89,6 +89,18 @@ USAGE:
 
   lapse info <video>                            Print duration / fps / frame estimate
 
+  lapse audit <root> [--json] [--plist FILE]    Audit a LetsLapse library against its
+                            manifest: counts, orphan folders, dangling records,
+                            missing or unlisted media, .json names among the
+                            frames, unlisted or missing blend renders, sidecar
+                            presence, origin-id coverage, tombstones and hash
+                            coverage. <root> is the storage root (the folder
+                            holding Projects/) or the Projects folder itself — a
+                            devicectl copy of a phone's container works too.
+                            Exit 0 when consistent, 1 otherwise. Never writes.
+      --json                Machine-readable report
+      --plist FILE          A preferences plist copy to read the device id from
+
   lapse lightroom <file.xmp> [--json]           Read a Lightroom sidecar and report the import
   lapse lightroom <file.xmp> --render <out.jpg> [--variant ID] [--scale S] [--no-masks | --flip-masks] [--no-dehaze] [--no-hsl]
                                                 Render the sidecar's raw through a variant
@@ -354,6 +366,21 @@ do {
         print("fps: \(String(format: "%.2f", fps))")
         print("size: \(Int(size.width))x\(Int(size.height))")
         print("frames (estimated): \(frames)")
+
+    case "audit":
+        let asJSON = takeFlag(["--json"])
+        let plistPath = takeOption(["--plist"])
+        guard args.count == 1 else { fail("audit needs one library root (the folder holding Projects/, or Projects/ itself)") }
+        var options = LibraryAudit.Options()
+        options.preferencesPlist = plistPath.map { URL(fileURLWithPath: $0) }
+        let report = LibraryAudit.run(root: URL(fileURLWithPath: args[0]), options: options)
+        if asJSON {
+            FileHandle.standardOutput.write(try LibraryAudit.json(report))
+            FileHandle.standardOutput.write(Data("\n".utf8))
+        } else {
+            print(LibraryAudit.text(report))
+        }
+        exit(report.consistent ? 0 : 1)
 
     case "slice":
         let outputPath = takeOption(["-o", "--output"])

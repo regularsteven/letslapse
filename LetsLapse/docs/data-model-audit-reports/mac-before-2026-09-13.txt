@@ -1,0 +1,59 @@
+lapse audit · /Volumes/letslapse
+  manifest: decoded · 2417115 bytes · schema 3
+  captures 256 · blends 140 · collections 1 · project folders 259 · 432.4 GB
+
+consistency
+  orphan folders (no record): 3  [44623568-4A19-43A8-AEEF-907371DDD3C2, 5968F261-55DD-417B-A1FD-F718BD7800F3, 894519E4-7B8B-4DCC-94CF-7F0E34E99DE0]
+  records with no folder: 0
+  records over an empty folder: 1  [C6F7D8CD-4543-423B-B6AF-371B07B55BF3]
+  listed source files missing on disk: 750 in 1 projects
+      C6F7D8CD ×750: source/frame-00001.dng, source/frame-00002.dng, source/frame-00003.dng, source/frame-00004.dng, source/frame-00005.dng
+  media in source/ not listed: 0 in 0 projects
+  .json names in sourceFileNames: 77 in 77 projects
+      A55DF0EE ×1: source/frame-02316.json
+      ECF80B31 ×1: source/frame-01057.json
+      0F387359 ×1: source/frame-00224.json
+      8BC64DBE ×1: source/frame-00501.json
+      CBBBF580 ×1: source/frame-00210.json
+      BB6CBBE2 ×1: source/frame-05661.json
+      BEDACBF0 ×1: source/frame-01891.json
+      9514CC87 ×1: source/frame-02163.json
+      …
+  blend files unlisted: 7 in 7 projects
+      385DC396 ×1: 53A785DE-F7D0-441C-B05E-479FF4BCC4CD.mp4
+      7DB15558 ×1: 1E86D994-D0E7-4223-ABAE-65627D8B0732.png
+      A5517BFB ×1: 971ECAB8-8F67-46EE-A595-F4C6757FBE42.mp4
+      5EFCC959 ×1: 269852AF-14CB-4A52-AE1D-C3E7462B0FFA.mp4
+      166353DC ×1: C1443186-204D-4A2C-BABD-0FAB4505050D.png
+      50A313ED ×1: 90E4681E-BEB9-478B-8BFF-EF348EFCF9A3.png
+      0B0109D4 ×1: 0D72D01C-35AC-4FD3-B1C4-9DD286B7ADC5.mp4
+  blend records whose file is missing: 0
+  blend records whose capture is missing: 0
+
+sidecars (projects carrying each)
+  assets.ndjson              0
+  dng-archive.json           4
+  metadata.json              0
+  notes/                     5
+  overlays.json              17
+  shapes.json                240
+  source/capture_log.json    190
+  source/documents.json      0
+  source/frames.exposure     126
+  source/frames.timestamps   224
+  source/frames.whitebalance 3
+  source/framing.json        6
+  source/sequence.json       14
+
+identity
+  originID: 0 of 256 captures · 0 distinct · originDeviceID 0 · derivedFromOriginID 0
+  importedFromID: 222 · resolvable locally 0
+  modifiedBy: captures 0 · blends 0 · collections 0
+
+tombstones
+  captures 0 · blends 0 · collections 0 · .trash 0 folders, 0 B
+
+hashes
+  hashed 0 of 56487 assets (0.0%) · 0 B of 427.7 GB · 0 projects with assets.ndjson · 0 stale records · 0 records with metadata
+
+AUDIT INCONSISTENT

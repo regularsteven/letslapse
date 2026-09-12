@@ -1,0 +1,709 @@
+{
+  "consistency" : {
+    "blendRecordsMissingFile" : {
+      "count" : 0,
+      "projects" : [
+
+      ]
+    },
+    "blendRecordsWithoutCapture" : 0,
+    "consistent" : false,
+    "jsonNames" : {
+      "count" : 77,
+      "projects" : [
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-02316.json"
+          ],
+          "project" : "A55DF0EE-3E65-48A1-BF96-2D1DE10EED6A"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-01057.json"
+          ],
+          "project" : "ECF80B31-4114-42C0-846B-E21784DB2FAF"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00224.json"
+          ],
+          "project" : "0F387359-FD7D-45E4-9A51-959ACED13D29"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00501.json"
+          ],
+          "project" : "8BC64DBE-C5D2-4169-8F5F-21D28DF41B9D"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00210.json"
+          ],
+          "project" : "CBBBF580-5DAE-487A-863D-9B63CACE4D43"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-05661.json"
+          ],
+          "project" : "BB6CBBE2-9607-42EF-A363-6330285CDF29"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-01891.json"
+          ],
+          "project" : "BEDACBF0-D4DB-4248-AFA9-F2B4B5A8E730"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-02163.json"
+          ],
+          "project" : "9514CC87-7F19-4F2E-BA90-CB77C7A33BDF"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-01454.json"
+          ],
+          "project" : "F6F7FCC8-606B-41EA-AA84-B2A2F6C5F256"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00303.json"
+          ],
+          "project" : "6CE7460B-159B-4AE3-9EEA-2A93A614B229"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00311.json"
+          ],
+          "project" : "BFE2EB33-8A64-4784-86AA-BC2BA3C08120"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00305.json"
+          ],
+          "project" : "F4BA152E-A226-4988-BE48-88E259F091FA"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-05031.json"
+          ],
+          "project" : "E33ED216-900E-4C47-9426-84BC7961D15F"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-04365.json"
+          ],
+          "project" : "3355871A-02F9-47D4-88A8-8B11FC7DC729"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-01588.json"
+          ],
+          "project" : "8B6C7BFC-FF06-4784-9D43-D2F45F6F4AEE"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00373.json"
+          ],
+          "project" : "5EDE6DB9-89DA-4959-B95F-AB79920DCFCF"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00636.json"
+          ],
+          "project" : "FC69DAEB-8EA8-4A73-AD12-BA260E0ABE7F"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-02754.json"
+          ],
+          "project" : "385DC396-5B24-4605-8899-B18BD3D05FF7"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00020.json"
+          ],
+          "project" : "8950EB3F-DB36-4A25-85D0-343D31D77A76"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00205.json"
+          ],
+          "project" : "6156BA32-2BC3-40E1-91B0-D4B7C95329DF"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00377.json"
+          ],
+          "project" : "192A5B9E-2228-4C32-BE76-CBC15CB02D7D"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00729.json"
+          ],
+          "project" : "A8B6FBBC-F497-47E3-8AC4-B7DC252F49B8"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00305.json"
+          ],
+          "project" : "6DE4935A-07AA-4619-A592-EE3759A548F8"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00301.json"
+          ],
+          "project" : "ACF3E290-87F9-49C9-8F5D-69A0C62B786D"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00251.json"
+          ],
+          "project" : "8823F1DE-2EBC-46DA-B0F1-1F08FCCB9B03"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00308.json"
+          ],
+          "project" : "139F2266-1439-460B-B42A-526435F15EDE"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-01250.json"
+          ],
+          "project" : "D8DF938A-CD99-418B-8B39-55B5B3138C04"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-01440.json"
+          ],
+          "project" : "1FB0FD23-3853-4325-AAD7-A5B422CBFB79"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00304.json"
+          ],
+          "project" : "E9D52934-F4F3-4AF2-A65C-DBF5110B0FC4"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00314.json"
+          ],
+          "project" : "CBD2B71A-EFBF-42E6-B6AA-375677B7F456"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00101.json"
+          ],
+          "project" : "27A53544-9816-463F-9ABA-DBD5BB51FDDC"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00101.json"
+          ],
+          "project" : "B9E17C99-0402-4C4A-BD76-1EE6CD754637"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00207.json"
+          ],
+          "project" : "0B4310FD-2853-4193-BF22-DFB69347B29D"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00191.json"
+          ],
+          "project" : "44BFC44E-3CC5-40F0-BC81-98741B6C1B5E"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00187.json"
+          ],
+          "project" : "225E61C2-DE6F-4D3E-BC52-CFDDE8637A65"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-02474.json"
+          ],
+          "project" : "98C4542D-506F-4E74-9404-C308B7A32BAD"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00013.json"
+          ],
+          "project" : "83325D46-0284-47D2-8F31-A411D52C71E7"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00108.json"
+          ],
+          "project" : "1877966A-9973-4EFF-AC02-693F257B49C2"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00603.json"
+          ],
+          "project" : "E39131D4-6C53-4601-A0E4-27C5B5AD1F37"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "3F9FF2AC-7F2A-4D71-9880-4C6737383FD2"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00104.json"
+          ],
+          "project" : "EB1F5EC3-7584-4048-B0BC-5CEBFB606B5A"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00025.json"
+          ],
+          "project" : "06BC719B-A975-4C84-824A-D0537995BF26"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00108.json"
+          ],
+          "project" : "A5517BFB-C09E-47F0-A19D-8EFC0DCB9FF7"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00110.json"
+          ],
+          "project" : "FEB75B48-8A94-470D-B916-86C98B52E58C"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00105.json"
+          ],
+          "project" : "5EFCC959-FF7F-46F6-A4DA-33BCCD4CBC6D"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00104.json"
+          ],
+          "project" : "BE74C9FC-ED8C-4EF0-9C47-85655FF8E42D"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00031.json"
+          ],
+          "project" : "CB861BE8-AF31-4971-994A-2EFEF0067782"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00052.json"
+          ],
+          "project" : "0B0109D4-82FA-4CFC-B46F-2EC3784BD3BD"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00035.json"
+          ],
+          "project" : "58229042-1BC0-438F-89BA-2F8ED278C133"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00992.json"
+          ],
+          "project" : "5757C00A-7E7B-4012-946E-9F6EDFFEA1A2"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00400.json"
+          ],
+          "project" : "907DD068-9E32-4805-B9E3-BBD0FDF956B2"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00373.json"
+          ],
+          "project" : "E539ED3E-A666-47DE-B0BC-6413961B77CE"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00011.json"
+          ],
+          "project" : "DBA60658-4F4D-4BD1-9D3F-01E6BCF1ECB4"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00003.json"
+          ],
+          "project" : "D77E513B-ED7F-4DE2-B9AD-05ECFD263D0E"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00029.json"
+          ],
+          "project" : "5BD07D71-EF72-4687-AC88-36154595FEDF"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00039.json"
+          ],
+          "project" : "86CF34C5-E891-4EB5-9313-92D86E371E09"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00003.json"
+          ],
+          "project" : "AB4E88AA-B7F4-4DFF-8D4F-9F909E963989"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00737.json"
+          ],
+          "project" : "B94D8940-399F-4716-A2CC-865771F811BD"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00842.json"
+          ],
+          "project" : "18146390-3773-49E1-AFF4-411CE5418768"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00750.json"
+          ],
+          "project" : "C6F7D8CD-4543-423B-B6AF-371B07B55BF3"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00750.json"
+          ],
+          "project" : "93DCBE8E-7E12-405C-BA36-BA74FC8BC40B"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00253.json"
+          ],
+          "project" : "B755E39C-5AA7-41B2-BE9D-A28D09DD6FB6"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "B0E3269D-C90A-4424-867B-E157F6C094CB"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "C63693EE-E46B-48F0-83AA-78637DBF397A"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "F5994FA9-49D1-4AAB-A407-6323E1D615E1"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "D29464DA-97ED-4E2F-81CB-6E316B573999"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "A7B4726A-F6D6-44AF-A479-37A8B4E5F26D"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00251.json"
+          ],
+          "project" : "BF7E57A6-5B80-431C-841E-297EF2F29BBF"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "10DD1859-4847-4569-85AC-CC7EE554D142"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "30975843-CF38-400C-9D06-B07D4D7F150F"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "663337FD-6467-49DE-9AB4-6D56F8D39975"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "84D23730-8E0A-4CE3-92FE-FC3410BA0476"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "8DB230B8-E17C-4ADA-A829-30B900E5BC84"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "947C2EF1-26C3-4081-A24D-BD059DF0608A"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "6E0D0257-5098-4D87-98E3-76B618077C26"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/frame-00208.json"
+          ],
+          "project" : "F6387DFA-216D-4EFE-8398-FF18F243E454"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "source\/sequence.json"
+          ],
+          "project" : "09085E1B-BD3C-4671-9667-86630B8B5A77"
+        }
+      ]
+    },
+    "missingListedFiles" : {
+      "count" : 750,
+      "projects" : [
+        {
+          "count" : 750,
+          "examples" : [
+            "source\/frame-00001.dng",
+            "source\/frame-00002.dng",
+            "source\/frame-00003.dng",
+            "source\/frame-00004.dng",
+            "source\/frame-00005.dng"
+          ],
+          "project" : "C6F7D8CD-4543-423B-B6AF-371B07B55BF3"
+        }
+      ]
+    },
+    "orphanFolders" : [
+      "44623568-4A19-43A8-AEEF-907371DDD3C2",
+      "5968F261-55DD-417B-A1FD-F718BD7800F3",
+      "894519E4-7B8B-4DCC-94CF-7F0E34E99DE0"
+    ],
+    "recordsOverEmptyFolder" : [
+      "C6F7D8CD-4543-423B-B6AF-371B07B55BF3"
+    ],
+    "recordsWithoutFolder" : [
+
+    ],
+    "stagingLeftovers" : [
+
+    ],
+    "unlistedBlendFiles" : {
+      "count" : 7,
+      "projects" : [
+        {
+          "count" : 1,
+          "examples" : [
+            "53A785DE-F7D0-441C-B05E-479FF4BCC4CD.mp4"
+          ],
+          "project" : "385DC396-5B24-4605-8899-B18BD3D05FF7"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "1E86D994-D0E7-4223-ABAE-65627D8B0732.png"
+          ],
+          "project" : "7DB15558-A2A2-4729-8148-9E596F905DB1"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "971ECAB8-8F67-46EE-A595-F4C6757FBE42.mp4"
+          ],
+          "project" : "A5517BFB-C09E-47F0-A19D-8EFC0DCB9FF7"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "269852AF-14CB-4A52-AE1D-C3E7462B0FFA.mp4"
+          ],
+          "project" : "5EFCC959-FF7F-46F6-A4DA-33BCCD4CBC6D"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "C1443186-204D-4A2C-BABD-0FAB4505050D.png"
+          ],
+          "project" : "166353DC-2830-4C18-9405-F18013BB46E0"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "90E4681E-BEB9-478B-8BFF-EF348EFCF9A3.png"
+          ],
+          "project" : "50A313ED-1EE6-4F46-86C2-02E70032D605"
+        },
+        {
+          "count" : 1,
+          "examples" : [
+            "0D72D01C-35AC-4FD3-B1C4-9DD286B7ADC5.mp4"
+          ],
+          "project" : "0B0109D4-82FA-4CFC-B46F-2EC3784BD3BD"
+        }
+      ]
+    },
+    "unlistedMedia" : {
+      "count" : 0,
+      "projects" : [
+
+      ]
+    }
+  },
+  "counts" : {
+    "blends" : 140,
+    "bytes" : 464337869283,
+    "captures" : 256,
+    "collections" : 1,
+    "projectFolders" : 259
+  },
+  "hashes" : {
+    "assets" : 56487,
+    "bytes" : 459200742114,
+    "hashed" : 0,
+    "hashedBytes" : 0,
+    "projectsWithRecords" : 0,
+    "stale" : 0,
+    "withMetadata" : 0
+  },
+  "identity" : {
+    "derivedFromOriginID" : 0,
+    "distinctOriginIDs" : 0,
+    "importedFromID" : 222,
+    "importedFromResolvedLocally" : 0,
+    "modifiedBy" : {
+      "blends" : 0,
+      "captures" : 0,
+      "collections" : 0
+    },
+    "originDeviceID" : 0,
+    "originID" : 0
+  },
+  "manifest" : {
+    "bytes" : 2417115,
+    "decoded" : true,
+    "error" : "",
+    "gradingSchemaVersion" : 3,
+    "path" : "\/Volumes\/letslapse\/Projects\/library.json",
+    "setAside" : [
+
+    ]
+  },
+  "projectsFolder" : "\/Volumes\/letslapse\/Projects",
+  "root" : "\/Volumes\/letslapse",
+  "sidecars" : {
+    "assets.ndjson" : 0,
+    "dng-archive.json" : 4,
+    "metadata.json" : 0,
+    "notes\/" : 5,
+    "overlays.json" : 17,
+    "shapes.json" : 240,
+    "source\/capture_log.json" : 190,
+    "source\/documents.json" : 0,
+    "source\/frames.exposure" : 126,
+    "source\/frames.timestamps" : 224,
+    "source\/frames.whitebalance" : 3,
+    "source\/framing.json" : 6,
+    "source\/sequence.json" : 14
+  },
+  "tombstones" : {
+    "blends" : 0,
+    "captures" : 0,
+    "collections" : 0,
+    "trashBytes" : 0,
+    "trashFolders" : 0
+  }
+}
