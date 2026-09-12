@@ -4,6 +4,8 @@
 
 Nothing was created, modified or deleted in any store. File references are relative to `LetsLapse/`; `file:line` numbers are from the working tree on the audit date.
 
+**Part 2** (2026-09-12) — scale to 100k–1M projects, the IPTC/XMP metadata model, and the Lightroom catalogue migration — is in [data-model-scale-and-metadata-2026-09-12.md](data-model-scale-and-metadata-2026-09-12.md). It revises §6.2: the truth stays in per-project JSON, but the **index** becomes SQLite once the measurements there are taken into account. **Part 3** (2026-09-12) — the server as the source of truth, revisions, the change journal, asset hashes, presence tiers and the sync flows — is in [data-model-server-portability-2026-09-12.md](data-model-server-portability-2026-09-12.md); it changes two of §5.1's fixed constraints and says so.
+
 ---
 
 ## 0. Summary
