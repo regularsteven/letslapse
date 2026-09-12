@@ -124,6 +124,12 @@ final class LetsLapseAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     @MainActor private static var pending: [URL] = []
+    /// Set once the model exists: flushes the library persister (W6).
+    @MainActor static var willTerminate: (() -> Void)?
+
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { Self.willTerminate?() }
+    }
 
     func application(_ application: NSApplication, open urls: [URL]) {
         MainActor.assumeIsolated {

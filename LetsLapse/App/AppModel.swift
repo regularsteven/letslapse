@@ -1239,6 +1239,9 @@ final class AppModel: ObservableObject {
         LLog("device id \(DeviceIdentity.id.uuidString)")
         loadLibrary()
         refreshShapeSummaries()
+        persister.onFailure = { [weak self] error in
+            self?.errorMessage = error.localizedDescription
+        }
         assetStore.onChange = { [weak self] _ in self?.metadataRevision += 1 }
         assetStore.shouldPause = { [weak self] in
             let process = ProcessInfo.processInfo
@@ -7079,7 +7082,7 @@ final class AppModel: ObservableObject {
         }
 
         captures.insert(capture, at: 0)
-        try persistLibrary()
+        try persistRegistration(of: capture.id)
         // The project owns the material now — and only now, with the manifest
         // written. Everything downstream re-resolves through `source(for:)`, so
         // the staging copy is dead weight from this line on.
@@ -7177,7 +7180,7 @@ final class AppModel: ObservableObject {
         )
 
         captures.insert(capture, at: 0)
-        try persistLibrary()
+        try persistRegistration(of: capture.id)
         // Same as `registerCapture`: the segments and their `sequence.json` are
         // in the project folder and the manifest is on disk, so the staging run
         // in `tmp/` is now a duplicate of a multi-gigabyte shoot.
@@ -7518,7 +7521,7 @@ final class AppModel: ObservableObject {
 
         captures.insert(capture, at: 0)
         captures.sort { $0.createdAt > $1.createdAt }
-        try persistLibrary()
+        try persistRegistration(of: capture.id)
         Task { [weak self] in
             await self?.refreshStillsMetadata(for: capture.id)
         }
@@ -7794,7 +7797,7 @@ final class AppModel: ObservableObject {
                 originDeviceID: DeviceIdentity.id)
             captures.insert(capture, at: 0)
             captures.sort { $0.createdAt > $1.createdAt }
-            try persistLibrary()
+            try persistRegistration(of: capture.id)
             // Frame rate, duration and pixel size come from the probe every
             // video project gets — one code path, so an imported clip and a
             // captured one describe themselves the same way.
@@ -8051,20 +8054,64 @@ final class AppModel: ObservableObject {
         try? persistLibrary()
     }
 
+    /// The one writer of `library.json` (Phase 1 W6): every snapshot is
+    /// versioned on the main actor and written by one serial queue that
+    /// drops anything older than what is already on disk. See
+    /// `LibraryPersister`.
+    let persister = LibraryPersister()
+
+    /// Synchronous: the manifest is on disk when this returns, and the size
+    /// and existence caches are dropped first. Every path that adds,
+    /// converts, rotates or deletes a project's files ends here — it is
+    /// `persistAndWait(reason: .filesChanged)` under the name the 70-odd
+    /// call sites already use.
     func persistLibrary() throws {
-        // Every path that adds, converts, rotates or deletes a project's files
-        // ends here, so this is the one place that has to drop the size cache —
-        // and the existence tickets, which stale under exactly the same edits.
-        projectStorageBytes.removeAll()
-        validatedSourceFrames.removeAll()
-        try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
+        try persistAndWait(reason: .filesChanged)
+    }
+
+    /// A registration's persist: when the write is refused or fails, the
+    /// record just inserted comes back out of the list, so a project the
+    /// disk never learned about does not sit in the UI as if it had. The
+    /// caller's own catch removes the folder.
+    func persistRegistration(of captureID: UUID) throws {
+        do {
+            try persistLibrary()
+        } catch {
+            captures.removeAll { $0.id == captureID }
+            throw error
+        }
+    }
+
+    /// Queued: returns at once, values only (a grade tick, a tag). It is
+    /// `persist(reason: .valuesChanged)` under its old name.
+    func persistLibraryOffMain() {
+        persist(reason: .valuesChanged)
+    }
+
+    /// Queues a snapshot of the library for the persister.
+    func persist(reason: LibraryPersister.Reason) {
+        let (manifest, version) = snapshotManifest(reason: reason)
+        persister.persist(manifest, version: version, to: manifestURL)
+    }
+
+    /// Writes a snapshot and returns only when it is on disk — deletes,
+    /// registrations and installs need that before they touch the files.
+    func persistAndWait(reason: LibraryPersister.Reason) throws {
+        let (manifest, version) = snapshotManifest(reason: reason)
+        try persister.persistAndWait(manifest, version: version, to: manifestURL)
+    }
+
+    private func snapshotManifest(reason: LibraryPersister.Reason) -> (LibraryManifest, Int) {
+        if reason == .filesChanged {
+            // The size cache and the existence tickets stale under exactly
+            // the edits that change files.
+            projectStorageBytes.removeAll()
+            validatedSourceFrames.removeAll()
+        }
         var manifest = LibraryManifest(
             captures: captures.map(stampingPresetState), blends: blends, collections: collections)
         manifest.gradingSchemaVersion = max(gradingSchemaVersion, 1)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(manifest)
-        try data.write(to: manifestURL, options: .atomic)
+        return (manifest, persister.mint())
     }
 
     /// A capture with its preset state written out explicitly.
@@ -9648,36 +9695,11 @@ final class AppModel: ObservableObject {
         return timestamps.entries.map { $0.captureTime.timeIntervalSince(first) }
     }
 
-    /// The manifest write for value-only changes, off the main thread.
-    ///
-    /// The snapshot is taken here, synchronously — value types, so the encode
-    /// on the queue sees exactly the state this call saw — and the queue is
-    /// serial, so rapid writes land in order and the last one wins. Unlike
-    /// `persistLibrary()` this leaves `projectStorageBytes` alone: callers
-    /// are changing stored numbers, not files on disk.
-    private static let libraryPersistQueue = DispatchQueue(
-        label: "com.letslapse.library-persist", qos: .utility)
-    func persistLibraryOffMain() {
-        var manifest = LibraryManifest(
-            captures: captures.map(stampingPresetState), blends: blends, collections: collections)
-        manifest.gradingSchemaVersion = max(gradingSchemaVersion, 1)
-        let directory = projectsRootURL
-        let destination = manifestURL
-        Self.libraryPersistQueue.async {
-            try? FileManager.default.createDirectory(
-                at: directory, withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            guard let data = try? encoder.encode(manifest) else { return }
-            try? data.write(to: destination, options: .atomic)
-        }
-    }
-
-    /// Blocks until every queued off-main manifest write has landed — the
-    /// editors call it on their way out, so quitting the app right after
-    /// closing an editor can't lose the final gesture.
+    /// Blocks until every queued manifest write has landed — the editors
+    /// call it on their way out, and the app on its way to the background
+    /// or out of the process, so quitting right after a gesture can't lose it.
     func flushLibraryPersists() {
-        Self.libraryPersistQueue.sync {}
+        persister.flush()
     }
 
     /// One of a capture's assets as the viewer shows it, ready to leave the app:

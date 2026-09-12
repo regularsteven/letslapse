@@ -111,6 +111,9 @@ struct LetsLapseApp: App {
             // here, so anything the delegate caught before now is released.
             .onAppear {
                 LetsLapseAppDelegate.handler = { model.openArchive(at: $0) }
+                // The last queued manifest write lands before the process
+                // goes (W6).
+                LetsLapseAppDelegate.willTerminate = { model.flushLibraryPersists() }
             }
             #endif
     }
@@ -145,6 +148,9 @@ struct LetsLapseApp: App {
                 // switcher over a live camera shouldn't read as "phone away".
                 .onChange(of: scenePhase) { phase in
                     WatchRemoteControlReceiver.shared.setAppActive(phase != .background)
+                    // Backgrounded is as far as iOS lets an app see its own
+                    // end coming: the queued manifest write lands now (W6).
+                    if phase == .background { model.flushLibraryPersists() }
                 }
         }
         #endif
@@ -1562,3 +1568,4 @@ enum CreateCameraSetting {
         UserDefaults.standard.object(forKey: key) as? Bool ?? defaultValue
     }
 }
+
