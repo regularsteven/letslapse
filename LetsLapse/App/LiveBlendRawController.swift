@@ -313,6 +313,19 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     private var peakProcessingSeconds = 0.0
     private var peakMemoryFootprint: Int?
     private var loggedLogWriteFailure = false
+    /// The crash-safe line form of the experiment log (Phase 1 W11): a
+    /// header line at start, one line per window as it completes, a summary
+    /// line at finish — appended, never rewritten. The `{header, outputs,
+    /// summary}` document `tools/` reads is written ONCE at finish from the
+    /// same records. blendQueue-confined.
+    private var lineLog: NDJSONWriter?
+    /// The one-shot JSON encoder both forms share (ISO-8601 dates).
+    private static let lineEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return encoder
+    }()
 
     init(
         configuration: Configuration,
@@ -364,7 +377,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 : nil
             self.openWindowState()
             LLog("liveblend-dng: start interval=\(self.configuration.intervalSeconds)s depth=\(self.configuration.blendDepth.token) raw=\(self.configuration.rawPixelFormat) log=\(self.configuration.logURL.path)")
-            self.rewriteLog()
+            self.openLineLog()
 
             // Spread mode paces shots across the interval; burst mode fires
             // them back-to-back, so its timer only closes windows and
@@ -1114,7 +1127,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             ceilingSnapshot.withLock { $0 = processingCeiling }
         }
         log.outputs.append(entry)
-        rewriteLog()
+        appendLine(ExperimentLog.outputKind, entry)
 
         // Every completed unthrottled window is a lesson: what this device
         // managed under these conditions feeds the Safe-mode profiles.
@@ -1463,7 +1476,11 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             peakMemoryFootprintBytes: peakMemoryFootprint,
             finalThermalState: LiveBlendController.thermalStateName(),
             discarded: discard)
-        rewriteLog()
+        if let summary = log.summary { appendLine(ExperimentLog.summaryKind, summary) }
+        lineLog?.synchronize()
+        lineLog?.close()
+        lineLog = nil
+        writeLegacyDocument()
         exposureWriter?.close()
         exposureWriter = nil
         // Released before the discard branch below can delete the directory
@@ -1555,7 +1572,44 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
 
     // MARK: Support
 
-    private func rewriteLog() {
+    /// The `.ndjson` beside the document: same stem, the line form.
+    private var lineLogURL: URL {
+        configuration.logURL.deletingPathExtension().appendingPathExtension("ndjson")
+    }
+
+    /// Opens the line log and writes the header line. blendQueue.
+    private func openLineLog() {
+        lineLog = NDJSONWriter(url: lineLogURL, encoder: Self.lineEncoder)
+        if lineLog == nil, !loggedLogWriteFailure {
+            loggedLogWriteFailure = true
+            LLog("liveblend-dng: could not open experiment log \(lineLogURL.lastPathComponent)")
+        }
+        appendLine(ExperimentLog.headerKind, log.header)
+    }
+
+    /// One line, appended — bytes written over a run are linear in outputs.
+    private func appendLine<T: Encodable>(_ kind: String, _ record: T) {
+        guard let lineLog else { return }
+        do {
+            let payload = try Self.lineEncoder.encode(record)
+            if !lineLog.appendLine(try ExperimentLog.line(kind: kind, payload: payload)), !loggedLogWriteFailure {
+                loggedLogWriteFailure = true
+                LLog("liveblend-dng: could not append to experiment log")
+            }
+        } catch {
+            if !loggedLogWriteFailure {
+                loggedLogWriteFailure = true
+                LLog("liveblend-dng: could not encode experiment log line: \(error)")
+            }
+        }
+    }
+
+    /// The `{header, outputs, summary}` document, written once at finish —
+    /// what `shoot.py` and `tools/blend_compare.py` read, and the copy that
+    /// travels into the project's `source/`. A run that never finishes
+    /// leaves only the `.ndjson`, which `ExperimentLog.document(fromLines:)`
+    /// rebuilds this from.
+    private func writeLegacyDocument() {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

@@ -30,6 +30,14 @@ struct LetsLapseApp: App {
         // later launch can know it was abandoned.
         ImportStaging.sweepOrphans()
 
+        // The experiment logs (`liveblend-*.json/.ndjson`) and ladder logs
+        // used to accumulate for ever — 277 files / 39 MB on the iPhone
+        // (Part 1 R5). The newest 50 of each stay, as the console log keeps
+        // its newest 12 (W11).
+        let logs = StorageRoot.current.appendingPathComponent("Logs", isDirectory: true)
+        ExperimentLog.prune(directory: logs, prefix: "liveblend-", keep: 50)
+        ExperimentLog.prune(directory: logs, prefix: "ladder-", keep: 50)
+
         // And the network's own staging tree. A day rather than 15 minutes:
         // a partial transfer is the only thing that makes a resume possible,
         // and it can legitimately outlive several launches while somebody is
