@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Shape-mation · Find shapes · portrait</title>
-  <desc>Mirrors App/Shapemation/FindShapesView.swift (plan card) over ShapeFinder.candidates — 2026-09-11, code first, mirrored from the running app (iPhone 16 Pro simulator, LL_SHAPEMATION=find). Pushed inside the Shape-mation sheet's own NavigationStack from the Find shapes door (shapemation.portrait.svg): back "Shape-mation", large title "Find shapes". One card (llCard 18, 16-pt padding, 12-pt spacing): the plan title "3 projects to analyse" (17 semibold; "Every project has been checked." when nothing is left), the explanation at 14 secondary — one picture per project, the rendered blend where there is one, else the middle frame, searched for circles, ovals, squares and rectangles; kept with the project so a project is only analysed once — five lines as wrapped on the 402-pt device; the tertiary 12-pt line "10 already analysed · 0 video shoots left out" (shown when either count is non-zero); and the full-width borderedProminent button "Find shapes" (16 semibold on LL.accent, 57 pt tall, ~16-pt continuous corners — not a capsule), absent when there is nothing to analyse. Tapping it starts ShapeFinder.run: the card becomes the progress card — viewfinder.circle, "Analysing n of N" (15 semibold), a Stop button, an accent ProgressView and the current project's title on one line — then the summary (shapemation.find.done.portrait.svg). The progress state was not captured: three projects analyse in well under a second, so the reference run had finished before the screenshot; no hook freezes it. Leaving the screen mid-run cancels. Measured geometry: the sheet's top edge sits at y 72 on the 16 Pro (69 on the 393-pt canvas device); the paragraph's first line is 335 pt wide on the 16 Pro's 338-pt inner width and re-wraps ("where" drops) on a 393-pt device.</desc>
+  <desc>Mirrors App/Shapemation/FindShapesView.swift (plan card) over ShapeFinder.candidates — 2026-09-11, code first, mirrored from the running app (iPhone 16 Pro simulator, LL_SHAPEMATION=find). Pushed inside the Shape-mation sheet's own NavigationStack from the Find shapes door (shapemation.portrait.svg): back "Shape-mation", large title "Find shapes". One card (llCard 18, 16-pt padding, 12-pt spacing): the plan title "3 projects to analyse" (17 semibold; "Every project has been checked." when nothing is left), the explanation at 14 secondary — one picture per project, the rendered blend where there is one, else the middle frame, searched for circles, ovals, squares and rectangles; kept with the project; analysed again only when the detector has improved, kept or drawn shapes stay — six lines as wrapped on the 402-pt device (2026-09-12: detector version 2 re-offers version-1 registers, so the paragraph grew a line, the tertiary line gained 'N from an older detector' and the button moved down 16.8 pt); the tertiary 12-pt line "10 already analysed · 4 from an older detector · 0 video shoots left out" (shown when either count is non-zero); and the full-width borderedProminent button "Find shapes" (16 semibold on LL.accent, 57 pt tall, ~16-pt continuous corners — not a capsule), absent when there is nothing to analyse. Tapping it starts ShapeFinder.run: the card becomes the progress card — viewfinder.circle, "Analysing n of N" (15 semibold), a Stop button, an accent ProgressView and the current project's title on one line — then the summary (shapemation.find.done.portrait.svg). The progress state was not captured: three projects analyse in well under a second, so the reference run had finished before the screenshot; no hook freezes it. Leaving the screen mid-run cancels. Measured geometry: the sheet's top edge sits at y 72 on the 16 Pro (69 on the 393-pt canvas device); the paragraph's first line is 335 pt wide on the 16 Pro's 338-pt inner width and re-wraps ("where" drops) on a 393-pt device.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="sheet"><rect x="0" y="72" width="393" height="780" rx="18"/></clipPath>
@@ -30,19 +30,20 @@
         <text x="16" y="164" font-size="34" class="b" fill="#000">Find shapes</text>
 
         <g id="plan-card">
-          <rect x="16" y="196" width="361" height="243" rx="18" fill="#FFF" filter="url(#card)"/>
+          <rect x="16" y="196" width="361" height="259.8" rx="18" fill="#FFF" filter="url(#card)"/>
           <text x="32" y="227.5" font-size="17" class="sb" fill="#000">3 projects to analyse</text>
           <g id="explanation" font-size="14" class="sec">
             <text x="32" y="257.5">One picture per project — the rendered blend where</text>
             <text x="32" y="274.3">there is one, else the middle frame — is searched</text>
             <text x="32" y="291">for circles, ovals, squares and rectangles. Results</text>
-            <text x="32" y="307.7">are kept with the project, so a project is only</text>
-            <text x="32" y="324.5">analysed once.</text>
+            <text x="32" y="307.7">are kept with the project; a project is analysed</text>
+            <text x="32" y="324.5">again only when the detector has improved, and</text>
+            <text x="32" y="341.3">shapes you kept or drew stay.</text>
           </g>
-          <text x="32" y="351" font-size="12" class="ter">10 already analysed · 0 video shoots left out</text>
+          <text x="32" y="367.8" font-size="12" class="ter">10 already analysed · 4 from an older detector · 0 video shoots left out</text>
           <g id="find-button">
-            <rect x="32" y="366.3" width="329" height="57" rx="16" fill="#C36A00"/>
-            <text x="196.5" y="400" font-size="16" class="sb" fill="#FFF" text-anchor="middle">Find shapes</text>
+            <rect x="32" y="383.1" width="329" height="57" rx="16" fill="#C36A00"/>
+            <text x="196.5" y="416.8" font-size="16" class="sb" fill="#FFF" text-anchor="middle">Find shapes</text>
           </g>
         </g>
       </g>

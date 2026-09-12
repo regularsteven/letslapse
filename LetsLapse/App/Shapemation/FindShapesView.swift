@@ -8,7 +8,7 @@ struct FindShapesView: View {
     @StateObject private var finder = ShapeFinder()
     var onFinished: () -> Void = {}
 
-    @State private var pending: (todo: Int, alreadyDone: Int, skippedVideo: Int) = (0, 0, 0)
+    @State private var pending: (todo: Int, alreadyDone: Int, skippedVideo: Int, outdated: Int) = (0, 0, 0, 0)
     @State private var started = false
 
     var body: some View {
@@ -28,7 +28,7 @@ struct FindShapesView: View {
         .navigationTitle("Find shapes")
         .onAppear {
             let c = ShapeFinder.candidates(in: model)
-            pending = (c.todo.count, c.alreadyDone, c.skippedVideo)
+            pending = (c.todo.count, c.alreadyDone, c.skippedVideo, c.outdated)
         }
         .onDisappear {
             if finder.isRunning { finder.cancel() }
@@ -42,11 +42,11 @@ struct FindShapesView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(pending.todo == 0 ? "Every project has been checked." : "\(pending.todo) project\(pending.todo == 1 ? "" : "s") to analyse")
                 .font(.system(size: 17, weight: .semibold))
-            Text("One picture per project — the rendered blend where there is one, else the middle frame — is searched for circles, ovals, squares and rectangles. Results are kept with the project, so a project is only analysed once.")
+            Text("One picture per project — the rendered blend where there is one, else the middle frame — is searched for circles, ovals, squares and rectangles. Results are kept with the project; a project is analysed again only when the detector has improved, and shapes you kept or drew stay.")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
-            if pending.alreadyDone > 0 || pending.skippedVideo > 0 {
-                Text("\(pending.alreadyDone) already analysed · \(pending.skippedVideo) video shoot\(pending.skippedVideo == 1 ? "" : "s") left out")
+            if pending.alreadyDone > 0 || pending.skippedVideo > 0 || pending.outdated > 0 {
+                Text("\(pending.alreadyDone) already analysed" + (pending.outdated > 0 ? " · \(pending.outdated) from an older detector" : "") + " · \(pending.skippedVideo) video shoot\(pending.skippedVideo == 1 ? "" : "s") left out")
                     .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
             }

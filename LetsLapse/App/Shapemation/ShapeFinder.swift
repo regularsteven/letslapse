@@ -113,18 +113,24 @@ final class ShapeFinder: ObservableObject {
     static let imageExtensions: Set<String> = ["jpg", "jpeg", "heic", "heif", "png", "tif", "tiff"]
     static let videoExtensions: Set<String> = ["mp4", "mov", "m4v"]
 
-    /// The projects "Find shapes" would analyse now, and how many it leaves out.
-    static func candidates(in model: AppModel) -> (todo: [Candidate], alreadyDone: Int, skippedVideo: Int) {
+    /// The projects "Find shapes" would analyse now, and how many it leaves
+    /// out. A register from an older detector is to do again: its kept shapes
+    /// and viewfinder trail survive the run (see `run`), its detections are
+    /// replaced. `outdated` says how many of `todo` are those.
+    static func candidates(in model: AppModel) -> (todo: [Candidate], alreadyDone: Int, skippedVideo: Int, outdated: Int) {
         var todo: [Candidate] = []
-        var done = 0, video = 0
+        var done = 0, video = 0, outdated = 0
         for capture in model.captures where !capture.isScannerCapture {
             guard capture.kind == .photos else { video += 1; continue }
             let folder = model.projectFolderURL(for: capture)
-            if let existing = ShapeRegister.load(inProjectFolder: folder), existing.isAnalysed { done += 1; continue }
+            if let existing = ShapeRegister.load(inProjectFolder: folder), existing.isAnalysed {
+                if existing.isCurrent { done += 1; continue }
+                outdated += 1
+            }
             guard let rep = representative(for: capture, in: model) else { continue }
             todo.append(Candidate(id: capture.id, title: capture.displayTitle, folder: folder, representative: rep))
         }
-        return (todo, done, video)
+        return (todo, done, video, outdated)
     }
 
     /// Representative order: blend image → blend clip (mid frame) → middle source frame.
@@ -159,7 +165,7 @@ final class ShapeFinder: ObservableObject {
 
     func run(model: AppModel) {
         guard !isRunning else { return }
-        let (todo, alreadyDone, skippedVideo) = Self.candidates(in: model)
+        let (todo, alreadyDone, skippedVideo, _) = Self.candidates(in: model)
         isRunning = true
         summary = nil
         progress = Progress(done: 0, total: todo.count, current: todo.first?.title ?? "")

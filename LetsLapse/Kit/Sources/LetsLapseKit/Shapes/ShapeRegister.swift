@@ -233,7 +233,10 @@ public struct DetectedShape: Codable, Identifiable, Equatable, Sendable {
 public struct ShapeRegister: Codable, Equatable, Sendable {
     public static let fileName = "shapes.json"
     /// Bump when the detector changes enough that old registers should be redone.
-    public static let currentDetectorVersion = 1
+    /// 1: the Vision passes. 2 (2026-09-12): the region-proposal pass, flat
+    /// nests, the 0.10 file floor — a register from 1 is missing most of what
+    /// 2 finds, and Find shapes offers it again.
+    public static let currentDetectorVersion = 2
 
     public struct Representative: Codable, Equatable, Sendable {
         public enum Source: String, Codable, Sendable { case blendImage, blendVideo, sourceFrame }
@@ -298,6 +301,10 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
     }
 
     public var isAnalysed: Bool { analysedAt != nil }
+
+    /// Analysed by the detector as it stands. An older register still counts
+    /// as analysed everywhere it is shown; Find shapes is where it is redone.
+    public var isCurrent: Bool { isAnalysed && detectorVersion >= Self.currentDetectorVersion }
     public var manualShapes: [DetectedShape] { shapes.filter { $0.source == .manual } }
     /// The shapes a person put there or confirmed — what a detector re-run keeps.
     public var keptShapes: [DetectedShape] { shapes.filter { $0.source != .detected } }
