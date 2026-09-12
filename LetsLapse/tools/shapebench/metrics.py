@@ -515,7 +515,7 @@ def run_label(det: str, key: str, runs: dict, all_runs_mode: bool) -> str:
     if not all_runs_mode:
         return det
     params = (runs[key]["run"].get("params") or {}).get("detector") or {}
-    tag = params.get("profile") or ("dedupe " + str((params.get("shapeDedupe") or {}).get("iou")) if "shapeDedupe" in params else key.split("|")[-1])
+    tag = params.get("profile") or params.get("generation") or ("dedupe " + str((params.get("shapeDedupe") or {}).get("iou")) if "shapeDedupe" in params else key.split("|")[-1])
     return f"{det} · {tag}"
 
 

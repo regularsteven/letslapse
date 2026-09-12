@@ -237,6 +237,13 @@ def cmd_vision(args) -> int:
     for a in assets:
         aid = a["assetId"]
         img_path = os.path.join(work, a["image"])
+        # A DNG goes to `lapse` as the DNG: the app decodes raw at the
+        # detector's size straight from the file, and that is a slightly
+        # different picture from a full render downsized (a shape at the size
+        # floor flipped on it, 2026-09-12). The rig's own reference keeps the
+        # full render, which is what the labels were drawn on.
+        original = os.path.join(manifest.get("root", ""), a["projectId"], a.get("sourceRelativePath") or "")
+        lapse_input = original if a.get("sourceFormat") == "dng" and os.path.exists(original) else img_path
         rpath = schema.results_path(work, aid)
         doc = schema.load_results(rpath, a["projectId"])
         gray = None
@@ -251,7 +258,7 @@ def cmd_vision(args) -> int:
         wall_ms = None
         if need_run:
             t0 = time.perf_counter()
-            proc = subprocess.run([lapse, "shapes", img_path, "--json", *flags], capture_output=True, text=True, timeout=600)
+            proc = subprocess.run([lapse, "shapes", lapse_input, "--json", *flags], capture_output=True, text=True, timeout=600)
             wall_ms = int(round((time.perf_counter() - t0) * 1000))
             if proc.returncode != 0 or not proc.stdout.strip():
                 failed += 1
@@ -297,7 +304,7 @@ def cmd_vision(args) -> int:
             # refusal list is trimmed to 24 by the Kit, so it is not a count
             candidates = sum(int(x) for x in offered if x is not None) if any(x is not None for x in offered) \
                 else len(v1_shapes) + len(refusals)
-            stats = {"candidates": candidates, "v1Shapes": len(v1_shapes),
+            stats = {"candidates": candidates, "v1Shapes": len(v1_shapes), "lapseInput": "dng" if lapse_input != img_path else "render",
                      "refusals": len(refusals), "accepted": len(shapes),
                      "durationMs": int(diag.get("milliseconds") or 0), "wallMs": wall_ms,
                      "quadsOffered": diag.get("quadsOffered"), "quadsKept": diag.get("quadsKept"),
@@ -323,6 +330,9 @@ def cmd_vision(args) -> int:
         with open(reg_path, "r", encoding="utf-8") as f:
             reg = json.load(f)
         reg_params = {"detector": {"source": "library shapes.json", "refine": refine_params}, "rules": RULES}
+        if getattr(args, "register_tag", None):
+            # A generation of registers (e.g. after an in-app re-analysis): its own run block.
+            reg_params["detector"]["generation"] = args.register_tag
         reg_version = str(reg.get("detectorVersion", 0))
         rkey = schema.run_key(schema.DETECTOR_REGISTER, reg_version, schema.params_hash(reg_params))
         if schema.has_run(doc, rkey) and not args.force:
@@ -730,6 +740,7 @@ def main(argv=None) -> int:
     p.add_argument("--lapse", default=DEFAULT_LAPSE)
     p.add_argument("--params", help="JSON overrides for the refinement / dedupe knobs (same file as detect)")
     p.add_argument("--flags", default="", help='extra lapse arguments, e.g. "--sensitivity high --size all" (a new run block per distinct set)')
+    p.add_argument("--register-tag", default="", help="name this generation of library registers (a new apple-vision-register block)")
     p.add_argument("--only")
     p.add_argument("--limit", type=int)
     p.add_argument("--force", action="store_true")

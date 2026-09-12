@@ -1864,6 +1864,7 @@ final class CameraController: NSObject, ObservableObject {
         c.stabilization = videoStabilizationStatus
         c.exposureLocked = exposureLocked
         c.shapeSearch = shapeSearch
+        #if os(iOS)
         switch latestCaptureOrientation {
         case .portrait: c.orientation = "portrait"
         case .portraitUpsideDown: c.orientation = "portraitUpsideDown"
@@ -1871,6 +1872,7 @@ final class CameraController: NSObject, ObservableObject {
         case .landscapeRight: c.orientation = "landscapeRight"
         @unknown default: break
         }
+        #endif
         guard let device = videoDevice else { return c }
         var physical = device
         #if os(iOS)
@@ -9958,9 +9960,14 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
                 // The session document's line: the camera's own EXIF for
                 // this still (what the file carries — or carried, before
                 // the flat grade re-encoded it).
+                #if os(iOS)
+                let stillMetadata = photo.metadata   // AVCapturePhoto.metadata is iOS-only
+                #else
+                let stillMetadata: [String: Any] = [:]
+                #endif
                 self.plainRunLog?.entries.append(CaptureExposureLog.Entry(
                     frameIndex: self.photoURLs.count - 1,
-                    exposure: DNGAuthor.DNGExposure(photoMetadata: photo.metadata, capturedAt: Date())))
+                    exposure: DNGAuthor.DNGExposure(photoMetadata: stillMetadata, capturedAt: Date())))
                 let count = self.photoURLs.count
                 self.publishLiveExposure()
                 let bankedAt = Date()

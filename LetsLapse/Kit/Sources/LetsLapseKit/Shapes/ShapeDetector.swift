@@ -100,6 +100,13 @@ public struct ShapeDetector: Sendable {
         public var regionRectSideTolerance = 0.10
         public init() {}
 
+        /// The long edge a caller should decode the picture at: the Vision
+        /// passes' resolution, or the region pass's largest scale when that
+        /// is bigger — a 2048 pass handed a 1024 decode runs at 1024.
+        public var decodeLongEdge: Int {
+            max(detectionLongEdge, regionProposals ? (regionProposalLongEdges.max() ?? 0) : 0)
+        }
+
         /// The viewfinder pass with the dials at their defaults — see
         /// `ShapeSearch.liveSettings()`. Measured at 25–95 ms per contour pass
         /// on an iPhone 16 Pro (2026-09-11).

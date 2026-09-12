@@ -310,8 +310,10 @@ floor at 0.10 of the short edge and the **flat nest policy** (decided 2026-09-12
 a shape, Shape-mation takes the biggest — merging is near-identical only, `sameShapeIoU` 0.9) the
 Kit passes the reference: on the completed 37-picture / 153-label set 72 hits against the
 reference's 66 (recall 47 % vs 43 %, precision 52 % vs 61 %). SIZE = All's file floor is 0.10
-of the short edge (decided 2026-09-12). Next: commit, a phone run (time, heat, old registers
-still open), then this adoption.
+of the short edge (decided 2026-09-12). Run in the Mac app (Find shapes over the 37): 19 % → 46 % of the labels in the
+registers themselves. Next: bump `currentDetectorVersion` (Find shapes re-analyses older
+registers — 199 in the Mac library carry version 1), a phone run (time, heat), then this
+adoption.
 
 
 ### Shape-mation — from spike to feature: timing, accuracy, design mirrors, collections

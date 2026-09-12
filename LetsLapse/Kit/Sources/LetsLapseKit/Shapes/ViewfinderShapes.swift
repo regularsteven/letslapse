@@ -121,15 +121,24 @@ public enum ShapeReconciler {
         return out
     }
 
-    /// The index of the same-kind candidate overlapping `shape` most, if any does enough.
-    public static func bestMatch(for shape: DetectedShape, in candidates: [DetectedShape]) -> Int? {
+    /// The index of the same-kind candidate overlapping `shape` most, if any
+    /// does enough. `threshold` defaults to the viewfinder's drift-tolerant
+    /// 0.4; a still-against-still pairing (Find shapes re-analysing a
+    /// picture) passes the consensus 0.7, under which a nested member 8 %
+    /// apart in radius is a different shape (flat policy).
+    public static func bestMatch(for shape: DetectedShape, in candidates: [DetectedShape],
+                                 threshold: Double = matchThreshold) -> Int? {
         var best: (Int, Double)?
         for (i, c) in candidates.enumerated() where c.kind == shape.kind {
             let o = ShapeDetector.overlap(shape, c)
-            if o >= matchThreshold, o > (best?.1 ?? 0) { best = (i, o) }
+            if o >= threshold, o > (best?.1 ?? 0) { best = (i, o) }
         }
         return best?.0
     }
+
+    /// Bounds-IoU at which a still picture's detection is the same shape as
+    /// one kept from the viewfinder of that same picture.
+    public static let stillMatchThreshold = 0.7
 
     /// A live shape as the register stores it: normalised geometry unchanged,
     /// `nativeDiameterPx` scaled from preview pixels to the still's.

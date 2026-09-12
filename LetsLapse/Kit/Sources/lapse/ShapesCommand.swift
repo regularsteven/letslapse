@@ -111,7 +111,7 @@ func runShapes(path: String, residual: Double?, live: Bool, longEdge: Int?, verb
         if let edges { profiles[i].1.edgeThresholds = edges }
         if let contourDimension { profiles[i].1.contourImageDimension = contourDimension }
     }
-    let decodeEdge = profiles.map { max($0.1.detectionLongEdge, $0.1.regionProposals ? ($0.1.regionProposalLongEdges.max() ?? 0) : 0) }.max() ?? 1024
+    let decodeEdge = profiles.map { $0.1.decodeLongEdge }.max() ?? 1024
     let options: [CFString: Any] = [
         kCGImageSourceCreateThumbnailFromImageAlways: true,
         kCGImageSourceCreateThumbnailWithTransform: true,

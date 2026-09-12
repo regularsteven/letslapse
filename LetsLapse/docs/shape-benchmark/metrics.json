@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-12T09:14:13Z",
+  "generatedAt": "2026-09-12T10:49:27Z",
   "floor": 0.1,
   "match": {
     "centrePctDiag": 2.0,
@@ -32,8 +32,8 @@
   "chosen": {
     "manual-groundtruth": "manual-groundtruth|1|e89f36e6cd43",
     "opencv-reference": "opencv-reference|1|a49d2b2eb28e",
-    "apple-vision": "apple-vision|1|630594b98ea9",
-    "apple-vision-register": "apple-vision-register|1|26f7ceec831c"
+    "apple-vision": "apple-vision|1|63726d7e9a88",
+    "apple-vision-register": "apple-vision-register|1|128ce29d7629"
   },
   "gate": "opencv-reference a49d2b2eb28e: median accepted candidates/image = 2.0 → ≤ 6 → geometry alone is sufficient for photo mode; no AI ranking layer",
   "detectors": {
@@ -337,10 +337,10 @@
       "durationMs": {
         "n": 37,
         "median": 3032.0,
-        "p25": 2122.0,
+        "p25": 2231.0,
         "p75": 4223.0,
         "max": 6439.0,
-        "mean": 3129.5945945945946
+        "mean": 3143.108108108108
       },
       "wallMs": null,
       "runKey": "opencv-reference|1|a49d2b2eb28e"
@@ -2120,6 +2120,330 @@
       },
       "runKey": "apple-vision|1|630594b98ea9"
     },
+    "apple-vision · file all/medium/all · e20160": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 72,
+      "fp": 66,
+      "fn": 81,
+      "duplicates": 10,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5217391304347826,
+      "recall": 0.47058823529411764,
+      "f1": 0.49484536082474223,
+      "precisionCI": [
+        0.43894037630479876,
+        0.6033603309630267
+      ],
+      "recallCI": [
+        0.393188812557957,
+        0.549428452249339
+      ],
+      "fpNestedInLabel": 32,
+      "precisionExcludingNested": 0.6792452830188679,
+      "recallOnRulePassingGT": 0.48322147651006714,
+      "aspectError": {
+        "median": 0.01075738167521387,
+        "p95": 0.04929750432499273,
+        "n": 72
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.1026783033806495,
+        "p95": 0.45564664975045155,
+        "max": 0.8714421151172338,
+        "n": 72,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 55
+          },
+          {
+            "from": 0.25,
+            "count": 13
+          },
+          {
+            "from": 0.5,
+            "count": 3
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3299999999999983,
+        "p95": 2.438999999999999,
+        "n": 47
+      },
+      "subclassMismatches": 7,
+      "acceptedMeasuredAsProposed": {
+        "n": 76,
+        "of": 138
+      },
+      "subclassConfusion": {
+        "square": {
+          "square": 15,
+          "rectangle": 1
+        },
+        "circle": {
+          "circle": 23,
+          "ellipse": 2
+        },
+        "rectangle": {
+          "rectangle": 25,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 2
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 43,
+          "fp": 48,
+          "fn": 54
+        },
+        "ellipse": {
+          "tp": 29,
+          "fp": 18,
+          "fn": 27
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 50,
+          "fn": 61
+        },
+        "medium": {
+          "tp": 15,
+          "fn": 16
+        },
+        "large": {
+          "tp": 7,
+          "fn": 4
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.72972972972973
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 155.0,
+        "p25": 91.0,
+        "p75": 213.0,
+        "max": 440.0,
+        "mean": 154.97297297297297
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2206.0,
+        "p25": 1545.0,
+        "p75": 4241.0,
+        "max": 57740.0,
+        "mean": 5974.648648648648
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 2332.0,
+        "p25": 1685.0,
+        "p75": 4364.0,
+        "max": 57883.0,
+        "mean": 6124.1621621621625
+      },
+      "runKey": "apple-vision|1|e201608388ca"
+    },
+    "apple-vision · file all/medium/all · 63726d": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 69,
+      "fp": 64,
+      "fn": 84,
+      "duplicates": 10,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.518796992481203,
+      "recall": 0.45098039215686275,
+      "f1": 0.48251748251748255,
+      "precisionCI": [
+        0.4345513610645472,
+        0.601987235385655
+      ],
+      "recallCI": [
+        0.3742967741616633,
+        0.5300653338504968
+      ],
+      "fpNestedInLabel": 31,
+      "precisionExcludingNested": 0.6764705882352942,
+      "recallOnRulePassingGT": 0.46308724832214765,
+      "aspectError": {
+        "median": 0.01159618008185541,
+        "p95": 0.04953068784320107,
+        "n": 69
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.10074284093671561,
+        "p95": 0.4054832935188292,
+        "max": 0.8714421151172338,
+        "n": 69,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 53
+          },
+          {
+            "from": 0.25,
+            "count": 13
+          },
+          {
+            "from": 0.5,
+            "count": 2
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3299999999999841,
+        "p95": 1.9900000000000055,
+        "n": 45
+      },
+      "subclassMismatches": 7,
+      "acceptedMeasuredAsProposed": {
+        "n": 72,
+        "of": 133
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 22,
+          "ellipse": 2
+        },
+        "square": {
+          "square": 13,
+          "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 25,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 2
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 41,
+          "fp": 46,
+          "fn": 56
+        },
+        "ellipse": {
+          "tp": 28,
+          "fp": 18,
+          "fn": 28
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 48,
+          "fn": 63
+        },
+        "medium": {
+          "tp": 14,
+          "fn": 17
+        },
+        "large": {
+          "tp": 7,
+          "fn": 4
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.5945945945945947
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 162.0,
+        "p25": 108.0,
+        "p75": 213.0,
+        "max": 440.0,
+        "mean": 163.54054054054055
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2909.0,
+        "p25": 1707.0,
+        "p75": 9310.0,
+        "max": 63328.0,
+        "mean": 8315.783783783783
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 3036.0,
+        "p25": 1822.0,
+        "p75": 9703.0,
+        "max": 63456.0,
+        "mean": 8545.648648648648
+      },
+      "runKey": "apple-vision|1|63726d7e9a88"
+    },
     "apple-vision-register · 01e9cab7f08c": {
       "detectorId": "apple-vision-register",
       "labelledAssets": 33,
@@ -2451,6 +2775,340 @@
         }
       },
       "runKey": "apple-vision-register|1|26f7ceec831c"
+    },
+    "apple-vision-register · after the port (in-app Find shapes, Mac, 2026-09-12)": {
+      "detectorId": "apple-vision-register",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 66,
+      "fp": 65,
+      "fn": 87,
+      "duplicates": 5,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5038167938931297,
+      "recall": 0.43137254901960786,
+      "f1": 0.4647887323943662,
+      "precisionCI": [
+        0.4193159467511274,
+        0.5881001622241442
+      ],
+      "recallCI": [
+        0.3555238474775599,
+        0.5105831037394641
+      ],
+      "fpNestedInLabel": 28,
+      "precisionExcludingNested": 0.6407766990291263,
+      "recallOnRulePassingGT": 0.4429530201342282,
+      "aspectError": {
+        "median": 0.013476632783358665,
+        "p95": 0.04858486957675817,
+        "n": 66
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.10762051302780792,
+        "p95": 0.7484028334904939,
+        "max": 1.6218691439200628,
+        "n": 66,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 47
+          },
+          {
+            "from": 0.25,
+            "count": 12
+          },
+          {
+            "from": 0.5,
+            "count": 3
+          },
+          {
+            "from": 0.75,
+            "count": 3
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 1
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3299999999999841,
+        "p95": 19.199999999999996,
+        "n": 41
+      },
+      "subclassMismatches": 7,
+      "acceptedMeasuredAsProposed": {
+        "n": 78,
+        "of": 131
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 24,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 11,
+          "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 23,
+          "square": 3
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 38,
+          "fp": 46,
+          "fn": 59
+        },
+        "ellipse": {
+          "tp": 28,
+          "fp": 19,
+          "fn": 28
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 44,
+          "fn": 67
+        },
+        "medium": {
+          "tp": 15,
+          "fn": 16
+        },
+        "large": {
+          "tp": 7,
+          "fn": 4
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.5405405405405403
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 4.0,
+        "p25": 2.0,
+        "p75": 7.0,
+        "max": 29.0,
+        "mean": 5.864864864864865
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 0.0,
+        "p25": 0.0,
+        "p75": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "wallMs": null,
+      "byProvenance": {
+        "detected": {
+          "tp": 50,
+          "fp": 53,
+          "n": 103
+        },
+        "captured": {
+          "tp": 16,
+          "fp": 12,
+          "n": 28
+        }
+      },
+      "runKey": "apple-vision-register|1|928fa0af89bb"
+    },
+    "apple-vision-register · after the port + captured shapes snapped (in-app, Mac, 2026-09-12)": {
+      "detectorId": "apple-vision-register",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 71,
+      "fp": 72,
+      "fn": 82,
+      "duplicates": 10,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.4965034965034965,
+      "recall": 0.46405228758169936,
+      "f1": 0.4797297297297297,
+      "precisionCI": [
+        0.4157242744569096,
+        0.5774656662683346
+      ],
+      "recallCI": [
+        0.38687830957341385,
+        0.5429872363021702
+      ],
+      "fpNestedInLabel": 33,
+      "precisionExcludingNested": 0.6454545454545455,
+      "recallOnRulePassingGT": 0.47651006711409394,
+      "aspectError": {
+        "median": 0.01159618008185541,
+        "p95": 0.049375232164395516,
+        "n": 71
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.10461376582458339,
+        "p95": 0.5131088798969072,
+        "max": 1.6218691439200628,
+        "n": 71,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 53
+          },
+          {
+            "from": 0.25,
+            "count": 13
+          },
+          {
+            "from": 0.5,
+            "count": 3
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 1
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3299999999999841,
+        "p95": 1.9900000000000055,
+        "n": 45
+      },
+      "subclassMismatches": 7,
+      "acceptedMeasuredAsProposed": {
+        "n": 81,
+        "of": 143
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 24,
+          "ellipse": 2
+        },
+        "square": {
+          "square": 13,
+          "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 25,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 2
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 41,
+          "fp": 47,
+          "fn": 56
+        },
+        "ellipse": {
+          "tp": 30,
+          "fp": 25,
+          "fn": 26
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 49,
+          "fn": 62
+        },
+        "medium": {
+          "tp": 15,
+          "fn": 16
+        },
+        "large": {
+          "tp": 7,
+          "fn": 4
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.864864864864865
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 5.0,
+        "p25": 3.0,
+        "p75": 7.0,
+        "max": 29.0,
+        "mean": 6.297297297297297
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 0.0,
+        "p25": 0.0,
+        "p75": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "wallMs": null,
+      "byProvenance": {
+        "detected": {
+          "tp": 54,
+          "fp": 60,
+          "n": 114
+        },
+        "captured": {
+          "tp": 17,
+          "fp": 12,
+          "n": 29
+        }
+      },
+      "runKey": "apple-vision-register|1|128ce29d7629"
     }
   },
   "floorSweeps": {
@@ -2896,6 +3554,74 @@
         "mean": 1.2857142857142858
       }
     },
+    "apple-vision · file all/medium/all · e20160": {
+      "0.10": {
+        "n": 35,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.942857142857143
+      },
+      "0.15": {
+        "n": 35,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 17.0,
+        "mean": 2.742857142857143
+      },
+      "0.20": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.5,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 1.9428571428571428
+      },
+      "0.25": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.2857142857142858
+      }
+    },
+    "apple-vision · file all/medium/all · 63726d": {
+      "0.10": {
+        "n": 33,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 4.03030303030303
+      },
+      "0.15": {
+        "n": 33,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 17.0,
+        "mean": 2.8484848484848486
+      },
+      "0.20": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 2.0
+      },
+      "0.25": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.303030303030303
+      }
+    },
     "apple-vision-register · 01e9cab7f08c": {
       "0.10": {
         "n": 27,
@@ -2962,6 +3688,74 @@
         "p75": 1.5,
         "max": 3.0,
         "mean": 1.1481481481481481
+      }
+    },
+    "apple-vision-register · after the port (in-app Find shapes, Mac, 2026-09-12)": {
+      "0.10": {
+        "n": 34,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.8529411764705883
+      },
+      "0.15": {
+        "n": 34,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 17.0,
+        "mean": 2.764705882352941
+      },
+      "0.20": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.75,
+        "max": 7.0,
+        "mean": 1.9705882352941178
+      },
+      "0.25": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.1176470588235294
+      }
+    },
+    "apple-vision-register · after the port + captured shapes snapped (in-app, Mac, 2026-09-12)": {
+      "0.10": {
+        "n": 34,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.75,
+        "max": 26.0,
+        "mean": 4.205882352941177
+      },
+      "0.15": {
+        "n": 34,
+        "median": 2.5,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 17.0,
+        "mean": 3.0588235294117645
+      },
+      "0.20": {
+        "n": 34,
+        "median": 1.5,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 2.176470588235294
+      },
+      "0.25": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.25,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.3823529411764706
       }
     }
   },
@@ -3072,7 +3866,7 @@
         }
       },
       "opencv-reference|1|a49d2b2eb28e": {
-        "runAt": "2026-09-12T07:45:38Z",
+        "runAt": "2026-09-12T10:32:20Z",
         "assets": 37,
         "params": {
           "detector": {
@@ -3897,6 +4691,136 @@
             "tieMargin": 0.02
           }
         }
+      },
+      "apple-vision|1|e201608388ca": {
+        "runAt": "2026-09-12T10:25:41Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "843a43c32fc9",
+            "profile": "file all/medium/all",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.9
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|63726d7e9a88": {
+        "runAt": "2026-09-12T10:42:42Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "3f81f769c18b",
+            "profile": "file all/medium/all",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.9
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
       }
     },
     "apple-vision-register": {
@@ -3967,6 +4891,132 @@
         "assets": 33,
         "params": {
           "detector": {
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.9
+              }
+            },
+            "source": "library shapes.json"
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision-register|1|928fa0af89bb": {
+        "runAt": "2026-09-12T10:32:34Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "generation": "after the port (in-app Find shapes, Mac, 2026-09-12)",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.9
+              }
+            },
+            "source": "library shapes.json"
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision-register|1|128ce29d7629": {
+        "runAt": "2026-09-12T10:48:00Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "generation": "after the port + captured shapes snapped (in-app, Mac, 2026-09-12)",
             "refine": {
               "adaptive": {
                 "C": 5,

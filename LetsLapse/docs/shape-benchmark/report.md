@@ -228,6 +228,51 @@ the viewfinder keeps 1/6).
 written before them. Tests: `RegionProposalsTests` (maps, tracing, fits, IoU, the hole case,
 the trapezoid refused, old diagnostics decode). Both decisions are made: the floor is 0.10 and the nest policy is flat.
 
+## In the app (2026-09-12, Mac, Release build)
+
+The same comparison run where it ships: the Mac app's **Find shapes** over the 37 Shape testing
+projects, registers reset so they would be re-analysed (originals backed up), the rewritten
+`shapes.json` files scored against the same labels through the rig's register block. Two runs, the
+second after two fixes the first one surfaced.
+
+| library registers, 37 pictures, 153 labels | TP | FP | of which nested | precision strict / excl. nested | recall | median s / project |
+|---|---|---|---|---|---|---|
+| before (old detector; the phone's captured shapes + its file pass) | 25 | 35 | 11 | 42 % / 51 % | 19 % (of 132 on 33 pictures) | — |
+| after the port, in-app run 1 | 66 | 65 | 28 | 50 % / 64 % | 43 % | 3.1 |
+| **after the port, in-app run 2 (captured shapes snapped)** | **71** | 72 | 33 | 50 % / 65 % | **46 %** | 2.8 |
+| the CLI on the same files, DNGs decoded as the app does | 69 | 64 | 31 | 52 % / 68 % | 45 % | 2.9 |
+
+So in the app itself: **19 % → 46 % of the shapes a person marked**, precision 42 % → 50 % strict
+(51 % → 65 % leaving out unlabelled nest members), 39 projects in 4 min 50 s on an M4 Max. The
+p90 of 19 s and the 58 s maximum are the Kit's existing Hough pass on cobbles and facades, not the
+new code; the new pass costs ~1.2 s of the 2.8 s median. Of the 71 hits, 17 are shapes you kept on
+the viewfinder at capture time and 54 are the file pass's; of the 72 false positives, 12 are old
+viewfinder shapes that match no label and 60 are detections, 33 of those nested inside a label.
+
+What the run surfaced, all fixed in the tree:
+
+- **Find shapes was not running the file profile.** It built `ShapeDetector()` from raw defaults
+  (floor 1/6 + 400 px) and decoded the picture at 1024 px, so the 2048 region scale would have
+  run on a 1024 image. It now uses `ShapeSearch().fileSettings()` and decodes at
+  `Settings.decodeLongEdge`; the capture-time path decodes at the same.
+- **Captured viewfinder shapes kept their 384-px geometry** and the sharper file detection of
+  the same object was dropped. Find shapes now snaps a captured shape to its file fit (identity,
+  name and `captured` source kept) at a still-against-still bar of bounds-IoU 0.7
+  (`ShapeReconciler.stillMatchThreshold`; the viewfinder's own 0.4 is drift tolerance and stays);
+  a hand-drawn shape still wins over its detection. Worth 5 hits here.
+- **A re-analysis dropped the viewfinder trail** (the register was rebuilt without it). Carried
+  over now.
+- **DNGs are a slightly different picture in the app.** The app (CIRAWFilter) and `lapse`
+  (ImageIO) decode raw at the detector's size straight from the file; the rig rendered the full
+  frame and downsized. The pixels differ by 2.5 levels on average and the P-sign's two squares,
+  right at the size floor, flipped on it. The rig now hands `lapse` the DNG itself for DNG assets
+  (`stats.lapseInput`) and renders its own reference frames through ImageIO rather than rawpy.
+- The Mac target had not built since yesterday's field-test commit (two iOS-only symbols
+  outside their guards in `CameraController`). Fixed.
+- `ShapeRegister.detectorVersion` exists for exactly this re-analysis but Find shapes only
+  checks the analysed flag; 199 registers in this library carry version 1. Bumping the version
+  and re-analysing older registers is the release step, deliberately not done for the test.
+
 ## What was learned building the reference (worth keeping)
 
 - The brief's auto-Canny (median ± σ) goes blind on a bright wall (median 165 → high threshold
@@ -260,10 +305,10 @@ the trapezoid refused, old diagnostics decode). Both decisions are made: the flo
 
 ## Next
 
-1. ~~Port the reference's proposal maps into the still-photo pass~~ — done; with the flat nest
-   policy and the floor at 0.10 the Kit passes the reference (72 against 66 of 153 labels).
-   ~~Decide the SIZE floor, complete the labels~~ — done. Commit, then run it on a phone: time
-   per picture, heat, and that existing registers still open.
+1. ~~Port the reference's proposal maps into the still-photo pass~~ — done; in the app 19 % → 46 %
+   of the labels. ~~Decide the SIZE floor, complete the labels, run it in the app~~ — done.
+   Remaining: bump `ShapeRegister.currentDetectorVersion` so libraries re-analyse (Find shapes
+   should treat an older version as to-do), then a phone run for time and heat.
 2. The Kit's Hough rim gates refuse two labelled rings by 0.01–0.02 (support 0.33/0.34 vs 0.35,
    coverage 0.53 vs 0.55); a benchmark run at 0.30 / 0.50 would say whether that is a free
    two labels or a wall of arches. Cheap: `--flags` on `vision`, one run block.

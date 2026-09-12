@@ -164,7 +164,9 @@ final class ShapeFinder: ObservableObject {
         summary = nil
         progress = Progress(done: 0, total: todo.count, current: todo.first?.title ?? "")
         task = Task.detached(priority: .userInitiated) { [weak self] in
-            let detector = ShapeDetector()
+            // The file profile with the dials at their defaults — the same
+            // pass a capture's register gets, floor included.
+            let detector = ShapeDetector(settings: ShapeSearch().fileSettings())
             var analysed = 0, withShapes = 0, unreadable = 0
             var families: [DetectedShape.Family: Int] = [:]
             for (i, candidate) in todo.enumerated() {
@@ -174,28 +176,51 @@ final class ShapeFinder: ObservableObject {
                 // Shapes drawn by hand or confirmed on the viewfinder before
                 // this run stay; the detector's join them — minus any that
                 // are the same thing as a kept one, which is already listed.
-                let drawn = ShapeRegister.load(inProjectFolder: candidate.folder)?.keptShapes ?? []
+                let existing = ShapeRegister.load(inProjectFolder: candidate.folder)
+                let drawn = existing?.keptShapes ?? []
                 var register: ShapeRegister
                 if let size = RepresentativeLoader.orientedPixelSize(rep),
-                   let image = RepresentativeLoader.image(rep, maxPixelSize: detector.settings.detectionLongEdge) {
-                    let shapes = ((try? detector.detect(in: image, nativeSize: size)) ?? [])
-                        .filter { ShapeReconciler.bestMatch(for: $0, in: drawn) == nil }
+                   let image = RepresentativeLoader.image(rep, maxPixelSize: detector.settings.decodeLongEdge) {
+                    let started = Date()
+                    var found = (try? detector.detect(in: image, nativeSize: size)) ?? []
+                    // A shape confirmed on the viewfinder keeps its identity
+                    // and takes the file pass's geometry where the file pass
+                    // saw the same shape — the live pass drew it at 384 px.
+                    // A hand-drawn shape is the person's own geometry and
+                    // stands; the detection of the same shape is dropped.
+                    var kept = drawn
+                    for i in kept.indices {
+                        guard let j = ShapeReconciler.bestMatch(for: kept[i], in: found, threshold: ShapeReconciler.stillMatchThreshold) else { continue }
+                        let detection = found.remove(at: j)
+                        if kept[i].source == .captured {
+                            var snapped = detection
+                            snapped.id = kept[i].id
+                            snapped.source = .captured
+                            snapped.name = kept[i].name
+                            kept[i] = snapped
+                        }
+                    }
+                    let shapes = found
                     // The lens: what the register already knew (a capture-time
                     // register keeps its shutter reading), else the file's EXIF.
-                    let fov = ShapeRegister.load(inProjectFolder: candidate.folder)?.representative.horizontalFieldOfView
+                    let fov = existing?.representative.horizontalFieldOfView
                         ?? RepresentativeLoader.horizontalFieldOfView(rep)
                     register = ShapeRegister(representative: .init(relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction,
                                                                    width: Int(size.width), height: Int(size.height), horizontalFieldOfView: fov),
-                                             shapes: drawn + shapes).rectifyingQuads()
+                                             shapes: kept + shapes).rectifyingQuads()
                     analysed += 1
                     if !shapes.isEmpty { withShapes += 1 }
                     for s in shapes { families[s.family, default: 0] += 1 }
+                    LLog(String(format: "shapes: %@ — %d shape(s) in %.0f ms", candidate.title, shapes.count, Date().timeIntervalSince(started) * 1000))
                 } else {
                     register = ShapeRegister(representative: .init(relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction, width: 0, height: 0),
                                              shapes: drawn, failure: "picture could not be read")
                     unreadable += 1
                     LLog("shapes: could not read \(rep.url.lastPathComponent) for \(candidate.title)")
                 }
+                // The viewfinder's account of the capture belongs to the
+                // capture, not to the detector run that is being redone.
+                register.viewfinder = existing?.viewfinder
                 do { try register.save(inProjectFolder: candidate.folder) } catch {
                     LLog("shapes: could not write shapes.json for \(candidate.title): \(error)")
                 }
@@ -252,7 +277,7 @@ extension AppModel {
             // The same things the viewfinder was looking for, at the file
             // pass's own resolution and gates (see `ShapeSearch.fileSettings`).
             let detector = ShapeDetector(settings: viewfinder.search.fileSettings())
-            guard let image = RepresentativeLoader.image(rep, maxPixelSize: detector.settings.detectionLongEdge) else {
+            guard let image = RepresentativeLoader.image(rep, maxPixelSize: detector.settings.decodeLongEdge) else {
                 LLog("shapes: could not read \(rep.url.lastPathComponent) to refine the viewfinder's shapes; provisional register stands")
                 return
             }
