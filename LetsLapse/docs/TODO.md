@@ -154,8 +154,37 @@ gallery preview sheet/panel — rows marked ⚠️ in the INDEX files); metadata
 EXPORT (record → XMP packet in JPEG/HEIC/TIFF/DNG exports and `.xmp` beside
 raws, through the same table); the "Copy contact block from…" convenience
 (Part 2 §7); QuickTime metadata for video imports (Part 2 §9.2); the
-`lapse import-lightroom` tool. **Next:** Milestone 2 — W2 + W3 + W4, W6 + W7,
-W9, W8, W10, W11, W12 in the spec's order, each on its own commit.
+`lapse import-lightroom` tool.
+
+**Milestone 2 landed 2026-09-13** (commits 71ae326 → d866dfc, one per work
+item): W2 `DeviceIdentity` (`letslapse.deviceID`, Appendix B row 84); W3
+`originID` / `originDeviceID` / `derivedFromOriginID` with duplicate detection
+by origin (a crafted second-hop archive is caught) and `PTProjectInfo.originID`;
+W4 `ManifestMigrations` step 4 on the JSON before decode (verified on a copy of
+the Mac manifest: schema 4, `.json` names 77 → 0, originID 256/256, four clone
+links; `registerSequenceCapture` no longer lists `sequence.json`, installs strip
+`.json` names); W6 `LibraryPersister` + Kit `VersionGate` (one queue, older
+snapshots dropped, flush on terminate/background); W7 the set-aside
+`library.json.unreadable-<stamp>` + refused writes + banner; W9 tombstones,
+`Projects/.trash/`, launch sweep, 30-day purge, Settings ▸ Storage Trash line +
+Empty trash; W8 `revision`/`modifiedAt`/`modifiedBy` on all three record types
++ `editedBy` per field on the asset records; W10 the run's project id minted at
+start (staging folder, `capture_start.projectID`, blend `sessionID`, experiment
+header `originID`, registration keeps it); W11 `NDJSONWriter` + the `.ndjson`
+experiment log with the document written once at finish, logs pruned to 50; W12
+`.jobs/` scratch with relative paths and removal at completion, branded
+`LetsLapse-Models`, `.gps-backup` sweep. DEBUG hooks added: `LL_IMPORT_ARCHIVE`,
+`LL_EXPORT_ARCHIVE`, `LL_DELETE`. **Owed from M2:** the on-device checks the
+spec asks for (W10's `capture_log.json.sessionID == id == originID` after an
+interval run; W11's linear write volume and a killed run's parseable `.ndjson`;
+W5's backfill pausing under thermal pressure) — a Release run on the iPhone 16
+Pro once Steven says so; the Mac → iPhone → Mac transfer round trip (the archive
+path was verified; the transfer shares the installer); SVG mirrors for the W7
+banner and the Settings ▸ Storage Trash row after sign-off; the ten
+`.hasSuffix(".json")` filters come out one release after W4; the Phase 1 §5
+after-audit on both real libraries once a build with the backfill has run
+against them (the Mac volume was audited unchanged after M1 — no build ran
+against it).
 
 ### Asset metadata (IPTC Core), the index at scale, and the Lightroom catalogue
 
