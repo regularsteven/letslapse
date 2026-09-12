@@ -817,11 +817,18 @@ final class AppModel: ObservableObject {
 
     func beginActivity(_ activity: LibraryActivity) {
         activeLibraryActivities.insert(activity)
+        libraryBusyForBackfill = true
     }
 
     func endActivity(_ activity: LibraryActivity) {
         activeLibraryActivities.remove(activity)
+        libraryBusyForBackfill = !activeLibraryActivities.isEmpty
     }
+
+    /// `isLibraryBusy`, readable off the main actor by the asset backfill's
+    /// pause check. A plain flag rather than the set, because the set is
+    /// main-actor state and the hasher asks from its own queue.
+    nonisolated(unsafe) private(set) var libraryBusyForBackfill = false
 
     var isLibraryBusy: Bool { !activeLibraryActivities.isEmpty }
 
@@ -1202,9 +1209,26 @@ final class AppModel: ObservableObject {
 
     private var blendTask: Task<Void, Never>?
 
+    /// The per-asset records (`assets.ndjson`) and project-level metadata
+    /// (`metadata.json`) of every project — see `AppModel+Metadata.swift`.
+    let assetStore = AssetRecordStore()
+    /// Bumped whenever a project's records change on disk, so the panel
+    /// re-reads. Edits commit per field, never per keystroke.
+    @Published var metadataRevision = 0
+
     init() {
         loadLibrary()
         refreshShapeSummaries()
+        assetStore.onChange = { [weak self] _ in self?.metadataRevision += 1 }
+        assetStore.shouldPause = { [weak self] in
+            let process = ProcessInfo.processInfo
+            if process.thermalState == .serious || process.thermalState == .critical { return true }
+            if process.isLowPowerModeEnabled { return true }
+            // Read off the main actor only through this snapshot, which the
+            // activity brackets keep current.
+            return self?.libraryBusyForBackfill ?? false
+        }
+        scheduleAssetBackfill()
         // The Adjust and Guided previews level their source frames the way
         // the render will; they learn the current project's level from here.
         AdjustPreviewLevel.provider = { [weak self] in
@@ -3738,6 +3762,22 @@ final class AppModel: ObservableObject {
         captures[index].sceneTaggedAutomatically = nil
         captures[index].modifiedAt = Date()
         try? persistLibrary()
+        // Tags are keywords (Part 2 §4.5): the same list lands in the project record's edited
+        // layer, where an export will read `dc:subject` from and where "from file / edited here"
+        // is answered.
+        writeProjectKeywords(cleaned, for: captures[index])
+    }
+
+    /// Seeds a project's tags from the keywords its files carried — only when it has none of its
+    /// own, so a person's list is never overwritten by a re-read. Called when the asset recorder
+    /// finishes a project (`recordAssets`), off the main persist path.
+    func seedSceneTags(_ keywords: [String], on captureID: UUID) {
+        guard !keywords.isEmpty,
+              let index = captures.firstIndex(where: { $0.id == captureID }),
+              captures[index].sceneTags == nil
+        else { return }
+        captures[index].sceneTags = keywords
+        persistLibraryOffMain()
     }
 
     /// Every tag already used somewhere in this library, taxonomy first, then hand-typed ones.
@@ -6903,6 +6943,11 @@ final class AppModel: ObservableObject {
         markEdited(blend.captureID)
         blends.sort { $0.createdAt > $1.createdAt }
         try persistLibrary()
+        // The render's hash line. Frames only (no metadata read): a blend
+        // output carries no IPTC, and the frames were recorded at registration.
+        if let capture = captures.first(where: { $0.id == captureID }) {
+            recordAssets(for: capture, extractMetadata: false)
+        }
         return blend
     }
 
@@ -6984,6 +7029,13 @@ final class AppModel: ObservableObject {
                         at: sidecar,
                         to: root.appendingPathComponent("source/\(name)"))
                 }
+                // The per-asset record file is a ROOT sidecar; a staging
+                // folder that already carries one (nothing writes it during
+                // a shoot today) keeps it beside the project, not the frames.
+                let records = staging.appendingPathComponent(ProjectFileRegistry.assetRecordsName)
+                if FileManager.default.fileExists(atPath: records.path) {
+                    try? copyReplacingItem(at: records, to: root.appendingPathComponent(ProjectFileRegistry.assetRecordsName))
+                }
             }
             capture = CaptureProject(
                 id: id,
@@ -7021,6 +7073,7 @@ final class AppModel: ObservableObject {
             case .photos: await self?.refreshStillsMetadata(for: capture.id)
             }
         }
+        recordAssets(for: capture)
         autoTagIfEnabled(capture)
         return capture
     }
@@ -7107,6 +7160,7 @@ final class AppModel: ObservableObject {
         Task { [weak self] in
             await self?.refreshVideoMetadata(for: capture.id)
         }
+        recordAssets(for: capture)
         autoTagIfEnabled(capture)
         return capture
     }
@@ -7437,6 +7491,10 @@ final class AppModel: ObservableObject {
         Task { [weak self] in
             await self?.refreshStillsMetadata(for: capture.id)
         }
+        // The frames' own record: bytes, hash, and what each file said about
+        // itself (title, rating, keywords, the photographer, the camera). User-
+        // initiated priority, because the panel opens on this project next.
+        recordAssets(for: capture, priority: .userInitiated)
         autoTagIfEnabled(capture)
         return capture
     }
@@ -7563,10 +7621,28 @@ final class AppModel: ObservableObject {
                 guard FileManager.default.fileExists(atPath: from.path) else { continue }
                 try? FileManager.default.copyItem(at: from, to: root.appendingPathComponent(folder, isDirectory: true))
             }
-            for file in ProjectArchive.transferableFiles {
+            for file in ProjectArchive.transferableFiles where file != ProjectFileRegistry.assetRecordsName {
                 let from = originalRoot.appendingPathComponent(file)
                 guard FileManager.default.fileExists(atPath: from.path) else { continue }
                 try? FileManager.default.copyItem(at: from, to: root.appendingPathComponent(file))
+            }
+            // The per-asset records are re-keyed, not copied: the clone's
+            // frames have new names (an `.ARW` becomes a `.dng`) and new
+            // bytes, so only a person's edits carry over — the hash and the
+            // imported layer are re-read from the converted files.
+            let sourceRecords = assetStore.records(inProjectFolder: originalRoot)
+            var cloneRecords = AssetRecords()
+            for input in inputs {
+                let oldName = "source/\(input.lastPathComponent)"
+                let newName = "source/\(input.deletingPathExtension().lastPathComponent).dng"
+                guard let record = sourceRecords[oldName], record.edited != nil else { continue }
+                var moved = AssetRecord(name: newName)
+                moved.edited = record.edited
+                moved.editedAt = record.editedAt
+                cloneRecords.put(moved)
+            }
+            if !cloneRecords.isEmpty {
+                try? cloneRecords.compact(to: AssetRecords.url(inProjectFolder: root))
             }
 
             // The record of what was done, beside the frames it describes.
@@ -7609,6 +7685,7 @@ final class AppModel: ObservableObject {
             captures.sort { $0.createdAt > $1.createdAt }
             try persistLibrary()
             Task { [weak self] in await self?.refreshStillsMetadata(for: clone.id) }
+            recordAssets(for: clone)
             return clone
         } catch {
             try? FileManager.default.removeItem(at: root)
@@ -7683,6 +7760,7 @@ final class AppModel: ObservableObject {
             // video project gets — one code path, so an imported clip and a
             // captured one describe themselves the same way.
             Task { [weak self] in await self?.refreshVideoMetadata(for: capture.id) }
+            recordAssets(for: capture)
             autoTagIfEnabled(capture)
             openCapture(capture)
         } catch {
@@ -7912,7 +7990,7 @@ final class AppModel: ObservableObject {
         try? persistLibrary()
     }
 
-    private func persistLibrary() throws {
+    func persistLibrary() throws {
         // Every path that adds, converts, rotates or deletes a project's files
         // ends here, so this is the one place that has to drop the size cache —
         // and the existence tickets, which stale under exactly the same edits.
@@ -8977,6 +9055,7 @@ final class AppModel: ObservableObject {
         }
 
         var importedBlends: [BlendProject] = []
+        var blendRenames: [String: String] = [:]
         for blendEntry in manifest.blends {
             var blend = blendEntry
             let extractedFile = destination.appendingPathComponent(blend.outputFileName)
@@ -8989,15 +9068,38 @@ final class AppModel: ObservableObject {
             } catch {
                 continue
             }
+            blendRenames[blend.outputFileName] = newFileName
             blend.id = newBlendID
             blend.captureID = newID
             blend.outputFileName = newFileName
             importedBlends.append(blend)
         }
 
+        // The arrived `assets.ndjson` names blends by the SENDER's ids; the
+        // lines follow the files to their new names, and anything else it
+        // names that did not arrive is dropped with the file.
+        if !blendRenames.isEmpty || FileManager.default.fileExists(atPath: AssetRecords.url(inProjectFolder: destination).path) {
+            assetStore.forget(projectFolder: destination)
+            let arrived = assetStore.records(inProjectFolder: destination)
+            var rekeyed = AssetRecords()
+            for record in arrived.ordered {
+                if record.name.hasPrefix("blends/") {
+                    guard let newName = blendRenames[record.name] else { continue }
+                    var moved = record
+                    moved.name = newName
+                    rekeyed.put(moved)
+                } else {
+                    rekeyed.put(record)
+                }
+            }
+            try? assetStore.replace(inProjectFolder: destination, with: rekeyed)
+        }
+
         captures.insert(capture, at: 0)
         blends.append(contentsOf: importedBlends)
         try persistLibrary()
+        // Whatever the sender never hashed or read, this side finishes.
+        recordAssets(for: capture)
         // A stills project from a device that predates their probing arrives
         // without its dimensions/span — fill them now rather than waiting for
         // the next launch's catch-up pass.
@@ -9472,7 +9574,7 @@ final class AppModel: ObservableObject {
     /// are changing stored numbers, not files on disk.
     private static let libraryPersistQueue = DispatchQueue(
         label: "com.letslapse.library-persist", qos: .utility)
-    private func persistLibraryOffMain() {
+    func persistLibraryOffMain() {
         var manifest = LibraryManifest(
             captures: captures.map(stampingPresetState), blends: blends, collections: collections)
         manifest.gradingSchemaVersion = max(gradingSchemaVersion, 1)

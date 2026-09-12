@@ -97,8 +97,14 @@ public enum MetadataFieldMap {
         MetadataMapping(.gpsLongitude, xmp: ["exif:GPSLongitude"], imageIO: ["{GPS}.Longitude"], kind: .coordinate),
         MetadataMapping(.gpsAltitude, xmp: ["exif:GPSAltitude"], imageIO: ["{GPS}.Altitude"], kind: .altitude),
         MetadataMapping(.gpsDirection, xmp: ["exif:GPSImgDirection"], imageIO: ["{GPS}.ImgDirection"], kind: .number),
-        MetadataMapping(.width, xmp: ["exif:PixelXDimension", "tiff:ImageWidth"], imageIO: ["PixelWidth"], kind: .integer),
-        MetadataMapping(.height, xmp: ["exif:PixelYDimension", "tiff:ImageLength"], imageIO: ["PixelHeight"], kind: .integer),
+        // A DNG's own size first: on iOS ImageIO's `PixelWidth` for a DNG is
+        // the embedded PREVIEW (256 × 171 for the Part 2 DNG, measured on the
+        // simulator 2026-09-13), while `{DNG}.DefaultCropSize` / `ActiveArea`
+        // describe the picture. `[n]` indexes an array value.
+        MetadataMapping(.width, xmp: ["exif:PixelXDimension", "tiff:ImageWidth"],
+                        imageIO: ["{DNG}.DefaultCropSize[0]", "{DNG}.ActiveArea[3]", "{Exif}.PixelXDimension", "PixelWidth"], kind: .integer),
+        MetadataMapping(.height, xmp: ["exif:PixelYDimension", "tiff:ImageLength"],
+                        imageIO: ["{DNG}.DefaultCropSize[1]", "{DNG}.ActiveArea[2]", "{Exif}.PixelYDimension", "PixelHeight"], kind: .integer),
         MetadataMapping(.orientation, xmp: ["tiff:Orientation"], imageIO: ["Orientation", "{TIFF}.Orientation"], kind: .integer),
         MetadataMapping(.software, xmp: ["xmp:CreatorTool", "tiff:Software"], imageIO: ["{TIFF}.Software"]),
     ]

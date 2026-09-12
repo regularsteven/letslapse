@@ -130,7 +130,32 @@ JSON-level migration in the Kit, one version-gated persister, the
 undecodable-manifest guard, tombstones + `Projects/.trash/`, revision stamps,
 whole-file SHA-256 into per-project `assets.ndjson`, project id minted at run
 start so `capture_log.json.sessionID` = origin id, the experiment log as NDJSON),
-with Kit tests and a before/after audit on both real libraries. Not started.
+with Kit tests and a before/after audit on both real libraries.
+
+**Milestone 1 landed 2026-09-13** (W1 + W5 + the Part 2 §4 metadata import as a
+vertical slice; commits from 7fd0a0a): `lapse audit <root> [--json] [--plist]`
+reproduces Part 1 Appendix A on `/Volumes/letslapse` (3 orphan folders, 1 record
+over an empty folder, 7 unlisted renders, 77 `.json` names; reports saved in
+`docs/data-model-audit-reports/`); `ProjectFileRegistry` in the Kit is the one
+table of per-project files and `ProjectArchive.transferableFiles/Subfolders`
+derive from it; per-project `assets.ndjson` (bytes, whole-file SHA-256,
+`imported` + `edited` metadata layers, per-field `editedAt`) written at
+registration and by the idle-only, resumable launch backfill (`AssetRecordStore`
+— pauses on thermal serious, low power or a busy library), plus `metadata.json`
+for the project-level record; `MetadataFieldMap` (JSON key ↔ XMP path ↔ IIM ↔
+ImageIO) read through `MetadataReader` (sidecar over embedded XMP over IIM/Exif);
+tags are keywords (`sceneTags` stays as the searchable cache, seeded from the
+files); the Gallery panel's INFO and METADATA groups with from-file / edited-here
+markers, revert, and a Whole project / This frame scope for interval shoots;
+`lapse metadata <image>` headless. Verified on the Mac app, the iPhone 16 Pro
+and iPad Pro simulators with the four Part 2 §2 files. **Owed from M1:** the
+panel's SVG mirrors after Steven's sign-off (macOS `gallery.svg`, iOS/iPadOS
+gallery preview sheet/panel — rows marked ⚠️ in the INDEX files); metadata
+EXPORT (record → XMP packet in JPEG/HEIC/TIFF/DNG exports and `.xmp` beside
+raws, through the same table); the "Copy contact block from…" convenience
+(Part 2 §7); QuickTime metadata for video imports (Part 2 §9.2); the
+`lapse import-lightroom` tool. **Next:** Milestone 2 — W2 + W3 + W4, W6 + W7,
+W9, W8, W10, W11, W12 in the spec's order, each on its own commit.
 
 ### Asset metadata (IPTC Core), the index at scale, and the Lightroom catalogue
 
@@ -156,6 +181,10 @@ becomes SQLite (a rebuildable cache — the truth stays in per-project JSON);
 `Projects/` stays flat because Lightroom's root folders point into it; a
 read-only `lapse import-lightroom` tool that attaches per-frame metadata to
 existing projects and creates Photo projects for the ~3,800 standalone images.
+**2026-09-13:** the metadata half shipped as Milestone 1 of the Phase 1 work
+(see the entry above) — per-asset lines in `assets.ndjson` + `metadata.json`,
+the mapping table, the reader, the panel. Still open here: the SQLite index
+(Phase 3) and the Lightroom tool.
 
 ### Shape-mation · Match, Sort and Timing — shipped 2026-09-11, owed follow-ups
 

@@ -166,7 +166,7 @@ public struct ProjectMetadata: Codable, Equatable, Sendable {
 
     public func write(inProjectFolder folder: URL) throws {
         let encoder = NDJSONFile.makeEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(self).write(to: Self.url(inProjectFolder: folder), options: .atomic)
     }
 }

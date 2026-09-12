@@ -12,6 +12,7 @@
 // Usage:
 //   xcrun swift hid.swift click <x> <y> [<x> <y> …]      screen points, 250 ms apart
 //   xcrun swift hid.swift dblclick <x> <y>
+//   xcrun swift hid.swift scroll <x> <y> <lines>          wheel ticks at a point, + = down
 //   xcrun swift hid.swift drag <x1> <y1> <x2> <y2>       30 steps, ~16 ms apart
 //   xcrun swift hid.swift type <text…>                   unicode, one event per char
 //   xcrun swift hid.swift key <name> [cmd] [shift] [opt] a|return|delete|left|right|escape
@@ -62,6 +63,23 @@ case "dblclick":
     guard let p = points(args.dropFirst()).first else { print("dblclick: need x y"); exit(2) }
     click(p, count: 2)
     print("double-clicked")
+case "scroll":
+    // scroll <x> <y> <lines>: wheel ticks at a screen point, positive = down,
+    // one event per line so a SwiftUI ScrollView takes them as a real wheel.
+    let numbers = args.dropFirst().compactMap(Double.init)
+    guard numbers.count == 3 else { print("scroll: need x y lines"); exit(2) }
+    let p = CGPoint(x: numbers[0], y: numbers[1])
+    let lines = Int(numbers[2])
+    mouse(.mouseMoved, at: p)
+    usleep(80_000)
+    for _ in 0..<abs(lines) {
+        let event = CGEvent(scrollWheelEvent2Source: source, units: .line, wheelCount: 1,
+                            wheel1: Int32(lines < 0 ? 3 : -3), wheel2: 0, wheel3: 0)
+        event?.location = p
+        post(event)
+        usleep(20_000)
+    }
+    print("scrolled \(lines) line(s)")
 case "drag":
     let pts = points(args.dropFirst())
     guard pts.count == 2 else { print("drag: need x1 y1 x2 y2"); exit(2) }

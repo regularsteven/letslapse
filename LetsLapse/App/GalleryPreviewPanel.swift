@@ -8,7 +8,10 @@ import SwiftUI
 /// - Thumbnail (150pt height)
 /// - Title, date, size
 /// - Actions: Open, then Edit / Text / Shapes / New clip (see `actionGrid`)
-/// - Tags: the shared tag editor (`TagField`), full width
+/// - Info: what the files said — camera, lens, exposure, captured, GPS, size
+/// - Metadata: the editable IPTC Core record, keywords (the shared tag
+///   editor, `TagField`) last; an interval project scopes it to the whole
+///   shoot or one frame (`MetadataPanelSections.swift`)
 /// - Metadata rows: In frame, Storage, Field notes
 /// - Footer: Rename, Share, Show in Finder, Delete…
 struct GalleryPreviewPanel: View {
@@ -40,6 +43,8 @@ struct GalleryPreviewPanel: View {
     @State private var exportedArchive: ExportedArchive?
     @State private var isExporting = false
     @State private var blendFilter = BlendListFilter()
+    /// Whole project by default; an interval project can scope to one frame.
+    @State private var metadataScope: AppModel.MetadataScope = .project
 
     private var blends: [AppModel.BlendProject] {
         model.blends(for: capture)
@@ -70,7 +75,7 @@ struct GalleryPreviewPanel: View {
                 Divider()
                     .padding(.top, 16)
 
-                tagsSection
+                recordSections
                     .padding(.horizontal, 14)
 
                 metadataSection
@@ -100,6 +105,7 @@ struct GalleryPreviewPanel: View {
         .editorCover($editorRequest)
         #endif
         .task(id: capture.id) {
+            metadataScope = .project
             if let bytes = await model.storageBytes(for: capture) {
                 storageBytes = bytes
             }
@@ -249,33 +255,22 @@ struct GalleryPreviewPanel: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: Tags
+    // MARK: Info + Metadata
 
-    /// The shared tag editor, promoted out of the metaRow grid to the panel's own column.
-    ///
-    /// Was `SceneTagLine` in a 72pt-label row: up to three tiny capsules and a "+N", read-only.
-    /// `SceneTagLine` stays exactly as it is elsewhere — it is a summary for a list row, not an
-    /// editor — but here, beside the project it describes, it was the only view of a project's
-    /// tags that a person could reach and could do nothing with.
-    ///
-    /// Full width rather than in the label grid because at the 190pt a metaRow leaves, a single
-    /// "Sky & weather" chip is nearly the whole row. This costs the panel real height when a
-    /// project carries several tags; the panel scrolls, and the blended-clips list below it moves
-    /// down accordingly — see docs/design/macOS/INDEX.md.
-    private var tagsSection: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            LLSectionHeader("Tags")
-            TagField(tags: tagsBinding, libraryTags: model.libraryTags)
+    /// The asset record, in two groups: Info (read-only, from the files) and
+    /// Metadata (editable, IPTC Core). The tag editor that used to be its own
+    /// TAGS block is the Metadata group's Keywords row now — tags ARE
+    /// keywords (Part 2 §4.5) — still the shared `TagField`, still writing
+    /// through with no Apply step. An interval project gets the scope switch
+    /// above both, so a five-star frame in a 5,000-frame set can be rated
+    /// without rating the shoot.
+    private var recordSections: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            MetadataScopeControl(capture: capture, scope: $metadataScope)
+            MetadataInfoSection(capture: capture, scope: metadataScope)
+            MetadataEditSection(capture: capture, scope: metadataScope)
         }
         .padding(.top, 12)
-    }
-
-    /// Writes straight through to the library, with no Apply step — the same bargain the rename
-    /// alert makes, and the reason the picker sheet carries Done and no Cancel.
-    private var tagsBinding: Binding<[String]> {
-        Binding(
-            get: { model.captures.first { $0.id == capture.id }?.sceneTags ?? [] },
-            set: { model.setSceneTags($0, on: capture) })
     }
 
     // MARK: Metadata rows

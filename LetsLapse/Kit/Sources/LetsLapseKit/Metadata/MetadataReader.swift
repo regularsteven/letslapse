@@ -49,11 +49,39 @@ public enum MetadataReader {
 
     // MARK: - Sources
 
+    /// The properties of the file's PRIMARY image. On iOS a DNG's index 0 is
+    /// its embedded preview (256 × 171 for `_WEX3518-Rendered.dng`, measured
+    /// 2026-09-13 on the simulator; the Mac decodes the raw at index 0 and
+    /// says 4608 × 3072), so for a raw every index is read and the largest
+    /// picture's properties are the file's. Header reads only.
     public static func imageIOProperties(at url: URL) -> [String: Any]? {
         guard let source = CGImageSourceCreateWithURL(
             url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary)
         else { return nil }
-        return CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
+        let count = CGImageSourceGetCount(source)
+        guard ImportedStills.isRaw(url), count > 1 else {
+            return CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
+        }
+        var best: [String: Any]?
+        var bestWidth = -1
+        for index in 0..<count {
+            guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [String: Any] else { continue }
+            let width = (properties[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue ?? 0
+            if width > bestWidth {
+                bestWidth = width
+                best = properties
+            }
+        }
+        // The descriptive dictionaries usually ride index 0; a larger index
+        // that lacks one borrows it, so choosing the big picture never loses
+        // the IPTC block.
+        if var chosen = best, let first = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] {
+            for key in ["{IPTC}", "{Exif}", "{TIFF}", "{GPS}", "{ExifAux}"] where chosen[key] == nil {
+                if let value = first[key] { chosen[key] = value }
+            }
+            return chosen
+        }
+        return best
     }
 
     /// The packet embedded in a JPEG, HEIC, TIFF or DNG, as ImageIO
@@ -157,12 +185,23 @@ public enum MetadataReader {
         return record
     }
 
-    /// `{Exif}.ExposureTime` → the value; `PixelWidth` → the top-level value.
+    /// `{Exif}.ExposureTime` → the value; `PixelWidth` → the top-level value;
+    /// `{DNG}.ActiveArea[3]` → one element of an array value.
     static func lookup(_ properties: [String: Any], path: String) -> Any? {
         var current: Any = properties
         for component in path.split(separator: ".") {
-            guard let dictionary = current as? [String: Any], let next = dictionary[String(component)] else { return nil }
+            var key = String(component)
+            var index: Int?
+            if key.hasSuffix("]"), let open = key.lastIndex(of: "[") {
+                index = Int(key[key.index(after: open)..<key.index(before: key.endIndex)])
+                key = String(key[..<open])
+            }
+            guard let dictionary = current as? [String: Any], let next = dictionary[key] else { return nil }
             current = next
+            if let index {
+                guard let list = current as? [Any], list.indices.contains(index) else { return nil }
+                current = list[index]
+            }
         }
         return current
     }

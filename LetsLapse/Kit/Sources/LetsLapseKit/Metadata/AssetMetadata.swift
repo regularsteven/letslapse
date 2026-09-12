@@ -377,7 +377,7 @@ public struct AssetMetadata: Codable, Equatable, Sendable {
         return Self.parseISO8601(captured)
     }
 
-    static func parseISO8601(_ text: String) -> Date? {
+    public static func parseISO8601(_ text: String) -> Date? {
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = fractional.date(from: text) { return date }

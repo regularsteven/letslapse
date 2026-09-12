@@ -41,7 +41,11 @@ enum ProjectArchive {
     // `luts` (2026-09-08): a project graded with a LUT preset carries its own
     // copy of the cube, so the far side can render it without the sender's
     // LUT store — see `LUTStore.ensureCopy` and docs/presets-lut-spike.md §4.4.
-    static let transferableSubfolders = ["source", "blends", "notes", "masks", "fonts", "luts"]
+    // Since 2026-09-13 the list is DERIVED from the Kit's `ProjectFileRegistry`
+    // — the one table of per-project files — so a new subfolder is registered
+    // once, with its class and whether it travels, and every list that reads
+    // the registry (this one, the clone, the audit) agrees.
+    static let transferableSubfolders = ProjectFileRegistry.travellingSubfolders
 
     /// The project's top-level FILES that travel, on the same terms as the
     /// subfolders above and read by the same two places.
@@ -53,7 +57,9 @@ enum ProjectArchive {
     /// AirDropped project arrived with its text gone and had to be re-typed
     /// on the far side. `project.json` is NOT here: the manifest is written
     /// by the sender and re-keyed by the installer, never moved.
-    static let transferableFiles = ["overlays.json", "shapes.json"]
+    // `assets.ndjson` (the per-asset records: hashes and metadata layers) and
+    // `metadata.json` (the project-level record) joined on 2026-09-13.
+    static let transferableFiles = ProjectFileRegistry.travellingRootFiles
 
     static func write(contentsOf directory: URL, to archiveURL: URL) throws {
         try DirectoryArchive.write(contentsOf: directory, to: archiveURL)
