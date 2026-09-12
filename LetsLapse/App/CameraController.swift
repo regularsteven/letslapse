@@ -341,6 +341,25 @@ final class CameraController: NSObject, ObservableObject {
     /// lands (the photo's own EXIF), written into the staging directory at
     /// the finish, where registration picks it up. sessionQueue-confined.
     private var plainRunLog: PlainRunLog?
+    /// The project id of the run in progress, minted when it starts (Phase 1
+    /// W10). Threaded into the blend controllers as their `sessionID`, into
+    /// the experiment log's header as `originID`, into the capture session
+    /// log's `capture_start` as `projectID`, and handed to registration as
+    /// the project's `id` and `originID` — so every record a run writes can
+    /// be joined to its project without the folder path. Written on the
+    /// session queue at run start, read on the main thread when the run
+    /// hands its files over.
+    let runIdentity = RunIdentity()
+    final class RunIdentity: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: UUID?
+        var current: UUID? { lock.lock(); defer { lock.unlock() }; return value }
+        @discardableResult func mint() -> UUID {
+            let id = UUID()
+            lock.lock(); value = id; lock.unlock()
+            return id
+        }
+    }
     struct PlainRunLog {
         var sessionID = UUID().uuidString
         var startedAt = Date()
@@ -5212,8 +5231,10 @@ final class CameraController: NSObject, ObservableObject {
             // already in hand if it's accurate enough, else the first accurate
             // one to arrive while shooting.
             if self.gpsTaggingEnabled { LocationService.shared.beginRecordingFix() }
+            // The staging folder is named by the run's project id (W10), so an
+            // orphaned capture log's `projectID` names the frames it left.
             let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("live-capture-\(Int(startedAt.timeIntervalSince1970))")
+                .appendingPathComponent("live-capture-\(self.runIdentity.mint().uuidString)")
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let resolution = LiveCaptureSequence.Resolution(
                 width: self.selectedResolution.width,
@@ -5290,11 +5311,13 @@ final class CameraController: NSObject, ObservableObject {
                 "mode": mode.rawValue,
                 "baseFPS": baseFrameRate,
             ])
+            let projectID = self.runIdentity.current ?? self.runIdentity.mint()
             CaptureSessionLogger.shared.log("capture_start", [
                 "kind": "video",
                 "fps": baseFrameRate,
                 "resolution": "\(resolution.width)x\(resolution.height)",
                 "sequenceMode": mode.rawValue,
+                "projectID": projectID.uuidString,
             ])
             self.startNextSegment(
                 resolution: self.selectedResolution, frameRate: self.selectedFrameRate)
@@ -6215,14 +6238,17 @@ final class CameraController: NSObject, ObservableObject {
             }
             #endif
             let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("interval-\(Int(Date().timeIntervalSince1970))")
+                .appendingPathComponent("interval-\(self.runIdentity.mint().uuidString)")
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             self.photoDirectory = directory
             self.photoURLs = []
             self.intervalWriter = FrameTimestampWriter(directory: directory)
             let conditions = self.captureConditions(
                 format: FlatCapture.isEnabled(.stills) ? "jpeg-flat" : "jpeg", shapeSearch: shapeSearch)
-            self.plainRunLog = PlainRunLog(conditions: conditions, isPhoto: frameCap != nil, intervalSeconds: seconds)
+            let projectID = self.runIdentity.current ?? self.runIdentity.mint()
+            self.plainRunLog = PlainRunLog(
+                sessionID: projectID.uuidString, conditions: conditions,
+                isPhoto: frameCap != nil, intervalSeconds: seconds)
             LLog("capture: \(frameCap != nil ? "photo" : "interval") — \(conditions.summary)")
             self.intervalFrameCap = frameCap
             self.intervalFramesRequested = 0
@@ -6231,6 +6257,7 @@ final class CameraController: NSObject, ObservableObject {
                 "kind": "interval",
                 "intervalSeconds": seconds,
                 "frameCap": frameCap ?? 0,
+                "projectID": projectID.uuidString,
             ])
             DispatchQueue.main.async {
                 self.photoCount = 0
@@ -7417,7 +7444,7 @@ final class CameraController: NSObject, ObservableObject {
             let sceneEV = self.sceneExposureValue()
 
             let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("scanner-\(Int(Date().timeIntervalSince1970))")
+                .appendingPathComponent("scanner-\(self.runIdentity.mint().uuidString)")
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             } catch {
@@ -7496,8 +7523,10 @@ final class CameraController: NSObject, ObservableObject {
             self.scannerEngine = engine
             self.attachScannerTapOnQueue()
 
+            let projectID = self.runIdentity.current ?? self.runIdentity.mint()
             CaptureSessionLogger.shared.log("capture_start", [
                 "kind": "scanner",
+                "projectID": projectID.uuidString,
                 "frameCap": frameCap ?? 0,
                 "raw": self.scannerRawPixelFormat != nil,
                 "rawRequested": preferRAW,
@@ -9001,6 +9030,7 @@ final class CameraController: NSObject, ObservableObject {
                 self.publishLiveBlendRefusal(interval: interval, depth: depth)
                 return
             }
+            let projectID = self.runIdentity.mint()
             CaptureSessionLogger.shared.log("capture_start", [
                 "kind": holyGrail ? "holyGrailBlend" : "liveBlend",
                 "intervalSeconds": interval,
@@ -9008,6 +9038,7 @@ final class CameraController: NSObject, ObservableObject {
                 "framesPerBlend": depth.fixedFrames ?? 0,
                 "preferDNG": preferDNG,
                 "ladder": ladder?.name ?? "",
+                "projectID": projectID.uuidString,
             ])
             #if os(iOS)
             self.holyGrailRequestedForRun = holyGrail
@@ -9188,7 +9219,7 @@ final class CameraController: NSObject, ObservableObject {
             self.restoreFocusState(focusBeforeStart, reason: "live blend start")
 
             let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("liveblend-\(Int(Date().timeIntervalSince1970))")
+                .appendingPathComponent("liveblend-\((self.runIdentity.current ?? self.runIdentity.mint()).uuidString)")
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             } catch {
@@ -9223,7 +9254,7 @@ final class CameraController: NSObject, ObservableObject {
                 rampState: self.holyGrailRequestedForRun
                     ? { [weak self] in self?.holyGrailRecord.state ?? nil }
                     : nil,
-                sessionID: UUID().uuidString,
+                sessionID: (self.runIdentity.current ?? UUID()).uuidString,
                 deviceModel: LiveBlendController.deviceModelIdentifier(),
                 gpsMetadata: { [weak self] in
                     guard let self, self.gpsTaggingEnabled,
@@ -9463,7 +9494,7 @@ final class CameraController: NSObject, ObservableObject {
             connection.videoOrientation = captureOrientation()
         }
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("liveblend-dng-\(Int(Date().timeIntervalSince1970))")
+            .appendingPathComponent("liveblend-dng-\((self.runIdentity.current ?? self.runIdentity.mint()).uuidString)")
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
@@ -9501,7 +9532,7 @@ final class CameraController: NSObject, ObservableObject {
             rampState: holyGrailRequestedForRun
                 ? { [weak self] in self?.holyGrailRecord.state ?? nil }
                 : nil,
-            sessionID: UUID().uuidString,
+            sessionID: (self.runIdentity.current ?? UUID()).uuidString,
             deviceModel: LiveBlendController.deviceModelIdentifier(),
             gpsProvider: { [weak self] in
                 guard let self, self.gpsTaggingEnabled,

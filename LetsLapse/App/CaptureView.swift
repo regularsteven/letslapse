@@ -1053,7 +1053,7 @@ struct CaptureView: View {
         camera.onFinishLiveCapture = { result in
             camera.stop()
             dismiss()
-            model.setSequenceSource(result)
+            model.setSequenceSource(result, projectID: camera.runIdentity.current)
         }
         camera.onFinishVideo = { url in
             camera.stop()
@@ -1069,7 +1069,7 @@ struct CaptureView: View {
             }
             #endif
             dismiss()
-            model.setSource(.video(url), mode: camera.activeFormatDescription)
+            model.setSource(.video(url), mode: camera.activeFormatDescription, projectID: camera.runIdentity.current)
         }
         camera.onFinishPhotos = { urls in
             steadiness.stop()
@@ -1089,7 +1089,8 @@ struct CaptureView: View {
                 Task {
                     await model.processPhotoBurst(
                         urls: framesToBlend, blendDepth: depth, linear: model.linearLight,
-                        presentResult: false, viewfinderShapes: shapes)
+                        presentResult: false, viewfinderShapes: shapes,
+                        projectID: camera.runIdentity.current)
                 }
                 return
             }
@@ -1110,10 +1111,11 @@ struct CaptureView: View {
                 model.finishScannerCapture(
                     urls: urls,
                     mode: intervalSourceModeName,
-                    documentStarts: scannerDocumentStarts)
+                    documentStarts: scannerDocumentStarts,
+                    projectID: camera.runIdentity.current)
                 return
             }
-            model.setSource(.photos(urls), mode: intervalSourceModeName)
+            model.setSource(.photos(urls), mode: intervalSourceModeName, projectID: camera.runIdentity.current)
             // A minimum run of 2 filters a lone bad frame (a passing cloud, a
             // single bump); the half-session ceiling keeps a shaky handheld
             // shoot from reading as a tail event.
@@ -1136,7 +1138,8 @@ struct CaptureView: View {
                 Task {
                     await model.processPhotoBurst(
                         urls: dngURLs, blendDepth: 1, linear: model.linearLight,
-                        presentResult: false, viewfinderShapes: shapes)
+                        presentResult: false, viewfinderShapes: shapes,
+                        projectID: camera.runIdentity.current)
                 }
                 return
             }
@@ -1166,7 +1169,8 @@ struct CaptureView: View {
             }
             model.setSource(
                 .photos(result.frameURLs),
-                mode: "Interval · \(format)\(blend)")
+                mode: "Interval · \(format)\(blend)",
+                projectID: camera.runIdentity.current)
         }
         revalidateSafeDepth()
         orientation = currentCaptureOrientation()

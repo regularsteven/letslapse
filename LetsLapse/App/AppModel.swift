@@ -2961,9 +2961,9 @@ final class AppModel: ObservableObject {
     }
     #endif
 
-    func setSource(_ source: Source, mode: String = "Import", captureMode: CaptureProjectMode? = nil) {
+    func setSource(_ source: Source, mode: String = "Import", captureMode: CaptureProjectMode? = nil, projectID: UUID? = nil) {
         do {
-            let capture = try registerCapture(from: source, mode: mode, captureMode: captureMode)
+            let capture = try registerCapture(from: source, mode: mode, captureMode: captureMode, id: projectID)
             openCapture(capture)
         } catch {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
@@ -2985,9 +2985,9 @@ final class AppModel: ObservableObject {
     /// began: the 1-based page number that opened it. Empty (or one entry) is a
     /// sitting that produced a single document, which writes no sidecar at all
     /// — see `ScanDocumentStore.save`.
-    func finishScannerCapture(urls: [URL], mode: String, documentStarts: [Int] = []) {
+    func finishScannerCapture(urls: [URL], mode: String, documentStarts: [Int] = [], projectID: UUID? = nil) {
         do {
-            let capture = try registerCapture(from: .photos(urls), mode: mode, captureMode: .scanner)
+            let capture = try registerCapture(from: .photos(urls), mode: mode, captureMode: .scanner, id: projectID)
             let documents = ScanDocumentStore.build(
                 starts: documentStarts, pageNumbers: scanPageNumbers(for: capture))
             if documents.count > 1 {
@@ -3052,9 +3052,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func setSequenceSource(_ result: LiveCaptureResult) {
+    func setSequenceSource(_ result: LiveCaptureResult, projectID: UUID? = nil) {
         do {
-            let capture = try registerSequenceCapture(result)
+            let capture = try registerSequenceCapture(result, id: projectID)
             openCapture(capture)
         } catch {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
@@ -5760,12 +5760,12 @@ final class AppModel: ObservableObject {
     /// — the camera stays on screen and the finished photo lands quietly in
     /// Projects, so the user can shoot the next frame straight away.
     func processPhotoBurst(urls: [URL], blendDepth: Int, linear: Bool, presentResult: Bool = true,
-                           viewfinderShapes: ViewfinderShapes? = nil) async {
+                           viewfinderShapes: ViewfinderShapes? = nil, projectID: UUID? = nil) async {
         // Preserve the burst as a photo capture so its frames stay on disk and
         // the blend has a project to belong to.
         let capture: CaptureProject
         do {
-            capture = try registerCapture(from: .photos(urls), mode: Self.photoCaptureMode)
+            capture = try registerCapture(from: .photos(urls), mode: Self.photoCaptureMode, id: projectID)
         } catch {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
             stage = .home
@@ -7199,10 +7199,15 @@ final class AppModel: ObservableObject {
         return blend
     }
 
+    /// `id` is the run's own id (W10) — minted by the camera when the run
+    /// started and already written into its capture_start event, its
+    /// experiment log and its capture_log.json — so the project keeps it as
+    /// both `id` and `originID`. Nil (an import, an older caller) mints one
+    /// here, as every registration did before.
     private func registerCapture(
-        from source: Source, mode: String, captureMode: CaptureProjectMode? = nil
+        from source: Source, mode: String, captureMode: CaptureProjectMode? = nil, id runID: UUID? = nil
     ) throws -> CaptureProject {
-        let id = UUID()
+        let id = usableProjectID(runID)
         let root = captureFolderURL(for: id)
         let sourceFolder = root.appendingPathComponent("source")
         try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
@@ -7231,7 +7236,7 @@ final class AppModel: ObservableObject {
                 sequence: liveSource.sequence,
                 segmentURLs: liveSource.segmentURLs,
                 metadataURL: liveSource.metadataURL
-            ))
+            ), id: runID)
         case .photos(let urls):
             var relativeNames: [String] = []
             for (index, url) in urls.enumerated() {
@@ -7330,6 +7335,18 @@ final class AppModel: ObservableObject {
         return capture
     }
 
+    /// The run's id when it is free, else a fresh one: a folder that already
+    /// exists under that id (a run registered twice, a stale run id) must
+    /// never be written into.
+    private func usableProjectID(_ runID: UUID?) -> UUID {
+        guard let runID,
+              !captures.contains(where: { $0.id == runID }),
+              !deletedCaptures.contains(where: { $0.id == runID }),
+              !FileManager.default.fileExists(atPath: captureFolderURL(for: runID).path)
+        else { return UUID() }
+        return runID
+    }
+
     /// Brings a Scanner pose's *other* files into the project beside the frame
     /// itself: the processed sibling (`frame-00001.heic`) a RAW pose is shot
     /// with, and the rectified `frame-00001-corrected.heic` if one has been
@@ -7370,8 +7387,8 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func registerSequenceCapture(_ result: LiveCaptureResult) throws -> CaptureProject {
-        let id = UUID()
+    private func registerSequenceCapture(_ result: LiveCaptureResult, id runID: UUID? = nil) throws -> CaptureProject {
+        let id = usableProjectID(runID)
         let root = captureFolderURL(for: id)
         let sourceFolder = root.appendingPathComponent("source")
         try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)

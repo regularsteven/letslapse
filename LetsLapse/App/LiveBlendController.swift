@@ -132,6 +132,11 @@ struct LiveBlendSessionLog: Codable {
         var bracketedRAW: Bool? = nil
         /// The output's bracket ceiling for the active format (0 = none).
         var bracketMaxFrames: Int? = nil
+        /// The project this run became (Phase 1 W10): the run's id, minted
+        /// at start, which registration keeps as the project's `id` and
+        /// `originID` — and which `capture_log.json.sessionID` equals. Nil
+        /// in logs from before the id was minted at run start.
+        var originID: String? = nil
     }
 
     struct OutputEntry: Codable {
@@ -558,7 +563,8 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             requestedFramesPerBlend: configuration.initialDisplayFrames,
             blendDepth: configuration.blendDepth.familyName,
             requestedOutputFormat: configuration.requestedOutputFormat,
-            outputFormat: "standard"))
+            outputFormat: "standard",
+            originID: configuration.sessionID))
         super.init()
     }
 

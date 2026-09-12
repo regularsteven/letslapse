@@ -344,7 +344,8 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             responsiveCapture: configuration.responsiveCapture,
             burstScheduling: configuration.burstScheduling,
             bracketedRAW: configuration.bracketedRAW,
-            bracketMaxFrames: configuration.maxBracketFrames))
+            bracketMaxFrames: configuration.maxBracketFrames,
+            originID: configuration.sessionID))
         super.init()
     }
 
