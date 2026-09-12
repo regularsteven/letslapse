@@ -18,6 +18,8 @@ $PY tools/shapebench/shapebench.py detect                                      #
 $PY tools/shapebench/shapebench.py label                                       # phase 2: opens the labelling page
 $PY tools/shapebench/shapebench.py metrics                                     # phase 3: opencv vs ground truth
 $PY tools/shapebench/shapebench.py vision                                      # phase 4: lapse shapes --json + the library register
+$PY tools/shapebench/shapebench.py vision --flags="--sensitivity high"         #   any lapse dial or flag: its own run block
+$PY tools/shapebench/shapebench.py metrics --all-runs                          #   every run block of every detector, side by side
 $PY tools/shapebench/shapebench.py metrics --docs docs/shape-benchmark         # phase 5: the comparison, copied to docs
 ```
 
@@ -33,7 +35,7 @@ work/manifest.json               corpus manifest: assets[], labelSet (25 ids, se
 work/images/<assetId>.jpg|png    byte copy of the JPEG / rawpy render of a DNG (lossless PNG)
 work/register/<assetId>/         byte copy of the library's shapes.json (+ capture_log.json)
 work/results/<assetId>.json      schema v2: { schemaVersion: 2, projectId, runs: [...] }
-work/vision-raw/<assetId>.json   raw `lapse shapes --json` output (provenance)
+work/vision-raw/<assetId>.<flags>.<lapse sha8>.json   raw `lapse shapes --json` output (provenance; keyed by the binary)
 work/labels/<assetId>.json       raw clicks + fit verdicts (audit; GT itself is a run block in results/)
 work/logs/<detector>.<hash>.jsonl  one row per candidate region (extent, verdict, reason, scores)
 work/overlays/<detector>/        1024-px review pictures; *.vs-gt/ after metrics; combined/ = GT + all
@@ -64,8 +66,12 @@ to the brief's §4.2. `assetId` = project UUID (a Photo project is one asset).
   prefilter → region dedupe (**this count is "candidates per image"**) →
   full-resolution re-trace inside each ROI → the shared fitting pass. A
   full-res contour replaces the proposal only when its mask IoU with the
-  proposal is ≥ 0.8; otherwise the proposal is measured as traced and the
-  shape carries `provenance.refined: false`. Hough-circle proposals and a
+  proposal is ≥ 0.8 **and the shape it fits to matches the proposal's own fit
+  under the consensus rule** (`fitting.measure`: refinement adds precision,
+  never identity — found 2026-09-12 when a 0.93-IoU contour of plate-plus-frame
+  replaced a Kit quad that was right to 1.5 % and scored it as a miss);
+  otherwise the proposal is measured as traced and the shape carries
+  `provenance.refined: false` (and `refineRejected` with the test that failed). Hough-circle proposals and a
   "gather edge points along the rim" refinement were tried and removed: a
   proposal that survives as its own outline scores IoU 1.0 by construction,
   and a band around any circle on a textured facade collects edge points at

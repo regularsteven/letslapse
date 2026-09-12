@@ -40,7 +40,7 @@ import detect_opencv  # noqa: E402
 import overlay  # noqa: E402
 import schema  # noqa: E402
 from fitting import (RULES, Region, densify_polygon, ellipse_outline, fit_candidate, match_details,  # noqa: E402
-                     refine_region, region_from_v1, shape_from_label, dedupe_shapes)
+                     measure, region_from_v1, shape_from_label, dedupe_shapes)
 from imaging import DimsMismatch, check_dims, dims_of, is_raw, load_bgr, load_gray  # noqa: E402
 
 DEFAULT_WORK = os.path.join(HERE, "work")
@@ -197,8 +197,7 @@ def _v1_rows_and_shapes(gray, v1_shapes, W, H, params, extra_prov):
             rows.append({"source": "v1-?", "accepted": False, "reasons": [f"unconvertible: {ex}"]})
             continue
         region.prior.update(extra_prov)
-        region = refine_region(gray, region, params)
-        v = fit_candidate(region, W, H, RULES)
+        region, v = measure(gray, region, params, W, H, RULES)
         row = {k: v[k] for k in ("source", "refined", "nPoints", "contourExtent", "extentRatio", "sizeBand",
                                  "accepted", "primitive", "subclass", "winner", "rectScore", "ellipseScore",
                                  "reasons", "prior")}
@@ -242,7 +241,7 @@ def cmd_vision(args) -> int:
         doc = schema.load_results(rpath, a["projectId"])
         gray = None
         # --- apple-vision: run lapse ---
-        raw_path = os.path.join(work, "vision-raw", f"{aid}.json" if slug == "default" else f"{aid}.{slug}.json")
+        raw_path = os.path.join(work, "vision-raw", f"{aid}.{slug}.{lapse_sha[:8]}.json")
         need_run = True
         if os.path.exists(raw_path) and not args.force:
             with open(raw_path, "r", encoding="utf-8") as f:

@@ -35,6 +35,14 @@ USAGE:
       --contrast A,B        Contour contrast sweep (file 1,2,3; live 2)
       --edges A,B           CIEdges thresholds for the edge-map passes (file 0.06,0.15; live none)
       --contour-dimension N Vision's tracer resolution (file 512, live 384)
+      --regions / --no-regions
+                            Force the region-proposal pass on or off (file on, live off)
+      --floor F             Size floor as a share of the short edge, no pixel minimum
+                            (an experiment's floor; the SIZE dial's is 1/6)
+      --region-edges A,B    Long edges the region pass traces at (default 1024; the
+                            benchmark reference used 1024,2048)
+      --region-gates loose  Loosen the region pass's own §3 gates (propose only; for a
+                            rig that measures at full resolution afterwards)
       --verbose             Also print what each pass looked at and refused, and why
       --json                The pass's shapes, diagnostics and the register as JSON
       --trail               First print the register beside a project picture: its
@@ -646,9 +654,16 @@ do {
         }
         let trail = takeFlag(["--trail"])
         let json = takeFlag(["--json"])
+        var regions: Bool?
+        if takeFlag(["--regions"]) { regions = true }
+        if takeFlag(["--no-regions"]) { regions = false }
+        let floor = takeOption(["--floor"]).map { Double($0) ?? 0 }
+        let regionGates = takeOption(["--region-gates"])
+        let regionEdges = takeOption(["--region-edges"]).map { $0.split(separator: ",").compactMap { Int($0) } }
         guard args.count == 1 else { fail("shapes needs one image") }
         try runShapes(path: args[0], residual: residual, live: live, longEdge: longEdge, verbose: verbose,
-                      contrasts: contrasts, edges: edges, contourDimension: contourDimension, search: search, trail: trail, json: json)
+                      contrasts: contrasts, edges: edges, contourDimension: contourDimension, search: search, trail: trail, json: json,
+                      regions: regions, floor: floor, regionGates: regionGates, regionEdges: regionEdges)
 
     case "framing":
         let apply = takeFlag(["--apply"])

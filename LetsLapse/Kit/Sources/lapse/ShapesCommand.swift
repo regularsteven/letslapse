@@ -24,7 +24,8 @@ struct ShapesJSON: Codable {
 
 func runShapes(path: String, residual: Double?, live: Bool, longEdge: Int?, verbose: Bool,
                contrasts: [Float]? = nil, edges: [Float]? = nil, contourDimension: Int? = nil,
-               search: ShapeSearch = ShapeSearch(), trail: Bool = false, json: Bool = false) throws {
+               search: ShapeSearch = ShapeSearch(), trail: Bool = false, json: Bool = false,
+               regions: Bool? = nil, floor: Double? = nil, regionGates: String? = nil, regionEdges: [Int]? = nil) throws {
     let url = URL(fileURLWithPath: path)
     let projectFolder = url.deletingLastPathComponent().lastPathComponent == "source"
         ? url.deletingLastPathComponent().deletingLastPathComponent() : url.deletingLastPathComponent()
@@ -84,13 +85,33 @@ func runShapes(path: String, residual: Double?, live: Bool, longEdge: Int?, verb
         profiles = [("file \(search.token)", search.fileSettings())]
     }
     for i in profiles.indices {
+        if let regions { profiles[i].1.regionProposals = regions; profiles[i].0 += regions ? " +regions" : " -regions" }
+        if let regionEdges, !regionEdges.isEmpty {
+            profiles[i].1.regionProposalLongEdges = regionEdges
+            profiles[i].0 += " regions@" + regionEdges.map(String.init).joined(separator: ",")
+        }
+        if regionGates == "loose" {
+            // Propose only: the §3 gates loosened so a later full-resolution
+            // measurement (the benchmark rig's shared pass) decides.
+            profiles[i].1.regionEllipseMinIoU = 0.70
+            profiles[i].1.regionRectMinFill = 0.70
+            profiles[i].1.regionRectAngleToleranceDeg = 20
+            profiles[i].1.regionRectSideTolerance = 0.25
+            profiles[i].0 += " loose"
+        }
+        if let floor {
+            // An experiment's floor: a share of the short edge, no pixel minimum.
+            profiles[i].1.minDiameterFractionOfShortEdge = floor
+            profiles[i].1.minNativeDiameterPx = 0
+            profiles[i].0 += String(format: " floor %.3f", floor)
+        }
         if let residual { profiles[i].1.maxFitResidual = residual }
         if let longEdge { profiles[i].1.detectionLongEdge = longEdge; profiles[i].1.contourImageDimension = min(longEdge, 512) }
         if let contrasts { profiles[i].1.contrastAdjustments = contrasts }
         if let edges { profiles[i].1.edgeThresholds = edges }
         if let contourDimension { profiles[i].1.contourImageDimension = contourDimension }
     }
-    let decodeEdge = profiles.map { $0.1.detectionLongEdge }.max() ?? 1024
+    let decodeEdge = profiles.map { max($0.1.detectionLongEdge, $0.1.regionProposals ? ($0.1.regionProposalLongEdges.max() ?? 0) : 0) }.max() ?? 1024
     let options: [CFString: Any] = [
         kCGImageSourceCreateThumbnailFromImageAlways: true,
         kCGImageSourceCreateThumbnailWithTransform: true,

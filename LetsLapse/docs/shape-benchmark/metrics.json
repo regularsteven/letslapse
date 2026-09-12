@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T21:44:09Z",
+  "generatedAt": "2026-09-12T09:14:13Z",
   "floor": 0.1,
   "match": {
     "centrePctDiag": 2.0,
@@ -30,211 +30,60 @@
     "tieMargin": 0.02
   },
   "chosen": {
-    "opencv-reference": "opencv-reference|1|5cc92beb0d6e",
-    "apple-vision": "apple-vision|1|5bfe31a210ca",
-    "apple-vision-register": "apple-vision-register|1|1031ec098d94",
-    "manual-groundtruth": "manual-groundtruth|1|e89f36e6cd43"
+    "manual-groundtruth": "manual-groundtruth|1|e89f36e6cd43",
+    "opencv-reference": "opencv-reference|1|a49d2b2eb28e",
+    "apple-vision": "apple-vision|1|630594b98ea9",
+    "apple-vision-register": "apple-vision-register|1|26f7ceec831c"
   },
-  "gate": "opencv-reference 5cc92beb0d6e: median accepted candidates/image = 2.0 → ≤ 6 → geometry alone is sufficient for photo mode; no AI ranking layer",
+  "gate": "opencv-reference a49d2b2eb28e: median accepted candidates/image = 2.0 → ≤ 6 → geometry alone is sufficient for photo mode; no AI ranking layer",
   "detectors": {
-    "opencv-reference · 5cc92beb0d6e": {
+    "opencv-reference · dedupe 0.7": {
       "detectorId": "opencv-reference",
-      "labelledAssets": 25,
+      "labelledAssets": 37,
       "assetsAll": 37,
-      "tp": 38,
-      "fp": 24,
-      "fn": 30,
-      "duplicates": 2,
-      "gtTotal": 68,
-      "gtTotalAll": 76,
-      "gtPassesRules": 68,
-      "precision": 0.6129032258064516,
-      "recall": 0.5588235294117647,
-      "f1": 0.5846153846153845,
+      "tp": 61,
+      "fp": 33,
+      "fn": 92,
+      "duplicates": 1,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.648936170212766,
+      "recall": 0.39869281045751637,
+      "f1": 0.4939271255060729,
       "precisionCI": [
-        0.48847616205780997,
-        0.7241553657300932
+        0.5483301998756748,
+        0.7378466410590606
       ],
       "recallCI": [
-        0.44081654438286205,
-        0.670539550136191
+        0.324505069656296,
+        0.47784328690216815
       ],
-      "recallOnRulePassingGT": 0.5588235294117647,
+      "fpNestedInLabel": 15,
+      "precisionExcludingNested": 0.7721518987341772,
+      "recallOnRulePassingGT": 0.40939597315436244,
       "aspectError": {
-        "median": 0.016049954174001214,
-        "p95": 0.07117117337940124,
-        "n": 38
+        "median": 0.008411580594679129,
+        "p95": 0.0567221961520413,
+        "n": 61
       },
       "centreOffsetPctDiag": {
-        "median": 0.11341055874618652,
-        "p95": 0.3551055253427513,
-        "max": 0.5985423627446885,
-        "n": 38,
+        "median": 0.08573284084876642,
+        "p95": 0.3229526281051193,
+        "max": 0.9635484419581543,
+        "n": 61,
         "histogram": [
           {
             "from": 0.0,
-            "count": 31
+            "count": 51
           },
           {
             "from": 0.25,
-            "count": 5
+            "count": 7
           },
           {
             "from": 0.5,
             "count": 2
-          },
-          {
-            "from": 0.75,
-            "count": 0
-          },
-          {
-            "from": 1.0,
-            "count": 0
-          },
-          {
-            "from": 1.25,
-            "count": 0
-          },
-          {
-            "from": 1.5,
-            "count": 0
-          },
-          {
-            "from": 1.75,
-            "count": 0
-          },
-          {
-            "from": 2.0,
-            "count": 0
-          }
-        ]
-      },
-      "orientationErrorDeg": {
-        "median": 0.3499999999999943,
-        "p95": 4.718499999999986,
-        "n": 24
-      },
-      "subclassMismatches": 5,
-      "acceptedMeasuredAsProposed": {
-        "n": 16,
-        "of": 95
-      },
-      "subclassConfusion": {
-        "circle": {
-          "ellipse": 1,
-          "circle": 13
-        },
-        "rectangle": {
-          "rectangle": 12,
-          "square": 1
-        },
-        "square": {
-          "square": 6,
-          "rectangle": 1
-        },
-        "ellipse": {
-          "ellipse": 2,
-          "circle": 2
-        }
-      },
-      "byPrimitive": {
-        "rectangle": {
-          "tp": 20,
-          "fp": 15,
-          "fn": 11
-        },
-        "ellipse": {
-          "tp": 18,
-          "fp": 9,
-          "fn": 19
-        }
-      },
-      "byBand": {
-        "small": {
-          "tp": 25,
-          "fn": 22
-        },
-        "medium": {
-          "tp": 10,
-          "fn": 6
-        },
-        "large": {
-          "tp": 3,
-          "fn": 2
-        }
-      },
-      "acceptedPerImage": {
-        "n": 37,
-        "median": 2.0,
-        "p25": 1.0,
-        "p75": 4.0,
-        "max": 9.0,
-        "mean": 2.5675675675675675
-      },
-      "candidatesPerImage": {
-        "n": 37,
-        "median": 216.0,
-        "p25": 127.0,
-        "p75": 296.0,
-        "max": 474.0,
-        "mean": 216.8108108108108
-      },
-      "durationMs": {
-        "n": 37,
-        "median": 3320.0,
-        "p25": 2323.0,
-        "p75": 4563.0,
-        "max": 6796.0,
-        "mean": 3379.7567567567567
-      },
-      "wallMs": null,
-      "runKey": "opencv-reference|1|5cc92beb0d6e"
-    },
-    "opencv-reference · dedupe 0.9": {
-      "detectorId": "opencv-reference",
-      "labelledAssets": 25,
-      "assetsAll": 37,
-      "tp": 39,
-      "fp": 35,
-      "fn": 29,
-      "duplicates": 10,
-      "gtTotal": 68,
-      "gtTotalAll": 76,
-      "gtPassesRules": 68,
-      "precision": 0.527027027027027,
-      "recall": 0.5735294117647058,
-      "f1": 0.5492957746478873,
-      "precisionCI": [
-        0.41477158311547435,
-        0.6366148220971626
-      ],
-      "recallCI": [
-        0.455165693769645,
-        0.6840294243791712
-      ],
-      "recallOnRulePassingGT": 0.5735294117647058,
-      "aspectError": {
-        "median": 0.01660770440251586,
-        "p95": 0.0704290677566772,
-        "n": 39
-      },
-      "centreOffsetPctDiag": {
-        "median": 0.11302955365743711,
-        "p95": 0.603393542008643,
-        "max": 0.8112818745664181,
-        "n": 39,
-        "histogram": [
-          {
-            "from": 0.0,
-            "count": 31
-          },
-          {
-            "from": 0.25,
-            "count": 4
-          },
-          {
-            "from": 0.5,
-            "count": 3
           },
           {
             "from": 0.75,
@@ -263,65 +112,65 @@
         ]
       },
       "orientationErrorDeg": {
-        "median": 0.3499999999999943,
-        "p95": 4.718499999999986,
-        "n": 24
+        "median": 0.23499999999999233,
+        "p95": 1.1870000000000034,
+        "n": 40
       },
-      "subclassMismatches": 6,
+      "subclassMismatches": 3,
       "acceptedMeasuredAsProposed": {
-        "n": 17,
-        "of": 111
+        "n": 31,
+        "of": 94
       },
       "subclassConfusion": {
+        "square": {
+          "square": 13,
+          "rectangle": 1
+        },
         "circle": {
-          "ellipse": 3,
-          "circle": 12
+          "circle": 20,
+          "ellipse": 1
         },
         "rectangle": {
-          "rectangle": 13
-        },
-        "square": {
-          "square": 6,
-          "rectangle": 1
+          "rectangle": 23
         },
         "ellipse": {
           "ellipse": 2,
-          "circle": 2
+          "circle": 1
         }
       },
       "byPrimitive": {
         "rectangle": {
-          "tp": 20,
-          "fp": 18,
-          "fn": 11
+          "tp": 37,
+          "fp": 23,
+          "fn": 60
         },
         "ellipse": {
-          "tp": 19,
-          "fp": 17,
-          "fn": 18
+          "tp": 24,
+          "fp": 10,
+          "fn": 32
         }
       },
       "byBand": {
         "small": {
-          "tp": 25,
-          "fn": 22
+          "tp": 42,
+          "fn": 69
         },
         "medium": {
-          "tp": 11,
-          "fn": 5
+          "tp": 13,
+          "fn": 18
         },
         "large": {
-          "tp": 3,
-          "fn": 2
+          "tp": 6,
+          "fn": 5
         }
       },
       "acceptedPerImage": {
         "n": 37,
         "median": 2.0,
         "p25": 1.0,
-        "p75": 4.0,
-        "max": 10.0,
-        "mean": 3.0
+        "p75": 3.0,
+        "max": 12.0,
+        "mean": 2.5405405405405403
       },
       "candidatesPerImage": {
         "n": 37,
@@ -333,64 +182,66 @@
       },
       "durationMs": {
         "n": 37,
-        "median": 3012.0,
-        "p25": 2110.0,
-        "p75": 4129.0,
-        "max": 6569.0,
-        "mean": 3128.5675675675675
+        "median": 2925.0,
+        "p25": 2092.0,
+        "p75": 4155.0,
+        "max": 6582.0,
+        "mean": 3197.5405405405404
       },
       "wallMs": null,
-      "runKey": "opencv-reference|1|6114968f7c78"
+      "runKey": "opencv-reference|1|d7fa78344644"
     },
-    "apple-vision · file all/medium/all": {
-      "detectorId": "apple-vision",
-      "labelledAssets": 25,
+    "opencv-reference · dedupe 0.9": {
+      "detectorId": "opencv-reference",
+      "labelledAssets": 37,
       "assetsAll": 37,
-      "tp": 11,
-      "fp": 14,
-      "fn": 57,
-      "duplicates": 0,
-      "gtTotal": 68,
-      "gtTotalAll": 76,
-      "gtPassesRules": 68,
-      "precision": 0.44,
-      "recall": 0.16176470588235295,
-      "f1": 0.23655913978494625,
+      "tp": 66,
+      "fp": 43,
+      "fn": 87,
+      "duplicates": 8,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6055045871559633,
+      "recall": 0.43137254901960786,
+      "f1": 0.5038167938931297,
       "precisionCI": [
-        0.2666537494700256,
-        0.6293298298043557
+        0.5116631519621372,
+        0.692162387555204
       ],
       "recallCI": [
-        0.09279997195749148,
-        0.2669024845579536
+        0.3555238474775599,
+        0.5105831037394641
       ],
-      "recallOnRulePassingGT": 0.16176470588235295,
+      "fpNestedInLabel": 24,
+      "precisionExcludingNested": 0.7764705882352941,
+      "recallOnRulePassingGT": 0.4429530201342282,
       "aspectError": {
-        "median": 0.010203090078709507,
-        "p95": 0.034465280290891756,
-        "n": 11
+        "median": 0.008963533767579409,
+        "p95": 0.06254569542458256,
+        "n": 66
       },
       "centreOffsetPctDiag": {
-        "median": 0.06752332930180809,
-        "p95": 0.38065943238910377,
-        "max": 0.38938849495073913,
-        "n": 11,
+        "median": 0.09890916724390693,
+        "p95": 0.5331757698239913,
+        "max": 0.9635484419581543,
+        "n": 66,
         "histogram": [
           {
             "from": 0.0,
-            "count": 8
+            "count": 55
           },
           {
             "from": 0.25,
-            "count": 3
+            "count": 6
           },
           {
             "from": 0.5,
-            "count": 0
+            "count": 3
           },
           {
             "from": 0.75,
-            "count": 0
+            "count": 2
           },
           {
             "from": 1.0,
@@ -415,19 +266,180 @@
         ]
       },
       "orientationErrorDeg": {
-        "median": 12.144999999999996,
-        "p95": 21.89649999999999,
-        "n": 2
+        "median": 0.23499999999999233,
+        "p95": 1.1370000000000042,
+        "n": 42
       },
-      "subclassMismatches": 2,
+      "subclassMismatches": 5,
       "acceptedMeasuredAsProposed": {
-        "n": 21,
-        "of": 39
+        "n": 32,
+        "of": 109
+      },
+      "subclassConfusion": {
+        "square": {
+          "square": 14,
+          "rectangle": 1
+        },
+        "circle": {
+          "circle": 21,
+          "ellipse": 3
+        },
+        "rectangle": {
+          "rectangle": 24
+        },
+        "ellipse": {
+          "ellipse": 2,
+          "circle": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 39,
+          "fp": 26,
+          "fn": 58
+        },
+        "ellipse": {
+          "tp": 27,
+          "fp": 17,
+          "fn": 29
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 43,
+          "fn": 68
+        },
+        "medium": {
+          "tp": 16,
+          "fn": 15
+        },
+        "large": {
+          "tp": 7,
+          "fn": 4
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 13.0,
+        "mean": 2.945945945945946
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 216.0,
+        "p25": 127.0,
+        "p75": 296.0,
+        "max": 474.0,
+        "mean": 216.8108108108108
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 3032.0,
+        "p25": 2122.0,
+        "p75": 4223.0,
+        "max": 6439.0,
+        "mean": 3129.5945945945946
+      },
+      "wallMs": null,
+      "runKey": "opencv-reference|1|a49d2b2eb28e"
+    },
+    "apple-vision · file all/medium/all -regions": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 24,
+      "fp": 23,
+      "fn": 129,
+      "duplicates": 0,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5106382978723404,
+      "recall": 0.1568627450980392,
+      "f1": 0.24,
+      "precisionCI": [
+        0.37242217589372884,
+        0.6472467566339649
+      ],
+      "recallCI": [
+        0.10773416494874159,
+        0.22280059113637868
+      ],
+      "fpNestedInLabel": 14,
+      "precisionExcludingNested": 0.7272727272727273,
+      "recallOnRulePassingGT": 0.1610738255033557,
+      "aspectError": {
+        "median": 0.013476632783358665,
+        "p95": 0.05732396160592253,
+        "n": 24
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.07761245468717294,
+        "p95": 0.7182811047836397,
+        "max": 0.870027126013893,
+        "n": 24,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 17
+          },
+          {
+            "from": 0.25,
+            "count": 5
+          },
+          {
+            "from": 0.5,
+            "count": 0
+          },
+          {
+            "from": 0.75,
+            "count": 2
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.46999999999999886,
+        "p95": 55.87499999999999,
+        "n": 11
+      },
+      "subclassMismatches": 3,
+      "acceptedMeasuredAsProposed": {
+        "n": 29,
+        "of": 47
       },
       "subclassConfusion": {
         "circle": {
-          "ellipse": 1,
-          "circle": 8
+          "circle": 12,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 3
+        },
+        "rectangle": {
+          "rectangle": 5,
+          "square": 1
         },
         "ellipse": {
           "circle": 1,
@@ -436,28 +448,28 @@
       },
       "byPrimitive": {
         "rectangle": {
-          "tp": 0,
-          "fp": 4,
-          "fn": 31
+          "tp": 9,
+          "fp": 12,
+          "fn": 88
         },
         "ellipse": {
-          "tp": 11,
-          "fp": 10,
-          "fn": 26
+          "tp": 15,
+          "fp": 11,
+          "fn": 41
         }
       },
       "byBand": {
         "small": {
-          "tp": 4,
-          "fn": 43
+          "tp": 13,
+          "fn": 98
         },
         "medium": {
-          "tp": 6,
-          "fn": 10
+          "tp": 9,
+          "fn": 22
         },
         "large": {
-          "tp": 1,
-          "fn": 4
+          "tp": 2,
+          "fn": 9
         }
       },
       "acceptedPerImage": {
@@ -465,8 +477,8 @@
         "median": 1.0,
         "p25": 0.0,
         "p75": 1.0,
-        "max": 5.0,
-        "mean": 1.054054054054054
+        "max": 7.0,
+        "mean": 1.2702702702702702
       },
       "candidatesPerImage": {
         "n": 37,
@@ -478,71 +490,73 @@
       },
       "durationMs": {
         "n": 37,
-        "median": 1021.0,
-        "p25": 268.0,
-        "p75": 2873.0,
-        "max": 59286.0,
-        "mean": 4888.4324324324325
+        "median": 971.0,
+        "p25": 278.0,
+        "p75": 2653.0,
+        "max": 55262.0,
+        "mean": 4602.621621621622
       },
       "wallMs": {
         "n": 37,
-        "median": 1102.0,
-        "p25": 425.0,
-        "p75": 2974.0,
-        "max": 59377.0,
-        "mean": 4987.972972972973
+        "median": 1053.0,
+        "p25": 408.0,
+        "p75": 2771.0,
+        "max": 55351.0,
+        "mean": 4694.351351351352
       },
-      "runKey": "apple-vision|1|93b8a04130a8"
+      "runKey": "apple-vision|1|294b1327db76"
     },
-    "apple-vision · file all/high/all": {
+    "apple-vision · file all/medium/all +regions": {
       "detectorId": "apple-vision",
-      "labelledAssets": 25,
+      "labelledAssets": 37,
       "assetsAll": 37,
-      "tp": 13,
-      "fp": 33,
-      "fn": 55,
+      "tp": 33,
+      "fp": 25,
+      "fn": 120,
       "duplicates": 0,
-      "gtTotal": 68,
-      "gtTotalAll": 76,
-      "gtPassesRules": 68,
-      "precision": 0.2826086956521739,
-      "recall": 0.19117647058823528,
-      "f1": 0.22807017543859648,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5689655172413793,
+      "recall": 0.21568627450980393,
+      "f1": 0.3127962085308057,
       "precisionCI": [
-        0.1732404154491407,
-        0.42548835730293777
+        0.44117876705727427,
+        0.6881839919916508
       ],
       "recallCI": [
-        0.11527185601824742,
-        0.30010864775672413
+        0.15790480028479773,
+        0.28739542618573055
       ],
-      "recallOnRulePassingGT": 0.19117647058823528,
+      "fpNestedInLabel": 16,
+      "precisionExcludingNested": 0.7857142857142857,
+      "recallOnRulePassingGT": 0.2214765100671141,
       "aspectError": {
-        "median": 0.01328640563132434,
-        "p95": 0.0634391295412223,
-        "n": 13
+        "median": 0.013666859935392992,
+        "p95": 0.0707999434202097,
+        "n": 33
       },
       "centreOffsetPctDiag": {
-        "median": 0.0831538333451935,
-        "p95": 0.9820234122471685,
-        "max": 1.8709757881918179,
-        "n": 13,
+        "median": 0.08514740160450901,
+        "p95": 0.7994895608407425,
+        "max": 0.870027126013893,
+        "n": 33,
         "histogram": [
           {
             "from": 0.0,
-            "count": 9
+            "count": 23
           },
           {
             "from": 0.25,
-            "count": 3
+            "count": 6
           },
           {
             "from": 0.5,
-            "count": 0
+            "count": 1
           },
           {
             "from": 0.75,
-            "count": 0
+            "count": 3
           },
           {
             "from": 1.0,
@@ -558,7 +572,7 @@
           },
           {
             "from": 1.75,
-            "count": 1
+            "count": 0
           },
           {
             "from": 2.0,
@@ -567,138 +581,147 @@
         ]
       },
       "orientationErrorDeg": {
-        "median": 22.97999999999999,
-        "p95": 61.022999999999996,
-        "n": 3
+        "median": 0.46999999999999886,
+        "p95": 29.55899999999985,
+        "n": 19
       },
       "subclassMismatches": 3,
       "acceptedMeasuredAsProposed": {
-        "n": 45,
-        "of": 66
+        "n": 35,
+        "of": 58
       },
       "subclassConfusion": {
         "circle": {
-          "ellipse": 1,
-          "circle": 9
+          "circle": 13,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 4
+        },
+        "rectangle": {
+          "rectangle": 12,
+          "square": 1
         },
         "ellipse": {
-          "circle": 2,
+          "circle": 1,
           "ellipse": 1
         }
       },
       "byPrimitive": {
         "rectangle": {
-          "tp": 0,
-          "fp": 4,
-          "fn": 31
+          "tp": 17,
+          "fp": 14,
+          "fn": 80
         },
         "ellipse": {
-          "tp": 13,
-          "fp": 29,
-          "fn": 24
+          "tp": 16,
+          "fp": 11,
+          "fn": 40
         }
       },
       "byBand": {
         "small": {
-          "tp": 4,
-          "fn": 43
+          "tp": 18,
+          "fn": 93
         },
         "medium": {
-          "tp": 8,
-          "fn": 8
+          "tp": 12,
+          "fn": 19
         },
         "large": {
-          "tp": 1,
-          "fn": 4
+          "tp": 3,
+          "fn": 8
         }
       },
       "acceptedPerImage": {
         "n": 37,
-        "median": 2.0,
-        "p25": 1.0,
-        "p75": 3.0,
-        "max": 5.0,
-        "mean": 1.7837837837837838
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 10.0,
+        "mean": 1.5675675675675675
       },
       "candidatesPerImage": {
         "n": 37,
-        "median": 91.0,
-        "p25": 59.0,
-        "p75": 114.0,
+        "median": 89.0,
+        "p25": 58.0,
+        "p75": 113.0,
         "max": 186.0,
-        "mean": 89.64864864864865
+        "mean": 89.02702702702703
       },
       "durationMs": {
         "n": 37,
-        "median": 947.0,
-        "p25": 250.0,
-        "p75": 2635.0,
-        "max": 54530.0,
-        "mean": 4510.108108108108
+        "median": 1193.0,
+        "p25": 522.0,
+        "p75": 2910.0,
+        "max": 54821.0,
+        "mean": 4767.945945945946
       },
       "wallMs": {
         "n": 37,
-        "median": 1040.0,
-        "p25": 405.0,
-        "p75": 2732.0,
-        "max": 54627.0,
-        "mean": 4612.108108108108
+        "median": 1282.0,
+        "p25": 662.0,
+        "p75": 3002.0,
+        "max": 54903.0,
+        "mean": 4862.351351351352
       },
-      "runKey": "apple-vision|1|e84b1ac5b254"
+      "runKey": "apple-vision|1|dd1309823bbd"
     },
-    "apple-vision · file all/low/all": {
+    "apple-vision · file all/medium/all -regions floor 0.100": {
       "detectorId": "apple-vision",
-      "labelledAssets": 25,
+      "labelledAssets": 37,
       "assetsAll": 37,
-      "tp": 11,
-      "fp": 5,
-      "fn": 57,
+      "tp": 38,
+      "fp": 23,
+      "fn": 115,
       "duplicates": 0,
-      "gtTotal": 68,
-      "gtTotalAll": 76,
-      "gtPassesRules": 68,
-      "precision": 0.6875,
-      "recall": 0.16176470588235295,
-      "f1": 0.2619047619047619,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6229508196721312,
+      "recall": 0.24836601307189543,
+      "f1": 0.35514018691588783,
       "precisionCI": [
-        0.4440393186673406,
-        0.8583556494803894
+        0.49747627570942377,
+        0.7338566957163277
       ],
       "recallCI": [
-        0.09279997195749148,
-        0.2669024845579536
+        0.18662917039145915,
+        0.322429650737629
       ],
-      "recallOnRulePassingGT": 0.16176470588235295,
+      "fpNestedInLabel": 13,
+      "precisionExcludingNested": 0.7916666666666666,
+      "recallOnRulePassingGT": 0.2550335570469799,
       "aspectError": {
-        "median": 0.00958782247701892,
-        "p95": 0.03609782558613987,
-        "n": 11
+        "median": 0.012441292856589875,
+        "p95": 0.07875796836715832,
+        "n": 38
       },
       "centreOffsetPctDiag": {
-        "median": 0.06752332930180809,
-        "p95": 0.32727693865336294,
-        "max": 0.38938849495073913,
-        "n": 11,
+        "median": 0.0944186615340252,
+        "p95": 0.8965510269133703,
+        "max": 1.7455695803948925,
+        "n": 38,
         "histogram": [
           {
             "from": 0.0,
-            "count": 9
+            "count": 26
           },
           {
             "from": 0.25,
-            "count": 2
+            "count": 7
           },
           {
             "from": 0.5,
-            "count": 0
+            "count": 1
           },
           {
             "from": 0.75,
-            "count": 0
+            "count": 2
           },
           {
             "from": 1.0,
-            "count": 0
+            "count": 1
           },
           {
             "from": 1.25,
@@ -706,7 +729,7 @@
           },
           {
             "from": 1.5,
-            "count": 0
+            "count": 1
           },
           {
             "from": 1.75,
@@ -720,60 +743,387 @@
       },
       "orientationErrorDeg": {
         "median": 1.3100000000000023,
-        "p95": 20.812999999999988,
-        "n": 3
+        "p95": 88.26599999999999,
+        "n": 19
       },
-      "subclassMismatches": 2,
+      "subclassMismatches": 8,
       "acceptedMeasuredAsProposed": {
-        "n": 9,
-        "of": 28
+        "n": 34,
+        "of": 61
       },
       "subclassConfusion": {
         "circle": {
-          "ellipse": 1,
-          "circle": 7
-        },
-        "ellipse": {
-          "circle": 1,
+          "circle": 18,
           "ellipse": 1
         },
-        "rectangle": {
+        "square": {
+          "square": 4,
           "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 7,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 4,
+          "ellipse": 1
         }
       },
       "byPrimitive": {
         "rectangle": {
-          "tp": 1,
-          "fp": 4,
-          "fn": 30
+          "tp": 14,
+          "fp": 18,
+          "fn": 83
         },
         "ellipse": {
-          "tp": 10,
-          "fp": 1,
-          "fn": 27
+          "tp": 24,
+          "fp": 5,
+          "fn": 32
         }
       },
       "byBand": {
         "small": {
-          "tp": 4,
-          "fn": 43
+          "tp": 24,
+          "fn": 87
         },
         "medium": {
-          "tp": 6,
-          "fn": 10
+          "tp": 11,
+          "fn": 20
         },
         "large": {
-          "tp": 1,
-          "fn": 4
+          "tp": 3,
+          "fn": 8
         }
       },
       "acceptedPerImage": {
         "n": 37,
-        "median": 0.0,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 9.0,
+        "mean": 1.6486486486486487
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 155.0,
+        "p25": 94.0,
+        "p75": 201.0,
+        "max": 457.0,
+        "mean": 154.02702702702703
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 936.0,
+        "p25": 274.0,
+        "p75": 2691.0,
+        "max": 54902.0,
+        "mean": 4533.081081081081
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 1024.0,
+        "p25": 408.0,
+        "p75": 2781.0,
+        "max": 54992.0,
+        "mean": 4625.945945945946
+      },
+      "runKey": "apple-vision|1|aaa7ac724bca"
+    },
+    "apple-vision · file all/medium/all +regions floor 0.100": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 50,
+      "fp": 33,
+      "fn": 103,
+      "duplicates": 0,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6024096385542169,
+      "recall": 0.32679738562091504,
+      "f1": 0.42372881355932207,
+      "precisionCI": [
+        0.4948463779413774,
+        0.7009123367759931
+      ],
+      "recallCI": [
+        0.25751021482630554,
+        0.40456923348332674
+      ],
+      "fpNestedInLabel": 17,
+      "precisionExcludingNested": 0.7575757575757576,
+      "recallOnRulePassingGT": 0.33557046979865773,
+      "aspectError": {
+        "median": 0.011247079400671427,
+        "p95": 0.08214796620134883,
+        "n": 50
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.12435319629242657,
+        "p95": 0.8616636080695891,
+        "max": 1.7455695803948925,
+        "n": 50,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 34
+          },
+          {
+            "from": 0.25,
+            "count": 9
+          },
+          {
+            "from": 0.5,
+            "count": 2
+          },
+          {
+            "from": 0.75,
+            "count": 3
+          },
+          {
+            "from": 1.0,
+            "count": 1
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 1
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.8850000000000017,
+        "p95": 75.61899999999991,
+        "n": 30
+      },
+      "subclassMismatches": 8,
+      "acceptedMeasuredAsProposed": {
+        "n": 51,
+        "of": 83
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 19,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 8,
+          "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 14,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 4,
+          "ellipse": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 25,
+          "fp": 28,
+          "fn": 72
+        },
+        "ellipse": {
+          "tp": 25,
+          "fp": 5,
+          "fn": 31
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 32,
+          "fn": 79
+        },
+        "medium": {
+          "tp": 14,
+          "fn": 17
+        },
+        "large": {
+          "tp": 4,
+          "fn": 7
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 17.0,
+        "mean": 2.2432432432432434
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 155.0,
+        "p25": 94.0,
+        "p75": 201.0,
+        "max": 457.0,
+        "mean": 154.02702702702703
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 1200.0,
+        "p25": 529.0,
+        "p75": 2920.0,
+        "max": 54490.0,
+        "mean": 4790.783783783784
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 1277.0,
+        "p25": 661.0,
+        "p75": 3009.0,
+        "max": 54572.0,
+        "mean": 4885.810810810811
+      },
+      "runKey": "apple-vision|1|3a2071895eeb"
+    },
+    "apple-vision · file all/low/all -regions": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 23,
+      "fp": 12,
+      "fn": 130,
+      "duplicates": 0,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6571428571428571,
+      "recall": 0.1503267973856209,
+      "f1": 0.24468085106382978,
+      "precisionCI": [
+        0.4915164687273671,
+        0.7916850471731106
+      ],
+      "recallCI": [
+        0.1023063933961076,
+        0.2154766437573007
+      ],
+      "fpNestedInLabel": 9,
+      "precisionExcludingNested": 0.8846153846153846,
+      "recallOnRulePassingGT": 0.15436241610738255,
+      "aspectError": {
+        "median": 0.011269276393831629,
+        "p95": 0.04579727684413634,
+        "n": 23
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.064320447759629,
+        "p95": 0.44786541502976585,
+        "max": 0.870027126013893,
+        "n": 23,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 18
+          },
+          {
+            "from": 0.25,
+            "count": 4
+          },
+          {
+            "from": 0.5,
+            "count": 0
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.35999999999999943,
+        "p95": 12.18,
+        "n": 11
+      },
+      "subclassMismatches": 2,
+      "acceptedMeasuredAsProposed": {
+        "n": 16,
+        "of": 35
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 11,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 4
+        },
+        "rectangle": {
+          "rectangle": 5
+        },
+        "ellipse": {
+          "circle": 1,
+          "ellipse": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 9,
+          "fp": 12,
+          "fn": 88
+        },
+        "ellipse": {
+          "tp": 14,
+          "fp": 0,
+          "fn": 42
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 13,
+          "fn": 98
+        },
+        "medium": {
+          "tp": 8,
+          "fn": 23
+        },
+        "large": {
+          "tp": 2,
+          "fn": 9
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 1.0,
         "p25": 0.0,
         "p75": 1.0,
-        "max": 5.0,
-        "mean": 0.7567567567567568
+        "max": 7.0,
+        "mean": 0.9459459459459459
       },
       "candidatesPerImage": {
         "n": 37,
@@ -785,366 +1135,65 @@
       },
       "durationMs": {
         "n": 37,
-        "median": 293.0,
-        "p25": 136.0,
-        "p75": 1290.0,
-        "max": 19968.0,
-        "mean": 2063.162162162162
+        "median": 282.0,
+        "p25": 139.0,
+        "p75": 1312.0,
+        "max": 19907.0,
+        "mean": 2078.027027027027
       },
       "wallMs": {
         "n": 37,
-        "median": 429.0,
-        "p25": 223.0,
-        "p75": 1378.0,
-        "max": 20055.0,
-        "mean": 2157.3783783783783
+        "median": 423.0,
+        "p25": 213.0,
+        "p75": 1390.0,
+        "max": 19990.0,
+        "mean": 2167.6216216216217
       },
-      "runKey": "apple-vision|1|a46af1118534"
+      "runKey": "apple-vision|1|8c343ec8bc13"
     },
-    "apple-vision · file all/medium/small": {
+    "apple-vision · file all/high/all -regions": {
       "detectorId": "apple-vision",
-      "labelledAssets": 25,
+      "labelledAssets": 37,
       "assetsAll": 37,
-      "tp": 4,
-      "fp": 8,
-      "fn": 64,
+      "tp": 27,
+      "fp": 47,
+      "fn": 126,
       "duplicates": 0,
-      "gtTotal": 68,
-      "gtTotalAll": 76,
-      "gtPassesRules": 68,
-      "precision": 0.3333333333333333,
-      "recall": 0.058823529411764705,
-      "f1": 0.1,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.36486486486486486,
+      "recall": 0.17647058823529413,
+      "f1": 0.23788546255506607,
       "precisionCI": [
-        0.13811783989736134,
-        0.609382412602386
+        0.2643839969334518,
+        0.4786839770033634
       ],
       "recallCI": [
-        0.023110391480533066,
-        0.14171889962656925
+        0.12420853888153777,
+        0.24458137399871854
       ],
-      "recallOnRulePassingGT": 0.058823529411764705,
+      "fpNestedInLabel": 19,
+      "precisionExcludingNested": 0.4909090909090909,
+      "recallOnRulePassingGT": 0.18120805369127516,
       "aspectError": {
-        "median": 0.00844109054512716,
-        "p95": 0.04314339032904787,
-        "n": 4
+        "median": 0.013666859935392992,
+        "p95": 0.07190262779842985,
+        "n": 27
       },
       "centreOffsetPctDiag": {
-        "median": 0.08846370908856263,
-        "p95": 0.20525579412659503,
-        "max": 0.22153248068850387,
-        "n": 4,
-        "histogram": [
-          {
-            "from": 0.0,
-            "count": 4
-          },
-          {
-            "from": 0.25,
-            "count": 0
-          },
-          {
-            "from": 0.5,
-            "count": 0
-          },
-          {
-            "from": 0.75,
-            "count": 0
-          },
-          {
-            "from": 1.0,
-            "count": 0
-          },
-          {
-            "from": 1.25,
-            "count": 0
-          },
-          {
-            "from": 1.5,
-            "count": 0
-          },
-          {
-            "from": 1.75,
-            "count": 0
-          },
-          {
-            "from": 2.0,
-            "count": 0
-          }
-        ]
-      },
-      "orientationErrorDeg": {
-        "median": 9.715,
-        "p95": 18.251499999999997,
-        "n": 2
-      },
-      "subclassMismatches": 1,
-      "acceptedMeasuredAsProposed": {
-        "n": 10,
-        "of": 14
-      },
-      "subclassConfusion": {
-        "rectangle": {
-          "rectangle": 1
-        },
-        "circle": {
-          "circle": 2
-        },
-        "ellipse": {
-          "circle": 1
-        }
-      },
-      "byPrimitive": {
-        "rectangle": {
-          "tp": 1,
-          "fp": 0,
-          "fn": 30
-        },
-        "ellipse": {
-          "tp": 3,
-          "fp": 8,
-          "fn": 34
-        }
-      },
-      "byBand": {
-        "small": {
-          "tp": 4,
-          "fn": 43
-        },
-        "medium": {
-          "tp": 0,
-          "fn": 16
-        },
-        "large": {
-          "tp": 0,
-          "fn": 5
-        }
-      },
-      "acceptedPerImage": {
-        "n": 37,
-        "median": 0.0,
-        "p25": 0.0,
-        "p75": 1.0,
-        "max": 2.0,
-        "mean": 0.3783783783783784
-      },
-      "candidatesPerImage": {
-        "n": 37,
-        "median": 110.0,
-        "p25": 68.0,
-        "p75": 152.0,
-        "max": 214.0,
-        "mean": 111.43243243243244
-      },
-      "durationMs": {
-        "n": 37,
-        "median": 933.0,
-        "p25": 258.0,
-        "p75": 2645.0,
-        "max": 54451.0,
-        "mean": 4512.351351351352
-      },
-      "wallMs": {
-        "n": 37,
-        "median": 1019.0,
-        "p25": 387.0,
-        "p75": 2741.0,
-        "max": 54547.0,
-        "mean": 4606.972972972973
-      },
-      "runKey": "apple-vision|1|9a41ed1d5446"
-    },
-    "apple-vision · file all/high/small": {
-      "detectorId": "apple-vision",
-      "labelledAssets": 25,
-      "assetsAll": 37,
-      "tp": 4,
-      "fp": 41,
-      "fn": 64,
-      "duplicates": 0,
-      "gtTotal": 68,
-      "gtTotalAll": 76,
-      "gtPassesRules": 68,
-      "precision": 0.08888888888888889,
-      "recall": 0.058823529411764705,
-      "f1": 0.07079646017699115,
-      "precisionCI": [
-        0.035110548134203154,
-        0.20733851168365702
-      ],
-      "recallCI": [
-        0.023110391480533066,
-        0.14171889962656925
-      ],
-      "recallOnRulePassingGT": 0.058823529411764705,
-      "aspectError": {
-        "median": 0.02491023435647935,
-        "p95": 0.046946201387520974,
-        "n": 4
-      },
-      "centreOffsetPctDiag": {
-        "median": 0.14271933096159195,
-        "p95": 0.6651915817819583,
-        "max": 0.7434843643278622,
-        "n": 4,
-        "histogram": [
-          {
-            "from": 0.0,
-            "count": 3
-          },
-          {
-            "from": 0.25,
-            "count": 0
-          },
-          {
-            "from": 0.5,
-            "count": 1
-          },
-          {
-            "from": 0.75,
-            "count": 0
-          },
-          {
-            "from": 1.0,
-            "count": 0
-          },
-          {
-            "from": 1.25,
-            "count": 0
-          },
-          {
-            "from": 1.5,
-            "count": 0
-          },
-          {
-            "from": 1.75,
-            "count": 0
-          },
-          {
-            "from": 2.0,
-            "count": 0
-          }
-        ]
-      },
-      "orientationErrorDeg": {
-        "median": 30.965,
-        "p95": 41.5535,
-        "n": 2
-      },
-      "subclassMismatches": 2,
-      "acceptedMeasuredAsProposed": {
-        "n": 54,
-        "of": 57
-      },
-      "subclassConfusion": {
-        "circle": {
-          "circle": 2
-        },
-        "ellipse": {
-          "circle": 2
-        }
-      },
-      "byPrimitive": {
-        "rectangle": {
-          "tp": 0,
-          "fp": 0,
-          "fn": 31
-        },
-        "ellipse": {
-          "tp": 4,
-          "fp": 41,
-          "fn": 33
-        }
-      },
-      "byBand": {
-        "small": {
-          "tp": 4,
-          "fn": 43
-        },
-        "medium": {
-          "tp": 0,
-          "fn": 16
-        },
-        "large": {
-          "tp": 0,
-          "fn": 5
-        }
-      },
-      "acceptedPerImage": {
-        "n": 37,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 2.0,
-        "max": 7.0,
-        "mean": 1.5405405405405406
-      },
-      "candidatesPerImage": {
-        "n": 37,
-        "median": 112.0,
-        "p25": 68.0,
-        "p75": 152.0,
-        "max": 214.0,
-        "mean": 112.05405405405405
-      },
-      "durationMs": {
-        "n": 37,
-        "median": 935.0,
-        "p25": 258.0,
-        "p75": 2648.0,
-        "max": 54592.0,
-        "mean": 4520.081081081081
-      },
-      "wallMs": {
-        "n": 37,
-        "median": 1021.0,
-        "p25": 403.0,
-        "p75": 2748.0,
-        "max": 54679.0,
-        "mean": 4618.594594594595
-      },
-      "runKey": "apple-vision|1|5bfe31a210ca"
-    },
-    "apple-vision-register · 1031ec098d94": {
-      "detectorId": "apple-vision-register",
-      "labelledAssets": 22,
-      "assetsAll": 33,
-      "tp": 14,
-      "fp": 28,
-      "fn": 47,
-      "duplicates": 0,
-      "gtTotal": 61,
-      "gtTotalAll": 67,
-      "gtPassesRules": 61,
-      "precision": 0.3333333333333333,
-      "recall": 0.22950819672131148,
-      "f1": 0.2718446601941748,
-      "precisionCI": [
-        0.2101228076197232,
-        0.4844777298833308
-      ],
-      "recallCI": [
-        0.141931023788832,
-        0.34913643907451497
-      ],
-      "recallOnRulePassingGT": 0.22950819672131148,
-      "aspectError": {
-        "median": 0.014227221850062928,
-        "p95": 0.061577440473060754,
-        "n": 14
-      },
-      "centreOffsetPctDiag": {
-        "median": 0.10781172625185068,
-        "p95": 1.7090564694151769,
+        "median": 0.13246961915850786,
+        "p95": 0.838475462513675,
         "max": 1.8709757881918179,
-        "n": 14,
+        "n": 27,
         "histogram": [
           {
             "from": 0.0,
-            "count": 9
+            "count": 19
           },
           {
             "from": 0.25,
-            "count": 3
+            "count": 5
           },
           {
             "from": 0.5,
@@ -1152,7 +1201,7 @@
           },
           {
             "from": 0.75,
-            "count": 0
+            "count": 2
           },
           {
             "from": 1.0,
@@ -1164,7 +1213,7 @@
           },
           {
             "from": 1.5,
-            "count": 1
+            "count": 0
           },
           {
             "from": 1.75,
@@ -1177,19 +1226,26 @@
         ]
       },
       "orientationErrorDeg": {
-        "median": 22.97999999999999,
-        "p95": 61.022999999999996,
-        "n": 3
+        "median": 0.7800000000000011,
+        "p95": 75.83399999999997,
+        "n": 12
       },
-      "subclassMismatches": 3,
+      "subclassMismatches": 4,
       "acceptedMeasuredAsProposed": {
-        "n": 39,
-        "of": 56
+        "n": 53,
+        "of": 74
       },
       "subclassConfusion": {
         "circle": {
-          "ellipse": 1,
-          "circle": 10
+          "circle": 14,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 3
+        },
+        "rectangle": {
+          "rectangle": 5,
+          "square": 1
         },
         "ellipse": {
           "circle": 2,
@@ -1198,37 +1254,1006 @@
       },
       "byPrimitive": {
         "rectangle": {
-          "tp": 0,
-          "fp": 2,
-          "fn": 26
+          "tp": 9,
+          "fp": 12,
+          "fn": 88
         },
         "ellipse": {
-          "tp": 14,
-          "fp": 26,
-          "fn": 21
+          "tp": 18,
+          "fp": 35,
+          "fn": 38
         }
       },
       "byBand": {
         "small": {
-          "tp": 5,
-          "fn": 36
+          "tp": 13,
+          "fn": 98
         },
         "medium": {
-          "tp": 8,
-          "fn": 7
+          "tp": 11,
+          "fn": 20
         },
         "large": {
-          "tp": 1,
+          "tp": 3,
+          "fn": 8
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 2.0
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 91.0,
+        "p25": 59.0,
+        "p75": 114.0,
+        "max": 186.0,
+        "mean": 89.64864864864865
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 1017.0,
+        "p25": 254.0,
+        "p75": 2746.0,
+        "max": 58626.0,
+        "mean": 4752.27027027027
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 1107.0,
+        "p25": 437.0,
+        "p75": 2842.0,
+        "max": 58724.0,
+        "mean": 4857.5675675675675
+      },
+      "runKey": "apple-vision|1|fc8bfcfcf3dc"
+    },
+    "apple-vision · file all/low/all +regions floor 0.100": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 46,
+      "fp": 31,
+      "fn": 107,
+      "duplicates": 0,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5974025974025974,
+      "recall": 0.3006535947712418,
+      "f1": 0.39999999999999997,
+      "precisionCI": [
+        0.48576649330491517,
+        0.6997815413703016
+      ],
+      "recallCI": [
+        0.23360667413404657,
+        0.3774658984487377
+      ],
+      "fpNestedInLabel": 17,
+      "precisionExcludingNested": 0.7666666666666667,
+      "recallOnRulePassingGT": 0.3087248322147651,
+      "aspectError": {
+        "median": 0.009728507836957957,
+        "p95": 0.061892973934576115,
+        "n": 46
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.07761245468717294,
+        "p95": 0.6752969157490551,
+        "max": 0.870027126013893,
+        "n": 46,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 35
+          },
+          {
+            "from": 0.25,
+            "count": 7
+          },
+          {
+            "from": 0.5,
+            "count": 2
+          },
+          {
+            "from": 0.75,
+            "count": 2
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.5650000000000011,
+        "p95": 27.97399999999999,
+        "n": 28
+      },
+      "subclassMismatches": 5,
+      "acceptedMeasuredAsProposed": {
+        "n": 43,
+        "of": 77
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 17,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 10,
+          "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 13,
+          "square": 1
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 25,
+          "fp": 25,
+          "fn": 72
+        },
+        "ellipse": {
+          "tp": 21,
+          "fp": 6,
+          "fn": 35
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 31,
+          "fn": 80
+        },
+        "medium": {
+          "tp": 12,
+          "fn": 19
+        },
+        "large": {
+          "tp": 3,
+          "fn": 8
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 17.0,
+        "mean": 2.081081081081081
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 88.0,
+        "p25": 60.0,
+        "p75": 108.0,
+        "max": 222.0,
+        "mean": 86.21621621621621
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 555.0,
+        "p25": 400.0,
+        "p75": 1593.0,
+        "max": 20665.0,
+        "mean": 2350.4594594594596
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 711.0,
+        "p25": 484.0,
+        "p75": 1683.0,
+        "max": 20749.0,
+        "mean": 2452.2702702702704
+      },
+      "runKey": "apple-vision|1|40c7353f8987"
+    },
+    "apple-vision · file all/medium/all +regions regions@1024,2048 floor 0.100": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 53,
+      "fp": 50,
+      "fn": 100,
+      "duplicates": 0,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5145631067961165,
+      "recall": 0.3464052287581699,
+      "f1": 0.4140625,
+      "precisionCI": [
+        0.41926787342306515,
+        0.6088110770980802
+      ],
+      "recallCI": [
+        0.27560394850749137,
+        0.4247306565972767
+      ],
+      "fpNestedInLabel": 21,
+      "precisionExcludingNested": 0.6463414634146342,
+      "recallOnRulePassingGT": 0.35570469798657717,
+      "aspectError": {
+        "median": 0.011269276393831629,
+        "p95": 0.05878183422678114,
+        "n": 53
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.07630491465167838,
+        "p95": 0.6031924051725447,
+        "max": 0.8714421151172338,
+        "n": 53,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 39
+          },
+          {
+            "from": 0.25,
+            "count": 9
+          },
+          {
+            "from": 0.5,
+            "count": 4
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3299999999999983,
+        "p95": 23.27999999999999,
+        "n": 31
+      },
+      "subclassMismatches": 5,
+      "acceptedMeasuredAsProposed": {
+        "n": 60,
+        "of": 103
+      },
+      "subclassConfusion": {
+        "square": {
+          "square": 10
+        },
+        "circle": {
+          "circle": 21,
+          "ellipse": 1
+        },
+        "rectangle": {
+          "rectangle": 16,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 28,
+          "fp": 40,
+          "fn": 69
+        },
+        "ellipse": {
+          "tp": 25,
+          "fp": 10,
+          "fn": 31
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 35,
+          "fn": 76
+        },
+        "medium": {
+          "tp": 13,
+          "fn": 18
+        },
+        "large": {
+          "tp": 5,
+          "fn": 6
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 18.0,
+        "mean": 2.7837837837837838
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 155.0,
+        "p25": 91.0,
+        "p75": 213.0,
+        "max": 440.0,
+        "mean": 154.97297297297297
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2178.0,
+        "p25": 1535.0,
+        "p75": 4070.0,
+        "max": 56775.0,
+        "mean": 5861.243243243243
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 2318.0,
+        "p25": 1719.0,
+        "p75": 4202.0,
+        "max": 56908.0,
+        "mean": 5997.2972972972975
+      },
+      "runKey": "apple-vision|1|f7fef8b9a7bb"
+    },
+    "apple-vision · file all/medium/all -regions · 18af76": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 26,
+      "fp": 30,
+      "fn": 127,
+      "duplicates": 1,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.4642857142857143,
+      "recall": 0.16993464052287582,
+      "f1": 0.24880382775119622,
+      "precisionCI": [
+        0.34019643403583766,
+        0.5929604334275992
+      ],
+      "recallCI": [
+        0.11868668726157514,
+        0.23735150668696917
+      ],
+      "fpNestedInLabel": 18,
+      "precisionExcludingNested": 0.6842105263157895,
+      "recallOnRulePassingGT": 0.174496644295302,
+      "aspectError": {
+        "median": 0.012441292856589875,
+        "p95": 0.0562912151812175,
+        "n": 26
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.07761245468717294,
+        "p95": 0.6872318984084006,
+        "max": 0.870027126013893,
+        "n": 26,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 19
+          },
+          {
+            "from": 0.25,
+            "count": 5
+          },
+          {
+            "from": 0.5,
+            "count": 0
+          },
+          {
+            "from": 0.75,
+            "count": 2
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.46000000000000085,
+        "p95": 52.585499999999946,
+        "n": 12
+      },
+      "subclassMismatches": 3,
+      "acceptedMeasuredAsProposed": {
+        "n": 36,
+        "of": 56
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 13,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 4
+        },
+        "rectangle": {
+          "rectangle": 5,
+          "square": 1
+        },
+        "ellipse": {
+          "circle": 1,
+          "ellipse": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 10,
+          "fp": 12,
+          "fn": 87
+        },
+        "ellipse": {
+          "tp": 16,
+          "fp": 18,
+          "fn": 40
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 14,
+          "fn": 97
+        },
+        "medium": {
+          "tp": 10,
+          "fn": 21
+        },
+        "large": {
+          "tp": 2,
+          "fn": 9
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 7.0,
+        "mean": 1.5135135135135136
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 89.0,
+        "p25": 58.0,
+        "p75": 113.0,
+        "max": 186.0,
+        "mean": 89.02702702702703
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 925.0,
+        "p25": 268.0,
+        "p75": 2609.0,
+        "max": 54223.0,
+        "mean": 4495.0
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 1006.0,
+        "p25": 400.0,
+        "p75": 2744.0,
+        "max": 54316.0,
+        "mean": 4605.594594594595
+      },
+      "runKey": "apple-vision|1|18af76fb2371"
+    },
+    "apple-vision · file all/medium/all +regions floor 0.100 · 0a949c": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 72,
+      "fp": 66,
+      "fn": 81,
+      "duplicates": 10,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5217391304347826,
+      "recall": 0.47058823529411764,
+      "f1": 0.49484536082474223,
+      "precisionCI": [
+        0.43894037630479876,
+        0.6033603309630267
+      ],
+      "recallCI": [
+        0.393188812557957,
+        0.549428452249339
+      ],
+      "fpNestedInLabel": 32,
+      "precisionExcludingNested": 0.6792452830188679,
+      "recallOnRulePassingGT": 0.48322147651006714,
+      "aspectError": {
+        "median": 0.01075738167521387,
+        "p95": 0.04929750432499273,
+        "n": 72
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.1026783033806495,
+        "p95": 0.45564664975045155,
+        "max": 0.8714421151172338,
+        "n": 72,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 55
+          },
+          {
+            "from": 0.25,
+            "count": 13
+          },
+          {
+            "from": 0.5,
+            "count": 3
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3299999999999983,
+        "p95": 2.438999999999999,
+        "n": 47
+      },
+      "subclassMismatches": 7,
+      "acceptedMeasuredAsProposed": {
+        "n": 76,
+        "of": 138
+      },
+      "subclassConfusion": {
+        "square": {
+          "square": 15,
+          "rectangle": 1
+        },
+        "circle": {
+          "circle": 23,
+          "ellipse": 2
+        },
+        "rectangle": {
+          "rectangle": 25,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 2
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 43,
+          "fp": 48,
+          "fn": 54
+        },
+        "ellipse": {
+          "tp": 29,
+          "fp": 18,
+          "fn": 27
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 50,
+          "fn": 61
+        },
+        "medium": {
+          "tp": 15,
+          "fn": 16
+        },
+        "large": {
+          "tp": 7,
           "fn": 4
         }
       },
       "acceptedPerImage": {
+        "n": 37,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.72972972972973
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 155.0,
+        "p25": 91.0,
+        "p75": 213.0,
+        "max": 440.0,
+        "mean": 154.97297297297297
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2137.0,
+        "p25": 1560.0,
+        "p75": 4032.0,
+        "max": 56769.0,
+        "mean": 5833.648648648648
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 2270.0,
+        "p25": 1704.0,
+        "p75": 4164.0,
+        "max": 56897.0,
+        "mean": 5971.459459459459
+      },
+      "runKey": "apple-vision|1|0a949c12c77b"
+    },
+    "apple-vision · file all/medium/all": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 72,
+      "fp": 66,
+      "fn": 81,
+      "duplicates": 10,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5217391304347826,
+      "recall": 0.47058823529411764,
+      "f1": 0.49484536082474223,
+      "precisionCI": [
+        0.43894037630479876,
+        0.6033603309630267
+      ],
+      "recallCI": [
+        0.393188812557957,
+        0.549428452249339
+      ],
+      "fpNestedInLabel": 32,
+      "precisionExcludingNested": 0.6792452830188679,
+      "recallOnRulePassingGT": 0.48322147651006714,
+      "aspectError": {
+        "median": 0.01075738167521387,
+        "p95": 0.04929750432499273,
+        "n": 72
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.1026783033806495,
+        "p95": 0.45564664975045155,
+        "max": 0.8714421151172338,
+        "n": 72,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 55
+          },
+          {
+            "from": 0.25,
+            "count": 13
+          },
+          {
+            "from": 0.5,
+            "count": 3
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3299999999999983,
+        "p95": 2.438999999999999,
+        "n": 47
+      },
+      "subclassMismatches": 7,
+      "acceptedMeasuredAsProposed": {
+        "n": 76,
+        "of": 138
+      },
+      "subclassConfusion": {
+        "square": {
+          "square": 15,
+          "rectangle": 1
+        },
+        "circle": {
+          "circle": 23,
+          "ellipse": 2
+        },
+        "rectangle": {
+          "rectangle": 25,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 2
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 43,
+          "fp": 48,
+          "fn": 54
+        },
+        "ellipse": {
+          "tp": 29,
+          "fp": 18,
+          "fn": 27
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 50,
+          "fn": 61
+        },
+        "medium": {
+          "tp": 15,
+          "fn": 16
+        },
+        "large": {
+          "tp": 7,
+          "fn": 4
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.72972972972973
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 155.0,
+        "p25": 91.0,
+        "p75": 213.0,
+        "max": 440.0,
+        "mean": 154.97297297297297
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2272.0,
+        "p25": 1651.0,
+        "p75": 4106.0,
+        "max": 57501.0,
+        "mean": 5979.378378378378
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 2402.0,
+        "p25": 1776.0,
+        "p75": 4237.0,
+        "max": 57632.0,
+        "mean": 6130.324324324324
+      },
+      "runKey": "apple-vision|1|630594b98ea9"
+    },
+    "apple-vision-register · 01e9cab7f08c": {
+      "detectorId": "apple-vision-register",
+      "labelledAssets": 33,
+      "assetsAll": 33,
+      "tp": 25,
+      "fp": 35,
+      "fn": 107,
+      "duplicates": 0,
+      "gtTotal": 132,
+      "gtTotalAll": 147,
+      "gtPassesRules": 128,
+      "precision": 0.4166666666666667,
+      "recall": 0.1893939393939394,
+      "f1": 0.2604166666666667,
+      "precisionCI": [
+        0.30064086487871833,
+        0.5427214568676039
+      ],
+      "recallCI": [
+        0.13170373049398293,
+        0.26465202503304264
+      ],
+      "fpNestedInLabel": 11,
+      "precisionExcludingNested": 0.5102040816326531,
+      "recallOnRulePassingGT": 0.1953125,
+      "aspectError": {
+        "median": 0.01159618008185541,
+        "p95": 0.056433196779942185,
+        "n": 25
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.18183959964759946,
+        "p95": 1.4823809230129195,
+        "max": 1.8709757881918179,
+        "n": 25,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 15
+          },
+          {
+            "from": 0.25,
+            "count": 5
+          },
+          {
+            "from": 0.5,
+            "count": 0
+          },
+          {
+            "from": 0.75,
+            "count": 3
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 1
+          },
+          {
+            "from": 1.75,
+            "count": 1
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 1.345000000000006,
+        "p95": 80.53799999999998,
+        "n": 8
+      },
+      "subclassMismatches": 4,
+      "acceptedMeasuredAsProposed": {
+        "n": 43,
+        "of": 60
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 16,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 3
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 1
+        },
+        "rectangle": {
+          "rectangle": 1,
+          "square": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 5,
+          "fp": 5,
+          "fn": 75
+        },
+        "ellipse": {
+          "tp": 20,
+          "fp": 30,
+          "fn": 32
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 11,
+          "fn": 82
+        },
+        "medium": {
+          "tp": 11,
+          "fn": 17
+        },
+        "large": {
+          "tp": 3,
+          "fn": 8
+        }
+      },
+      "acceptedPerImage": {
         "n": 33,
-        "median": 1.0,
+        "median": 2.0,
         "p25": 1.0,
         "p75": 3.0,
         "max": 4.0,
-        "mean": 1.696969696969697
+        "mean": 1.8181818181818181
       },
       "candidatesPerImage": {
         "n": 33,
@@ -1248,37 +2273,203 @@
       },
       "wallMs": null,
       "byProvenance": {
-        "captured": {
-          "tp": 10,
-          "fp": 12,
-          "n": 22
-        },
         "detected": {
-          "tp": 4,
-          "fp": 16,
-          "n": 20
+          "tp": 9,
+          "fp": 23,
+          "n": 32
+        },
+        "captured": {
+          "tp": 16,
+          "fp": 12,
+          "n": 28
         }
       },
-      "runKey": "apple-vision-register|1|1031ec098d94"
+      "runKey": "apple-vision-register|1|01e9cab7f08c"
+    },
+    "apple-vision-register · 26f7ceec831c": {
+      "detectorId": "apple-vision-register",
+      "labelledAssets": 33,
+      "assetsAll": 33,
+      "tp": 25,
+      "fp": 35,
+      "fn": 107,
+      "duplicates": 0,
+      "gtTotal": 132,
+      "gtTotalAll": 147,
+      "gtPassesRules": 128,
+      "precision": 0.4166666666666667,
+      "recall": 0.1893939393939394,
+      "f1": 0.2604166666666667,
+      "precisionCI": [
+        0.30064086487871833,
+        0.5427214568676039
+      ],
+      "recallCI": [
+        0.13170373049398293,
+        0.26465202503304264
+      ],
+      "fpNestedInLabel": 11,
+      "precisionExcludingNested": 0.5102040816326531,
+      "recallOnRulePassingGT": 0.1953125,
+      "aspectError": {
+        "median": 0.01159618008185541,
+        "p95": 0.056433196779942185,
+        "n": 25
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.18183959964759946,
+        "p95": 1.4823809230129195,
+        "max": 1.8709757881918179,
+        "n": 25,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 15
+          },
+          {
+            "from": 0.25,
+            "count": 5
+          },
+          {
+            "from": 0.5,
+            "count": 0
+          },
+          {
+            "from": 0.75,
+            "count": 3
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 1
+          },
+          {
+            "from": 1.75,
+            "count": 1
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 1.345000000000006,
+        "p95": 80.53799999999998,
+        "n": 8
+      },
+      "subclassMismatches": 4,
+      "acceptedMeasuredAsProposed": {
+        "n": 43,
+        "of": 60
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 16,
+          "ellipse": 1
+        },
+        "square": {
+          "square": 3
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 1
+        },
+        "rectangle": {
+          "rectangle": 1,
+          "square": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 5,
+          "fp": 5,
+          "fn": 75
+        },
+        "ellipse": {
+          "tp": 20,
+          "fp": 30,
+          "fn": 32
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 11,
+          "fn": 82
+        },
+        "medium": {
+          "tp": 11,
+          "fn": 17
+        },
+        "large": {
+          "tp": 3,
+          "fn": 8
+        }
+      },
+      "acceptedPerImage": {
+        "n": 33,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 4.0,
+        "mean": 1.8181818181818181
+      },
+      "candidatesPerImage": {
+        "n": 33,
+        "median": 2.0,
+        "p25": 2.0,
+        "p75": 4.0,
+        "max": 9.0,
+        "mean": 2.9393939393939394
+      },
+      "durationMs": {
+        "n": 33,
+        "median": 0.0,
+        "p25": 0.0,
+        "p75": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "wallMs": null,
+      "byProvenance": {
+        "detected": {
+          "tp": 9,
+          "fp": 23,
+          "n": 32
+        },
+        "captured": {
+          "tp": 16,
+          "fp": 12,
+          "n": 28
+        }
+      },
+      "runKey": "apple-vision-register|1|26f7ceec831c"
     }
   },
   "floorSweeps": {
-    "opencv-reference · 5cc92beb0d6e": {
+    "opencv-reference · dedupe 0.7": {
       "0.10": {
         "n": 35,
         "median": 2.0,
         "p25": 1.0,
-        "p75": 4.0,
-        "max": 9.0,
-        "mean": 2.7142857142857144
+        "p75": 3.0,
+        "max": 12.0,
+        "mean": 2.6857142857142855
       },
       "0.15": {
         "n": 35,
         "median": 1.0,
         "p25": 1.0,
         "p75": 2.0,
-        "max": 5.0,
-        "mean": 1.5714285714285714
+        "max": 8.0,
+        "mean": 1.6285714285714286
       },
       "0.20": {
         "n": 35,
@@ -1286,33 +2477,33 @@
         "p25": 0.5,
         "p75": 2.0,
         "max": 5.0,
-        "mean": 1.2571428571428571
+        "mean": 1.3142857142857143
       },
       "0.25": {
         "n": 35,
         "median": 1.0,
         "p25": 0.0,
         "p75": 1.0,
-        "max": 4.0,
-        "mean": 0.9428571428571428
+        "max": 3.0,
+        "mean": 0.9142857142857143
       }
     },
     "opencv-reference · dedupe 0.9": {
       "0.10": {
         "n": 35,
-        "median": 3.0,
+        "median": 2.0,
         "p25": 1.0,
         "p75": 4.0,
-        "max": 10.0,
-        "mean": 3.1714285714285713
+        "max": 13.0,
+        "mean": 3.1142857142857143
       },
       "0.15": {
         "n": 35,
         "median": 1.0,
         "p25": 1.0,
-        "p75": 3.0,
-        "max": 6.0,
-        "mean": 1.9142857142857144
+        "p75": 2.5,
+        "max": 9.0,
+        "mean": 1.9428571428571428
       },
       "0.20": {
         "n": 35,
@@ -1320,7 +2511,7 @@
         "p25": 0.5,
         "p75": 2.0,
         "max": 5.0,
-        "mean": 1.542857142857143
+        "mean": 1.5714285714285714
       },
       "0.25": {
         "n": 35,
@@ -1328,203 +2519,67 @@
         "p25": 0.0,
         "p75": 2.0,
         "max": 4.0,
-        "mean": 1.2
+        "mean": 1.1428571428571428
       }
     },
-    "apple-vision · file all/medium/all": {
+    "apple-vision · file all/medium/all -regions": {
       "0.10": {
-        "n": 24,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 2.0,
-        "max": 5.0,
-        "mean": 1.625
-      },
-      "0.15": {
-        "n": 24,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 2.0,
-        "max": 5.0,
-        "mean": 1.625
-      },
-      "0.20": {
-        "n": 24,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 1.25,
-        "max": 4.0,
-        "mean": 1.3333333333333333
-      },
-      "0.25": {
-        "n": 24,
-        "median": 1.0,
-        "p25": 0.0,
-        "p75": 1.0,
-        "max": 3.0,
-        "mean": 0.875
-      }
-    },
-    "apple-vision · file all/high/all": {
-      "0.10": {
-        "n": 32,
-        "median": 2.0,
-        "p25": 1.0,
-        "p75": 3.0,
-        "max": 5.0,
-        "mean": 2.0625
-      },
-      "0.15": {
-        "n": 32,
-        "median": 2.0,
-        "p25": 1.0,
-        "p75": 3.0,
-        "max": 5.0,
-        "mean": 2.0625
-      },
-      "0.20": {
-        "n": 32,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 3.0,
-        "max": 4.0,
-        "mean": 1.71875
-      },
-      "0.25": {
-        "n": 32,
-        "median": 1.0,
-        "p25": 0.0,
-        "p75": 1.0,
-        "max": 3.0,
-        "mean": 0.96875
-      }
-    },
-    "apple-vision · file all/low/all": {
-      "0.10": {
-        "n": 17,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 2.0,
-        "max": 5.0,
-        "mean": 1.6470588235294117
-      },
-      "0.15": {
-        "n": 17,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 2.0,
-        "max": 4.0,
-        "mean": 1.5294117647058822
-      },
-      "0.20": {
-        "n": 17,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 1.0,
-        "max": 4.0,
-        "mean": 1.2352941176470589
-      },
-      "0.25": {
-        "n": 17,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 1.0,
-        "max": 2.0,
-        "mean": 0.8235294117647058
-      }
-    },
-    "apple-vision · file all/medium/small": {
-      "0.10": {
-        "n": 11,
-        "median": 1.0,
-        "p25": 1.0,
-        "p75": 1.5,
-        "max": 2.0,
-        "mean": 1.2727272727272727
-      },
-      "0.15": {
-        "n": 11,
-        "median": 0.0,
-        "p25": 0.0,
-        "p75": 1.0,
-        "max": 1.0,
-        "mean": 0.45454545454545453
-      },
-      "0.20": {
-        "n": 11,
-        "median": 0.0,
-        "p25": 0.0,
-        "p75": 0.0,
-        "max": 0.0,
-        "mean": 0.0
-      },
-      "0.25": {
-        "n": 11,
-        "median": 0.0,
-        "p25": 0.0,
-        "p75": 0.0,
-        "max": 0.0,
-        "mean": 0.0
-      }
-    },
-    "apple-vision · file all/high/small": {
-      "0.10": {
-        "n": 29,
+        "n": 26,
         "median": 1.0,
         "p25": 1.0,
         "p75": 2.0,
         "max": 7.0,
-        "mean": 1.9655172413793103
+        "mean": 1.8076923076923077
       },
       "0.15": {
-        "n": 29,
+        "n": 26,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 7.0,
+        "mean": 1.7692307692307692
+      },
+      "0.20": {
+        "n": 26,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.3461538461538463
+      },
+      "0.25": {
+        "n": 26,
         "median": 1.0,
         "p25": 0.0,
         "p75": 1.0,
         "max": 3.0,
-        "mean": 0.8275862068965517
-      },
-      "0.20": {
-        "n": 29,
-        "median": 0.0,
-        "p25": 0.0,
-        "p75": 0.0,
-        "max": 0.0,
-        "mean": 0.0
-      },
-      "0.25": {
-        "n": 29,
-        "median": 0.0,
-        "p25": 0.0,
-        "p75": 0.0,
-        "max": 0.0,
-        "mean": 0.0
+        "mean": 0.8461538461538461
       }
     },
-    "apple-vision-register · 1031ec098d94": {
+    "apple-vision · file all/medium/all +regions": {
       "0.10": {
         "n": 26,
-        "median": 2.0,
+        "median": 1.5,
         "p25": 1.0,
-        "p75": 3.0,
-        "max": 4.0,
-        "mean": 2.1538461538461537
+        "p75": 2.75,
+        "max": 10.0,
+        "mean": 2.230769230769231
       },
       "0.15": {
         "n": 26,
-        "median": 2.0,
+        "median": 1.5,
         "p25": 1.0,
-        "p75": 3.0,
-        "max": 4.0,
-        "mean": 2.1538461538461537
+        "p75": 2.75,
+        "max": 10.0,
+        "mean": 2.1923076923076925
       },
       "0.20": {
         "n": 26,
-        "median": 2.0,
+        "median": 1.0,
         "p25": 1.0,
-        "p75": 3.0,
+        "p75": 2.0,
         "max": 4.0,
-        "mean": 1.9615384615384615
+        "mean": 1.6153846153846154
       },
       "0.25": {
         "n": 26,
@@ -1532,14 +2587,420 @@
         "p25": 1.0,
         "p75": 1.0,
         "max": 3.0,
-        "mean": 1.1538461538461537
+        "mean": 1.0384615384615385
+      }
+    },
+    "apple-vision · file all/medium/all -regions floor 0.100": {
+      "0.10": {
+        "n": 32,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 9.0,
+        "mean": 1.90625
+      },
+      "0.15": {
+        "n": 32,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 7.0,
+        "mean": 1.3125
+      },
+      "0.20": {
+        "n": 32,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 4.0,
+        "mean": 0.90625
+      },
+      "0.25": {
+        "n": 32,
+        "median": 0.5,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 2.0,
+        "mean": 0.5625
+      }
+    },
+    "apple-vision · file all/medium/all +regions floor 0.100": {
+      "0.10": {
+        "n": 33,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 17.0,
+        "mean": 2.515151515151515
+      },
+      "0.15": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 10.0,
+        "mean": 1.6363636363636365
+      },
+      "0.20": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.121212121212121
+      },
+      "0.25": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 2.0,
+        "mean": 0.7272727272727273
+      }
+    },
+    "apple-vision · file all/low/all -regions": {
+      "0.10": {
+        "n": 19,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 7.0,
+        "mean": 1.8421052631578947
+      },
+      "0.15": {
+        "n": 19,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 7.0,
+        "mean": 1.6842105263157894
+      },
+      "0.20": {
+        "n": 19,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 1.0,
+        "max": 4.0,
+        "mean": 1.2105263157894737
+      },
+      "0.25": {
+        "n": 19,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 2.0,
+        "mean": 0.7894736842105263
+      }
+    },
+    "apple-vision · file all/high/all -regions": {
+      "0.10": {
+        "n": 33,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 2.242424242424242
+      },
+      "0.15": {
+        "n": 33,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 2.212121212121212
+      },
+      "0.20": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 4.0,
+        "mean": 1.7575757575757576
+      },
+      "0.25": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 3.0,
+        "mean": 0.9696969696969697
+      }
+    },
+    "apple-vision · file all/low/all +regions floor 0.100": {
+      "0.10": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 17.0,
+        "mean": 2.4838709677419355
+      },
+      "0.15": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 10.0,
+        "mean": 1.6129032258064515
+      },
+      "0.20": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.1290322580645162
+      },
+      "0.25": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 2.0,
+        "mean": 0.8064516129032258
+      }
+    },
+    "apple-vision · file all/medium/all +regions regions@1024,2048 floor 0.100": {
+      "0.10": {
+        "n": 35,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 18.0,
+        "mean": 2.942857142857143
+      },
+      "0.15": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 11.0,
+        "mean": 2.0
+      },
+      "0.20": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.5,
+        "p75": 2.0,
+        "max": 6.0,
+        "mean": 1.4
+      },
+      "0.25": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 3.0,
+        "mean": 0.9428571428571428
+      }
+    },
+    "apple-vision · file all/medium/all -regions · 18af76": {
+      "0.10": {
+        "n": 27,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.5,
+        "max": 7.0,
+        "mean": 2.074074074074074
+      },
+      "0.15": {
+        "n": 27,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.5,
+        "max": 7.0,
+        "mean": 2.037037037037037
+      },
+      "0.20": {
+        "n": 27,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 5.0,
+        "mean": 1.6296296296296295
+      },
+      "0.25": {
+        "n": 27,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.1111111111111112
+      }
+    },
+    "apple-vision · file all/medium/all +regions floor 0.100 · 0a949c": {
+      "0.10": {
+        "n": 35,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.942857142857143
+      },
+      "0.15": {
+        "n": 35,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 17.0,
+        "mean": 2.742857142857143
+      },
+      "0.20": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.5,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 1.9428571428571428
+      },
+      "0.25": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.2857142857142858
+      }
+    },
+    "apple-vision · file all/medium/all": {
+      "0.10": {
+        "n": 35,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 26.0,
+        "mean": 3.942857142857143
+      },
+      "0.15": {
+        "n": 35,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 17.0,
+        "mean": 2.742857142857143
+      },
+      "0.20": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.5,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 1.9428571428571428
+      },
+      "0.25": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.2857142857142858
+      }
+    },
+    "apple-vision-register · 01e9cab7f08c": {
+      "0.10": {
+        "n": 27,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 4.0,
+        "mean": 2.2222222222222223
+      },
+      "0.15": {
+        "n": 27,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 4.0,
+        "mean": 2.2222222222222223
+      },
+      "0.20": {
+        "n": 27,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 4.0,
+        "mean": 2.0
+      },
+      "0.25": {
+        "n": 27,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 1.5,
+        "max": 3.0,
+        "mean": 1.1481481481481481
+      }
+    },
+    "apple-vision-register · 26f7ceec831c": {
+      "0.10": {
+        "n": 27,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 4.0,
+        "mean": 2.2222222222222223
+      },
+      "0.15": {
+        "n": 27,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 4.0,
+        "mean": 2.2222222222222223
+      },
+      "0.20": {
+        "n": 27,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 4.0,
+        "mean": 2.0
+      },
+      "0.25": {
+        "n": 27,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 1.5,
+        "max": 3.0,
+        "mean": 1.1481481481481481
       }
     }
   },
   "runs": {
+    "manual-groundtruth": {
+      "manual-groundtruth|1|e89f36e6cd43": {
+        "runAt": "2026-09-12T09:08:09Z",
+        "assets": 37,
+        "params": {
+          "labeller": "steven",
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          },
+          "tool": "label.html/1"
+        }
+      }
+    },
     "opencv-reference": {
-      "opencv-reference|1|5cc92beb0d6e": {
-        "runAt": "2026-09-11T19:32:01Z",
+      "opencv-reference|1|d7fa78344644": {
+        "runAt": "2026-09-12T06:30:10Z",
         "assets": 37,
         "params": {
           "detector": {
@@ -1575,11 +3036,15 @@
               2048
             ],
             "refine": {
+              "identity": "consensus",
               "pad": 0.08,
               "priorIoU": 0.8
             },
             "regionDedupe": {
               "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.7
             }
           },
           "rules": {
@@ -1606,8 +3071,8 @@
           }
         }
       },
-      "opencv-reference|1|6114968f7c78": {
-        "runAt": "2026-09-11T21:21:24Z",
+      "opencv-reference|1|a49d2b2eb28e": {
+        "runAt": "2026-09-12T07:45:38Z",
         "assets": 37,
         "params": {
           "detector": {
@@ -1643,6 +3108,7 @@
               2048
             ],
             "refine": {
+              "identity": "consensus",
               "pad": 0.08,
               "priorIoU": 0.8
             },
@@ -1679,14 +3145,702 @@
       }
     },
     "apple-vision": {
-      "apple-vision|1|93b8a04130a8": {
-        "runAt": "2026-09-11T19:35:28Z",
+      "apple-vision|1|294b1327db76": {
+        "runAt": "2026-09-12T06:39:40Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--no-regions"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "25db3bad125a",
+            "profile": "file all/medium/all -regions",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.7
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|dd1309823bbd": {
+        "runAt": "2026-09-12T06:42:52Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--regions"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "25db3bad125a",
+            "profile": "file all/medium/all +regions",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.7
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|aaa7ac724bca": {
+        "runAt": "2026-09-12T06:45:56Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--no-regions",
+              "--floor",
+              "0.10"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "25db3bad125a",
+            "profile": "file all/medium/all -regions floor 0.100",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.7
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|3a2071895eeb": {
+        "runAt": "2026-09-12T06:49:10Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--regions",
+              "--floor",
+              "0.10"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "25db3bad125a",
+            "profile": "file all/medium/all +regions floor 0.100",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.7
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|8c343ec8bc13": {
+        "runAt": "2026-09-12T06:50:41Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--no-regions",
+              "--sensitivity",
+              "low"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "25db3bad125a",
+            "profile": "file all/low/all -regions",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.7
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|fc8bfcfcf3dc": {
+        "runAt": "2026-09-12T06:53:54Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--no-regions",
+              "--sensitivity",
+              "high"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "25db3bad125a",
+            "profile": "file all/high/all -regions",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.7
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|40c7353f8987": {
+        "runAt": "2026-09-12T06:55:37Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--regions",
+              "--floor",
+              "0.10",
+              "--sensitivity",
+              "low"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "cb3ab25580f5",
+            "profile": "file all/low/all +regions floor 0.100",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.7
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|f7fef8b9a7bb": {
+        "runAt": "2026-09-12T06:59:42Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--regions",
+              "--floor",
+              "0.10",
+              "--region-edges",
+              "1024,2048"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "cb3ab25580f5",
+            "profile": "file all/medium/all +regions regions@1024,2048 floor 0.100",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.7
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|18af76fb2371": {
+        "runAt": "2026-09-12T07:48:41Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--no-regions"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "3d0aac8f599e",
+            "profile": "file all/medium/all -regions",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.9
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|0a949c12c77b": {
+        "runAt": "2026-09-12T07:52:39Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--regions",
+              "--floor",
+              "0.10"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "3d0aac8f599e",
+            "profile": "file all/medium/all +regions floor 0.100",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.9
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|630594b98ea9": {
+        "runAt": "2026-09-12T09:14:12Z",
         "assets": 37,
         "params": {
           "detector": {
             "flags": [],
             "kitDetectorVersion": 1,
-            "lapseSha256": "a9014db7ce25",
+            "lapseSha256": "861577c57e72",
             "profile": "file all/medium/all",
             "refine": {
               "adaptive": {
@@ -1711,278 +3865,12 @@
                 "mode": "RETR_CCOMP"
               },
               "refine": {
-                "pad": 0.08,
-                "priorIoU": 0.8
-              }
-            }
-          },
-          "rules": {
-            "borderPx": 2,
-            "ellipse": {
-              "circleRatio": 0.95,
-              "minAxisRatio": 0.4,
-              "minIoU": 0.9
-            },
-            "preFloor": 0.05,
-            "rect": {
-              "angleTolDeg": 8.0,
-              "approxEpsFrac": 0.02,
-              "minFill": 0.85,
-              "sideTol": 0.1,
-              "squareTol": 0.05
-            },
-            "size": {
-              "floor": 0.1,
-              "medium": 0.65,
-              "small": 0.35
-            },
-            "tieMargin": 0.02
-          }
-        }
-      },
-      "apple-vision|1|e84b1ac5b254": {
-        "runAt": "2026-09-11T21:35:03Z",
-        "assets": 37,
-        "params": {
-          "detector": {
-            "flags": [
-              "--sensitivity",
-              "high"
-            ],
-            "kitDetectorVersion": 1,
-            "lapseSha256": "a9014db7ce25",
-            "profile": "file all/high/all",
-            "refine": {
-              "adaptive": {
-                "C": 5,
-                "block": 51
-              },
-              "blur": 5,
-              "canny": {
-                "aperture": 3,
-                "loFrac": 0.5,
-                "minHi": 40,
-                "mode": "otsu"
-              },
-              "close": [
-                5,
-                9,
-                15
-              ],
-              "contours": {
-                "method": "CHAIN_APPROX_NONE",
-                "minPoints": 40,
-                "mode": "RETR_CCOMP"
-              },
-              "refine": {
+                "identity": "consensus",
                 "pad": 0.08,
                 "priorIoU": 0.8
               },
               "shapeDedupe": {
-                "iou": 0.7
-              }
-            }
-          },
-          "rules": {
-            "borderPx": 2,
-            "ellipse": {
-              "circleRatio": 0.95,
-              "minAxisRatio": 0.4,
-              "minIoU": 0.9
-            },
-            "preFloor": 0.05,
-            "rect": {
-              "angleTolDeg": 8.0,
-              "approxEpsFrac": 0.02,
-              "minFill": 0.85,
-              "sideTol": 0.1,
-              "squareTol": 0.05
-            },
-            "size": {
-              "floor": 0.1,
-              "medium": 0.65,
-              "small": 0.35
-            },
-            "tieMargin": 0.02
-          }
-        }
-      },
-      "apple-vision|1|a46af1118534": {
-        "runAt": "2026-09-11T21:36:33Z",
-        "assets": 37,
-        "params": {
-          "detector": {
-            "flags": [
-              "--sensitivity",
-              "low"
-            ],
-            "kitDetectorVersion": 1,
-            "lapseSha256": "a9014db7ce25",
-            "profile": "file all/low/all",
-            "refine": {
-              "adaptive": {
-                "C": 5,
-                "block": 51
-              },
-              "blur": 5,
-              "canny": {
-                "aperture": 3,
-                "loFrac": 0.5,
-                "minHi": 40,
-                "mode": "otsu"
-              },
-              "close": [
-                5,
-                9,
-                15
-              ],
-              "contours": {
-                "method": "CHAIN_APPROX_NONE",
-                "minPoints": 40,
-                "mode": "RETR_CCOMP"
-              },
-              "refine": {
-                "pad": 0.08,
-                "priorIoU": 0.8
-              },
-              "shapeDedupe": {
-                "iou": 0.7
-              }
-            }
-          },
-          "rules": {
-            "borderPx": 2,
-            "ellipse": {
-              "circleRatio": 0.95,
-              "minAxisRatio": 0.4,
-              "minIoU": 0.9
-            },
-            "preFloor": 0.05,
-            "rect": {
-              "angleTolDeg": 8.0,
-              "approxEpsFrac": 0.02,
-              "minFill": 0.85,
-              "sideTol": 0.1,
-              "squareTol": 0.05
-            },
-            "size": {
-              "floor": 0.1,
-              "medium": 0.65,
-              "small": 0.35
-            },
-            "tieMargin": 0.02
-          }
-        }
-      },
-      "apple-vision|1|9a41ed1d5446": {
-        "runAt": "2026-09-11T21:40:14Z",
-        "assets": 37,
-        "params": {
-          "detector": {
-            "flags": [
-              "--size",
-              "small"
-            ],
-            "kitDetectorVersion": 1,
-            "lapseSha256": "a9014db7ce25",
-            "profile": "file all/medium/small",
-            "refine": {
-              "adaptive": {
-                "C": 5,
-                "block": 51
-              },
-              "blur": 5,
-              "canny": {
-                "aperture": 3,
-                "loFrac": 0.5,
-                "minHi": 40,
-                "mode": "otsu"
-              },
-              "close": [
-                5,
-                9,
-                15
-              ],
-              "contours": {
-                "method": "CHAIN_APPROX_NONE",
-                "minPoints": 40,
-                "mode": "RETR_CCOMP"
-              },
-              "refine": {
-                "pad": 0.08,
-                "priorIoU": 0.8
-              },
-              "shapeDedupe": {
-                "iou": 0.7
-              }
-            }
-          },
-          "rules": {
-            "borderPx": 2,
-            "ellipse": {
-              "circleRatio": 0.95,
-              "minAxisRatio": 0.4,
-              "minIoU": 0.9
-            },
-            "preFloor": 0.05,
-            "rect": {
-              "angleTolDeg": 8.0,
-              "approxEpsFrac": 0.02,
-              "minFill": 0.85,
-              "sideTol": 0.1,
-              "squareTol": 0.05
-            },
-            "size": {
-              "floor": 0.1,
-              "medium": 0.65,
-              "small": 0.35
-            },
-            "tieMargin": 0.02
-          }
-        }
-      },
-      "apple-vision|1|5bfe31a210ca": {
-        "runAt": "2026-09-11T21:43:15Z",
-        "assets": 37,
-        "params": {
-          "detector": {
-            "flags": [
-              "--size",
-              "small",
-              "--sensitivity",
-              "high"
-            ],
-            "kitDetectorVersion": 1,
-            "lapseSha256": "a9014db7ce25",
-            "profile": "file all/high/small",
-            "refine": {
-              "adaptive": {
-                "C": 5,
-                "block": 51
-              },
-              "blur": 5,
-              "canny": {
-                "aperture": 3,
-                "loFrac": 0.5,
-                "minHi": 40,
-                "mode": "otsu"
-              },
-              "close": [
-                5,
-                9,
-                15
-              ],
-              "contours": {
-                "method": "CHAIN_APPROX_NONE",
-                "minPoints": 40,
-                "mode": "RETR_CCOMP"
-              },
-              "refine": {
-                "pad": 0.08,
-                "priorIoU": 0.8
-              },
-              "shapeDedupe": {
-                "iou": 0.7
+                "iou": 0.9
               }
             }
           },
@@ -2012,8 +3900,8 @@
       }
     },
     "apple-vision-register": {
-      "apple-vision-register|1|1031ec098d94": {
-        "runAt": "2026-09-11T19:35:28Z",
+      "apple-vision-register|1|01e9cab7f08c": {
+        "runAt": "2026-09-12T06:39:40Z",
         "assets": 33,
         "params": {
           "detector": {
@@ -2040,8 +3928,12 @@
                 "mode": "RETR_CCOMP"
               },
               "refine": {
+                "identity": "consensus",
                 "pad": 0.08,
                 "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.7
               }
             },
             "source": "library shapes.json"
@@ -2069,14 +3961,45 @@
             "tieMargin": 0.02
           }
         }
-      }
-    },
-    "manual-groundtruth": {
-      "manual-groundtruth|1|e89f36e6cd43": {
-        "runAt": "2026-09-11T21:16:10Z",
-        "assets": 25,
+      },
+      "apple-vision-register|1|26f7ceec831c": {
+        "runAt": "2026-09-12T09:14:12Z",
+        "assets": 33,
         "params": {
-          "labeller": "steven",
+          "detector": {
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.9
+              }
+            },
+            "source": "library shapes.json"
+          },
           "rules": {
             "borderPx": 2,
             "ellipse": {
@@ -2098,8 +4021,7 @@
               "small": 0.35
             },
             "tieMargin": 0.02
-          },
-          "tool": "label.html/1"
+          }
         }
       }
     }

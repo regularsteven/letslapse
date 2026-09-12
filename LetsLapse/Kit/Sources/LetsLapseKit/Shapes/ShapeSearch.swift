@@ -66,6 +66,18 @@ public struct ShapeSearch: Equatable, Sendable, Codable {
             }
         }
 
+        /// The file pass's floor. All reaches down to 0.10 of the short edge
+        /// there: against 68 hand-labelled shapes the 1/6 floor cost nine of
+        /// them for no precision (docs/shape-benchmark/report.md, 2026-09-12).
+        /// The viewfinder keeps 1/6 — at 384 px a 0.10 shape is 38 px, too
+        /// small to trace live.
+        public var fileFloor: Double {
+            switch self {
+            case .all: return 0.10
+            default: return range.lowerBound
+            }
+        }
+
         /// The viewfinder's detection resolution (long edge).
         public var liveLongEdge: Int {
             switch self {
@@ -101,6 +113,7 @@ public struct ShapeSearch: Equatable, Sendable, Codable {
         s.minNativeDiameterPx = 0
         s.edgeThresholds = []
         s.rectMaximumObservations = 12
+        s.regionProposals = false
         apply(to: &s, live: true)
         return s
     }
@@ -118,7 +131,8 @@ public struct ShapeSearch: Equatable, Sendable, Codable {
     private func apply(to s: inout ShapeDetector.Settings, live: Bool) {
         s.detectQuads = family != .circular
         s.detectEllipses = family != .rectangular
-        s.minDiameterFractionOfShortEdge = size.range.lowerBound
+        s.minDiameterFractionOfShortEdge = live ? size.range.lowerBound : size.fileFloor
+        if !live { s.minNativeDiameterPx = 0 }   // the fraction is the floor; 400 px would override 0.10 on a 12 MP frame
         s.maxDiameterFractionOfShortEdge = size.range.upperBound
         switch sensitivity {
         case .high:

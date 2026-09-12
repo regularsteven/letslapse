@@ -6,6 +6,13 @@ import CoreVideo
 /// The shape-sequence spike's self-test as a unit test: a known ellipse and a
 /// perspective quad drawn on a card must come back with their geometry, and
 /// the composer must put the shape where it says it does.
+/// The Vision machine on its own: the region pass has its own tests
+/// (`RegionProposalsTests`) and, unoptimised in a test build, costs ~50 s per
+/// picture at 1024 + 2048.
+private extension ShapeDetector.Settings {
+    var visionOnly: ShapeDetector.Settings { var s = self; s.regionProposals = false; return s }
+}
+
 final class ShapeDetectorTests: XCTestCase {
     private func card() -> (CGImage, CGPoint, Double, Double, Double, [CGPoint]) {
         let W = 3000, H = 2000
@@ -46,7 +53,7 @@ final class ShapeDetectorTests: XCTestCase {
 
     func testDetectorFindsCardShapes() throws {
         let (image, ec, ea, eb, er, quad) = card()
-        let shapes = try ShapeDetector().detect(in: image, nativeSize: CGSize(width: 3000, height: 2000))
+        let shapes = try ShapeDetector(settings: ShapeDetector.Settings().visionOnly).detect(in: image, nativeSize: CGSize(width: 3000, height: 2000))
         guard let ellipse = shapes.first(where: { $0.kind == .ellipse }) else { return XCTFail("no ellipse") }
         XCTAssertEqual(Double(ellipse.centre.x) * 3000, Double(ec.x), accuracy: 3)
         XCTAssertEqual(Double(ellipse.centre.y) * 2000, Double(ec.y), accuracy: 3)
@@ -246,9 +253,9 @@ final class ShapeDetectorTests: XCTestCase {
     func testSearchFamilySkipsTheOtherHalf() throws {
         let (image, _, _, _, _, _) = card()
         let native = CGSize(width: 3000, height: 2000)
-        let circular = try ShapeDetector(settings: ShapeSearch(family: .circular).fileSettings()).detect(in: image, nativeSize: native)
+        let circular = try ShapeDetector(settings: ShapeSearch(family: .circular).fileSettings().visionOnly).detect(in: image, nativeSize: native)
         XCTAssertEqual(circular.map(\.kind), [.ellipse])
-        let rectangular = try ShapeDetector(settings: ShapeSearch(family: .rectangular).fileSettings()).detect(in: image, nativeSize: native)
+        let rectangular = try ShapeDetector(settings: ShapeSearch(family: .rectangular).fileSettings().visionOnly).detect(in: image, nativeSize: native)
         XCTAssertFalse(rectangular.isEmpty)
         XCTAssertTrue(rectangular.allSatisfy { $0.kind == .quad })
     }
@@ -260,7 +267,7 @@ final class ShapeDetectorTests: XCTestCase {
         let (image, _, _, _, _, _) = card()
         let native = CGSize(width: 3000, height: 2000)
         func ellipses(_ size: ShapeSearch.Size) throws -> Int {
-            try ShapeDetector(settings: ShapeSearch(family: .circular, size: size).fileSettings())
+            try ShapeDetector(settings: ShapeSearch(family: .circular, size: size).fileSettings().visionOnly)
                 .detect(in: image, nativeSize: native).filter { $0.kind == .ellipse }.count
         }
         XCTAssertEqual(try ellipses(.all), 1)
@@ -272,6 +279,17 @@ final class ShapeDetectorTests: XCTestCase {
     /// The live mapping: the defaults are the shipped profile; Low is one
     /// contrast pass with tight gates, High three with loose ones; Large looks
     /// at 256 px, Small at 512.
+    /// The file pass's All floor is 0.10 of the short edge with no pixel
+    /// minimum; the viewfinder keeps 1/6.
+    func testSearchFileFloorIsATenthOfTheShortEdge() {
+        let file = ShapeSearch().fileSettings(), live = ShapeSearch().liveSettings()
+        XCTAssertEqual(file.minDiameterFractionOfShortEdge, 0.10, accuracy: 1e-9)
+        XCTAssertEqual(file.minNativeDiameterPx, 0)
+        XCTAssertEqual(live.minDiameterFractionOfShortEdge, 1.0 / 6.0, accuracy: 1e-9)
+        XCTAssertEqual(ShapeSearch(size: .mid).fileSettings().minDiameterFractionOfShortEdge, 1.0 / 6.0, accuracy: 1e-9)
+        XCTAssertEqual(ShapeSearch(size: .small).fileSettings().minDiameterFractionOfShortEdge, 1.0 / 12.0, accuracy: 1e-9)
+    }
+
     func testSearchLiveMapping() {
         let base = ShapeSearch().liveSettings()
         XCTAssertEqual(base.detectionLongEdge, 384)
@@ -347,7 +365,7 @@ final class ShapeDetectorTests: XCTestCase {
     func testEdgeCirclesFindTheRibbedMedallionAndRefuseTheArch() throws {
         let (image, centre, radius) = medallionCard()
         let native = CGSize(width: 2400, height: 1800)
-        for (name, settings) in [("file", ShapeSearch().fileSettings()), ("live", ShapeSearch().liveSettings())] {
+        for (name, settings) in [("file", ShapeSearch().fileSettings().visionOnly), ("live", ShapeSearch().liveSettings())] {
             let shapes = try ShapeDetector(settings: settings).detect(in: image, nativeSize: native)
             let ellipses = shapes.filter { $0.kind == .ellipse }
             guard let medallion = ellipses.first(where: { abs(Double($0.centre.x) * 2400 - centre.x) < 40 && abs(Double($0.centre.y) * 1800 - centre.y) < 40 })
@@ -364,6 +382,7 @@ final class ShapeDetectorTests: XCTestCase {
         let (image, _, _, _, _, _) = card()
         var strict = ShapeSearch(family: .circular, sensitivity: .low).fileSettings()
         strict.maxFitResidual = 0.0001   // nothing passes; every fit must say why
+        strict.regionProposals = false   // the Vision machine's own trail is under test
         let (shapes, diag) = try ShapeDetector(settings: strict).detectWithDiagnostics(in: image, nativeSize: CGSize(width: 3000, height: 2000))
         XCTAssertTrue(shapes.filter { $0.kind == DetectedShape.Kind.ellipse }.isEmpty)
         XCTAssertGreaterThan(diag.ellipseFits, 0)

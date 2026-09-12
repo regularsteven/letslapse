@@ -19,7 +19,7 @@ import numpy as np
 import overlay
 import schema
 from fitting import (MATCH, RULES, Region, bbox_iou, binary_maps, dedupe_shapes, fit_candidate,
-                     polygon_bbox, refine_region)
+                     measure, polygon_bbox)
 from imaging import check_dims, dims_of, load_bgr
 
 DETECTOR_VERSION = "1"
@@ -38,10 +38,12 @@ DEFAULT_PARAMS = {
     "regionDedupe": {"bboxIoU": 0.80},
     # a full-res contour replaces the proposal only when it is clearly the same
     # region; below this the proposal is measured as traced (refined: false)
-    "refine": {"pad": 0.08, "priorIoU": 0.80},
-    # within-detector dedupe: the consensus rule's IoU (0.70) merges concentric
-    # rings 8 % apart in radius; 0.70 was the first run, 0.90 keeps them apart
-    "shapeDedupe": {"iou": 0.70},
+    # refinement adds precision, never identity (fitting.measure)
+    "refine": {"pad": 0.08, "priorIoU": 0.80, "identity": "consensus"},
+    # within-detector dedupe. The consensus rule's IoU (0.70) merges concentric
+    # rings 8 % apart in radius; the policy is flat (every member of a nest is
+    # a shape, 2026-09-12), so only near-identical shapes merge: 0.90.
+    "shapeDedupe": {"iou": 0.90},
 }
 
 
@@ -108,8 +110,7 @@ def detect_image(bgr: np.ndarray, params: dict, rules=RULES) -> tuple[list, dict
     t_prop = time.perf_counter()
     rows, accepted = [], []
     for r in regions:
-        r2 = refine_region(gray, r, params)
-        v = fit_candidate(r2, W, H, rules)
+        r2, v = measure(gray, r, params, W, H, rules)
         row = {k: v[k] for k in ("source", "refined", "nPoints", "contourExtent", "extentRatio", "sizeBand",
                                  "accepted", "primitive", "subclass", "winner", "rectScore", "ellipseScore",
                                  "reasons", "prior")}

@@ -20,7 +20,7 @@ import numpy as np
 
 import overlay
 import schema
-from fitting import MATCH, RULES, match_details, size_band
+from fitting import MATCH, RULES, match_details, polygon_bbox, shape_outline_px, size_band
 from imaging import load_bgr
 
 GATE = [(6, "≤ 6 → geometry alone is sufficient for photo mode; no AI ranking layer"),
@@ -160,7 +160,7 @@ def evaluate_detector(det_id, run_slot, gt_slot, manifest, floor, match=MATCH):
     by_id = {a["assetId"]: a for a in manifest["assets"]}
     gt_assets = gt_slot["assets"] if gt_slot else {}
     labelled = {aid for aid, a in gt_assets.items() if (a.get("stats") or {}).get("done", True)}
-    res = {"detectorId": det_id, "tp": 0, "fp": 0, "fn": 0, "duplicates": 0, "gtTotal": 0, "gtTotalAll": 0,
+    res = {"detectorId": det_id, "tp": 0, "fp": 0, "fn": 0, "fpNestedInLabel": 0, "duplicates": 0, "gtTotal": 0, "gtTotalAll": 0,
            "gtPassesRules": 0, "tpPassesRules": 0,
            "byPrimitive": defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0}),
            "byBand": defaultdict(lambda: {"tp": 0, "fn": 0}),
@@ -204,6 +204,19 @@ def evaluate_detector(det_id, run_slot, gt_slot, manifest, floor, match=MATCH):
         res["fp"] += len(m["fp"])
         res["fn"] += len(m["fn"])
         res["duplicates"] += m["duplicates"]
+        # Flat policy (2026-09-12): every member of a nest is a target, so a
+        # detection nested inside a labelled shape that nobody labelled is a
+        # label omission, not a detector error. Counted apart so both readings
+        # of precision are on the table.
+        gt_boxes = [polygon_bbox(shape_outline_px(g, W, H)) for g in gt_all]
+        for i in m["fp"]:
+            b = polygon_bbox(shape_outline_px(det[i], W, H))
+            for gb in gt_boxes:
+                slack = 0.03 * max(gb[2] - gb[0], gb[3] - gb[1])
+                if b[0] >= gb[0] - slack and b[1] >= gb[1] - slack and b[2] <= gb[2] + slack and b[3] <= gb[3] + slack \
+                        and (b[2] - b[0]) * (b[3] - b[1]) < 0.95 * (gb[2] - gb[0]) * (gb[3] - gb[1]):
+                    res["fpNestedInLabel"] += 1
+                    break
         for mm in m["matched"]:
             g, d = gt[mm["gt"]], det[mm["det"]]
             res["byPrimitive"][g["primitive"]]["tp"] += 1
@@ -252,6 +265,8 @@ def summarise(res: dict) -> dict:
         "gtTotalAll": res["gtTotalAll"], "gtPassesRules": res["gtPassesRules"],
         "precision": prec, "recall": rec, "f1": f1,
         "precisionCI": wilson(tp, tp + fp), "recallCI": wilson(tp, tp + fn),
+        "fpNestedInLabel": res["fpNestedInLabel"],
+        "precisionExcludingNested": (tp / (tp + fp - res["fpNestedInLabel"])) if tp + fp - res["fpNestedInLabel"] else None,
         "recallOnRulePassingGT": (res["tpPassesRules"] / res["gtPassesRules"]) if res["gtPassesRules"] else None,
         "aspectError": {"median": med(res["aspectErrors"]), "p95": q(res["aspectErrors"], 95), "n": len(res["aspectErrors"])},
         "centreOffsetPctDiag": {"median": med(res["offsetsPct"]), "p95": q(res["offsetsPct"], 95),
@@ -357,8 +372,8 @@ def write_report(path, manifest, chosen, all_runs, summaries, sweeps, floor, gat
     L.append("")
     L.append("## Detectors vs ground truth")
     L.append("")
-    L.append("| detector | labelled | GT (≥ floor) | TP | FP | FN | precision | recall | F1 | recall on rule-passing GT | aspect err med / p95 | centre offset med / p95 (% diag) | orientation err med (°) | subclass mismatches | measured as proposed | accepted/img med (p25–p75, max) | candidates/img med | ms/img med |")
-    L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    L.append("| detector | labelled | GT (≥ floor) | TP | FP | FN | precision | recall | F1 | recall on rule-passing GT | aspect err med / p95 | centre offset med / p95 (% diag) | orientation err med (°) | subclass mismatches | measured as proposed | FP nested in a label (precision without them) | accepted/img med (p25–p75, max) | candidates/img med | ms/img med |")
+    L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for det, s in summaries.items():
         ae, co, oe = s["aspectError"], s["centreOffsetPctDiag"], s["orientationErrorDeg"]
         acc, cand, dur = s["acceptedPerImage"], s["candidatesPerImage"], s["durationMs"]
@@ -368,6 +383,7 @@ def write_report(path, manifest, chosen, all_runs, summaries, sweeps, floor, gat
                  f"{fmt(s['recallOnRulePassingGT'], pct=True)} | {fmt(ae['median'], pct=True)} / {fmt(ae['p95'], pct=True)}{p95_note} | "
                  f"{fmt(co['median'], 2)} / {fmt(co['p95'], 2)} | {fmt(oe['median'], 1)} (n={oe['n']}) | {s['subclassMismatches']} | "
                  f"{s['acceptedMeasuredAsProposed']['n']} of {s['acceptedMeasuredAsProposed']['of']} | "
+                 f"{s['fpNestedInLabel']} ({fmt(s['precisionExcludingNested'], pct=True)}) | "
                  f"{fmt(acc['median'], 1)} ({fmt(acc['p25'], 0)}–{fmt(acc['p75'], 0)}, {fmt(acc['max'], 0)}) | "
                  f"{fmt(cand['median'], 1)} | {fmt(dur['median'], 0)} |")
     L.append("")
@@ -456,7 +472,7 @@ def write_overlays(work, manifest, results, docs_dir=None):
     os.makedirs(comb_dir, exist_ok=True)
     per_det_dir = {}
     for det in results:
-        safe = "".join(ch if (ch.isalnum() or ch in "-._") else "-" for ch in det).strip("-")
+        safe = "".join(ch if (ch.isalnum() or ch in "-._") else ("plus" if ch == "+" else "-") for ch in det).strip("-")
         per_det_dir[det] = os.path.join(work, "overlays", f"{safe}.vs-gt")
         os.makedirs(per_det_dir[det], exist_ok=True)
     labelled = set()
@@ -527,6 +543,8 @@ def run(args) -> int:
             todo.append((det, key))
     for det, key in todo:
         label = run_label(det, key, all_runs[det], all_mode)
+        if label in summaries:   # the same profile from a different binary or parameter set
+            label += " · " + key.split("|")[-1][:6]
         res = evaluate_detector(det, all_runs[det][key], gt_slot, manifest, floor)
         results[label] = res
         s = summarise(res)

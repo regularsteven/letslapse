@@ -11,6 +11,74 @@ live inline.
 
 ## Open
 
+### Server as the source of truth — sync-ready records (Part 3 of the data-model audit)
+
+**Detail:** [data-model-server-portability-2026-09-12.md](data-model-server-portability-2026-09-12.md) ·
+**Raised:** 2026-09-12 (Steven: a Lightroom alternative with its own cloud;
+records canonical on the server, originals moving between devices, previews
+everywhere) · **AUDIT DONE 2026-09-12, no implementation** · large; the client
+half (phases 1–5) precedes any server
+
+Verdict: today's model cannot sync (no cross-device id, no revisions, delete =
+folder removal, path-keyed thumbnails); the Parts 1–2 model can, with five
+additions — revisions + tombstones on every edit-class record, a per-device
+NDJSON change journal behind ONE `apply(change)` funnel (the 35 persist sites),
+asset keys `(originID, fileName)` + SHA-256 content hash, presence tiers
+original / proxy / preview per device, and a class for every store (capture
+fact · edit · derived · cache · device state). One metadata edit moves a few
+hundred bytes: journal line → server revision + feed → each client rewrites
+one project's asset record and one index row; no media, renders or caches.
+Two brief constraints change and are listed as Steven's decisions: per-field
+last-writer-wins for metadata/grades with a server lease only for structural
+edits; server canonical for records, client canonical for the bytes it holds.
+Also: `metadata.json` + `assets.ndjson` per project, folder = `originID` for
+synced projects, the LAN transfer kept as the originals transport, and a
+journal-replay test that reproduces the materialised files byte for byte.
+
+**Decisions taken 2026-09-12 (Part 3 §10):** conflicts = per-field LWW + lease
+for structural edits; the server owns originals once a device is signed in,
+devices hold storage-sized leases and evict to previews only after the server
+confirms the bytes by hash; folder = originID for server-arrived projects only,
+existing folders never renamed; previews made by the last device to edit
+(needs an original or proxy); Lightroom retired after a verified one-time
+migration with its folders pinned until then; accounts = Laravel auth (Sign in
+with Apple + email), offline use allowed, one account per device, sign-out
+refused until originals are confirmed, plain quota, sharing in v2. **Build
+order (§12):** local phases 1–5 first, server-ready but standalone; the server
+is milestone 6. **Phase 1 spec written 2026-09-12:**
+[data-model-phase1-spec-2026-09-12.md](data-model-phase1-spec-2026-09-12.md)
+— twelve work items (`lapse audit` first, then identity + manifest v4 as a
+JSON-level migration in the Kit, one version-gated persister, the
+undecodable-manifest guard, tombstones + `Projects/.trash/`, revision stamps,
+whole-file SHA-256 into per-project `assets.ndjson`, project id minted at run
+start so `capture_log.json.sessionID` = origin id, the experiment log as NDJSON),
+with Kit tests and a before/after audit on both real libraries. Not started.
+
+### Asset metadata (IPTC Core), the index at scale, and the Lightroom catalogue
+
+**Detail:** [data-model-scale-and-metadata-2026-09-12.md](data-model-scale-and-metadata-2026-09-12.md)
+(Part 2 of the data-model audit) · **Raised:** 2026-09-12 (Steven) · **AUDIT
+DONE 2026-09-12, no implementation** · large (metadata + panel + index + import
+tool), with a design-first pass owed for the Gallery panel
+
+Steven's brief: user-editable metadata in the Gallery's right-hand panel
+(title, caption, copyright, creator, rating, copyright status and URLs,
+contact address through website), imported from files that carry it, camera
+and GPS preserved; sustainability at 100k–1M projects; the Lightroom
+catalogue migrated in. Findings: the field list IS IPTC Core in XMP, and every
+example file's descriptive metadata already survives an import on disk but
+nothing reads or shows it; the Lightroom catalogue holds 13,532 images of
+which 72 % are frames of LetsLapse projects already on the volume, so
+per-asset records are the migration itself; a JSON index is measured fine to
+~10k projects and fails on a phone by 100k (367 MB resident) and on the Mac by
+1M (4.4 s decode, 2 GB), while SQLite answers everything in < 5 ms at 1M.
+Recommendation: per-asset `metadata.json` with an `imported` and an `edited`
+layer and one XMP mapping table in the Kit; tags become keywords; the index
+becomes SQLite (a rebuildable cache — the truth stays in per-project JSON);
+`Projects/` stays flat because Lightroom's root folders point into it; a
+read-only `lapse import-lightroom` tool that attaches per-frame metadata to
+existing projects and creates Photo projects for the ~3,800 standalone images.
+
 ### Shape-mation · Match, Sort and Timing — shipped 2026-09-11, owed follow-ups
 
 **Raised:** 2026-09-11 · **Size:** small (what is left)
@@ -234,10 +302,16 @@ map the SHAPES/SENSITIVITY/SIZE dials onto the §3 bands and thresholds, and kee
 Masks tab, Gallery SHAPES rows and the Shape-mation builder reading one chosen run
 (a "which run" choice on Find shapes needs its two SVG mirrors updated). **The decision landed
 2026-09-11 evening** (`docs/shape-benchmark/report.md`): no ranking layer — the §3 rules + size
-floor accept a median of 2 shapes per picture; the gap is recall (56 % for the geometric
-reference, 16 % for today's Find-shapes pass against 68 hand labels), on ornate rims and nested
-shapes. Next lever is proposal (an honestly-measured Hough rim pass benchmarked as a run block),
-then this adoption.
+floor accept a median of 2 shapes per picture; the gap is recall (57 % for the geometric
+reference, 19 % for the shipped Find-shapes pass against 68 hand labels), on ornate rims and nested
+shapes. **2026-09-12: the reference's proposal maps are ported into the still-photo pass**
+(`Kit/…/Shapes/RegionProposals.swift`, on by default in the file profile, off live): with the
+floor at 0.10 of the short edge and the **flat nest policy** (decided 2026-09-12: every member is
+a shape, Shape-mation takes the biggest — merging is near-identical only, `sameShapeIoU` 0.9) the
+Kit passes the reference: on the completed 37-picture / 153-label set 72 hits against the
+reference's 66 (recall 47 % vs 43 %, precision 52 % vs 61 %). SIZE = All's file floor is 0.10
+of the short edge (decided 2026-09-12). Next: commit, a phone run (time, heat, old registers
+still open), then this adoption.
 
 
 ### Shape-mation — from spike to feature: timing, accuracy, design mirrors, collections

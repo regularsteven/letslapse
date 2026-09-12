@@ -550,6 +550,57 @@ def fit_candidate(region: Region, W: int, H: int, rules=RULES) -> dict:
     return v
 
 
+def _shape_for_identity(v: dict, W: int, H: int, rules=RULES):
+    """The shape a verdict describes, accepted or not: the accepted shape, else
+    one built from the winning fit's geometry (a rectangle needs its four
+    vertices), else None."""
+    if v.get("shape"):
+        return v["shape"]
+    r, e = v.get("rect"), v.get("ellipse")
+    order = [v.get("winner")] + [p for p in ("rectangle", "ellipse") if p != v.get("winner")]
+    for prim in order:
+        try:
+            if prim == "rectangle" and r and r.get("vertices") is not None and r.get("nVertices") == 4:
+                return serialise_shape("rectangle", r, W, H, 0.0, "small", rules)
+            if prim == "ellipse" and e and e.get("a"):
+                return serialise_shape("ellipse", e, W, H, 0.0, "small", rules)
+        except (KeyError, TypeError, ValueError):
+            continue
+    return None
+
+
+def measure(gray: np.ndarray, region: Region, params: dict, W: int, H: int, rules=RULES):
+    """One region → (region measured, verdict). Refinement adds precision and
+    never identity: the full-resolution contour's verdict stands only if the
+    shape it describes matches the proposal's own fit under the consensus
+    rule (same primitive, centre within 2 % of the diagonal, IoU ≥ 0.7, aspect
+    within 10 %). Otherwise the proposal is measured as traced or proposed
+    (refined=False, provenance.refineRejected). Found 2026-09-12: a Kit quad
+    on an enamel plate, right to 1.5 % in aspect, was replaced by a 0.93-IoU
+    contour of plate-plus-frame and scored as a miss."""
+    refined = refine_region(gray, region, params)
+    if not refined.refined:
+        return refined, fit_candidate(refined, W, H, rules)
+    v_ref = fit_candidate(refined, W, H, rules)
+    v_prior = fit_candidate(region, W, H, rules)
+    sa, sb = _shape_for_identity(v_prior, W, H, rules), _shape_for_identity(v_ref, W, H, rules)
+    if sa is None or sb is None:
+        return refined, v_ref
+    m = match_details(sa, sb, W, H)
+    if m["ok"]:
+        return refined, v_ref
+    kept = Region(pts=region.pts, source=region.source, from_contour=region.from_contour, refined=False,
+                  scale=region.scale, prior=dict(region.prior))
+    kept.prior["refineIoU"] = refined.prior.get("refineIoU")
+    kept.prior["refineMap"] = refined.prior.get("refineMap")
+    kept.prior["refineRejected"] = ("different primitive" if not m["samePrimitive"] else
+                                    f"aspect {m['aspectError'] * 100:.0f}%" if m["aspectError"] > MATCH["aspectTol"] else
+                                    f"centre {m['offsetPctDiag']:.1f}% diag" if m["offsetPctDiag"] > MATCH["centrePctDiag"] else
+                                    f"IoU {m['iou']:.2f}")
+    v = fit_candidate(kept, W, H, rules)
+    return kept, v
+
+
 # --- converters -----------------------------------------------------------
 
 def _xy(p):
