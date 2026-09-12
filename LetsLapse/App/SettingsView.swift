@@ -62,6 +62,7 @@ struct SettingsView: View {
     /// whether the next shoot fits, which the library's own total never could.
     @State private var freeBytes: Int64?
     @State private var isClearingCache = false
+    @State private var isEmptyingTrash = false
     @State private var showIncompleteCaptures = false
     @State private var customFrameRateText = RecordingSettingsStore.customFrameRate.map(String.init) ?? ""
     #if os(iOS)
@@ -732,6 +733,24 @@ struct SettingsView: View {
                         legendDot(color: Color.secondary.opacity(0.35), label: "Cache \(LLFormat.bytes(storage.cacheBytes))")
                     }
                 }
+
+                // W9: deleted projects, blends and collection renders wait
+                // here for 30 days (or Empty trash below) — its own line, so
+                // the library figure above is explained rather than padded.
+                if model.trashItemCount > 0 || (storage?.trashBytes ?? 0) > 0 {
+                    Divider()
+                    HStack {
+                        Text("Trash")
+                            .font(.system(size: 16))
+                        Text(model.trashItemCount == 1 ? "1 item" : "\(model.trashItemCount) items")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(storage.map { LLFormat.bytes($0.trashBytes) } ?? "…")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 13)
@@ -768,8 +787,39 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
             .disabled(isClearingCache || (storage?.cacheBytes ?? 0) == 0)
+
+            if model.trashItemCount > 0 || (storage?.trashBytes ?? 0) > 0 {
+                Button {
+                    emptyTrash()
+                } label: {
+                    LLRow(
+                        title: isEmptyingTrash
+                            ? "Emptying…"
+                            : "Empty trash\(storage.map { " (\(LLFormat.bytes($0.trashBytes)))" } ?? "")",
+                        titleColor: LL.accent,
+                        showsDivider: false
+                    ) {
+                        EmptyView()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isEmptyingTrash)
+            }
         }
         .llCard()
+    }
+
+    private func emptyTrash() {
+        isEmptyingTrash = true
+        Task {
+            await model.emptyTrash()
+            await refreshFreeSpace()
+            if let walked = await model.computeLibraryStorage() {
+                storage = walked
+            }
+            isEmptyingTrash = false
+        }
     }
 
     /// Under 2 GB is roughly a minute of 4K or a dozen RAW stills — little

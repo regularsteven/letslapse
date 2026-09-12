@@ -198,6 +198,10 @@ struct LapseCollection: Identifiable, Codable, Equatable {
     var lastExport: ExportRecord?
     /// nil until Ken Burns is first turned on.
     var kenBurns: KenBurnsSettings?
+    /// The tombstone (Phase 1 W9) — see `AppModel.CaptureProject.deletedAt`.
+    /// The render folder moves to `Projects/.trash/collections/<id>/`.
+    var deletedAt: Date?
+    var deletedBy: UUID?
 
     init(id: UUID = UUID(), name: String, createdAt: Date = Date(), ratioRaw: String? = nil,
          entries: [Entry] = [], lastExport: ExportRecord? = nil, kenBurns: KenBurnsSettings? = nil) {

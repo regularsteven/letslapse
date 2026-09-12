@@ -226,6 +226,13 @@ final class AppModel: ObservableObject {
         /// not a derivation), so this is the link that survives an import
         /// where `dng-archive.json` does not.
         var derivedFromOriginID: UUID?
+        /// The tombstone (Phase 1 W9): set when a person deleted the project.
+        /// The record stays in the manifest — split into `deletedCaptures`
+        /// on load, so every list, export and transfer keeps excluding it —
+        /// and the folder sits in `Projects/.trash/<id>/` until purged.
+        var deletedAt: Date?
+        /// Which install deleted it (`DeviceIdentity.id`).
+        var deletedBy: UUID?
         /// When this project arrived in THIS library — shot here, imported
         /// from a file, or received from another device.
         ///
@@ -497,6 +504,10 @@ final class AppModel: ObservableObject {
         /// the sliced animation and the poster, never on the regular clip a
         /// sliced run keeps alongside them. Absent everywhere else.
         var timeSlice: TimeSliceSettings?
+        /// The tombstone (W9) — see `CaptureProject.deletedAt`. The output
+        /// file moves to `.trash/<captureID>/blends/`.
+        var deletedAt: Date?
+        var deletedBy: UUID?
 
         /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
         var sourceCodecLabel: String? {
@@ -868,6 +879,12 @@ final class AppModel: ObservableObject {
     @Published var source: Source?
     @Published var errorMessage: String?
     @Published private(set) var captures: [CaptureProject] = []
+    /// The tombstoned records (W9): in the manifest, out of every list. Their
+    /// files sit under `Projects/.trash/` until Empty trash or the 30-day
+    /// purge removes both.
+    @Published private(set) var deletedCaptures: [CaptureProject] = []
+    @Published private(set) var deletedBlends: [BlendProject] = []
+    @Published private(set) var deletedCollections: [LapseCollection] = []
     @Published private(set) var blends: [BlendProject] = []
     @Published private(set) var collections: [LapseCollection] = []
     /// Per-project `shapes.json` summaries for the Gallery's Shapes rows,
@@ -1251,6 +1268,7 @@ final class AppModel: ObservableObject {
             // activity brackets keep current.
             return self?.libraryBusyForBackfill ?? false
         }
+        sweepTrashAtLaunch()
         scheduleAssetBackfill()
         // The Adjust and Guided previews level their source frames the way
         // the render will; they learn the current project's level from here.
@@ -1768,6 +1786,20 @@ final class AppModel: ObservableObject {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         let sourceFolder = captureFolderURL(for: capture.id).appendingPathComponent("source")
         let base = String(format: "frame-%05d", number)
+        // Persist first (W9): the manifest stops naming the page before its
+        // files go, so a kill in between leaves an unlisted file, never a
+        // listed one that is missing.
+        captures[index].sourceFileNames.removeAll { name in
+            (name as NSString).lastPathComponent.hasPrefix("\(base).")
+        }
+        // A person changed this project — see CaptureProject.modifiedAt.
+        captures[index].modifiedAt = Date()
+        do {
+            try persistLibrary()
+        } catch {
+            errorMessage = "Couldn't delete that page: \(error.localizedDescription)"
+            return
+        }
         var removed: [URL] = []
         for name in ["\(base).heic", "\(base).jpg", "\(base).jpeg", "\(base).dng",
                      "\(base)\(PerspectiveCorrector.correctedSuffix).heic"] {
@@ -1778,12 +1810,6 @@ final class AppModel: ObservableObject {
         }
         // The sidecar counts from 0 where the files count from 1.
         try? FrameTimestamps.deleteEntry(frame: number - 1, in: sourceFolder)
-        captures[index].sourceFileNames.removeAll { name in
-            (name as NSString).lastPathComponent.hasPrefix("\(base).")
-        }
-        // A person changed this project — see CaptureProject.modifiedAt.
-        captures[index].modifiedAt = Date()
-        try? persistLibrary()
         ProjectThumbnailCache.shared.invalidate(urls: removed)
         invalidateScannerCache(for: capture.id)
         // The frame count and the sidecar both changed under the cached axis.
@@ -1821,20 +1847,66 @@ final class AppModel: ObservableObject {
             throw LibraryDeletionError.activeCapture
         }
 
-        let folder = captureFolderURL(for: capture.id)
-        if FileManager.default.fileExists(atPath: folder.path) {
-            try FileManager.default.removeItem(at: folder)
+        // W9: the record is tombstoned and on disk BEFORE a file moves, and
+        // the folder goes to `.trash` rather than away — reversible, and a
+        // kill between the two leaves a tombstone the launch sweep finishes.
+        let now = Date()
+        var tombstone = captures.first { $0.id == capture.id } ?? capture
+        tombstone.deletedAt = now
+        tombstone.deletedBy = DeviceIdentity.id
+        let removedBlends = blends.filter { $0.captureID == capture.id }.map { blend -> BlendProject in
+            var stamped = blend
+            stamped.deletedAt = now
+            stamped.deletedBy = DeviceIdentity.id
+            return stamped
         }
-
-        let removedBlendIDs = Set(blends.filter { $0.captureID == capture.id }.map(\.id))
+        let previousCollections = collections
         captures.removeAll { $0.id == capture.id }
         blends.removeAll { $0.captureID == capture.id }
-        removeCollectionEntries(blendIDs: removedBlendIDs)
-        try persistLibrary()
+        deletedCaptures.append(tombstone)
+        deletedBlends.append(contentsOf: removedBlends)
+        removeCollectionEntries(blendIDs: Set(removedBlends.map(\.id)))
+        do {
+            try persistAndWait(reason: .filesChanged)
+        } catch {
+            // Not saved → not deleted. The lists go back exactly as they were.
+            deletedCaptures.removeAll { $0.id == capture.id }
+            deletedBlends.removeAll { $0.captureID == capture.id }
+            captures.append(tombstone.undeleted)
+            captures.sort { $0.createdAt > $1.createdAt }
+            blends.append(contentsOf: removedBlends.map(\.undeleted))
+            blends.sort { $0.createdAt > $1.createdAt }
+            collections = previousCollections
+            throw error
+        }
+
+        let folder = captureFolderURL(for: capture.id)
+        if FileManager.default.fileExists(atPath: folder.path) {
+            try moveToTrash(folder, as: trashURL.appendingPathComponent(capture.id.uuidString, isDirectory: true))
+        }
+        assetStore.forget(projectFolder: folder)
 
         if currentCaptureID == capture.id {
             reset()
         }
+    }
+
+    /// `Projects/.trash/` — deleted projects (`<id>/`), deleted blend outputs
+    /// (`<captureID>/blends/<file>`) and deleted collection renders
+    /// (`collections/<id>/`), until Empty trash or the 30-day purge.
+    var trashURL: URL {
+        projectsRootURL.appendingPathComponent(".trash", isDirectory: true)
+    }
+
+    /// Moves an item into the trash, replacing anything already at the
+    /// destination (a folder deleted, restored by hand and deleted again).
+    private func moveToTrash(_ item: URL, as destination: URL) throws {
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: item, to: destination)
     }
 
     func deleteBlend(_ blend: BlendProject) throws {
@@ -1847,14 +1919,31 @@ final class AppModel: ObservableObject {
             throw LibraryDeletionError.unsafeBlendPath
         }
 
-        if FileManager.default.fileExists(atPath: output.path) {
-            try FileManager.default.removeItem(at: output)
-        }
-
+        // W9: tombstone first, on disk, then the file to `.trash`.
+        var tombstone = blends.first { $0.id == blend.id } ?? blend
+        tombstone.deletedAt = Date()
+        tombstone.deletedBy = DeviceIdentity.id
+        let previousCollections = collections
         blends.removeAll { $0.id == blend.id }
+        deletedBlends.append(tombstone)
         markEdited(blend.captureID)
         removeCollectionEntries(blendIDs: [blend.id])
-        try persistLibrary()
+        do {
+            try persistAndWait(reason: .filesChanged)
+        } catch {
+            deletedBlends.removeAll { $0.id == blend.id }
+            blends.append(tombstone.undeleted)
+            blends.sort { $0.createdAt > $1.createdAt }
+            collections = previousCollections
+            throw error
+        }
+
+        if FileManager.default.fileExists(atPath: output.path) {
+            try moveToTrash(output, as: trashURL
+                .appendingPathComponent(blend.captureID.uuidString, isDirectory: true)
+                .appendingPathComponent("blends", isDirectory: true)
+                .appendingPathComponent(output.lastPathComponent))
+        }
 
         let blendsFolder = output.deletingLastPathComponent()
         if (try? FileManager.default.contentsOfDirectory(atPath: blendsFolder.path).isEmpty) == true {
@@ -1913,11 +2002,108 @@ final class AppModel: ObservableObject {
     }
 
     func deleteCollection(_ id: UUID) {
-        guard collections.contains(where: { $0.id == id }) else { return }
-        collections.removeAll { $0.id == id }
-        try? FileManager.default.removeItem(at: collectionRenderFolderURL(for: id))
-        persistCollectionsQuietly()
+        guard let index = collections.firstIndex(where: { $0.id == id }) else { return }
+        // W9: tombstone on disk first; the render folder to `.trash` only
+        // once that has landed.
+        var tombstone = collections.remove(at: index)
+        tombstone.deletedAt = Date()
+        tombstone.deletedBy = DeviceIdentity.id
+        deletedCollections.append(tombstone)
+        do {
+            try persistAndWait(reason: .filesChanged)
+        } catch {
+            deletedCollections.removeAll { $0.id == id }
+            collections.insert(tombstone.undeleted, at: min(index, collections.count))
+            errorMessage = "Couldn't delete the collection: \(error.localizedDescription)"
+            return
+        }
+        let renders = collectionRenderFolderURL(for: id)
+        if FileManager.default.fileExists(atPath: renders.path) {
+            try? moveToTrash(renders, as: trashURL
+                .appendingPathComponent("collections", isDirectory: true)
+                .appendingPathComponent(id.uuidString, isDirectory: true))
+        }
     }
+
+    // MARK: - Trash (W9)
+
+    /// Finishes any delete the process did not live to complete: a
+    /// tombstoned project whose folder is still under `Projects/`, or a
+    /// tombstoned blend whose output is still in its live folder. Then the
+    /// 30-day purge. Runs once per launch, after the library loads.
+    func sweepTrashAtLaunch() {
+        for capture in deletedCaptures {
+            let folder = captureFolderURL(for: capture.id)
+            guard FileManager.default.fileExists(atPath: folder.path) else { continue }
+            do {
+                try moveToTrash(folder, as: trashURL.appendingPathComponent(capture.id.uuidString, isDirectory: true))
+                LLog("trash: finished moving \(capture.id.uuidString.prefix(8)) (deleted \(capture.deletedAt.map(FrameTimestamps.string(from:)) ?? "?"))")
+            } catch {
+                LLog("trash: could not move \(capture.id.uuidString.prefix(8)): \(error)")
+            }
+        }
+        for blend in deletedBlends where !deletedCaptures.contains(where: { $0.id == blend.captureID }) {
+            let output = blendOutputURL(for: blend)
+            guard FileManager.default.fileExists(atPath: output.path) else { continue }
+            try? moveToTrash(output, as: trashURL
+                .appendingPathComponent(blend.captureID.uuidString, isDirectory: true)
+                .appendingPathComponent("blends", isDirectory: true)
+                .appendingPathComponent(output.lastPathComponent))
+        }
+        purgeExpiredTrash()
+    }
+
+    /// How long a deleted item stays recoverable.
+    static let trashRetention: TimeInterval = 30 * 24 * 3600
+
+    /// Removes every tombstone older than `trashRetention` together with its
+    /// files, and persists once when anything went.
+    func purgeExpiredTrash() {
+        let cutoff = Date().addingTimeInterval(-Self.trashRetention)
+        let expiredCaptures = deletedCaptures.filter { ($0.deletedAt ?? .distantPast) < cutoff }
+        let expiredBlends = deletedBlends.filter { ($0.deletedAt ?? .distantPast) < cutoff }
+        let expiredCollections = deletedCollections.filter { ($0.deletedAt ?? .distantPast) < cutoff }
+        guard !expiredCaptures.isEmpty || !expiredBlends.isEmpty || !expiredCollections.isEmpty else { return }
+        for capture in expiredCaptures {
+            try? FileManager.default.removeItem(at: trashURL.appendingPathComponent(capture.id.uuidString, isDirectory: true))
+        }
+        for blend in expiredBlends {
+            let file = (blend.outputFileName as NSString).lastPathComponent
+            try? FileManager.default.removeItem(at: trashURL
+                .appendingPathComponent(blend.captureID.uuidString, isDirectory: true)
+                .appendingPathComponent("blends", isDirectory: true)
+                .appendingPathComponent(file))
+        }
+        for collection in expiredCollections {
+            try? FileManager.default.removeItem(at: trashURL
+                .appendingPathComponent("collections", isDirectory: true)
+                .appendingPathComponent(collection.id.uuidString, isDirectory: true))
+        }
+        let goneCaptures = Set(expiredCaptures.map(\.id))
+        let goneBlends = Set(expiredBlends.map(\.id))
+        let goneCollections = Set(expiredCollections.map(\.id))
+        deletedCaptures.removeAll { goneCaptures.contains($0.id) }
+        deletedBlends.removeAll { goneBlends.contains($0.id) }
+        deletedCollections.removeAll { goneCollections.contains($0.id) }
+        LLog("trash: purged \(expiredCaptures.count) projects, \(expiredBlends.count) blends, \(expiredCollections.count) collections older than 30 days")
+        persist(reason: .filesChanged)
+    }
+
+    /// Settings ▸ Storage ▸ Empty trash: every file under `.trash` and every
+    /// tombstone record, now.
+    func emptyTrash() async {
+        let trash = trashURL
+        await MediaWorkQueue.shared.run {
+            try? FileManager.default.removeItem(at: trash)
+        }
+        deletedCaptures.removeAll()
+        deletedBlends.removeAll()
+        deletedCollections.removeAll()
+        persist(reason: .filesChanged)
+    }
+
+    /// What the trash holds, for the storage card's own line.
+    var trashItemCount: Int { deletedCaptures.count + deletedBlends.count + deletedCollections.count }
 
     /// Adds blends to a collection in order, skipping any already there —
     /// one appearance per collection (callers pre-check when they want the
@@ -4119,8 +4305,10 @@ final class AppModel: ObservableObject {
         var originalsBytes: Int64 = 0
         var versionsBytes: Int64 = 0
         var cacheBytes: Int64 = 0
+        /// `Projects/.trash/` (W9) — its own line on the card.
+        var trashBytes: Int64 = 0
 
-        var totalBytes: Int64 { originalsBytes + versionsBytes + cacheBytes }
+        var totalBytes: Int64 { originalsBytes + versionsBytes + cacheBytes + trashBytes }
     }
 
     /// Per-project folder sizes already walked this session, keyed by capture.
@@ -4154,7 +4342,8 @@ final class AppModel: ObservableObject {
             var storage = LibraryStorage()
             let fileManager = FileManager.default
             if let folders = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) {
-                for folder in folders where (try? folder.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                for folder in folders where (try? folder.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+                    && !folder.lastPathComponent.hasPrefix(".") {
                     storage.originalsBytes += Self.directorySize(folder.appendingPathComponent("source"))
                     // Field notes count with the originals: captured material
                     // that belongs to the project, typically kilobytes — not
@@ -4175,6 +4364,7 @@ final class AppModel: ObservableObject {
             // 2026-08-26, so the card charged the user for bytes no button in
             // the app could free.
             storage.cacheBytes += Self.directorySize(DiskThumbnailStore.directory)
+            storage.trashBytes = Self.directorySize(root.appendingPathComponent(".trash", isDirectory: true))
             return storage
         }
     }
@@ -7961,10 +8151,17 @@ final class AppModel: ObservableObject {
                 setAsideUnreadableManifest(error)
                 return
             }
-            captures = manifest.captures.sorted { $0.createdAt > $1.createdAt }
-            blends = manifest.blends.sorted { $0.createdAt > $1.createdAt }
+            // Tombstoned records (W9) split off here, so the live arrays are
+            // what they always were and every view, export and transfer keeps
+            // excluding the deleted for free.
+            captures = manifest.captures.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
+            deletedCaptures = manifest.captures.filter { $0.deletedAt != nil }
+            blends = manifest.blends.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
+            deletedBlends = manifest.blends.filter { $0.deletedAt != nil }
             // Oldest first — a collection list reads in creation order.
-            collections = (manifest.collections ?? []).sorted { $0.createdAt < $1.createdAt }
+            let allCollections = manifest.collections ?? []
+            collections = allCollections.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
+            deletedCollections = allCollections.filter { $0.deletedAt != nil }
             gradingSchemaVersion = manifest.gradingSchemaVersion ?? 0
             stampLegacyDefaultPresetsIfNeeded()
             stampPresetStatesIfNeeded()
@@ -8159,7 +8356,9 @@ final class AppModel: ObservableObject {
             validatedSourceFrames.removeAll()
         }
         var manifest = LibraryManifest(
-            captures: captures.map(stampingPresetState), blends: blends, collections: collections)
+            captures: captures.map(stampingPresetState) + deletedCaptures,
+            blends: blends + deletedBlends,
+            collections: collections + deletedCollections)
         manifest.gradingSchemaVersion = max(gradingSchemaVersion, 1)
         return (manifest, persister.mint())
     }
@@ -8567,10 +8766,9 @@ final class AppModel: ObservableObject {
         }
         guard existing.count > 1 else { throw EncodingDeletionError.lastEncoding }
 
+        // Persist first, then remove (W9): a derived file, so no tombstone —
+        // but the manifest must stop naming it before it goes.
         let url = encodingURL(for: fresh, encoding)
-        if FileManager.default.fileExists(atPath: url.path) {
-            try FileManager.default.removeItem(at: url)
-        }
         let newList = list.filter { $0.fileName != encoding.fileName }
         var map = captures[index].clipEncodings ?? [:]
         map[clipFileName] = newList
@@ -8578,6 +8776,9 @@ final class AppModel: ObservableObject {
         // A person changed this project — see CaptureProject.modifiedAt.
         captures[index].modifiedAt = Date()
         try persistLibrary()
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
     }
 
     /// One-tap storage reclaim: convert every ProRes clip in a capture to H.264
@@ -9996,4 +10197,34 @@ final class AppModel: ObservableObject {
         }
     }
     #endif
+}
+
+
+extension AppModel.CaptureProject {
+    /// The record with its tombstone lifted — what a delete that could not
+    /// be saved puts back in the list.
+    var undeleted: AppModel.CaptureProject {
+        var copy = self
+        copy.deletedAt = nil
+        copy.deletedBy = nil
+        return copy
+    }
+}
+
+extension AppModel.BlendProject {
+    var undeleted: AppModel.BlendProject {
+        var copy = self
+        copy.deletedAt = nil
+        copy.deletedBy = nil
+        return copy
+    }
+}
+
+extension LapseCollection {
+    var undeleted: LapseCollection {
+        var copy = self
+        copy.deletedAt = nil
+        copy.deletedBy = nil
+        return copy
+    }
 }
