@@ -170,3 +170,142 @@ public struct ShapeSearch: Equatable, Sendable, Codable {
         }
     }
 }
+
+// MARK: - Detection modes
+
+/// A named configuration of the still-photo pass, for the Find shapes sheet
+/// and the Masks tab's one-off search (2026-09-12): which engine looks, and
+/// the dials it looks with. The Kit engines are `ShapeDetector` settings. The
+/// Python engines are the benchmark rig's own detectors, which the Mac app
+/// runs through `tools/shapebench` (`ExternalShapeDetector`) — a way to look
+/// at what a candidate method finds in the app before it is ported, never a
+/// path that ships on a phone.
+public struct ShapeDetectionMode: Equatable, Sendable, Codable {
+    public enum Engine: String, CaseIterable, Sendable, Codable, Identifiable {
+        /// Every engine below in turn on the same picture; a shape found by
+        /// more than one is listed once, with who found it — the test bench's
+        /// own mode, and what the detector score sheet is built from.
+        case all
+        /// The file pass as it ships: Vision quads, traced ellipses, Hough
+        /// rims, region proposals at 1024 + 2048.
+        case standard
+        /// The Vision passes and the rims alone — the pass before the port.
+        case visionOnly
+        /// Region proposals at 1024 only: the cheaper half of the region pass.
+        case regions1024
+        /// Standard plus the edge-chain pass (`EdgeDrawing`).
+        case edgeChains
+        /// Vision passes and edge chains, no region pass.
+        case edgeChainsOnly
+        /// The rig's `opencv-reference` detector (Mac, Python).
+        case pythonReference
+        /// The rig's `edge-drawing` detector (Mac, Python, needs opencv-contrib).
+        case pythonEdgeDrawing
+
+        public var id: String { rawValue }
+
+        public var title: String {
+            switch self {
+            case .all: return "Use all"
+            case .standard: return "Standard"
+            case .visionOnly: return "Vision only"
+            case .regions1024: return "Regions at 1024"
+            case .edgeChains: return "Standard + edge chains"
+            case .edgeChainsOnly: return "Edge chains, no regions"
+            case .pythonReference: return "Python reference"
+            case .pythonEdgeDrawing: return "Python edge drawing"
+            }
+        }
+
+        /// One line under the picker: what the engine is, and the benchmark
+        /// number it carries (hits / false positives of 153 labels, 2026-09-12).
+        /// A few characters for a chip in a list of who found a shape.
+        public var shortTitle: String {
+            switch self {
+            case .all: return "All"
+            case .standard: return "Std"
+            case .visionOnly: return "Vision"
+            case .regions1024: return "Reg1024"
+            case .edgeChains: return "Std+chains"
+            case .edgeChainsOnly: return "Chains"
+            case .pythonReference: return "PyRef"
+            case .pythonEdgeDrawing: return "PyED"
+            }
+        }
+
+        public var detail: String {
+            switch self {
+            case .all: return "Every detector in turn; a shape found by more than one is listed once with who found it, and every Add or dismissal scores each detector"
+            case .standard: return "Vision passes, Hough rims, region proposals at 1024 + 2048 · 74 / 69"
+            case .visionOnly: return "Vision quads, traced ellipses and rims, no region pass · 38 / 23"
+            case .regions1024: return "Region proposals at 1024 only · 67 / 47, about a second faster"
+            case .edgeChains: return "Standard plus one-pixel edge chains fitted like regions · measured in the Kit next"
+            case .edgeChainsOnly: return "Vision passes and edge chains, no region pass"
+            case .pythonReference: return "The benchmark's OpenCV reference, run by the rig · 66 / 43, ~3 s"
+            case .pythonEdgeDrawing: return "The benchmark's edge-drawing detector, run by the rig · 74 / 46, ~1 s"
+            }
+        }
+
+        /// The Python engines run outside the Kit — only where the rig is.
+        public var isExternal: Bool { self == .pythonReference || self == .pythonEdgeDrawing }
+
+        /// The rig's detector id for an external engine.
+        public var externalDetectorID: String? {
+            switch self {
+            case .pythonReference: return "opencv-reference"
+            case .pythonEdgeDrawing: return "edge-drawing"
+            default: return nil
+            }
+        }
+
+        /// The engines that run inside the Kit, one configuration each.
+        public static var kitEngines: [Engine] { allCases.filter { !$0.isExternal && $0 != .all } }
+        public static var externalEngines: [Engine] { allCases.filter { $0.isExternal } }
+        /// The picker's order: Use all first, then the Kit's, then the Mac's.
+        public static var pickerEngines: [Engine] { [.all] + kitEngines + externalEngines }
+        /// What a Use All run visits, given whether the Python engines can run here.
+        public static func roster(externalAvailable: Bool) -> [Engine] {
+            kitEngines + (externalAvailable ? externalEngines : [])
+        }
+    }
+
+    public var engine: Engine
+    public var search: ShapeSearch
+
+    public init(engine: Engine = .standard, search: ShapeSearch = ShapeSearch()) {
+        self.engine = engine; self.search = search
+    }
+
+    public static let `default` = ShapeDetectionMode()
+
+    /// The Kit settings this mode runs with. For an external engine these are
+    /// the standard file settings — what the app decodes the picture at, and
+    /// the floor it applies to what comes back.
+    public func settings() -> ShapeDetector.Settings {
+        var s = search.fileSettings()
+        switch engine {
+        case .all, .standard, .pythonReference, .pythonEdgeDrawing: break
+        case .visionOnly: s.regionProposals = false
+        case .regions1024: s.regionProposalLongEdges = [1024]
+        case .edgeChains: s.edgeChains = true
+        case .edgeChainsOnly: s.regionProposals = false; s.edgeChains = true
+        }
+        return s
+    }
+
+    /// One line for logs and captions: `edgeChains · all/medium/all`.
+    public var token: String { "\(engine.rawValue) · \(search.token)" }
+
+    /// Where the Find shapes sheet and the Masks tab keep the last choice.
+    public static let defaultsKey = "shapes.detectionMode"
+
+    public static func load(from defaults: UserDefaults = .standard) -> ShapeDetectionMode {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let mode = try? JSONDecoder().decode(ShapeDetectionMode.self, from: data) else { return .default }
+        return mode
+    }
+
+    public func save(to defaults: UserDefaults = .standard) {
+        if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: Self.defaultsKey) }
+    }
+}

@@ -66,9 +66,24 @@ struct OverlayMasksPanel: View {
     let onShapesEdited: (_ commit: Bool) -> Void
     /// "Use as mask": an ellipse becomes a Radial mask copy.
     let onUseAsMask: (DetectedShape) -> Void
+    /// "Find in this picture" (2026-09-12): one pass of a detection mode over
+    /// the register's picture. The viewer runs it, keeps the result and scores
+    /// it; this returns when it is done.
+    let onFindShapes: (ShapeDetectionMode) async -> Void
+    /// The last find and what was done with it, owned by the viewer so the
+    /// picture can draw the candidates and share the hover with this list.
+    @Binding var lastFind: ShapeFinder.Pass?
+    @Binding var addedFindIDs: Set<UUID>
+    @Binding var rejectedFindIDs: Set<UUID>
+    @Binding var hoveredFoundID: UUID?
+    /// Add / Reject / undo / settle / clear — the viewer's, shared with the
+    /// picture's tick / cross pill.
+    let findActions: ShapeFinder.FoundActions
 
     @State private var importing = false
     @State private var importError: String?
+    @State private var findMode = ShapeDetectionMode.load()
+    @State private var finding = false
 
     /// The mask the deck has selected, derived from the inspected region so
     /// the tint, the handles and the detail card can never disagree.
@@ -164,8 +179,12 @@ struct OverlayMasksPanel: View {
                     .monospaced()
                     .foregroundStyle(.secondary)
             }
+            findRow
+            if let find = lastFind {
+                findResults(find)
+            }
             if shapes.isEmpty {
-                Text("No shapes yet. Run Find shapes from the Create tab, or draw one with ＋ Shape. Shapes are what a Shape-mation holds still.")
+                Text("No shapes yet. Find them in this picture above, run Find shapes from the Create tab, or draw one with ＋ Shape. Shapes are what a Shape-mation holds still.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -187,6 +206,185 @@ struct OverlayMasksPanel: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // MARK: Find in this picture
+
+    /// The detection mode as a menu (engine, sensitivity, size) and a Find
+    /// button — every mode Find shapes offers, on this one picture, timed.
+    private var findRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // `LL_SHAPES_MODE=<engine>` presets the menu for a screenshot run
+            // (the Find shapes sheet reads the same hook); a run saves the
+            // choice, so the two screens share it thereafter.
+            #if DEBUG
+            let _ = {
+                if let raw = ProcessInfo.processInfo.environment["LL_SHAPES_MODE"],
+                   let engine = ShapeDetectionMode.Engine(rawValue: raw), findMode.engine != engine {
+                    DispatchQueue.main.async { findMode.engine = engine }
+                }
+            }()
+            #endif
+            HStack(spacing: 8) {
+                Menu {
+                    Picker("Detector", selection: $findMode.engine) {
+                        Text(ShapeDetectionMode.Engine.all.title).tag(ShapeDetectionMode.Engine.all)
+                        Divider()
+                        ForEach(ShapeDetectionMode.Engine.kitEngines) { Text($0.title).tag($0) }
+                        #if os(macOS)
+                        if ExternalShapeDetector.isAvailable {
+                            Divider()
+                            ForEach(ShapeDetectionMode.Engine.externalEngines) { Text($0.title).tag($0) }
+                        }
+                        #endif
+                    }
+                    Picker("Sensitivity", selection: $findMode.search.sensitivity) {
+                        ForEach(ShapeSearch.Sensitivity.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    Picker("Size", selection: $findMode.search.size) {
+                        ForEach(ShapeSearch.Size.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(findMode.engine.title)
+                            .font(.system(size: 11.5, weight: .medium))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                }
+                .fixedSize()
+                Spacer()
+                Button {
+                    runFind()
+                } label: {
+                    if finding {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        // Short on purpose: the rail is 340 pt and the mode's
+                        // title beside it can be five words.
+                        Text("Find")
+                            .font(.system(size: 11.5, weight: .semibold))
+                    }
+                }
+                .disabled(finding)
+            }
+            Text("Find shapes in this picture · " + findMode.engine.detail)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func runFind() {
+        finding = true
+        let mode = findMode
+        mode.save()
+        Task { @MainActor in
+            await onFindShapes(mode)
+            finding = false
+        }
+    }
+
+    private func foundByLine(_ found: ShapeFinder.Found, in find: ShapeFinder.Pass) -> String? {
+        guard find.mode.engine == .all else { return nil }
+        let ran = find.engines.filter { !$0.failed }.count
+        return "\(found.foundBy.count) of \(ran): " + found.foundBy.map(\.shortTitle).joined(separator: ", ")
+    }
+
+    @ViewBuilder private func findResults(_ find: ShapeFinder.Pass) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(find.failed ? (find.note ?? "The detector did not run.")
+                 : "\(find.found.count) found in \(find.milliseconds) ms · \(find.found.isEmpty ? "nothing to add" : "add what you want kept")")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(find.failed ? .orange : .primary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !find.failed, let note = find.note {
+                Text(note)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(find.found) { found in
+                let shape = found.shape
+                let hovered = hoveredFoundID == found.id
+                let isAdded = addedFindIDs.contains(found.id)
+                let isRejected = rejectedFindIDs.contains(found.id)
+                let listed = !isAdded && alreadyListed(shape)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Image(systemName: shape.family.symbolName)
+                            .font(.system(size: 10))
+                        Text("\(shape.family.title) · \(Int(shape.nativeDiameterPx)) px · \(Int((shape.confidence * 100).rounded())) %")
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                            .strikethrough(isRejected, color: .secondary)
+                        Spacer()
+                        if isAdded {
+                            Text("Added").font(.system(size: 10.5)).foregroundStyle(.secondary)
+                            Button("undo") { findActions.undo(found) }
+                                .font(.system(size: 10.5, weight: .medium)).buttonStyle(.plain).foregroundStyle(accent)
+                        } else if isRejected {
+                            Text("Rejected").font(.system(size: 10.5)).foregroundStyle(.secondary)
+                            Button("undo") { findActions.undo(found) }
+                                .font(.system(size: 10.5, weight: .medium)).buttonStyle(.plain).foregroundStyle(accent)
+                        } else if listed {
+                            Text("Listed").font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        } else {
+                            Button { findActions.add(found) } label: {
+                                Image(systemName: "checkmark.circle.fill").font(.system(size: 14))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color(red: 0.2, green: 0.6, blue: 0.3))
+                            .help("Add to the register")
+                            Button { findActions.reject(found) } label: {
+                                Image(systemName: "xmark.circle.fill").font(.system(size: 14))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color(red: 0.85, green: 0.25, blue: 0.2))
+                            .help("Reject")
+                        }
+                    }
+                    if let by = foundByLine(found, in: find) {
+                        Text(by)
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .opacity(isRejected ? 0.55 : 1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(hovered ? accent.opacity(0.22) : Color.clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .contentShape(Rectangle())
+                .onHover { inside in
+                    if inside { hoveredFoundID = found.id } else if hoveredFoundID == found.id { hoveredFoundID = nil }
+                }
+            }
+            HStack(spacing: 12) {
+                if !find.found.isEmpty {
+                    let pending = find.found.filter { !addedFindIDs.contains($0.id) && !rejectedFindIDs.contains($0.id) && !alreadyListed($0.shape) }
+                    Button("Add all") { for found in pending { findActions.add(found) } }
+                        .disabled(pending.isEmpty)
+                    Button("Reject all") { for found in pending { findActions.reject(found) } }
+                        .disabled(pending.isEmpty)
+                }
+                Spacer()
+                Button("Clear") { findActions.clear() }
+            }
+            .font(.system(size: 10.5, weight: .medium))
+            .buttonStyle(.plain)
+            .foregroundStyle(accent)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onDisappear { findActions.settle() }
+    }
+
+    /// The register already holds this shape (the same kind over the same
+    /// bounds, the Kit's own near-identical bar).
+    private func alreadyListed(_ shape: DetectedShape) -> Bool {
+        shapes.contains { $0.kind == shape.kind && ShapeDetector.overlap($0, shape) > 0.9 }
     }
 
     private func shapeTile(_ shape: DetectedShape) -> some View {

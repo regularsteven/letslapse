@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-12T10:49:27Z",
+  "generatedAt": "2026-09-12T12:45:55Z",
   "floor": 0.1,
   "match": {
     "centrePctDiag": 2.0,
@@ -31,11 +31,12 @@
   },
   "chosen": {
     "manual-groundtruth": "manual-groundtruth|1|e89f36e6cd43",
-    "opencv-reference": "opencv-reference|1|a49d2b2eb28e",
-    "apple-vision": "apple-vision|1|63726d7e9a88",
-    "apple-vision-register": "apple-vision-register|1|128ce29d7629"
+    "opencv-reference": "opencv-reference|1|e6f41f7edf7d",
+    "apple-vision": "apple-vision|1|39640d381d81",
+    "apple-vision-register": "apple-vision-register|1|128ce29d7629",
+    "edge-drawing": "edge-drawing|1|2d85f5f1f67f"
   },
-  "gate": "opencv-reference a49d2b2eb28e: median accepted candidates/image = 2.0 → ≤ 6 → geometry alone is sufficient for photo mode; no AI ranking layer",
+  "gate": "opencv-reference e6f41f7edf7d: median accepted candidates/image = 2.0 → ≤ 6 → geometry alone is sufficient for photo mode; no AI ranking layer",
   "detectors": {
     "opencv-reference · dedupe 0.7": {
       "detectorId": "opencv-reference",
@@ -344,6 +345,778 @@
       },
       "wallMs": null,
       "runKey": "opencv-reference|1|a49d2b2eb28e"
+    },
+    "opencv-reference · dedupe 0.9 · c8a664": {
+      "detectorId": "opencv-reference",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 66,
+      "fp": 36,
+      "fn": 87,
+      "duplicates": 6,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6470588235294118,
+      "recall": 0.43137254901960786,
+      "f1": 0.5176470588235293,
+      "precisionCI": [
+        0.5505209704774588,
+        0.7329214566967336
+      ],
+      "recallCI": [
+        0.3555238474775599,
+        0.5105831037394641
+      ],
+      "fpNestedInLabel": 21,
+      "precisionExcludingNested": 0.8148148148148148,
+      "recallOnRulePassingGT": 0.4429530201342282,
+      "aspectError": {
+        "median": 0.011649164695929016,
+        "p95": 0.06254569542458256,
+        "n": 66
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.09716542397393058,
+        "p95": 0.6352150058149031,
+        "max": 1.6465600626761283,
+        "n": 66,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 54
+          },
+          {
+            "from": 0.25,
+            "count": 6
+          },
+          {
+            "from": 0.5,
+            "count": 3
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 1
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 1
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.29999999999999716,
+        "p95": 1.8679999999999988,
+        "n": 42
+      },
+      "subclassMismatches": 8,
+      "acceptedMeasuredAsProposed": {
+        "n": 102,
+        "of": 102
+      },
+      "subclassConfusion": {
+        "square": {
+          "square": 15,
+          "rectangle": 1
+        },
+        "circle": {
+          "circle": 19,
+          "ellipse": 5
+        },
+        "rectangle": {
+          "rectangle": 22,
+          "square": 1
+        },
+        "ellipse": {
+          "ellipse": 2,
+          "circle": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 39,
+          "fp": 21,
+          "fn": 58
+        },
+        "ellipse": {
+          "tp": 27,
+          "fp": 15,
+          "fn": 29
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 43,
+          "fn": 68
+        },
+        "medium": {
+          "tp": 16,
+          "fn": 15
+        },
+        "large": {
+          "tp": 7,
+          "fn": 4
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 13.0,
+        "mean": 2.7567567567567566
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 216.0,
+        "p25": 127.0,
+        "p75": 296.0,
+        "max": 474.0,
+        "mean": 216.8108108108108
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 3333.0,
+        "p25": 2385.0,
+        "p75": 4412.0,
+        "max": 8195.0,
+        "mean": 3429.891891891892
+      },
+      "wallMs": null,
+      "runKey": "opencv-reference|1|c8a664eb0e85"
+    },
+    "opencv-reference · dedupe 0.9 · d09849": {
+      "detectorId": "opencv-reference",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 67,
+      "fp": 49,
+      "fn": 86,
+      "duplicates": 5,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5775862068965517,
+      "recall": 0.43790849673202614,
+      "f1": 0.4981412639405204,
+      "precisionCI": [
+        0.4866280369998908,
+        0.6635702247055604
+      ],
+      "recallCI": [
+        0.3617681656177596,
+        0.5170905045309765
+      ],
+      "fpNestedInLabel": 28,
+      "precisionExcludingNested": 0.7613636363636364,
+      "recallOnRulePassingGT": 0.44966442953020136,
+      "aspectError": {
+        "median": 0.014596451058958302,
+        "p95": 0.06882236325926362,
+        "n": 67
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.10061013865411486,
+        "p95": 0.5093709784282969,
+        "max": 0.6470541553842333,
+        "n": 67,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 54
+          },
+          {
+            "from": 0.25,
+            "count": 9
+          },
+          {
+            "from": 0.5,
+            "count": 4
+          },
+          {
+            "from": 0.75,
+            "count": 0
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.27,
+        "p95": 11.712999999999987,
+        "n": 43
+      },
+      "subclassMismatches": 9,
+      "acceptedMeasuredAsProposed": {
+        "n": 19,
+        "of": 116
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 19,
+          "ellipse": 5
+        },
+        "square": {
+          "square": 15,
+          "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 21,
+          "square": 1
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 3
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 38,
+          "fp": 32,
+          "fn": 59
+        },
+        "ellipse": {
+          "tp": 29,
+          "fp": 17,
+          "fn": 27
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 49,
+          "fn": 62
+        },
+        "medium": {
+          "tp": 13,
+          "fn": 18
+        },
+        "large": {
+          "tp": 5,
+          "fn": 6
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 13.0,
+        "mean": 3.135135135135135
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 288.0,
+        "p25": 150.0,
+        "p75": 395.0,
+        "max": 685.0,
+        "mean": 293.1081081081081
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 4826.0,
+        "p25": 3220.0,
+        "p75": 6594.0,
+        "max": 10039.0,
+        "mean": 4828.324324324324
+      },
+      "wallMs": null,
+      "runKey": "opencv-reference|1|d0984933697d"
+    },
+    "opencv-reference · dedupe 0.9 · 5bbe1d": {
+      "detectorId": "opencv-reference",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 59,
+      "fp": 31,
+      "fn": 94,
+      "duplicates": 3,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6555555555555556,
+      "recall": 0.38562091503267976,
+      "f1": 0.48559670781893005,
+      "precisionCI": [
+        0.55283279348344,
+        0.7455423407853703
+      ],
+      "recallCI": [
+        0.3121939475797486,
+        0.46465097111529163
+      ],
+      "fpNestedInLabel": 15,
+      "precisionExcludingNested": 0.7866666666666666,
+      "recallOnRulePassingGT": 0.3959731543624161,
+      "aspectError": {
+        "median": 0.010195483653522075,
+        "p95": 0.06475953575086899,
+        "n": 59
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.0822717448459672,
+        "p95": 0.5472355529880187,
+        "max": 0.811732591436363,
+        "n": 59,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 48
+          },
+          {
+            "from": 0.25,
+            "count": 7
+          },
+          {
+            "from": 0.5,
+            "count": 3
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.2149999999999994,
+        "p95": 1.2224999999999937,
+        "n": 42
+      },
+      "subclassMismatches": 4,
+      "acceptedMeasuredAsProposed": {
+        "n": 26,
+        "of": 90
+      },
+      "subclassConfusion": {
+        "square": {
+          "square": 14,
+          "rectangle": 1
+        },
+        "circle": {
+          "circle": 15,
+          "ellipse": 2
+        },
+        "rectangle": {
+          "rectangle": 24
+        },
+        "ellipse": {
+          "ellipse": 2,
+          "circle": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 39,
+          "fp": 20,
+          "fn": 58
+        },
+        "ellipse": {
+          "tp": 20,
+          "fp": 11,
+          "fn": 36
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 41,
+          "fn": 70
+        },
+        "medium": {
+          "tp": 13,
+          "fn": 18
+        },
+        "large": {
+          "tp": 5,
+          "fn": 6
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 13.0,
+        "mean": 2.4324324324324325
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 137.0,
+        "p25": 56.0,
+        "p75": 219.0,
+        "max": 362.0,
+        "mean": 144.02702702702703
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2367.0,
+        "p25": 1442.0,
+        "p75": 3775.0,
+        "max": 6858.0,
+        "mean": 2670.0810810810813
+      },
+      "wallMs": null,
+      "runKey": "opencv-reference|1|5bbe1d0c9e30"
+    },
+    "opencv-reference · dedupe 0.9 · b71e0f": {
+      "detectorId": "opencv-reference",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 59,
+      "fp": 32,
+      "fn": 94,
+      "duplicates": 3,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6483516483516484,
+      "recall": 0.38562091503267976,
+      "f1": 0.4836065573770491,
+      "precisionCI": [
+        0.5460564927584927,
+        0.7386287086721032
+      ],
+      "recallCI": [
+        0.3121939475797486,
+        0.46465097111529163
+      ],
+      "fpNestedInLabel": 15,
+      "precisionExcludingNested": 0.7763157894736842,
+      "recallOnRulePassingGT": 0.3959731543624161,
+      "aspectError": {
+        "median": 0.010195483653522075,
+        "p95": 0.06475953575086899,
+        "n": 59
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.0831538333451935,
+        "p95": 0.41727438468725536,
+        "max": 0.6470541553842333,
+        "n": 59,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 49
+          },
+          {
+            "from": 0.25,
+            "count": 7
+          },
+          {
+            "from": 0.5,
+            "count": 3
+          },
+          {
+            "from": 0.75,
+            "count": 0
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.23499999999999233,
+        "p95": 1.2224999999999937,
+        "n": 42
+      },
+      "subclassMismatches": 4,
+      "acceptedMeasuredAsProposed": {
+        "n": 24,
+        "of": 91
+      },
+      "subclassConfusion": {
+        "square": {
+          "square": 14,
+          "rectangle": 1
+        },
+        "circle": {
+          "circle": 15,
+          "ellipse": 2
+        },
+        "rectangle": {
+          "rectangle": 24
+        },
+        "ellipse": {
+          "ellipse": 2,
+          "circle": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 39,
+          "fp": 20,
+          "fn": 58
+        },
+        "ellipse": {
+          "tp": 20,
+          "fp": 12,
+          "fn": 36
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 42,
+          "fn": 69
+        },
+        "medium": {
+          "tp": 12,
+          "fn": 19
+        },
+        "large": {
+          "tp": 5,
+          "fn": 6
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 13.0,
+        "mean": 2.4594594594594597
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 148.0,
+        "p25": 68.0,
+        "p75": 240.0,
+        "max": 379.0,
+        "mean": 161.0
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2844.0,
+        "p25": 1688.0,
+        "p75": 3843.0,
+        "max": 6647.0,
+        "mean": 2781.2162162162163
+      },
+      "wallMs": null,
+      "runKey": "opencv-reference|1|b71e0f8c0f10"
+    },
+    "opencv-reference · dedupe 0.9 · e6f41f": {
+      "detectorId": "opencv-reference",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 61,
+      "fp": 33,
+      "fn": 92,
+      "duplicates": 4,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.648936170212766,
+      "recall": 0.39869281045751637,
+      "f1": 0.4939271255060729,
+      "precisionCI": [
+        0.5483301998756748,
+        0.7378466410590606
+      ],
+      "recallCI": [
+        0.324505069656296,
+        0.47784328690216815
+      ],
+      "fpNestedInLabel": 16,
+      "precisionExcludingNested": 0.782051282051282,
+      "recallOnRulePassingGT": 0.40939597315436244,
+      "aspectError": {
+        "median": 0.009515486940479687,
+        "p95": 0.06448686184876298,
+        "n": 61
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.0831538333451935,
+        "p95": 0.40393761894628444,
+        "max": 0.6470541553842333,
+        "n": 61,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 51
+          },
+          {
+            "from": 0.25,
+            "count": 7
+          },
+          {
+            "from": 0.5,
+            "count": 3
+          },
+          {
+            "from": 0.75,
+            "count": 0
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.23499999999999233,
+        "p95": 1.2224999999999937,
+        "n": 42
+      },
+      "subclassMismatches": 4,
+      "acceptedMeasuredAsProposed": {
+        "n": 26,
+        "of": 94
+      },
+      "subclassConfusion": {
+        "square": {
+          "square": 14,
+          "rectangle": 1
+        },
+        "circle": {
+          "circle": 17,
+          "ellipse": 2
+        },
+        "rectangle": {
+          "rectangle": 24
+        },
+        "ellipse": {
+          "ellipse": 2,
+          "circle": 1
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 39,
+          "fp": 21,
+          "fn": 58
+        },
+        "ellipse": {
+          "tp": 22,
+          "fp": 12,
+          "fn": 34
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 42,
+          "fn": 69
+        },
+        "medium": {
+          "tp": 13,
+          "fn": 18
+        },
+        "large": {
+          "tp": 6,
+          "fn": 5
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 13.0,
+        "mean": 2.5405405405405403
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 154.0,
+        "p25": 68.0,
+        "p75": 247.0,
+        "max": 382.0,
+        "mean": 168.64864864864865
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2795.0,
+        "p25": 1855.0,
+        "p75": 4485.0,
+        "max": 6653.0,
+        "mean": 3067.837837837838
+      },
+      "wallMs": null,
+      "runKey": "opencv-reference|1|e6f41f7edf7d"
     },
     "apple-vision · file all/medium/all -regions": {
       "detectorId": "apple-vision",
@@ -2444,6 +3217,492 @@
       },
       "runKey": "apple-vision|1|63726d7e9a88"
     },
+    "apple-vision · file all/medium/all · 91aa6c": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 74,
+      "fp": 69,
+      "fn": 79,
+      "duplicates": 15,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5174825174825175,
+      "recall": 0.48366013071895425,
+      "f1": 0.5,
+      "precisionCI": [
+        0.43620068315654525,
+        0.5978496132172344
+      ],
+      "recallCI": [
+        0.40584912416819274,
+        0.5622715785025274
+      ],
+      "fpNestedInLabel": 34,
+      "precisionExcludingNested": 0.6788990825688074,
+      "recallOnRulePassingGT": 0.4966442953020134,
+      "aspectError": {
+        "median": 0.011247079400671427,
+        "p95": 0.04914204864618715,
+        "n": 74
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.09556360511077092,
+        "p95": 0.3995888514614867,
+        "max": 0.8714421151172338,
+        "n": 74,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 58
+          },
+          {
+            "from": 0.25,
+            "count": 13
+          },
+          {
+            "from": 0.5,
+            "count": 2
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3150000000000037,
+        "p95": 1.9275000000000055,
+        "n": 50
+      },
+      "subclassMismatches": 7,
+      "acceptedMeasuredAsProposed": {
+        "n": 73,
+        "of": 143
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 22,
+          "ellipse": 2
+        },
+        "square": {
+          "square": 15,
+          "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 28,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 2
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 46,
+          "fp": 48,
+          "fn": 51
+        },
+        "ellipse": {
+          "tp": 28,
+          "fp": 21,
+          "fn": 28
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 52,
+          "fn": 59
+        },
+        "medium": {
+          "tp": 15,
+          "fn": 16
+        },
+        "large": {
+          "tp": 7,
+          "fn": 4
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 5.0,
+        "max": 27.0,
+        "mean": 3.864864864864865
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 162.0,
+        "p25": 108.0,
+        "p75": 213.0,
+        "max": 440.0,
+        "mean": 163.54054054054055
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2868.0,
+        "p25": 1721.0,
+        "p75": 7519.0,
+        "max": 64262.0,
+        "mean": 8202.864864864865
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 2981.0,
+        "p25": 1832.0,
+        "p75": 7933.0,
+        "max": 64381.0,
+        "mean": 8359.945945945947
+      },
+      "runKey": "apple-vision|1|91aa6ccab374"
+    },
+    "apple-vision · file all/medium/all · db0670": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 74,
+      "fp": 69,
+      "fn": 79,
+      "duplicates": 15,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5174825174825175,
+      "recall": 0.48366013071895425,
+      "f1": 0.5,
+      "precisionCI": [
+        0.43620068315654525,
+        0.5978496132172344
+      ],
+      "recallCI": [
+        0.40584912416819274,
+        0.5622715785025274
+      ],
+      "fpNestedInLabel": 34,
+      "precisionExcludingNested": 0.6788990825688074,
+      "recallOnRulePassingGT": 0.4966442953020134,
+      "aspectError": {
+        "median": 0.011247079400671427,
+        "p95": 0.04914204864618715,
+        "n": 74
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.09556360511077092,
+        "p95": 0.3995888514614867,
+        "max": 0.8714421151172338,
+        "n": 74,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 58
+          },
+          {
+            "from": 0.25,
+            "count": 13
+          },
+          {
+            "from": 0.5,
+            "count": 2
+          },
+          {
+            "from": 0.75,
+            "count": 1
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3150000000000037,
+        "p95": 1.9275000000000055,
+        "n": 50
+      },
+      "subclassMismatches": 7,
+      "acceptedMeasuredAsProposed": {
+        "n": 73,
+        "of": 143
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 22,
+          "ellipse": 2
+        },
+        "square": {
+          "square": 15,
+          "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 28,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 2,
+          "ellipse": 2
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 46,
+          "fp": 48,
+          "fn": 51
+        },
+        "ellipse": {
+          "tp": 28,
+          "fp": 21,
+          "fn": 28
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 52,
+          "fn": 59
+        },
+        "medium": {
+          "tp": 15,
+          "fn": 16
+        },
+        "large": {
+          "tp": 7,
+          "fn": 4
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 5.0,
+        "max": 27.0,
+        "mean": 3.864864864864865
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 162.0,
+        "p25": 108.0,
+        "p75": 213.0,
+        "max": 440.0,
+        "mean": 163.54054054054055
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 2868.0,
+        "p25": 1721.0,
+        "p75": 7519.0,
+        "max": 64262.0,
+        "mean": 8202.864864864865
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 2981.0,
+        "p25": 1832.0,
+        "p75": 7933.0,
+        "max": 64381.0,
+        "mean": 8359.945945945947
+      },
+      "runKey": "apple-vision|1|db067013f4a9"
+    },
+    "apple-vision · file all/medium/all regions@1024": {
+      "detectorId": "apple-vision",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 67,
+      "fp": 47,
+      "fn": 86,
+      "duplicates": 8,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.5877192982456141,
+      "recall": 0.43790849673202614,
+      "f1": 0.50187265917603,
+      "precisionCI": [
+        0.49593691926246675,
+        0.6737824328169348
+      ],
+      "recallCI": [
+        0.3617681656177596,
+        0.5170905045309765
+      ],
+      "fpNestedInLabel": 28,
+      "precisionExcludingNested": 0.7790697674418605,
+      "recallOnRulePassingGT": 0.44966442953020136,
+      "aspectError": {
+        "median": 0.010478449980229503,
+        "p95": 0.07606362524110291,
+        "n": 67
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.10663807950258515,
+        "p95": 0.8254655457114243,
+        "max": 1.7455695803948925,
+        "n": 67,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 49
+          },
+          {
+            "from": 0.25,
+            "count": 11
+          },
+          {
+            "from": 0.5,
+            "count": 2
+          },
+          {
+            "from": 0.75,
+            "count": 3
+          },
+          {
+            "from": 1.0,
+            "count": 1
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 1
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.5499999999999972,
+        "p95": 43.15499999999998,
+        "n": 43
+      },
+      "subclassMismatches": 9,
+      "acceptedMeasuredAsProposed": {
+        "n": 59,
+        "of": 114
+      },
+      "subclassConfusion": {
+        "circle": {
+          "circle": 22,
+          "ellipse": 2
+        },
+        "square": {
+          "square": 14,
+          "rectangle": 1
+        },
+        "rectangle": {
+          "rectangle": 20,
+          "square": 2
+        },
+        "ellipse": {
+          "circle": 4,
+          "ellipse": 2
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 37,
+          "fp": 30,
+          "fn": 60
+        },
+        "ellipse": {
+          "tp": 30,
+          "fp": 17,
+          "fn": 26
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 46,
+          "fn": 65
+        },
+        "medium": {
+          "tp": 15,
+          "fn": 16
+        },
+        "large": {
+          "tp": 6,
+          "fn": 5
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 20.0,
+        "mean": 3.081081081081081
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 161.0,
+        "p25": 113.0,
+        "p75": 201.0,
+        "max": 457.0,
+        "mean": 162.2972972972973
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 1952.0,
+        "p25": 705.0,
+        "p75": 5531.0,
+        "max": 61585.0,
+        "mean": 6799.027027027027
+      },
+      "wallMs": {
+        "n": 37,
+        "median": 2025.0,
+        "p25": 774.0,
+        "p75": 5605.0,
+        "max": 61659.0,
+        "mean": 6902.756756756757
+      },
+      "runKey": "apple-vision|1|39640d381d81"
+    },
     "apple-vision-register · 01e9cab7f08c": {
       "detectorId": "apple-vision-register",
       "labelledAssets": 33,
@@ -3109,6 +4368,622 @@
         }
       },
       "runKey": "apple-vision-register|1|128ce29d7629"
+    },
+    "edge-drawing · dedupe 0.9": {
+      "detectorId": "edge-drawing",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 74,
+      "fp": 46,
+      "fn": 79,
+      "duplicates": 3,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6166666666666667,
+      "recall": 0.48366013071895425,
+      "f1": 0.5421245421245421,
+      "precisionCI": [
+        0.5273391477284313,
+        0.6987561223585186
+      ],
+      "recallCI": [
+        0.40584912416819274,
+        0.5622715785025274
+      ],
+      "fpNestedInLabel": 35,
+      "precisionExcludingNested": 0.8705882352941177,
+      "recallOnRulePassingGT": 0.4966442953020134,
+      "aspectError": {
+        "median": 0.013695930246428838,
+        "p95": 0.05452518878442183,
+        "n": 74
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.08590803279944983,
+        "p95": 0.43364334648197117,
+        "max": 1.2405851522567883,
+        "n": 74,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 62
+          },
+          {
+            "from": 0.25,
+            "count": 9
+          },
+          {
+            "from": 0.5,
+            "count": 2
+          },
+          {
+            "from": 0.75,
+            "count": 0
+          },
+          {
+            "from": 1.0,
+            "count": 1
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3200000000000074,
+        "p95": 4.925999999999993,
+        "n": 47
+      },
+      "subclassMismatches": 12,
+      "acceptedMeasuredAsProposed": {
+        "n": 55,
+        "of": 120
+      },
+      "subclassConfusion": {
+        "rectangle": {
+          "rectangle": 21,
+          "square": 4
+        },
+        "circle": {
+          "circle": 22,
+          "ellipse": 5
+        },
+        "square": {
+          "square": 11
+        },
+        "ellipse": {
+          "circle": 3,
+          "ellipse": 8
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 36,
+          "fp": 7,
+          "fn": 61
+        },
+        "ellipse": {
+          "tp": 38,
+          "fp": 39,
+          "fn": 18
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 56,
+          "fn": 55
+        },
+        "medium": {
+          "tp": 12,
+          "fn": 19
+        },
+        "large": {
+          "tp": 6,
+          "fn": 5
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 22.0,
+        "mean": 3.2432432432432434
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 14.0,
+        "p25": 7.0,
+        "p75": 34.0,
+        "max": 67.0,
+        "mean": 21.16216216216216
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 1097.0,
+        "p25": 602.0,
+        "p75": 1536.0,
+        "max": 3323.0,
+        "mean": 1162.081081081081
+      },
+      "wallMs": null,
+      "runKey": "edge-drawing|1|bdab10078c2c"
+    },
+    "edge-drawing · dedupe 0.9 · 7c6eba": {
+      "detectorId": "edge-drawing",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 74,
+      "fp": 46,
+      "fn": 79,
+      "duplicates": 3,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6166666666666667,
+      "recall": 0.48366013071895425,
+      "f1": 0.5421245421245421,
+      "precisionCI": [
+        0.5273391477284313,
+        0.6987561223585186
+      ],
+      "recallCI": [
+        0.40584912416819274,
+        0.5622715785025274
+      ],
+      "fpNestedInLabel": 35,
+      "precisionExcludingNested": 0.8705882352941177,
+      "recallOnRulePassingGT": 0.4966442953020134,
+      "aspectError": {
+        "median": 0.013695930246428838,
+        "p95": 0.05452518878442183,
+        "n": 74
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.08590803279944983,
+        "p95": 0.43364334648197117,
+        "max": 1.2405851522567883,
+        "n": 74,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 62
+          },
+          {
+            "from": 0.25,
+            "count": 9
+          },
+          {
+            "from": 0.5,
+            "count": 2
+          },
+          {
+            "from": 0.75,
+            "count": 0
+          },
+          {
+            "from": 1.0,
+            "count": 1
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3200000000000074,
+        "p95": 4.925999999999993,
+        "n": 47
+      },
+      "subclassMismatches": 12,
+      "acceptedMeasuredAsProposed": {
+        "n": 55,
+        "of": 120
+      },
+      "subclassConfusion": {
+        "rectangle": {
+          "rectangle": 21,
+          "square": 4
+        },
+        "circle": {
+          "circle": 22,
+          "ellipse": 5
+        },
+        "square": {
+          "square": 11
+        },
+        "ellipse": {
+          "circle": 3,
+          "ellipse": 8
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 36,
+          "fp": 7,
+          "fn": 61
+        },
+        "ellipse": {
+          "tp": 38,
+          "fp": 39,
+          "fn": 18
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 56,
+          "fn": 55
+        },
+        "medium": {
+          "tp": 12,
+          "fn": 19
+        },
+        "large": {
+          "tp": 6,
+          "fn": 5
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 22.0,
+        "mean": 3.2432432432432434
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 14.0,
+        "p25": 7.0,
+        "p75": 34.0,
+        "max": 67.0,
+        "mean": 21.16216216216216
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 1266.0,
+        "p25": 598.0,
+        "p75": 1641.0,
+        "max": 3272.0,
+        "mean": 1276.3783783783783
+      },
+      "wallMs": null,
+      "runKey": "edge-drawing|1|7c6eba8d96e1"
+    },
+    "edge-drawing · dedupe 0.9 · 4da2ce": {
+      "detectorId": "edge-drawing",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 66,
+      "fp": 23,
+      "fn": 87,
+      "duplicates": 2,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.7415730337078652,
+      "recall": 0.43137254901960786,
+      "f1": 0.5454545454545454,
+      "precisionCI": [
+        0.6419686369260151,
+        0.8211858110800512
+      ],
+      "recallCI": [
+        0.3555238474775599,
+        0.5105831037394641
+      ],
+      "fpNestedInLabel": 20,
+      "precisionExcludingNested": 0.9565217391304348,
+      "recallOnRulePassingGT": 0.4429530201342282,
+      "aspectError": {
+        "median": 0.013317036998781343,
+        "p95": 0.057096892646318474,
+        "n": 66
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.07794793445578124,
+        "p95": 0.2882954117307231,
+        "max": 0.41052673481759855,
+        "n": 66,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 58
+          },
+          {
+            "from": 0.25,
+            "count": 8
+          },
+          {
+            "from": 0.5,
+            "count": 0
+          },
+          {
+            "from": 0.75,
+            "count": 0
+          },
+          {
+            "from": 1.0,
+            "count": 0
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3150000000000037,
+        "p95": 4.85,
+        "n": 46
+      },
+      "subclassMismatches": 10,
+      "acceptedMeasuredAsProposed": {
+        "n": 28,
+        "of": 89
+      },
+      "subclassConfusion": {
+        "rectangle": {
+          "rectangle": 21,
+          "square": 4
+        },
+        "circle": {
+          "circle": 17,
+          "ellipse": 3
+        },
+        "square": {
+          "square": 11
+        },
+        "ellipse": {
+          "circle": 3,
+          "ellipse": 7
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 36,
+          "fp": 7,
+          "fn": 61
+        },
+        "ellipse": {
+          "tp": 30,
+          "fp": 16,
+          "fn": 26
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 52,
+          "fn": 59
+        },
+        "medium": {
+          "tp": 8,
+          "fn": 23
+        },
+        "large": {
+          "tp": 6,
+          "fn": 5
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 11.0,
+        "mean": 2.4054054054054053
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 14.0,
+        "p25": 6.0,
+        "p75": 34.0,
+        "max": 66.0,
+        "mean": 19.756756756756758
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 1280.0,
+        "p25": 835.0,
+        "p75": 1647.0,
+        "max": 3240.0,
+        "mean": 1292.5135135135135
+      },
+      "wallMs": null,
+      "runKey": "edge-drawing|1|4da2cec76f3e"
+    },
+    "edge-drawing · dedupe 0.9 · 2d85f5": {
+      "detectorId": "edge-drawing",
+      "labelledAssets": 37,
+      "assetsAll": 37,
+      "tp": 72,
+      "fp": 41,
+      "fn": 81,
+      "duplicates": 3,
+      "gtTotal": 153,
+      "gtTotalAll": 171,
+      "gtPassesRules": 149,
+      "precision": 0.6371681415929203,
+      "recall": 0.47058823529411764,
+      "f1": 0.5413533834586466,
+      "precisionCI": [
+        0.5453576101068519,
+        0.7199588525228965
+      ],
+      "recallCI": [
+        0.393188812557957,
+        0.549428452249339
+      ],
+      "fpNestedInLabel": 30,
+      "precisionExcludingNested": 0.8674698795180723,
+      "recallOnRulePassingGT": 0.48322147651006714,
+      "aspectError": {
+        "median": 0.01472023384041263,
+        "p95": 0.06133537654044753,
+        "n": 72
+      },
+      "centreOffsetPctDiag": {
+        "median": 0.0959637222272661,
+        "p95": 0.5307418791950472,
+        "max": 1.2405851522567883,
+        "n": 72,
+        "histogram": [
+          {
+            "from": 0.0,
+            "count": 55
+          },
+          {
+            "from": 0.25,
+            "count": 12
+          },
+          {
+            "from": 0.5,
+            "count": 4
+          },
+          {
+            "from": 0.75,
+            "count": 0
+          },
+          {
+            "from": 1.0,
+            "count": 1
+          },
+          {
+            "from": 1.25,
+            "count": 0
+          },
+          {
+            "from": 1.5,
+            "count": 0
+          },
+          {
+            "from": 1.75,
+            "count": 0
+          },
+          {
+            "from": 2.0,
+            "count": 0
+          }
+        ]
+      },
+      "orientationErrorDeg": {
+        "median": 0.3200000000000074,
+        "p95": 10.905000000000001,
+        "n": 46
+      },
+      "subclassMismatches": 13,
+      "acceptedMeasuredAsProposed": {
+        "n": 52,
+        "of": 113
+      },
+      "subclassConfusion": {
+        "rectangle": {
+          "rectangle": 20,
+          "square": 4
+        },
+        "circle": {
+          "circle": 21,
+          "ellipse": 5
+        },
+        "square": {
+          "square": 11
+        },
+        "ellipse": {
+          "circle": 4,
+          "ellipse": 7
+        }
+      },
+      "byPrimitive": {
+        "rectangle": {
+          "tp": 35,
+          "fp": 6,
+          "fn": 62
+        },
+        "ellipse": {
+          "tp": 37,
+          "fp": 35,
+          "fn": 19
+        }
+      },
+      "byBand": {
+        "small": {
+          "tp": 54,
+          "fn": 57
+        },
+        "medium": {
+          "tp": 12,
+          "fn": 19
+        },
+        "large": {
+          "tp": 6,
+          "fn": 5
+        }
+      },
+      "acceptedPerImage": {
+        "n": 37,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 19.0,
+        "mean": 3.054054054054054
+      },
+      "candidatesPerImage": {
+        "n": 37,
+        "median": 13.0,
+        "p25": 6.0,
+        "p75": 31.0,
+        "max": 66.0,
+        "mean": 18.675675675675677
+      },
+      "durationMs": {
+        "n": 37,
+        "median": 608.0,
+        "p25": 416.0,
+        "p75": 774.0,
+        "max": 2021.0,
+        "mean": 627.3243243243244
+      },
+      "wallMs": null,
+      "runKey": "edge-drawing|1|2d85f5f1f67f"
     }
   },
   "floorSweeps": {
@@ -3178,6 +5053,176 @@
         "p75": 2.0,
         "max": 4.0,
         "mean": 1.1428571428571428
+      }
+    },
+    "opencv-reference · dedupe 0.9 · c8a664": {
+      "0.10": {
+        "n": 35,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 13.0,
+        "mean": 2.914285714285714
+      },
+      "0.15": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.5,
+        "max": 9.0,
+        "mean": 1.9142857142857144
+      },
+      "0.20": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.5,
+        "p75": 2.0,
+        "max": 6.0,
+        "mean": 1.5714285714285714
+      },
+      "0.25": {
+        "n": 35,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.1428571428571428
+      }
+    },
+    "opencv-reference · dedupe 0.9 · d09849": {
+      "0.10": {
+        "n": 34,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 13.0,
+        "mean": 3.411764705882353
+      },
+      "0.15": {
+        "n": 34,
+        "median": 1.5,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 1.8823529411764706
+      },
+      "0.20": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 5.0,
+        "mean": 1.5
+      },
+      "0.25": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 3.0,
+        "mean": 1.088235294117647
+      }
+    },
+    "opencv-reference · dedupe 0.9 · 5bbe1d": {
+      "0.10": {
+        "n": 30,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 3.75,
+        "max": 13.0,
+        "mean": 3.0
+      },
+      "0.15": {
+        "n": 30,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 9.0,
+        "mean": 1.8
+      },
+      "0.20": {
+        "n": 30,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 5.0,
+        "mean": 1.5333333333333334
+      },
+      "0.25": {
+        "n": 30,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.75,
+        "max": 4.0,
+        "mean": 1.0333333333333334
+      }
+    },
+    "opencv-reference · dedupe 0.9 · b71e0f": {
+      "0.10": {
+        "n": 31,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.5,
+        "max": 13.0,
+        "mean": 2.935483870967742
+      },
+      "0.15": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 0.5,
+        "p75": 2.0,
+        "max": 9.0,
+        "mean": 1.7096774193548387
+      },
+      "0.20": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 0.5,
+        "p75": 2.0,
+        "max": 5.0,
+        "mean": 1.4516129032258065
+      },
+      "0.25": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.5,
+        "max": 4.0,
+        "mean": 0.967741935483871
+      }
+    },
+    "opencv-reference · dedupe 0.9 · e6f41f": {
+      "0.10": {
+        "n": 33,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 13.0,
+        "mean": 2.8484848484848486
+      },
+      "0.15": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 9.0,
+        "mean": 1.696969696969697
+      },
+      "0.20": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 5.0,
+        "mean": 1.4545454545454546
+      },
+      "0.25": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 5.0,
+        "mean": 1.0
       }
     },
     "apple-vision · file all/medium/all -regions": {
@@ -3622,6 +5667,108 @@
         "mean": 1.303030303030303
       }
     },
+    "apple-vision · file all/medium/all · 91aa6c": {
+      "0.10": {
+        "n": 33,
+        "median": 3.0,
+        "p25": 2.0,
+        "p75": 5.0,
+        "max": 27.0,
+        "mean": 4.333333333333333
+      },
+      "0.15": {
+        "n": 33,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 18.0,
+        "mean": 3.0303030303030303
+      },
+      "0.20": {
+        "n": 33,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 2.1515151515151514
+      },
+      "0.25": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.4242424242424243
+      }
+    },
+    "apple-vision · file all/medium/all · db0670": {
+      "0.10": {
+        "n": 33,
+        "median": 3.0,
+        "p25": 2.0,
+        "p75": 5.0,
+        "max": 27.0,
+        "mean": 4.333333333333333
+      },
+      "0.15": {
+        "n": 33,
+        "median": 3.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 18.0,
+        "mean": 3.0303030303030303
+      },
+      "0.20": {
+        "n": 33,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 7.0,
+        "mean": 2.1515151515151514
+      },
+      "0.25": {
+        "n": 33,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.4242424242424243
+      }
+    },
+    "apple-vision · file all/medium/all regions@1024": {
+      "0.10": {
+        "n": 32,
+        "median": 3.0,
+        "p25": 2.0,
+        "p75": 4.0,
+        "max": 20.0,
+        "mean": 3.5625
+      },
+      "0.15": {
+        "n": 32,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.0,
+        "max": 13.0,
+        "mean": 2.5
+      },
+      "0.20": {
+        "n": 32,
+        "median": 2.0,
+        "p25": 0.75,
+        "p75": 3.0,
+        "max": 5.0,
+        "mean": 1.84375
+      },
+      "0.25": {
+        "n": 32,
+        "median": 1.0,
+        "p25": 0.75,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.375
+      }
+    },
     "apple-vision-register · 01e9cab7f08c": {
       "0.10": {
         "n": 27,
@@ -3757,6 +5904,142 @@
         "max": 4.0,
         "mean": 1.3823529411764706
       }
+    },
+    "edge-drawing · dedupe 0.9": {
+      "0.10": {
+        "n": 34,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 22.0,
+        "mean": 3.5294117647058822
+      },
+      "0.15": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.75,
+        "max": 11.0,
+        "mean": 1.8823529411764706
+      },
+      "0.20": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.75,
+        "max": 4.0,
+        "mean": 1.4705882352941178
+      },
+      "0.25": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 3.0,
+        "mean": 0.9411764705882353
+      }
+    },
+    "edge-drawing · dedupe 0.9 · 7c6eba": {
+      "0.10": {
+        "n": 34,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 22.0,
+        "mean": 3.5294117647058822
+      },
+      "0.15": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.75,
+        "max": 11.0,
+        "mean": 1.8823529411764706
+      },
+      "0.20": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.75,
+        "max": 4.0,
+        "mean": 1.4705882352941178
+      },
+      "0.25": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 3.0,
+        "mean": 0.9411764705882353
+      }
+    },
+    "edge-drawing · dedupe 0.9 · 4da2ce": {
+      "0.10": {
+        "n": 31,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 3.5,
+        "max": 11.0,
+        "mean": 2.870967741935484
+      },
+      "0.15": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.0,
+        "max": 11.0,
+        "mean": 1.5806451612903225
+      },
+      "0.20": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.2258064516129032
+      },
+      "0.25": {
+        "n": 31,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 3.0,
+        "mean": 0.7419354838709677
+      }
+    },
+    "edge-drawing · dedupe 0.9 · 2d85f5": {
+      "0.10": {
+        "n": 34,
+        "median": 2.0,
+        "p25": 1.0,
+        "p75": 4.0,
+        "max": 19.0,
+        "mean": 3.323529411764706
+      },
+      "0.15": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 1.0,
+        "p75": 2.75,
+        "max": 10.0,
+        "mean": 1.8823529411764706
+      },
+      "0.20": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.25,
+        "p75": 2.0,
+        "max": 4.0,
+        "mean": 1.4705882352941178
+      },
+      "0.25": {
+        "n": 34,
+        "median": 1.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "max": 3.0,
+        "mean": 1.0
+      }
     }
   },
   "runs": {
@@ -3890,6 +6173,379 @@
               "method": "CHAIN_APPROX_NONE",
               "minPoints": 40,
               "mode": "RETR_CCOMP"
+            },
+            "fillEnclosed": true,
+            "prefilter": {
+              "maxExtent": 0.98,
+              "minExtent": 0.08,
+              "minSolidity": 0.6
+            },
+            "proposalLongEdges": [
+              1024,
+              2048
+            ],
+            "refine": {
+              "identity": "consensus",
+              "pad": 0.08,
+              "priorIoU": 0.8
+            },
+            "regionDedupe": {
+              "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.9
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "opencv-reference|1|c8a664eb0e85": {
+        "runAt": "2026-09-12T12:02:49Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "adaptive": {
+              "C": 5,
+              "block": 51
+            },
+            "blur": 5,
+            "canny": {
+              "aperture": 3,
+              "loFrac": 0.5,
+              "minHi": 40,
+              "mode": "otsu"
+            },
+            "close": [
+              5,
+              9,
+              15
+            ],
+            "contours": {
+              "method": "CHAIN_APPROX_NONE",
+              "minPoints": 40,
+              "mode": "RETR_CCOMP"
+            },
+            "fillEnclosed": true,
+            "prefilter": {
+              "maxExtent": 0.98,
+              "minExtent": 0.08,
+              "minSolidity": 0.6
+            },
+            "proposalLongEdges": [
+              1024,
+              2048
+            ],
+            "refine": {
+              "identity": "consensus",
+              "pad": 0.08,
+              "priorIoU": 1.01
+            },
+            "regionDedupe": {
+              "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.9
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "opencv-reference|1|d0984933697d": {
+        "runAt": "2026-09-12T12:05:56Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "adaptive": {
+              "C": 5,
+              "block": 51
+            },
+            "blur": 5,
+            "canny": {
+              "aperture": 3,
+              "loFrac": 0.5,
+              "minHi": 40,
+              "mode": "otsu"
+            },
+            "close": [
+              5,
+              9,
+              15
+            ],
+            "contours": {
+              "method": "CHAIN_APPROX_NONE",
+              "minPoints": 40,
+              "mode": "RETR_CCOMP"
+            },
+            "fillEnclosed": true,
+            "prefilter": {
+              "maxExtent": 0.98,
+              "minExtent": 0.08,
+              "minSolidity": 0.6
+            },
+            "proposalLongEdges": [
+              1024,
+              2048,
+              4096
+            ],
+            "refine": {
+              "identity": "consensus",
+              "pad": 0.08,
+              "priorIoU": 0.8
+            },
+            "regionDedupe": {
+              "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.9
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "opencv-reference|1|5bbe1d0c9e30": {
+        "runAt": "2026-09-12T12:22:15Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "adaptive": {
+              "C": 5,
+              "block": 51
+            },
+            "blur": 5,
+            "canny": {
+              "aperture": 3,
+              "loFrac": 0.5,
+              "minHi": 40,
+              "mode": "otsu"
+            },
+            "close": [
+              5,
+              9,
+              15
+            ],
+            "contours": {
+              "method": "CHAIN_APPROX_NONE",
+              "minPoints": 40,
+              "mode": "RETR_CCOMP"
+            },
+            "edgeSupport": {
+              "min": 0.5,
+              "tolPx": 3
+            },
+            "fillEnclosed": true,
+            "prefilter": {
+              "maxExtent": 0.98,
+              "minExtent": 0.08,
+              "minSolidity": 0.6
+            },
+            "proposalLongEdges": [
+              1024,
+              2048
+            ],
+            "refine": {
+              "identity": "consensus",
+              "pad": 0.08,
+              "priorIoU": 0.8
+            },
+            "regionDedupe": {
+              "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.9
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "opencv-reference|1|b71e0f8c0f10": {
+        "runAt": "2026-09-12T12:24:05Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "adaptive": {
+              "C": 5,
+              "block": 51
+            },
+            "blur": 5,
+            "canny": {
+              "aperture": 3,
+              "loFrac": 0.5,
+              "minHi": 40,
+              "mode": "otsu"
+            },
+            "close": [
+              5,
+              9,
+              15
+            ],
+            "contours": {
+              "method": "CHAIN_APPROX_NONE",
+              "minPoints": 40,
+              "mode": "RETR_CCOMP"
+            },
+            "edgeSupport": {
+              "min": 0.4,
+              "tolPx": 3
+            },
+            "fillEnclosed": true,
+            "prefilter": {
+              "maxExtent": 0.98,
+              "minExtent": 0.08,
+              "minSolidity": 0.6
+            },
+            "proposalLongEdges": [
+              1024,
+              2048
+            ],
+            "refine": {
+              "identity": "consensus",
+              "pad": 0.08,
+              "priorIoU": 0.8
+            },
+            "regionDedupe": {
+              "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.9
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "opencv-reference|1|e6f41f7edf7d": {
+        "runAt": "2026-09-12T12:26:05Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "adaptive": {
+              "C": 5,
+              "block": 51
+            },
+            "blur": 5,
+            "canny": {
+              "aperture": 3,
+              "loFrac": 0.5,
+              "minHi": 40,
+              "mode": "otsu"
+            },
+            "close": [
+              5,
+              9,
+              15
+            ],
+            "contours": {
+              "method": "CHAIN_APPROX_NONE",
+              "minPoints": 40,
+              "mode": "RETR_CCOMP"
+            },
+            "edgeSupport": {
+              "min": 0.3,
+              "tolPx": 3
             },
             "fillEnclosed": true,
             "prefilter": {
@@ -4821,6 +7477,206 @@
             "tieMargin": 0.02
           }
         }
+      },
+      "apple-vision|1|91aa6ccab374": {
+        "runAt": "2026-09-12T12:18:37Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "4a42d8b33a26",
+            "profile": "file all/medium/all",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 1.01
+              }
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|db067013f4a9": {
+        "runAt": "2026-09-12T12:29:24Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "4a42d8b33a26",
+            "profile": "file all/medium/all",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.9
+              }
+            },
+            "v1Dedupe": "none"
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "apple-vision|1|39640d381d81": {
+        "runAt": "2026-09-12T12:33:56Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "flags": [
+              "--region-edges",
+              "1024"
+            ],
+            "kitDetectorVersion": 1,
+            "lapseSha256": "4a42d8b33a26",
+            "profile": "file all/medium/all regions@1024",
+            "refine": {
+              "adaptive": {
+                "C": 5,
+                "block": 51
+              },
+              "blur": 5,
+              "canny": {
+                "aperture": 3,
+                "loFrac": 0.5,
+                "minHi": 40,
+                "mode": "otsu"
+              },
+              "close": [
+                5,
+                9,
+                15
+              ],
+              "contours": {
+                "method": "CHAIN_APPROX_NONE",
+                "minPoints": 40,
+                "mode": "RETR_CCOMP"
+              },
+              "refine": {
+                "identity": "consensus",
+                "pad": 0.08,
+                "priorIoU": 0.8
+              },
+              "shapeDedupe": {
+                "iou": 0.9
+              }
+            },
+            "v1Dedupe": "none"
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
       }
     },
     "apple-vision-register": {
@@ -5049,6 +7905,430 @@
               }
             },
             "source": "library shapes.json"
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      }
+    },
+    "edge-drawing": {
+      "edge-drawing|1|bdab10078c2c": {
+        "runAt": "2026-09-12T12:20:30Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "adaptive": {
+              "C": 5,
+              "block": 51
+            },
+            "blur": 5,
+            "canny": {
+              "aperture": 3,
+              "loFrac": 0.5,
+              "minHi": 40,
+              "mode": "otsu"
+            },
+            "chains": {
+              "endGapFrac": 0.15,
+              "loopJoinPx": 3.0,
+              "minPoints": 40
+            },
+            "close": [
+              5,
+              9,
+              15
+            ],
+            "contours": {
+              "method": "CHAIN_APPROX_NONE",
+              "minPoints": 40,
+              "mode": "RETR_CCOMP"
+            },
+            "ed": {
+              "anchorThreshold": 8,
+              "gradientThreshold": 36,
+              "minPathLength": 20,
+              "nfa": true,
+              "pfMode": true,
+              "scanInterval": 1,
+              "sigma": 1.0,
+              "sumFlag": true
+            },
+            "ellipses": {
+              "use": true
+            },
+            "fillEnclosed": true,
+            "longEdges": [
+              1024,
+              2048,
+              4096
+            ],
+            "lowScaleChains": "refine",
+            "nativeChains": "asTraced",
+            "prefilter": {
+              "maxExtent": 0.98,
+              "minExtent": 0.08,
+              "minSolidity": 0.6
+            },
+            "refine": {
+              "identity": "consensus",
+              "pad": 0.08,
+              "priorIoU": 0.8
+            },
+            "regionDedupe": {
+              "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.9
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "edge-drawing|1|4da2cec76f3e": {
+        "runAt": "2026-09-12T12:42:24Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "adaptive": {
+              "C": 5,
+              "block": 51
+            },
+            "blur": 5,
+            "canny": {
+              "aperture": 3,
+              "loFrac": 0.5,
+              "minHi": 40,
+              "mode": "otsu"
+            },
+            "chains": {
+              "endGapFrac": 0.15,
+              "loopJoinPx": 3.0,
+              "minPoints": 40
+            },
+            "close": [
+              5,
+              9,
+              15
+            ],
+            "contours": {
+              "method": "CHAIN_APPROX_NONE",
+              "minPoints": 40,
+              "mode": "RETR_CCOMP"
+            },
+            "ed": {
+              "anchorThreshold": 8,
+              "gradientThreshold": 36,
+              "minPathLength": 20,
+              "nfa": true,
+              "pfMode": true,
+              "scanInterval": 1,
+              "sigma": 1.0,
+              "sumFlag": true
+            },
+            "ellipses": {
+              "edgeTolPx": 3,
+              "minEdgeSupport": 0.7,
+              "requireRefined": false,
+              "use": true
+            },
+            "fillEnclosed": true,
+            "longEdges": [
+              1024,
+              2048,
+              4096
+            ],
+            "lowScaleChains": "refine",
+            "nativeChains": "asTraced",
+            "prefilter": {
+              "maxExtent": 0.98,
+              "minExtent": 0.08,
+              "minSolidity": 0.6
+            },
+            "quads": {
+              "angleTolDeg": 8.0,
+              "aspectMax": 4.0,
+              "edgeTolPx": 3,
+              "maxPerScale": 400,
+              "mergeGapFrac": 0.3,
+              "mergeOffsetPx": 2.5,
+              "minClosingCover": 0.6,
+              "minLenFrac": 0.25,
+              "minOverlap": 0.6,
+              "minPairSupport": 0.8,
+              "requireRefined": false,
+              "use": false
+            },
+            "refine": {
+              "identity": "consensus",
+              "pad": 0.08,
+              "priorIoU": 0.8
+            },
+            "regionDedupe": {
+              "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.9
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "edge-drawing|1|2d85f5f1f67f": {
+        "runAt": "2026-09-12T12:42:53Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "adaptive": {
+              "C": 5,
+              "block": 51
+            },
+            "blur": 5,
+            "canny": {
+              "aperture": 3,
+              "loFrac": 0.5,
+              "minHi": 40,
+              "mode": "otsu"
+            },
+            "chains": {
+              "endGapFrac": 0.15,
+              "loopJoinPx": 3.0,
+              "minPoints": 40
+            },
+            "close": [
+              5,
+              9,
+              15
+            ],
+            "contours": {
+              "method": "CHAIN_APPROX_NONE",
+              "minPoints": 40,
+              "mode": "RETR_CCOMP"
+            },
+            "ed": {
+              "anchorThreshold": 8,
+              "gradientThreshold": 36,
+              "minPathLength": 20,
+              "nfa": true,
+              "pfMode": true,
+              "scanInterval": 1,
+              "sigma": 1.0,
+              "sumFlag": true
+            },
+            "ellipses": {
+              "edgeTolPx": 3,
+              "minEdgeSupport": 0.0,
+              "requireRefined": false,
+              "use": true
+            },
+            "fillEnclosed": true,
+            "longEdges": [
+              1024,
+              2048
+            ],
+            "lowScaleChains": "refine",
+            "nativeChains": "asTraced",
+            "prefilter": {
+              "maxExtent": 0.98,
+              "minExtent": 0.08,
+              "minSolidity": 0.6
+            },
+            "quads": {
+              "angleTolDeg": 8.0,
+              "aspectMax": 4.0,
+              "edgeTolPx": 3,
+              "maxPerScale": 400,
+              "mergeGapFrac": 0.3,
+              "mergeOffsetPx": 2.5,
+              "minClosingCover": 0.6,
+              "minLenFrac": 0.25,
+              "minOverlap": 0.6,
+              "minPairSupport": 0.8,
+              "requireRefined": false,
+              "use": false
+            },
+            "refine": {
+              "identity": "consensus",
+              "pad": 0.08,
+              "priorIoU": 0.8
+            },
+            "regionDedupe": {
+              "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.9
+            }
+          },
+          "rules": {
+            "borderPx": 2,
+            "ellipse": {
+              "circleRatio": 0.95,
+              "minAxisRatio": 0.4,
+              "minIoU": 0.9
+            },
+            "preFloor": 0.05,
+            "rect": {
+              "angleTolDeg": 8.0,
+              "approxEpsFrac": 0.02,
+              "minFill": 0.85,
+              "sideTol": 0.1,
+              "squareTol": 0.05
+            },
+            "size": {
+              "floor": 0.1,
+              "medium": 0.65,
+              "small": 0.35
+            },
+            "tieMargin": 0.02
+          }
+        }
+      },
+      "edge-drawing|1|7c6eba8d96e1": {
+        "runAt": "2026-09-12T12:41:31Z",
+        "assets": 37,
+        "params": {
+          "detector": {
+            "adaptive": {
+              "C": 5,
+              "block": 51
+            },
+            "blur": 5,
+            "canny": {
+              "aperture": 3,
+              "loFrac": 0.5,
+              "minHi": 40,
+              "mode": "otsu"
+            },
+            "chains": {
+              "endGapFrac": 0.15,
+              "loopJoinPx": 3.0,
+              "minPoints": 40
+            },
+            "close": [
+              5,
+              9,
+              15
+            ],
+            "contours": {
+              "method": "CHAIN_APPROX_NONE",
+              "minPoints": 40,
+              "mode": "RETR_CCOMP"
+            },
+            "ed": {
+              "anchorThreshold": 8,
+              "gradientThreshold": 36,
+              "minPathLength": 20,
+              "nfa": true,
+              "pfMode": true,
+              "scanInterval": 1,
+              "sigma": 1.0,
+              "sumFlag": true
+            },
+            "ellipses": {
+              "edgeTolPx": 3,
+              "minEdgeSupport": 0.0,
+              "requireRefined": false,
+              "use": true
+            },
+            "fillEnclosed": true,
+            "longEdges": [
+              1024,
+              2048,
+              4096
+            ],
+            "lowScaleChains": "refine",
+            "nativeChains": "asTraced",
+            "prefilter": {
+              "maxExtent": 0.98,
+              "minExtent": 0.08,
+              "minSolidity": 0.6
+            },
+            "quads": {
+              "angleTolDeg": 8.0,
+              "aspectMax": 4.0,
+              "edgeTolPx": 3,
+              "maxPerScale": 400,
+              "mergeGapFrac": 0.3,
+              "mergeOffsetPx": 2.5,
+              "minClosingCover": 0.6,
+              "minLenFrac": 0.25,
+              "minOverlap": 0.6,
+              "minPairSupport": 0.8,
+              "requireRefined": false,
+              "use": false
+            },
+            "refine": {
+              "identity": "consensus",
+              "pad": 0.08,
+              "priorIoU": 0.8
+            },
+            "regionDedupe": {
+              "bboxIoU": 0.8
+            },
+            "shapeDedupe": {
+              "iou": 0.9
+            }
           },
           "rules": {
             "borderPx": 2,

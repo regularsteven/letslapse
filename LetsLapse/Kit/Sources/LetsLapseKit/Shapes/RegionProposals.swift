@@ -190,42 +190,53 @@ enum RegionProposals {
             if support < s.minOutlineEdgeSupport {
                 result.refusals.append(Refusal(centre: centre, size: size, reason: String(format: "outline off the edges: support %.2f < %.2f", support, s.minOutlineEdgeSupport), margin: 1 - support / s.minOutlineEdgeSupport)); continue
             }
-            let rect = fitRect(pts, settings: s)
-            let ell = fitEllipse(pts, settings: s, width: w, height: h)
-            var order: [(Candidate.Primitive, Double)] = []
-            if let rect { order.append((.rectangle, rect.fill)) }
-            if let ell { order.append((.ellipse, ell.iou)) }
-            order.sort { $0.1 > $1.1 }
-            if order.count == 2, abs(order[0].1 - order[1].1) <= s.tieMargin, let rect, rect.structural {
-                order.sort { $0.0 == .rectangle && $1.0 != .rectangle }
-            }
-            var chosen: Candidate?
-            for (prim, score) in order {
-                if prim == .rectangle, let rect, rect.ok {
-                    let ext = max(rect.boxWidth, rect.boxHeight) / long
-                    chosen = Candidate(primitive: .rectangle, score: score, edgeSupport: support, corners: rect.corners, ellipse: nil, map: region.map, extent: ext)
-                    break
-                }
-                if prim == .ellipse, let ell, ell.ok {
-                    let e = ell.ellipse
-                    let ext = max(e.semiMajor, e.semiMinor) * 2 / long
-                    chosen = Candidate(primitive: .ellipse, score: score, edgeSupport: support, corners: nil, ellipse: e, map: region.map, extent: ext)
-                    break
-                }
-            }
-            if let chosen {
-                result.candidates.append(chosen)
-            } else {
-                var why: [String] = []
-                if let rect { why.append("rect: " + (rect.reasons.isEmpty ? "ok" : rect.reasons.joined(separator: "; "))) } else { why.append("rect: no fit") }
-                if let ell { why.append("ellipse: " + (ell.reasons.isEmpty ? "ok" : ell.reasons.joined(separator: "; "))) } else { why.append("ellipse: no fit") }
-                let best = order.first?.1 ?? 0
-                let gate = (order.first?.0 == .rectangle) ? s.rectMinFill : s.ellipseMinIoU
-                result.refusals.append(Refusal(centre: centre, size: size, reason: why.joined(separator: " · "), margin: max(0, 1 - best / gate)))
-            }
+            let verdict = fit(pts, map: region.map, edgeSupport: support, settings: s, width: w, height: h)
+            if let c = verdict.candidate { result.candidates.append(c) } else if let r = verdict.refusal { result.refusals.append(r) }
         }
         result.candidates.sort { $0.score > $1.score }
         return result
+    }
+
+    /// The §3 fits on one outline — shared by the region pass and the
+    /// edge-chain pass (`EdgeDrawing`) so a chain and a traced region are
+    /// judged by one rule. Both fits run; the better score is tried first,
+    /// and a near-tie (within `tieMargin`) goes to a rectangle whose four
+    /// sides are straight. The candidate that passed, or else the refusal
+    /// explaining what both fits made of the outline (centre and size from
+    /// its bounding box, the size relative to the plane's longer side).
+    static func fit(_ pts: [SIMD2<Double>], map: String, edgeSupport support: Double, settings s: Settings,
+                    width w: Int, height h: Int) -> (candidate: Candidate?, refusal: Refusal?) {
+        let long = Double(max(w, h))
+        var minX = Double.infinity, maxX = -Double.infinity, minY = Double.infinity, maxY = -Double.infinity
+        for p in pts { minX = min(minX, p.x); maxX = max(maxX, p.x); minY = min(minY, p.y); maxY = max(maxY, p.y) }
+        let centre = SIMD2<Double>((minX + maxX) / 2, (minY + maxY) / 2)
+        let size = max(maxX - minX, maxY - minY) / long
+        let rect = fitRect(pts, settings: s)
+        let ell = fitEllipse(pts, settings: s, width: w, height: h)
+        var order: [(Candidate.Primitive, Double)] = []
+        if let rect { order.append((.rectangle, rect.fill)) }
+        if let ell { order.append((.ellipse, ell.iou)) }
+        order.sort { $0.1 > $1.1 }
+        if order.count == 2, abs(order[0].1 - order[1].1) <= s.tieMargin, let rect, rect.structural {
+            order.sort { $0.0 == .rectangle && $1.0 != .rectangle }
+        }
+        for (prim, score) in order {
+            if prim == .rectangle, let rect, rect.ok {
+                let ext = max(rect.boxWidth, rect.boxHeight) / long
+                return (Candidate(primitive: .rectangle, score: score, edgeSupport: support, corners: rect.corners, ellipse: nil, map: map, extent: ext), nil)
+            }
+            if prim == .ellipse, let ell, ell.ok {
+                let e = ell.ellipse
+                let ext = max(e.semiMajor, e.semiMinor) * 2 / long
+                return (Candidate(primitive: .ellipse, score: score, edgeSupport: support, corners: nil, ellipse: e, map: map, extent: ext), nil)
+            }
+        }
+        var why: [String] = []
+        if let rect { why.append("rect: " + (rect.reasons.isEmpty ? "ok" : rect.reasons.joined(separator: "; "))) } else { why.append("rect: no fit") }
+        if let ell { why.append("ellipse: " + (ell.reasons.isEmpty ? "ok" : ell.reasons.joined(separator: "; "))) } else { why.append("ellipse: no fit") }
+        let best = order.first?.1 ?? 0
+        let gate = (order.first?.0 == .rectangle) ? s.rectMinFill : s.ellipseMinIoU
+        return (nil, Refusal(centre: centre, size: size, reason: why.joined(separator: " · "), margin: max(0, 1 - best / gate)))
     }
 
     /// Debug: a plane as a binary PGM.
@@ -496,7 +507,7 @@ enum RegionProposals {
                     }
                 }
             }
-            if count >= minPixels { out.append(moore(map, start: i, foreground: { map.data[$0] != 0 })) }
+            if count >= minPixels { out.append(moore(map, start: i, foreground: { map.data[$0] != 0 }, limit: 8 * count + 8)) }
         }
         // Holes: black 4-connected regions that never touch the frame.
         var hole = [Int32](repeating: 0, count: w * h)
@@ -514,15 +525,22 @@ enum RegionProposals {
                 if y > 0, map.data[j - w] == 0, hole[j - w] == 0 { hole[j - w] = label; stack.append(j - w) }
                 if y < h - 1, map.data[j + w] == 0, hole[j + w] == 0 { hole[j + w] = label; stack.append(j + w) }
             }
-            if !touches && count >= minPixels { out.append(moore(map, start: i, foreground: { hole[$0] == label })) }
+            if !touches && count >= minPixels { out.append(moore(map, start: i, foreground: { hole[$0] == label }, limit: 8 * count + 8)) }
         }
         return out
     }
 
     /// Moore-neighbour border tracing from the region's first pixel in scan
     /// order (so the pixel above it is background), stopping when the start
-    /// is re-entered from the same direction (Jacob's criterion).
-    static func moore(_ map: Plane, start: Int, foreground: (Int) -> Bool) -> [SIMD2<Int32>] {
+    /// is re-entered from the same direction (Jacob's criterion). `limit` is
+    /// a safety valve on the number of steps: a border enters a pixel at most
+    /// once per direction, so eight times the region's pixel count bounds any
+    /// trace. The old rule of 16 · (w + h) was a frame-size guess that cut a
+    /// long, thin region's border short (a serpentine's border is about twice
+    /// its pixel count, and the longest real contour at 2048 px on the
+    /// benchmark corpus reached 51,032 points against a limit of 57,344 —
+    /// found in the 2026-09-12 audit).
+    static func moore(_ map: Plane, start: Int, foreground: (Int) -> Bool, limit: Int? = nil) -> [SIMD2<Int32>] {
         let w = map.width, h = map.height
         // Clockwise from the top: N, NE, E, SE, S, SW, W, NW.
         let dx: [Int] = [0, 1, 1, 1, 0, -1, -1, -1]
@@ -533,7 +551,7 @@ enum RegionProposals {
         var backtrack = 6 // we arrived from the west (the pixel to the west is background or outside)
         var firstStep = -1
         var steps = 0
-        let limit = 4 * (w + h) * 4
+        let limit = limit ?? 4 * (w + h) * 4
         while steps < limit {
             steps += 1
             var found = false

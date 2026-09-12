@@ -73,6 +73,8 @@ struct SettingsView: View {
     @State private var cameraAuthorizationStatus = CameraPrivacySettings.authorizationStatus
     @State private var showLocationPicker = false
     @State private var locationChange: StorageLocationChangeRequest?
+    @State private var showRigPicker = false
+    @State private var rigVersion = 0
     @State private var locationError: String?
     /// Bumped after writes to `StorageRoot`'s stored setting, which SwiftUI
     /// can't observe on its own, so the location rows re-read it.
@@ -926,6 +928,14 @@ struct SettingsView: View {
 
     // MARK: - Advanced
 
+    #if os(macOS)
+    private var rigSubtitle: String {
+        _ = rigVersion
+        let a = ExternalShapeDetector.availability
+        return a.ok ? "Runs the benchmark's Python detectors from \(a.detail)" : a.detail + " — the repository's LetsLapse/tools, with its .venv"
+    }
+    #endif
+
     private var advancedCard: some View {
         VStack(spacing: 0) {
             NavigationLink(value: SettingsDestination.layout) {
@@ -937,6 +947,21 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            #if os(macOS)
+            // The shape benchmark rig (tools/shapebench, Python) — what the
+            // Find shapes sheet's and the Masks tab's "Python" detectors run.
+            LLRow(title: "Shape detectors (Python rig)", subtitle: rigSubtitle) {
+                Button("Choose…") { showRigPicker = true }
+                    .buttonStyle(.bordered)
+            }
+            .fileImporter(isPresented: $showRigPicker, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
+                if case .success(let urls) = result, let url = urls.first {
+                    UserDefaults.standard.set(url.path, forKey: ExternalShapeDetector.rigFolderKey)
+                    rigVersion += 1
+                }
+            }
+            #endif
 
             #if os(iOS)
             LLRow(

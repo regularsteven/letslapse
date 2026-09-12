@@ -305,6 +305,13 @@ What the run surfaced, all fixed in the tree:
 
 ## Next
 
+**2026-09-12, later:** the port was audited and the next method measured —
+`review-2026-09-12.md`. In short: the port is sound (one tracer step-limit bug fixed); the rig
+was hiding five Kit hits behind a post-refinement dedupe (fixed; the Kit scores 74 / 69); full-
+resolution refinement and a third full-res scale buy nothing; edge drawing (`shapebench.py ed`)
+scores 74 / 46 alone and 97 of 153 in union with the Kit, and is the recommended port; 48 labels,
+40 of them rectangles, are found by nothing. The list below is as it stood before that.
+
 1. ~~Port the reference's proposal maps into the still-photo pass~~ — done; in the app 19 % → 46 %
    of the labels. ~~Decide the SIZE floor, complete the labels, run it in the app~~ — done.
    Remaining: bump `ShapeRegister.currentDetectorVersion` so libraries re-analyse (Find shapes

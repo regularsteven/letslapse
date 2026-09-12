@@ -1,0 +1,184 @@
+{
+  "assetId": "02A0573B-5FCD-43A4-A131-2C6ED60794AF",
+  "labeller": "steven",
+  "savedAt": "2026-09-12T08:34:22Z",
+  "shapes": [
+    {
+      "shapeId": "28A85BE6-6733-4CE7-892B-51D48C96F296",
+      "primitive": "ellipse",
+      "subclass": "circle",
+      "centre": {
+        "x": 0.48113,
+        "y": 0.48916
+      },
+      "extentRatio": 0.37,
+      "sizeBand": "medium",
+      "aspectRatio": 1.0111,
+      "orientationDeg": 177.59,
+      "vertices": null,
+      "axes": {
+        "major": 0.36998,
+        "minor": 0.36592
+      },
+      "sizePx": {
+        "major": 1118.8,
+        "minor": 1106.5
+      },
+      "confidence": 1,
+      "maxAngularDeviationDeg": null,
+      "fillRatio": null,
+      "sideMismatch": null,
+      "ellipseIoU": null,
+      "provenance": {
+        "source": "label",
+        "labeller": "steven"
+      },
+      "gt": {
+        "residual": 0,
+        "nPoints": 5,
+        "passesRules": true
+      },
+      "clicks": [
+        [
+          1474.0879120879122,
+          1419.2967032967033
+        ],
+        [
+          1902.6593406593408,
+          1640.1758241758241
+        ],
+        [
+          1826.8351648351652,
+          2385.230769230769
+        ],
+        [
+          1127.934065934066,
+          2421.4945054945056
+        ],
+        [
+          976.2857142857144,
+          1686.3296703296703
+        ]
+      ]
+    },
+    {
+      "shapeId": "96575CAB-32FC-4E85-90F8-0D77D8C0EF0F",
+      "primitive": "ellipse",
+      "subclass": "circle",
+      "centre": {
+        "x": 0.48119,
+        "y": 0.48924
+      },
+      "extentRatio": 0.4762,
+      "sizeBand": "medium",
+      "aspectRatio": 1.0157,
+      "orientationDeg": 41.51,
+      "vertices": null,
+      "axes": {
+        "major": 0.47944,
+        "minor": 0.47205
+      },
+      "sizePx": {
+        "major": 1449.8,
+        "minor": 1427.5
+      },
+      "confidence": 1,
+      "maxAngularDeviationDeg": null,
+      "fillRatio": null,
+      "sideMismatch": null,
+      "ellipseIoU": null,
+      "provenance": {
+        "source": "label",
+        "labeller": "steven"
+      },
+      "gt": {
+        "residual": 0,
+        "nPoints": 5,
+        "passesRules": true
+      },
+      "clicks": [
+        [
+          1470.7912087912089,
+          1254.4615384615383
+        ],
+        [
+          1991.67032967033,
+          1501.7142857142856
+        ],
+        [
+          2008.1538461538464,
+          2441.274725274725
+        ],
+        [
+          1151.010989010989,
+          2619.296703296703
+        ],
+        [
+          735.6263736263737,
+          1933.5824175824175
+        ]
+      ]
+    },
+    {
+      "shapeId": "C3880179-7BA1-497D-93E3-E3C7D5FACB52",
+      "primitive": "ellipse",
+      "subclass": "circle",
+      "centre": {
+        "x": 0.48019,
+        "y": 0.48867
+      },
+      "extentRatio": 0.3323,
+      "sizeBand": "small",
+      "aspectRatio": 1.0099,
+      "orientationDeg": 9.8,
+      "vertices": null,
+      "axes": {
+        "major": 0.33244,
+        "minor": 0.32917
+      },
+      "sizePx": {
+        "major": 1005.3,
+        "minor": 995.4
+      },
+      "confidence": 1,
+      "maxAngularDeviationDeg": null,
+      "fillRatio": null,
+      "sideMismatch": null,
+      "ellipseIoU": null,
+      "provenance": {
+        "source": "label",
+        "labeller": "steven"
+      },
+      "gt": {
+        "residual": 0,
+        "nPoints": 5,
+        "passesRules": true
+      },
+      "clicks": [
+        [
+          1443.0734644783852,
+          1472.5444540258982
+        ],
+        [
+          1831.2202474611765,
+          1644.8235074353724
+        ],
+        [
+          1849.901108674252,
+          2275.821486188146
+        ],
+        [
+          1189.844012478917,
+          2394.133607204291
+        ],
+        [
+          957.3710729384214,
+          1881.4477494676623
+        ]
+      ]
+    }
+  ],
+  "rejected": [],
+  "done": true,
+  "notes": ""
+}

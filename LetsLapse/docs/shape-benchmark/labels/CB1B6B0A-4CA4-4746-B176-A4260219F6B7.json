@@ -1,0 +1,80 @@
+{
+  "assetId": "CB1B6B0A-4CA4-4746-B176-A4260219F6B7",
+  "labeller": "steven",
+  "savedAt": "2026-09-12T09:07:37Z",
+  "shapes": [
+    {
+      "shapeId": "91A1794B-7852-4FF7-9CFC-2C523DFFEE49",
+      "primitive": "rectangle",
+      "subclass": "rectangle",
+      "centre": {
+        "x": 0.45996,
+        "y": 0.3573
+      },
+      "extentRatio": 0.3636,
+      "sizeBand": "medium",
+      "aspectRatio": 1.0684,
+      "orientationDeg": 1.23,
+      "vertices": [
+        {
+          "x": 0.28796,
+          "y": 0.22936
+        },
+        {
+          "x": 0.63682,
+          "y": 0.23509
+        },
+        {
+          "x": 0.63464,
+          "y": 0.48528
+        },
+        {
+          "x": 0.27815,
+          "y": 0.47956
+        }
+      ],
+      "axes": null,
+      "sizePx": {
+        "major": 1078.3,
+        "minor": 1009.2
+      },
+      "confidence": 1,
+      "maxAngularDeviationDeg": 0.88,
+      "fillRatio": 0.9891,
+      "sideMismatch": 0.0214,
+      "ellipseIoU": null,
+      "provenance": {
+        "source": "label",
+        "labeller": "steven"
+      },
+      "gt": {
+        "maxAngularDeviationDeg": 0.88,
+        "sideMismatch": 0.0214,
+        "fillRatio": 0.9891,
+        "nPoints": 4,
+        "passesRules": true
+      },
+      "clicks": [
+        [
+          870.7912087912089,
+          924.7912087912086
+        ],
+        [
+          1925.736263736264,
+          947.8681318681317
+        ],
+        [
+          1919.1428571428573,
+          1956.6593406593406
+        ],
+        [
+          841.1208791208792,
+          1933.5824175824175
+        ]
+      ]
+    }
+  ],
+  "rejected": [],
+  "done": true,
+  "notes": ""
+}

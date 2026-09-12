@@ -21,6 +21,9 @@ $PY tools/shapebench/shapebench.py vision                                      #
 $PY tools/shapebench/shapebench.py vision --flags="--sensitivity high"         #   any lapse dial or flag: its own run block
 $PY tools/shapebench/shapebench.py metrics --all-runs                          #   every run block of every detector, side by side
 $PY tools/shapebench/shapebench.py metrics --docs docs/shape-benchmark         # phase 5: the comparison, copied to docs
+$PY tools/shapebench/shapebench.py gt-import --source docs/shape-benchmark/labels   # a fresh work/: ground truth back from git
+$PY tools/shapebench/shapebench.py detect-one --detector edge-drawing --image <file>   # one picture → the Kit's shape JSON (the Mac app's Python engines)
+<contrib venv>/python tools/shapebench/shapebench.py ed [--params f.json] [--dry]    # edge-drawing detector (needs cv2.ximgproc)
 ```
 
 `detect --params overrides.json` merges a JSON file over `DEFAULT_PARAMS` in
@@ -37,6 +40,7 @@ work/register/<assetId>/         byte copy of the library's shapes.json (+ captu
 work/results/<assetId>.json      schema v2: { schemaVersion: 2, projectId, runs: [...] }
 work/vision-raw/<assetId>.<flags>.<lapse sha8>.json   raw `lapse shapes --json` output (provenance; keyed by the binary)
 work/labels/<assetId>.json       raw clicks + fit verdicts (audit; GT itself is a run block in results/)
+                                 (archived in docs/shape-benchmark/labels/; `gt-import --source <dir>` rebuilds them and the GT run blocks)
 work/logs/<detector>.<hash>.jsonl  one row per candidate region (extent, verdict, reason, scores)
 work/overlays/<detector>/        1024-px review pictures; *.vs-gt/ after metrics; combined/ = GT + all
 work/metrics.json, work/report-generated.md
@@ -54,6 +58,13 @@ provenance}`. Coordinates are normalised per axis, origin top-left; `axes` are
 full axes as fractions of frame WIDTH (the v1 register's convention). The
 `stats` block (candidates, accepted, durationMs) and `provenance` are additive
 to the brief's §4.2. `assetId` = project UUID (a Photo project is one asset).
+
+`detect-one` is how the Mac app's "Python reference" / "Python edge drawing"
+detection modes run (`App/Shapemation/ExternalShapeDetector.swift`, Settings ▸
+Advanced points the app at this `tools` folder): one picture, one detector,
+the shapes printed as the Kit's own `DetectedShape` JSON (`fitting.shape_to_v1`).
+Since 2026-09-12 the venv carries `opencv-contrib-python-headless` (a superset
+of the plain wheel) so `edge-drawing` runs in it too.
 
 ## Detectors
 
@@ -89,6 +100,18 @@ to the brief's §4.2. `assetId` = project UUID (a Photo project is one asset).
 - `apple-vision-register` — the library's own `shapes.json` (v1), same
   conversion, with `provenance.v1Source` = captured (kept by the shooter on
   the viewfinder) / detected / manual.
+- `edge-drawing` — `detect_ed.py` (2026-09-12 review, `shapebench.py ed`): EdgeDrawing
+  (`cv2.ximgproc`, parameter-free mode) at 1024 / 2048 / native; closed edge chains become
+  regions (a native-scale chain is its own full-resolution measurement), EDCircles' ellipse
+  hypotheses are re-traced like Vision's, optionally gated on native edge support
+  (`ellipses.minEdgeSupport`, 0.7 is the precision setting) or `requireRefined`; then the
+  shared pass. Needs `opencv-contrib-python-headless` in place of `opencv-python-headless`
+  (a superset — uninstall the plain wheel first, one `cv2` only); `ed` refuses to run without
+  `cv2.ximgproc`. `--dry` scores against the labels and writes overlays without a run block.
+  Measured: 74 / 46 alone, 97 of 153 in union with the Kit —
+  `docs/shape-benchmark/review-2026-09-12.md`. The `quads` block (rectangles from EDLines
+  segments) is off by default: both forms tried buy hits only at a wall of false positives on
+  tiles and cobbles (§5 of the review).
 - `manual-groundtruth` — the labelling page. Rectangle = 4 corner clicks taken
   as vertices (the §3.4 checks are recorded in `gt.passesRules`, never used to
   reject: a human-labelled trapezoid is still a target). Ellipse = ≥ 5 rim
@@ -112,6 +135,12 @@ the candidate log without re-running.
 Matching (metrics): same primitive, centre offset ≤ 2 % of the diagonal, mask
 IoU ≥ 0.70 at a 1024-px working scale, aspect within 10 %; greedy one-to-one
 by IoU.
+
+The `apple-vision` and `apple-vision-register` blocks are scored as the Kit emits them: no
+second dedupe after refinement (`v1Dedupe: none` in their run params since 2026-09-12 — the
+consensus dedupe at 0.9 was merging two Kit shapes 5–10 % apart once the full-resolution
+re-trace had pulled both onto one contour, hiding five true positives). The reference and
+edge-drawing detectors still dedupe their own output (`shapeDedupe`).
 
 ## Labelling page keys
 

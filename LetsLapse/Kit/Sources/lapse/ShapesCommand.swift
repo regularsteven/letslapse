@@ -25,7 +25,8 @@ struct ShapesJSON: Codable {
 func runShapes(path: String, residual: Double?, live: Bool, longEdge: Int?, verbose: Bool,
                contrasts: [Float]? = nil, edges: [Float]? = nil, contourDimension: Int? = nil,
                search: ShapeSearch = ShapeSearch(), trail: Bool = false, json: Bool = false,
-               regions: Bool? = nil, floor: Double? = nil, regionGates: String? = nil, regionEdges: [Int]? = nil) throws {
+               regions: Bool? = nil, floor: Double? = nil, regionGates: String? = nil, regionEdges: [Int]? = nil,
+               edgeChains: Bool? = nil, edgeChainEdges: [Int]? = nil) throws {
     let url = URL(fileURLWithPath: path)
     let projectFolder = url.deletingLastPathComponent().lastPathComponent == "source"
         ? url.deletingLastPathComponent().deletingLastPathComponent() : url.deletingLastPathComponent()
@@ -89,6 +90,11 @@ func runShapes(path: String, residual: Double?, live: Bool, longEdge: Int?, verb
         if let regionEdges, !regionEdges.isEmpty {
             profiles[i].1.regionProposalLongEdges = regionEdges
             profiles[i].0 += " regions@" + regionEdges.map(String.init).joined(separator: ",")
+        }
+        if let edgeChains { profiles[i].1.edgeChains = edgeChains; profiles[i].0 += edgeChains ? " +edges" : " -edges" }
+        if let edgeChainEdges, !edgeChainEdges.isEmpty {
+            profiles[i].1.edgeChainLongEdges = edgeChainEdges
+            profiles[i].0 += " edges@" + edgeChainEdges.map(String.init).joined(separator: ",")
         }
         if regionGates == "loose" {
             // Propose only: the §3 gates loosened so a later full-resolution

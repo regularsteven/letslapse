@@ -78,6 +78,27 @@ final class RegionProposalsTests: XCTestCase {
         XCTAssertEqual(RegionProposals.approximate(pts, epsilon: 0.02 * perimeter).count, 4)
     }
 
+    func testTracerFollowsABorderLongerThanTheFrameRule() {
+        // A one-pixel serpentine: its border visits every pixel, about twice
+        // its pixel count, far past the old 16 · (w + h) step limit.
+        let w = 160, h = 120
+        var plane = RegionProposals.Plane(width: w, height: h)
+        var y = 4, row = 0
+        while y < 116 {
+            for x in 4..<156 { plane.data[y * w + x] = 255 }
+            let cx = row % 2 == 0 ? 155 : 4
+            for yy in y..<min(h - 1, y + 3) { plane.data[yy * w + cx] = 255 }
+            y += 2; row += 1
+        }
+        let pixels = plane.data.filter { $0 != 0 }.count
+        let contours = RegionProposals.trace(plane, minPixels: 20)
+        XCTAssertEqual(contours.count, 1)
+        let c = try! XCTUnwrap(contours.first)
+        XCTAssertGreaterThan(c.count, 16 * (w + h))
+        XCTAssertLessThanOrEqual(max(abs(c.last!.x - c.first!.x), abs(c.last!.y - c.first!.y)), 1)   // closed
+        XCTAssertEqual(Set(c.map { Int($0.y) * w + Int($0.x) }).count, pixels)                       // every pixel of a 1-px line is border
+    }
+
     func testPolygonIoU() {
         let square = [SIMD2<Double>(0, 0), SIMD2(10, 0), SIMD2(10, 10), SIMD2(0, 10)]
         let shifted = square.map { $0 + SIMD2(5, 0) }

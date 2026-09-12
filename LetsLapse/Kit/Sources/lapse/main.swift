@@ -43,6 +43,11 @@ USAGE:
                             benchmark reference used 1024,2048)
       --region-gates loose  Loosen the region pass's own §3 gates (propose only; for a
                             rig that measures at full resolution afterwards)
+      --edge-chains / --no-edge-chains
+                            Force the edge-chain pass (Edge Drawing's closed chains) on
+                            or off (off by default)
+      --edge-chain-edges A,B
+                            Long edges the edge-chain pass traces at (default 1024,2048)
       --verbose             Also print what each pass looked at and refused, and why
       --json                The pass's shapes, diagnostics and the register as JSON
       --trail               First print the register beside a project picture: its
@@ -660,10 +665,15 @@ do {
         let floor = takeOption(["--floor"]).map { Double($0) ?? 0 }
         let regionGates = takeOption(["--region-gates"])
         let regionEdges = takeOption(["--region-edges"]).map { $0.split(separator: ",").compactMap { Int($0) } }
+        var edgeChains: Bool?
+        if takeFlag(["--edge-chains"]) { edgeChains = true }
+        if takeFlag(["--no-edge-chains"]) { edgeChains = false }
+        let edgeChainEdges = takeOption(["--edge-chain-edges"]).map { $0.split(separator: ",").compactMap { Int($0) } }
         guard args.count == 1 else { fail("shapes needs one image") }
         try runShapes(path: args[0], residual: residual, live: live, longEdge: longEdge, verbose: verbose,
                       contrasts: contrasts, edges: edges, contourDimension: contourDimension, search: search, trail: trail, json: json,
-                      regions: regions, floor: floor, regionGates: regionGates, regionEdges: regionEdges)
+                      regions: regions, floor: floor, regionGates: regionGates, regionEdges: regionEdges,
+                      edgeChains: edgeChains, edgeChainEdges: edgeChainEdges)
 
     case "framing":
         let apply = takeFlag(["--apply"])

@@ -1,0 +1,220 @@
+{
+  "assetId": "4C493B9A-F191-4013-B70F-93EA01BB4027",
+  "labeller": "steven",
+  "savedAt": "2026-09-12T09:08:09Z",
+  "shapes": [
+    {
+      "shapeId": "873D4A35-07EE-4B90-A0D8-E0164773BEDD",
+      "primitive": "rectangle",
+      "subclass": "rectangle",
+      "centre": {
+        "x": 0.50545,
+        "y": 0.50557
+      },
+      "extentRatio": 0.6879,
+      "sizeBand": "large",
+      "aspectRatio": 1.1868,
+      "orientationDeg": 179.78,
+      "vertices": [
+        {
+          "x": 0.1615,
+          "y": 0.28987
+        },
+        {
+          "x": 0.84722,
+          "y": 0.28987
+        },
+        {
+          "x": 0.84613,
+          "y": 0.72076
+        },
+        {
+          "x": 0.16368,
+          "y": 0.72321
+        }
+      ],
+      "axes": null,
+      "sizePx": {
+        "major": 2073.6,
+        "minor": 1747.3
+      },
+      "confidence": 1,
+      "maxAngularDeviationDeg": 0.38,
+      "fillRatio": 0.9948,
+      "sideMismatch": 0.0057,
+      "ellipseIoU": null,
+      "provenance": {
+        "source": "label",
+        "labeller": "steven"
+      },
+      "gt": {
+        "maxAngularDeviationDeg": 0.38,
+        "sideMismatch": 0.0057,
+        "fillRatio": 0.9948,
+        "nPoints": 4,
+        "passesRules": true
+      },
+      "clicks": [
+        [
+          488.3736263736265,
+          1168.7472527472526
+        ],
+        [
+          2562.0000000000005,
+          1168.7472527472526
+        ],
+        [
+          2558.703296703297,
+          2906.10989010989
+        ],
+        [
+          494.9670329670331,
+          2916
+        ]
+      ]
+    },
+    {
+      "shapeId": "DA1E4BDB-7A6D-49AB-9E76-6736AD2F9B62",
+      "primitive": "rectangle",
+      "subclass": "rectangle",
+      "centre": {
+        "x": 0.50763,
+        "y": 0.55437
+      },
+      "extentRatio": 0.5854,
+      "sizeBand": "medium",
+      "aspectRatio": 1.7048,
+      "orientationDeg": 0,
+      "vertices": [
+        {
+          "x": 0.21492,
+          "y": 0.4256
+        },
+        {
+          "x": 0.80034,
+          "y": 0.4256
+        },
+        {
+          "x": 0.80034,
+          "y": 0.68315
+        },
+        {
+          "x": 0.21601,
+          "y": 0.67988
+        }
+      ],
+      "axes": null,
+      "sizePx": {
+        "major": 1770.3,
+        "minor": 1038.5
+      },
+      "confidence": 1,
+      "maxAngularDeviationDeg": 0.61,
+      "fillRatio": 0.9927,
+      "sideMismatch": 0.0127,
+      "ellipseIoU": null,
+      "provenance": {
+        "source": "label",
+        "labeller": "steven"
+      },
+      "gt": {
+        "maxAngularDeviationDeg": 0.61,
+        "sideMismatch": 0.0127,
+        "fillRatio": 0.9927,
+        "nPoints": 4,
+        "passesRules": true
+      },
+      "clicks": [
+        [
+          649.912087912088,
+          1715.9999999999998
+        ],
+        [
+          2420.2417582417584,
+          1715.9999999999998
+        ],
+        [
+          2420.2417582417584,
+          2754.461538461538
+        ],
+        [
+          653.2087912087914,
+          2741.274725274725
+        ]
+      ]
+    },
+    {
+      "shapeId": "5FFE8615-0F36-4D12-847F-EA2D3A7605F2",
+      "primitive": "rectangle",
+      "subclass": "rectangle",
+      "centre": {
+        "x": 0.50351,
+        "y": 0.3704
+      },
+      "extentRatio": 0.6033,
+      "sizeBand": "medium",
+      "aspectRatio": 4.6471,
+      "orientationDeg": 179.79,
+      "vertices": [
+        {
+          "x": 0.20184,
+          "y": 0.32257
+        },
+        {
+          "x": 0.80471,
+          "y": 0.32094
+        },
+        {
+          "x": 0.80471,
+          "y": 0.41824
+        },
+        {
+          "x": 0.20402,
+          "y": 0.41905
+        }
+      ],
+      "axes": null,
+      "sizePx": {
+        "major": 1823.1,
+        "minor": 392.3
+      },
+      "confidence": 1,
+      "maxAngularDeviationDeg": 0.87,
+      "fillRatio": 0.994,
+      "sideMismatch": 0.0083,
+      "ellipseIoU": null,
+      "provenance": {
+        "source": "label",
+        "labeller": "steven"
+      },
+      "gt": {
+        "maxAngularDeviationDeg": 0.87,
+        "sideMismatch": 0.0083,
+        "fillRatio": 0.994,
+        "nPoints": 4,
+        "passesRules": true
+      },
+      "clicks": [
+        [
+          610.3516483516485,
+          1300.6153846153845
+        ],
+        [
+          2433.4285714285716,
+          1294.021978021978
+        ],
+        [
+          2433.4285714285716,
+          1686.3296703296703
+        ],
+        [
+          616.9450549450551,
+          1689.6263736263736
+        ]
+      ]
+    }
+  ],
+  "rejected": [],
+  "done": true,
+  "notes": ""
+}

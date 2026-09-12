@@ -442,7 +442,7 @@ def serialise_shape(primitive: str, fit: dict, W: int, H: int, extent: float, ba
         d["extentRatio"] = round(float(extent), 4)
         d["sizeBand"] = band
         d["aspectRatio"] = round(aspect, 4)
-        d["orientationDeg"] = round(float(fit["orientationDeg"]) % 180.0, 2)
+        d["orientationDeg"] = round(float(fit["orientationDeg"]) % 180.0, 2) % 180.0   # 179.996 rounds to 180.0, which the schema refuses
         d["vertices"] = [{"x": round(float(x) / W, 5), "y": round(float(y) / H, 5)} for x, y in fit["vertices"]]
         d["axes"] = None
         d["sizePx"] = {"major": round(float(fit["long"]), 1), "minor": round(float(fit["short"]), 1)}
@@ -460,7 +460,7 @@ def serialise_shape(primitive: str, fit: dict, W: int, H: int, extent: float, ba
         d["extentRatio"] = round(float(extent), 4)
         d["sizeBand"] = band
         d["aspectRatio"] = round(a / b, 4)
-        d["orientationDeg"] = round(float(fit["orientationDeg"]) % 180.0, 2)
+        d["orientationDeg"] = round(float(fit["orientationDeg"]) % 180.0, 2) % 180.0
         d["vertices"] = None
         d["axes"] = {"major": round(2 * a / W, 5), "minor": round(2 * b / W, 5)}
         d["sizePx"] = {"major": round(2 * a, 1), "minor": round(2 * b, 1)}
@@ -770,3 +770,33 @@ def dedupe_shapes(shapes: list, W: int, H: int, match=MATCH) -> list:
             continue
         kept.append(s)
     return kept
+
+
+def shape_to_v1(shape: dict, W: int, H: int) -> dict:
+    """A schema-v2 shape → the Kit's `DetectedShape` JSON (the inverse of
+    `region_from_v1`), for `shapebench.py detect-one` — how the Mac app runs a
+    rig detector on one picture (2026-09-12). v1 conventions: `centre` and
+    `corners` normalised per axis, `majorAxis` / `minorAxis` full axes (an
+    ellipse) or the longer / shorter mean side (a quad) as fractions of the
+    frame WIDTH, `rotation` in radians from +x (the major axis, or the quad's
+    top edge), `wide` = the top edge is the longer pair, `nativeDiameterPx`
+    the major axis / longer mean side in pixels."""
+    cx, cy = float(shape["centre"]["x"]), float(shape["centre"]["y"])
+    d = {"id": shape.get("shapeId") or str(uuid.uuid4()).upper(), "centre": [cx, cy],
+         "confidence": float(shape.get("confidence", 1.0)), "source": "detected", "name": None}
+    if shape["primitive"] == "ellipse":
+        a, b = float(shape["axes"]["major"]), float(shape["axes"]["minor"])
+        d.update(kind="ellipse", majorAxis=a, minorAxis=b, rotation=math.radians(float(shape["orientationDeg"])),
+                 corners=None, nativeDiameterPx=a * W, wide=True)
+        return d
+    V = [[float(v["x"]), float(v["y"])] for v in shape["vertices"]]
+    P = [(x * W, y * H) for x, y in V]
+    def dist(p, q): return math.hypot(q[0] - p[0], q[1] - p[1])
+    top, bottom = dist(P[0], P[1]), dist(P[3], P[2])
+    left, right = dist(P[0], P[3]), dist(P[1], P[2])
+    mean_top, mean_side = (top + bottom) / 2.0, (left + right) / 2.0
+    wide = mean_top >= mean_side
+    d.update(kind="quad", majorAxis=max(mean_top, mean_side) / W, minorAxis=min(mean_top, mean_side) / W,
+             rotation=math.atan2(P[1][1] - P[0][1], P[1][0] - P[0][0]), corners=V,
+             nativeDiameterPx=max(mean_top, mean_side), wide=bool(wide))
+    return d

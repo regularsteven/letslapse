@@ -18,7 +18,7 @@ import numpy as np
 
 import overlay
 import schema
-from fitting import (MATCH, RULES, Region, bbox_iou, binary_maps, dedupe_shapes, fit_candidate,
+from fitting import (MATCH, RULES, Region, auto_canny, bbox_iou, binary_maps, dedupe_shapes, fit_candidate,
                      measure, polygon_bbox)
 from imaging import check_dims, dims_of, load_bgr
 
@@ -62,10 +62,21 @@ def propose(gray: np.ndarray, params: dict) -> list[Region]:
     pf = params["prefilter"]
     min_pts = int(params["contours"]["minPoints"])
     regions: list[Region] = []
+    # Optional (absent by default, so the pinned hashes stand): the Kit's
+    # outline-edge-support gate — the share of a region's traced points within
+    # `tolPx` of a Canny edge must reach `min`. Priced 2026-09-12.
+    es = params.get("edgeSupport")
     for L in params["proposalLongEdges"]:
         s = min(1.0, float(L) / max(W, H))
         sw, sh = max(1, round(W * s)), max(1, round(H * s))
         small = cv2.resize(gray, (sw, sh), interpolation=cv2.INTER_AREA) if s < 1.0 else gray
+        near = None
+        if es:
+            k = int(params.get("blur", 5))
+            g = cv2.GaussianBlur(small, (k, k), 0) if k > 1 else small
+            edges = auto_canny(g, params["canny"])
+            t = int(es.get("tolPx", 3))
+            near = cv2.dilate(edges, np.ones((2 * t + 1, 2 * t + 1), np.uint8)) if t > 0 else edges
         for name, m in binary_maps(small, params):
             contours, _ = cv2.findContours(m, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
             for c in contours:
@@ -82,10 +93,16 @@ def propose(gray: np.ndarray, params: dict) -> list[Region]:
                 solidity = area / hull_area
                 if solidity < pf["minSolidity"]:
                     continue
+                prior = {"proposalExtent": round(float(ext), 4), "solidity": round(float(solidity), 3)}
+                if near is not None:
+                    cc = c.reshape(-1, 2)
+                    support = float(np.count_nonzero(near[cc[:, 1], cc[:, 0]])) / max(1, len(cc))
+                    prior["edgeSupport"] = round(support, 3)
+                    if support < float(es.get("min", 0.5)):
+                        continue
                 pts = (c.reshape(-1, 2).astype(np.float32) + 0.5) / s - 0.5
                 regions.append(Region(pts=pts, source=f"cv-{name}@{L}", from_contour=True,
-                                      refined=False, scale=s,
-                                      prior={"proposalExtent": round(float(ext), 4), "solidity": round(float(solidity), 3)}))
+                                      refined=False, scale=s, prior=prior))
     # dedupe by bbox IoU, larger scale first, then larger area
     regions.sort(key=lambda r: (-r.scale, -(polygon_bbox(r.pts)[2] - polygon_bbox(r.pts)[0])
                                 * (polygon_bbox(r.pts)[3] - polygon_bbox(r.pts)[1])))

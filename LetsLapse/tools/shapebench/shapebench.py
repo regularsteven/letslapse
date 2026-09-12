@@ -7,6 +7,8 @@ Usage (from LetsLapse/):
   tools/.venv/bin/python tools/shapebench/shapebench.py label             # opens the labelling page
   tools/.venv/bin/python tools/shapebench/shapebench.py vision            # lapse shapes --json → schema v2
   tools/.venv/bin/python tools/shapebench/shapebench.py metrics [--docs docs/shape-benchmark]
+  tools/.venv/bin/python tools/shapebench/shapebench.py ed [--params overrides.json] [--dry]   # needs opencv-contrib
+  tools/.venv/bin/python tools/shapebench/shapebench.py gt-import --source docs/shape-benchmark/labels
   tools/.venv/bin/python tools/shapebench/shapebench.py selftest [--lapse PATH]
 
 Everything lands under --work (default tools/shapebench/work/, git-ignored).
@@ -276,8 +278,13 @@ def cmd_vision(args) -> int:
             failed += 1
             print(f"  FAIL {aid[:8]}: lapse reports {d.get('width')}x{d.get('height')} but the export is {W}x{H}")
             continue
+        # The Kit's shapes are scored as the Kit emits them: no second dedupe
+        # after refinement. The rig's consensus dedupe at 0.9 was merging two
+        # Kit shapes 5–10 % apart (a tile's outer and inner edge, both
+        # labelled) once the full-resolution re-trace had pulled both onto
+        # the same contour — five true positives hidden on 2026-09-12.
         run_params = {"detector": {"profile": d.get("profile"), "flags": flags, "lapseSha256": lapse_sha,
-                                   "kitDetectorVersion": 1, "refine": refine_params}, "rules": RULES}
+                                   "kitDetectorVersion": 1, "refine": refine_params, "v1Dedupe": "none"}, "rules": RULES}
         key = schema.run_key(schema.DETECTOR_VISION, VISION_VERSION, schema.params_hash(run_params))
         diag = d.get("diagnostics") or {}
         if schema.has_run(doc, key) and not args.force:
@@ -293,11 +300,7 @@ def cmd_vision(args) -> int:
                 continue
             v1_shapes = d.get("shapes") or []
             rows, accepted = _v1_rows_and_shapes(gray, v1_shapes, W, H, params, {})
-            shapes = dedupe_shapes(accepted, W, H, dedupe_rule(params))
-            kept = {s["shapeId"] for s in shapes}
-            for r in rows:
-                if r.get("shapeId") and r["shapeId"] not in kept:
-                    r["dedupedAway"] = True
+            shapes = accepted   # v1Dedupe none — see run_params
             refusals = diag.get("refusals") or []
             offered = [diag.get(k) for k in ("quadsOffered", "ellipseFits", "rimPeaks")]
             # everything the Kit's passes put forward before its own gates; the
@@ -342,11 +345,7 @@ def cmd_vision(args) -> int:
         v1_shapes = reg.get("shapes") or []
         rows, accepted = _v1_rows_and_shapes(gray, v1_shapes, W, H, params,
                                              {"registerAnalysedAt": reg.get("analysedAt")})
-        shapes = dedupe_shapes(accepted, W, H, dedupe_rule(params))
-        kept = {s["shapeId"] for s in shapes}
-        for r in rows:
-            if r.get("shapeId") and r["shapeId"] not in kept:
-                r["dedupedAway"] = True
+        shapes = accepted   # the register's shapes as the app wrote them (v1Dedupe none)
         srcs = {}
         for s in v1_shapes:
             srcs[s.get("source") or "detected"] = srcs.get(s.get("source") or "detected", 0) + 1
@@ -399,6 +398,63 @@ def write_gt(work: str, manifest_asset: dict, labels: dict, labeller: str) -> st
     run["assets"] = [schema.new_asset(aid, manifest_asset["frameWidth"], manifest_asset["frameHeight"], shapes, stats)]
     schema.save_results(rpath, doc)
     return key
+
+
+def cmd_detect_one(args) -> int:
+    """One picture, one rig detector, the shapes as the Kit's own JSON on
+    stdout — what the Mac app's Python engines call (`ExternalShapeDetector`,
+    `ShapeDetectionMode.pythonReference` / `.pythonEdgeDrawing`, 2026-09-12).
+    The picture need not be in the corpus; DNGs go through the ImageIO render."""
+    from fitting import shape_to_v1
+    t0 = time.perf_counter()
+    bgr = load_bgr(args.image)
+    W, H = dims_of(bgr)
+    overrides = None
+    if args.params:
+        with open(args.params, "r", encoding="utf-8") as f:
+            overrides = json.load(f)
+    if args.detector == schema.DETECTOR_OPENCV:
+        params = detect_opencv.merged_params(overrides)
+        shapes, stats, _rows = detect_opencv.detect_image(bgr, params)
+    elif args.detector == "edge-drawing":
+        import detect_ed
+        if not hasattr(cv2, "ximgproc"):
+            sys.exit("edge-drawing needs cv2.ximgproc — pip install opencv-contrib-python-headless")
+        params = detect_ed.merged_params(overrides)
+        shapes, stats, _rows = detect_ed.detect_image(bgr, params)
+    else:
+        sys.exit(f"unknown detector {args.detector!r}: opencv-reference | edge-drawing")
+    out = {"detector": args.detector, "paramsHash": schema.params_hash({"detector": params, "rules": RULES}),
+           "width": W, "height": H, "durationMs": int(round(1000 * (time.perf_counter() - t0))),
+           "candidates": stats.get("candidates"), "detectorMs": stats.get("durationMs"),
+           "shapes": [shape_to_v1(s, W, H) for s in shapes]}
+    print(json.dumps(out, ensure_ascii=False))
+    return 0
+
+
+def cmd_gt_import(args) -> int:
+    """Rebuild the manual-groundtruth run blocks (and work/labels/) from a
+    folder of label files — the archived copy in docs/shape-benchmark/labels/.
+    The label files are the ground truth's source of record; results/ is
+    derived from them."""
+    work = args.work
+    manifest = load_manifest(work)
+    by_id = {a["assetId"]: a for a in manifest["assets"]}
+    n = 0
+    for name in sorted(os.listdir(args.source)):
+        if not name.endswith(".json"):
+            continue
+        with open(os.path.join(args.source, name), "r", encoding="utf-8") as f:
+            labels = json.load(f)
+        aid = labels.get("assetId") or name[:-5]
+        a = by_id.get(aid)
+        if not a:
+            print(f"  skip {name}: not in the manifest")
+            continue
+        write_gt(work, a, labels, labels.get("labeller") or args.labeller)
+        n += 1
+    print(f"imported {n} label file(s) from {args.source} into {os.path.join(work, 'labels')} and the manual-groundtruth run blocks")
+    return 0
 
 
 def make_label_handler(work: str, manifest: dict, labeller: str):
@@ -752,6 +808,26 @@ def main(argv=None) -> int:
     p.add_argument("--labeller", default="steven")
     p.add_argument("--no-browser", action="store_true")
     p.set_defaults(fn=cmd_label)
+
+    p = sub.add_parser("ed", help="edge-drawing detector over the corpus (needs cv2.ximgproc: opencv-contrib-python-headless)")
+    p.add_argument("--params", help="JSON overrides merged over detect_ed.DEFAULT_PARAMS (new paramsHash)")
+    p.add_argument("--only")
+    p.add_argument("--limit", type=int)
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--dry", action="store_true", help="score against the labels, write overlays only — no run block")
+    p.add_argument("--dry-dir", default=os.path.join(DEFAULT_WORK, "overlays", "edge-drawing-dry"))
+    p.set_defaults(fn=lambda a: __import__("detect_ed").run(a))
+
+    p = sub.add_parser("detect-one", help="one picture through one rig detector; the Kit's shape JSON on stdout (the Mac app's Python engines)")
+    p.add_argument("--detector", default=schema.DETECTOR_OPENCV, help="opencv-reference | edge-drawing")
+    p.add_argument("--image", required=True)
+    p.add_argument("--params", help="JSON overrides for the detector's DEFAULT_PARAMS")
+    p.set_defaults(fn=cmd_detect_one)
+
+    p = sub.add_parser("gt-import", help="rebuild ground truth from archived label files (docs/shape-benchmark/labels)")
+    p.add_argument("--source", required=True, help="folder of <assetId>.json label files")
+    p.add_argument("--labeller", default="steven")
+    p.set_defaults(fn=cmd_gt_import)
 
     p = sub.add_parser("metrics", help="match every run against ground truth; report + overlays")
     p.add_argument("--run", action="append", default=[], help="detectorId=paramsHash to pin a run (default: latest)")

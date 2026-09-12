@@ -98,13 +98,22 @@ public struct ShapeDetector: Sendable {
         public var regionRectMinFill = 0.85
         public var regionRectAngleToleranceDeg = 8.0
         public var regionRectSideTolerance = 0.10
+        /// The edge-chain pass (`EdgeDrawing`, ported 2026-09-12 from the
+        /// benchmark's `edge-drawing` detector): one-pixel connected edge
+        /// chains without a closing step, so a plate's outline is one chain
+        /// and the bracket under it another. Closed chains are fitted like
+        /// region proposals. Off by default until measured in the Kit; the
+        /// file profile's modes turn it on.
+        public var edgeChains = false
+        public var edgeChainLongEdges = [1024, 2048]
         public init() {}
 
         /// The long edge a caller should decode the picture at: the Vision
         /// passes' resolution, or the region pass's largest scale when that
         /// is bigger — a 2048 pass handed a 1024 decode runs at 1024.
         public var decodeLongEdge: Int {
-            max(detectionLongEdge, regionProposals ? (regionProposalLongEdges.max() ?? 0) : 0)
+            max(detectionLongEdge, regionProposals ? (regionProposalLongEdges.max() ?? 0) : 0,
+                edgeChains ? (edgeChainLongEdges.max() ?? 0) : 0)
         }
 
         /// The viewfinder pass with the dials at their defaults — see
@@ -151,16 +160,21 @@ public struct ShapeDetector: Sendable {
         public var regionMaps = 0
         public var regions = 0
         public var regionsKept = 0
+        /// The edge-chain pass: chains traced, closed loops found, shapes admitted.
+        public var edgeChains = 0
+        public var edgeLoops = 0
+        public var edgeKept = 0
         public var milliseconds = 0
         public var refusals: [Refusal] = []
         public init() {}
 
         private enum CodingKeys: String, CodingKey {
             case longEdge, quadsOffered, quadsKept, contourPasses, contours, ellipseFits, ellipsesKept, rimPeaks, rimsKept
-            case regionMaps, regions, regionsKept, milliseconds, refusals
+            case regionMaps, regions, regionsKept, edgeChains, edgeLoops, edgeKept, milliseconds, refusals
         }
 
-        /// Registers written before the region pass carry no counters for it.
+        /// Registers written before the region pass carry no counters for
+        /// it, and those before the edge-chain pass none for that.
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             longEdge = try c.decodeIfPresent(Int.self, forKey: .longEdge) ?? 0
@@ -175,6 +189,9 @@ public struct ShapeDetector: Sendable {
             regionMaps = try c.decodeIfPresent(Int.self, forKey: .regionMaps) ?? 0
             regions = try c.decodeIfPresent(Int.self, forKey: .regions) ?? 0
             regionsKept = try c.decodeIfPresent(Int.self, forKey: .regionsKept) ?? 0
+            edgeChains = try c.decodeIfPresent(Int.self, forKey: .edgeChains) ?? 0
+            edgeLoops = try c.decodeIfPresent(Int.self, forKey: .edgeLoops) ?? 0
+            edgeKept = try c.decodeIfPresent(Int.self, forKey: .edgeKept) ?? 0
             milliseconds = try c.decodeIfPresent(Int.self, forKey: .milliseconds) ?? 0
             refusals = try c.decodeIfPresent([Refusal].self, forKey: .refusals) ?? []
         }
@@ -194,6 +211,7 @@ public struct ShapeDetector: Sendable {
         public var summary: String {
             "\(quadsOffered) quads offered, \(quadsKept) kept · \(contours) contours over \(contourPasses) passes, \(ellipseFits) fits, \(ellipsesKept) ellipses · \(rimPeaks) rim peaks, \(rimsKept) rims"
             + (regionMaps > 0 ? " · \(regions) regions over \(regionMaps) maps, \(regionsKept) admitted" : "")
+            + (edgeChains > 0 ? " · \(edgeLoops) loops over \(edgeChains) edge chains, \(edgeKept) admitted" : "")
             + " · \(milliseconds) ms"
         }
     }
@@ -308,21 +326,36 @@ public struct ShapeDetector: Sendable {
         out.removeAll { quad in keptEllipses.contains { Self.overlap($0, quad) >= 0.6 } }
         out += keptEllipses
 
-        // Region proposals, where the passes above found nothing: the
-        // benchmark reference's maps and fits (see `RegionProposals`).
+        // Region proposals and edge chains, where the passes above found
+        // nothing: the benchmark reference's maps and fits (see
+        // `RegionProposals`) and Edge Drawing's closed chains (see
+        // `EdgeDrawing`), each at its own scales. Candidates from every scale
+        // of both passes go through one admission below, best score first,
+        // so a chain and a region over the same object compete on equal
+        // terms and the merge at `sameShapeIoU` keeps whichever scored higher.
+        var rs = RegionProposals.Settings()
+        rs.ellipseMinIoU = settings.regionEllipseMinIoU
+        rs.rectMinFill = settings.regionRectMinFill
+        rs.rectAngleToleranceDeg = settings.regionRectAngleToleranceDeg
+        rs.rectSideTolerance = settings.regionRectSideTolerance
+        var scaled: [(RegionProposals.Candidate, Double)] = []   // candidate, its frame's px per detection px
+        // One gray plane per scale actually run, shared by both passes; a
+        // scale above the input's own size runs at the input's size.
+        var planes: [Int: (gray: RegionProposals.Plane, width: Int, height: Int)] = [:]
+        func plane(at edge: Int) -> (gray: RegionProposals.Plane, width: Int, height: Int)? {
+            let picture = edge == Int(max(w, h)) ? image : Self.downscale(input, longEdge: edge)
+            let size = max(picture.width, picture.height)
+            if let cached = planes[size] { return cached }
+            guard let gray = RegionProposals.grayPlane(picture) else { return nil }
+            planes[size] = (gray, picture.width, picture.height)
+            return planes[size]
+        }
         if settings.regionProposals {
-            var rs = RegionProposals.Settings()
-            rs.ellipseMinIoU = settings.regionEllipseMinIoU
-            rs.rectMinFill = settings.regionRectMinFill
-            rs.rectAngleToleranceDeg = settings.regionRectAngleToleranceDeg
-            rs.rectSideTolerance = settings.regionRectSideTolerance
-            var scaled: [(RegionProposals.Candidate, Double)] = []   // candidate, its frame's px per detection px
             var edgesDone: Set<Int> = []
             for edge in settings.regionProposalLongEdges.sorted(by: >) {
-                let picture = edge == Int(max(w, h)) ? image : Self.downscale(input, longEdge: edge)
-                let pw = picture.width, ph = picture.height
-                guard edgesDone.insert(max(pw, ph)).inserted, let gray = RegionProposals.grayPlane(picture) else { continue }
-                let regions = RegionProposals.detect(in: gray, settings: rs)
+                guard let scale = plane(at: edge), edgesDone.insert(max(scale.width, scale.height)).inserted else { continue }
+                let (pw, ph) = (scale.width, scale.height)
+                let regions = RegionProposals.detect(in: scale.gray, settings: rs)
                 diag.regionMaps += regions.maps
                 diag.regions += regions.regions
                 let factor = Double(pw) / w
@@ -331,48 +364,66 @@ public struct ShapeDetector: Sendable {
                 }
                 for c in regions.candidates { scaled.append((c, factor)) }
             }
-            scaled.sort { $0.0.score > $1.0.score }
-            for (c, factor) in scaled {
-                let shape: DetectedShape
-                switch c.primitive {
-                case .rectangle:
-                    guard settings.detectQuads, let corners = c.corners, corners.count == 4 else { continue }
-                    let px = corners.map { CGPoint(x: $0.x / factor, y: $0.y / factor) }
-                    let m = DetectedShape.quadMetrics(cornersPx: px)
-                    let centre = CGPoint(x: px.map(\.x).reduce(0, +) / 4 / w, y: px.map(\.y).reduce(0, +) / 4 / h)
-                    let major = m.major
-                    if major * nativeScale < minDiameterNative {
-                        diag.refuse("region", centre, major / w, String(format: "%.0f px < %.0f floor", major * nativeScale, minDiameterNative), margin: 1 - major * nativeScale / minDiameterNative); continue
-                    }
-                    if major * nativeScale > maxDiameterNative {
-                        diag.refuse("region", centre, major / w, String(format: "%.0f px > %.0f ceiling", major * nativeScale, maxDiameterNative)); continue
-                    }
-                    shape = DetectedShape(kind: .quad, centre: centre, majorAxis: major / w, minorAxis: m.minor / w,
-                                          rotation: m.rotation, corners: px.map { CGPoint(x: $0.x / w, y: $0.y / h) },
-                                          confidence: Float(c.score), nativeDiameterPx: major * nativeScale, wide: m.wide)
-                case .ellipse:
-                    guard settings.detectEllipses, var e = c.ellipse else { continue }
-                    e.centre /= factor; e.semiMajor /= factor; e.semiMinor /= factor
-                    let centre = CGPoint(x: e.centre.x / w, y: e.centre.y / h)
-                    let diameter = 2 * e.semiMajor
-                    if diameter * nativeScale < minDiameterNative {
-                        diag.refuse("region", centre, diameter / w, String(format: "%.0f px < %.0f floor", diameter * nativeScale, minDiameterNative), margin: 1 - diameter * nativeScale / minDiameterNative); continue
-                    }
-                    if diameter * nativeScale > maxDiameterNative {
-                        diag.refuse("region", centre, diameter / w, String(format: "%.0f px > %.0f ceiling", diameter * nativeScale, maxDiameterNative)); continue
-                    }
-                    if 2 * e.semiMajor > 0.97 * max(w, h) && 2 * e.semiMinor > 0.97 * min(w, h) { diag.refuse("region", centre, diameter / w, "fills the frame"); continue }
-                    shape = DetectedShape(kind: .ellipse, centre: centre, majorAxis: diameter / w, minorAxis: 2 * e.semiMinor / w,
-                                          rotation: e.rotation, corners: nil, confidence: Float(c.score), nativeDiameterPx: diameter * nativeScale)
+        }
+        if settings.edgeChains {
+            var es = EdgeDrawing.Settings()
+            es.fit = rs
+            var edgesDone: Set<Int> = []
+            for edge in settings.edgeChainLongEdges.sorted(by: >) {
+                guard let scale = plane(at: edge), edgesDone.insert(max(scale.width, scale.height)).inserted else { continue }
+                let (pw, ph) = (scale.width, scale.height)
+                let chains = EdgeDrawing.detect(in: scale.gray, settings: es)
+                diag.edgeChains += chains.chains
+                diag.edgeLoops += chains.loops
+                let factor = Double(pw) / w
+                for r in chains.refusals {
+                    diag.refuse("edge", CGPoint(x: r.centre.x / Double(pw), y: r.centre.y / Double(ph)), r.size * Double(max(pw, ph)) / Double(pw), r.reason, margin: r.margin)
                 }
-                // The Vision passes' shapes stand; a region over the same
-                // bounds is the same shape seen again (a nested member is not).
-                if out.contains(where: { Self.overlap($0, shape) > Self.sameShapeIoU }) {
-                    diag.refuse("region", shape.centre, shape.majorAxis, "the same bounds as a kept shape"); continue
-                }
-                out.append(shape)
-                diag.regionsKept += 1
+                for c in chains.candidates { scaled.append((c, factor)) }
             }
+        }
+        scaled.sort { $0.0.score > $1.0.score }
+        for (c, factor) in scaled {
+            let kind = c.map.hasPrefix("ed-chain") ? "edge" : "region"
+            let shape: DetectedShape
+            switch c.primitive {
+            case .rectangle:
+                guard settings.detectQuads, let corners = c.corners, corners.count == 4 else { continue }
+                let px = corners.map { CGPoint(x: $0.x / factor, y: $0.y / factor) }
+                let m = DetectedShape.quadMetrics(cornersPx: px)
+                let centre = CGPoint(x: px.map(\.x).reduce(0, +) / 4 / w, y: px.map(\.y).reduce(0, +) / 4 / h)
+                let major = m.major
+                if major * nativeScale < minDiameterNative {
+                    diag.refuse(kind, centre, major / w, String(format: "%.0f px < %.0f floor", major * nativeScale, minDiameterNative), margin: 1 - major * nativeScale / minDiameterNative); continue
+                }
+                if major * nativeScale > maxDiameterNative {
+                    diag.refuse(kind, centre, major / w, String(format: "%.0f px > %.0f ceiling", major * nativeScale, maxDiameterNative)); continue
+                }
+                shape = DetectedShape(kind: .quad, centre: centre, majorAxis: major / w, minorAxis: m.minor / w,
+                                      rotation: m.rotation, corners: px.map { CGPoint(x: $0.x / w, y: $0.y / h) },
+                                      confidence: Float(c.score), nativeDiameterPx: major * nativeScale, wide: m.wide)
+            case .ellipse:
+                guard settings.detectEllipses, var e = c.ellipse else { continue }
+                e.centre /= factor; e.semiMajor /= factor; e.semiMinor /= factor
+                let centre = CGPoint(x: e.centre.x / w, y: e.centre.y / h)
+                let diameter = 2 * e.semiMajor
+                if diameter * nativeScale < minDiameterNative {
+                    diag.refuse(kind, centre, diameter / w, String(format: "%.0f px < %.0f floor", diameter * nativeScale, minDiameterNative), margin: 1 - diameter * nativeScale / minDiameterNative); continue
+                }
+                if diameter * nativeScale > maxDiameterNative {
+                    diag.refuse(kind, centre, diameter / w, String(format: "%.0f px > %.0f ceiling", diameter * nativeScale, maxDiameterNative)); continue
+                }
+                if 2 * e.semiMajor > 0.97 * max(w, h) && 2 * e.semiMinor > 0.97 * min(w, h) { diag.refuse(kind, centre, diameter / w, "fills the frame"); continue }
+                shape = DetectedShape(kind: .ellipse, centre: centre, majorAxis: diameter / w, minorAxis: 2 * e.semiMinor / w,
+                                      rotation: e.rotation, corners: nil, confidence: Float(c.score), nativeDiameterPx: diameter * nativeScale)
+            }
+            // The Vision passes' shapes stand; a region or chain over the same
+            // bounds is the same shape seen again (a nested member is not).
+            if out.contains(where: { Self.overlap($0, shape) > Self.sameShapeIoU }) {
+                diag.refuse(kind, shape.centre, shape.majorAxis, "the same bounds as a kept shape"); continue
+            }
+            out.append(shape)
+            if kind == "edge" { diag.edgeKept += 1 } else { diag.regionsKept += 1 }
         }
         diag.milliseconds = Int(Date().timeIntervalSince(started) * 1000)
         diag.trim()

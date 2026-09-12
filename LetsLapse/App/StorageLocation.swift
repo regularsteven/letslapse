@@ -40,6 +40,8 @@ enum StorageRoot {
         "blend-profiles.json", "custom_presets.json", "light_ladders.json",
         // Imported LUTs (`LUTStore`): the cubes and their index.
         "luts", "luts.json",
+        // The shape detectors' score sheet (`ShapeDetectorFeedback`).
+        ShapeDetectorFeedback.fileName,
     ]
 
     /// True when a nominated location could not be reached at launch (drive

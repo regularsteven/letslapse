@@ -272,6 +272,16 @@ struct PhotoViewerView: View {
     /// down for its duration.
     @State private var maskGestureActive = false
     // MARK: Shapes — the project's register, edited from the Masks tab
+    /// The Masks tab's last "Find in this picture", what was added from it,
+    /// and the candidate under the mouse — shared by the rail's list and the
+    /// picture's `FoundShapesOverlay` (2026-09-12).
+    @State private var lastFind: ShapeFinder.Pass?
+    @State private var addedFindIDs: Set<UUID> = []
+    @State private var rejectedFindIDs: Set<UUID> = []
+    @State private var hoveredFoundID: UUID?
+    /// Where the mouse touched the hovered outline (picture hovers only), keyed
+    /// by the candidate so a stale point never places another shape's pill.
+    @State private var foundHoverAnchor: (id: UUID, point: CGPoint)?
     /// `shapes.json` for this project, or nil until a shape is drawn.
     @State private var shapeRegister: ShapeRegister?
     @State private var persistedShapeRegister: ShapeRegister?
@@ -1414,6 +1424,12 @@ struct PhotoViewerView: View {
                     },
                     onHUD: { maskHUD = $0 })
             }
+            // What "Find in this picture" found, as lines, before it is added.
+            if railTab == .masks, let find = lastFind, !find.found.isEmpty {
+                FoundShapesOverlay(found: find.found, added: addedFindIDs, rejected: rejectedFindIDs, hovered: hoveredFoundID,
+                                   hoverAnchor: foundHoverAnchor.flatMap { $0.id == hoveredFoundID ? $0.point : nil },
+                                   drawn: drawn, actions: foundActions, isListed: registerHolds, accent: LL.amber)
+            }
             // A register shape's handles — the Masks tab's Shapes selection.
             if railTab == .masks, let index = selectedRegisterShapeIndex {
                 RegisterShapeOverlay(
@@ -1431,6 +1447,9 @@ struct PhotoViewerView: View {
         }
         .frame(width: drawn.width, height: drawn.height)
         .coordinateSpace(name: MaskShapeOverlay.space)
+        // The found-shape hover, from the mouse over the whole picture — see
+        // `FoundShapesOverlay` for why the outlines cannot track it themselves.
+        .onContinuousHover(coordinateSpace: .local) { phase in updateFoundHover(phase, drawn: drawn) }
         .offset(zoom.offset)
     }
 
@@ -2484,7 +2503,127 @@ struct PhotoViewerView: View {
             squareLock: $shapeSquareLock,
             shapeFrame: registerFrame,
             onShapesEdited: shapesEdited,
-            onUseAsMask: useShapeAsMask)
+            onUseAsMask: useShapeAsMask,
+            onFindShapes: findShapesOnce,
+            lastFind: $lastFind,
+            addedFindIDs: $addedFindIDs,
+            rejectedFindIDs: $rejectedFindIDs,
+            hoveredFoundID: $hoveredFoundID,
+            findActions: foundActions)
+    }
+
+    // MARK: Find in this picture
+
+    /// The Masks tab's "Find in this picture": the project's representative
+    /// (the same picture Find shapes measures) through one detection mode.
+    /// Pending candidates of the previous find are passed over first.
+    private func findShapesOnce(_ mode: ShapeDetectionMode) async {
+        settleFind()
+        guard let capture, let rep = ShapeFinder.representative(for: capture, in: model) else {
+            lastFind = ShapeFinder.Pass(runID: UUID(), mode: mode, found: [], engines: [], milliseconds: 0,
+                                        note: "The picture could not be read.", failed: true)
+            return
+        }
+        let size = RepresentativeLoader.orientedPixelSize(rep) ?? registerFrame
+        let pass = await Task.detached(priority: .userInitiated) { ShapeFinder.pass(rep, size: size, mode: mode) }.value
+        addedFindIDs = []
+        rejectedFindIDs = []
+        hoveredFoundID = nil
+        foundHoverAnchor = nil
+        lastFind = pass ?? ShapeFinder.Pass(runID: UUID(), mode: mode, found: [], engines: [], milliseconds: 0,
+                                            note: "The picture could not be read.", failed: true)
+        if let pass {
+            ShapeDetectorFeedback.shared.recordPass(pass, project: capture.id, listed: registerHolds)
+        }
+    }
+
+    /// The register already holds this shape (same kind over the same
+    /// bounds, the Kit's own near-identical bar).
+    private func registerHolds(_ shape: DetectedShape) -> Bool {
+        (shapeRegister?.shapes ?? []).contains { $0.kind == shape.kind && ShapeDetector.overlap($0, shape) > 0.9 }
+    }
+
+    private var foundActions: ShapeFinder.FoundActions {
+        ShapeFinder.FoundActions(add: addFound, reject: rejectFound, undo: undoFound, settle: settleFind, clear: clearFind)
+    }
+
+    private func addFound(_ found: ShapeFinder.Found) {
+        guard let find = lastFind, !addedFindIDs.contains(found.id) else { return }
+        var shape = found.shape
+        shape.source = .detected
+        ensureShapeRegister()
+        shapeRegister?.shapes.append(shape)
+        addedFindIDs.insert(found.id)
+        rejectedFindIDs.remove(found.id)
+        persistShapeRegister()
+        if let capture { ShapeDetectorFeedback.shared.recordVerdict(.accepted, for: found, in: find, project: capture.id) }
+    }
+
+    private func rejectFound(_ found: ShapeFinder.Found) {
+        guard let find = lastFind else { return }
+        if addedFindIDs.contains(found.id) { removeAddedFound(found) }
+        rejectedFindIDs.insert(found.id)
+        if hoveredFoundID == found.id { hoveredFoundID = nil; foundHoverAnchor = nil }
+        if let capture { ShapeDetectorFeedback.shared.recordVerdict(.rejected, for: found, in: find, project: capture.id) }
+    }
+
+    /// An added or rejected candidate back to pending; its verdict withdrawn.
+    private func undoFound(_ found: ShapeFinder.Found) {
+        guard let find = lastFind else { return }
+        if addedFindIDs.contains(found.id) { removeAddedFound(found) }
+        rejectedFindIDs.remove(found.id)
+        if let capture { ShapeDetectorFeedback.shared.recordVerdict(.pending, for: found, in: find, project: capture.id) }
+    }
+
+    private func removeAddedFound(_ found: ShapeFinder.Found) {
+        shapeRegister?.shapes.removeAll { $0.id == found.id }
+        if selectedShapeID == found.id { selectedShapeID = nil }
+        addedFindIDs.remove(found.id)
+        persistShapeRegister()
+    }
+
+    /// Candidates left neither added, rejected nor already listed when a find
+    /// is cleared, replaced or left behind were looked at and passed over: a
+    /// false alarm for every engine that proposed them.
+    private func settleFind() {
+        guard let find = lastFind, !find.failed, let capture else { return }
+        for found in find.found where !addedFindIDs.contains(found.id) && !rejectedFindIDs.contains(found.id) && !registerHolds(found.shape) {
+            ShapeDetectorFeedback.shared.recordVerdict(.rejected, for: found, in: find, project: capture.id)
+            rejectedFindIDs.insert(found.id)
+        }
+    }
+
+    private func clearFind() {
+        settleFind()
+        lastFind = nil
+        addedFindIDs = []
+        rejectedFindIDs = []
+        hoveredFoundID = nil
+        foundHoverAnchor = nil
+    }
+
+    /// The hover over the picture, worked out from the mouse position: the
+    /// nearest found outline within reach, the pill of the current one, or —
+    /// sticky — the current one still. The pill is anchored where the mouse
+    /// first touched the outline. Leaving the picture keeps the hover; the
+    /// list's rows and a new find replace it.
+    private func updateFoundHover(_ phase: HoverPhase, drawn: CGSize) {
+        guard railTab == .masks, let find = lastFind, !find.found.isEmpty else { return }
+        switch phase {
+        case .active(let point):
+            let anchor = foundHoverAnchor.flatMap { $0.id == hoveredFoundID ? $0.point : nil }
+            let target = FoundShapesOverlay.hoverTarget(at: point, found: find.found, rejected: rejectedFindIDs,
+                                                        current: hoveredFoundID, currentAnchor: anchor, drawn: drawn)
+            if target != hoveredFoundID {
+                hoveredFoundID = target
+                foundHoverAnchor = target.map { ($0, point) }
+            } else if let target, anchor == nil {
+                // Hovered from the list, now touched on the picture: the pill moves to the mouse.
+                foundHoverAnchor = (target, point)
+            }
+        case .ended:
+            break
+        }
     }
 
     #if DEBUG
