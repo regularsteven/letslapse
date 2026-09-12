@@ -269,6 +269,11 @@ struct PTProjectInfo: Codable, Identifiable, Equatable {
     /// no compression on the payload path, so for once the progress bar's
     /// denominator is the truth rather than an estimate.
     var totalBytes: Int64
+    /// The shoot's identity on every device (Phase 1 W3) — what "Hide
+    /// imported" matches on. Optional so a build from either side of W3
+    /// reads the other's catalogue: an older server sends none and the
+    /// client falls back to `captureID`.
+    var originID: UUID?
     var id: UUID { captureID }
 }
 

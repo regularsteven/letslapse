@@ -209,6 +209,23 @@ final class AppModel: ObservableObject {
         /// through `AppModel.existingImport(of:)`, which is what catches a
         /// second double-click on an archive already in the library.
         var importedFromID: UUID?
+        /// The shoot's identity on EVERY device that holds a copy — the same
+        /// value after a `.lapse` export, a network transfer and a second-hop
+        /// re-export, verbatim. Minted at first registration (= the local
+        /// `id` of the registering device); the v4 manifest migration
+        /// backfills `importedFromID ?? id` for everything older. Nil only
+        /// before that migration has run. Read it through
+        /// `AppModel.originID(of:)`, never the field (Phase 1 W3).
+        var originID: UUID?
+        /// Which install first registered the shoot — `DeviceIdentity.id`
+        /// there. Travels verbatim; nil for projects registered before it
+        /// existed.
+        var originDeviceID: UUID?
+        /// For a DNG-archive clone: the parent's `originID`. The manifest's
+        /// `importedFromID` is nil'd on a clone (it is a transport history,
+        /// not a derivation), so this is the link that survives an import
+        /// where `dng-archive.json` does not.
+        var derivedFromOriginID: UUID?
         /// When this project arrived in THIS library — shot here, imported
         /// from a file, or received from another device.
         ///
@@ -1217,6 +1234,9 @@ final class AppModel: ObservableObject {
     @Published var metadataRevision = 0
 
     init() {
+        // Minted on the first launch of every install and never changed;
+        // read here so it exists before any record could name it (W2).
+        LLog("device id \(DeviceIdentity.id.uuidString)")
         loadLibrary()
         refreshShapeSummaries()
         assetStore.onChange = { [weak self] _ in self?.metadataRevision += 1 }
@@ -6974,6 +6994,8 @@ final class AppModel: ObservableObject {
                 mode: mode,
                 sourceFileNames: [relativeName],
                 sourceFPS: nil,
+                originID: id,
+                originDeviceID: DeviceIdentity.id,
                 captureMode: captureMode?.rawValue
             )
         case .liveSequence(let liveSource):
@@ -7045,6 +7067,8 @@ final class AppModel: ObservableObject {
                 mode: mode,
                 sourceFileNames: relativeNames,
                 sourceFPS: nil,
+                originID: id,
+                originDeviceID: DeviceIdentity.id,
                 captureMode: captureMode?.rawValue,
                 // Read here rather than plumbed through `setSource`: this is
                 // the same defaults key the capture screen's PAPER row writes,
@@ -7144,7 +7168,9 @@ final class AppModel: ObservableObject {
             originalName: result.sequence.mode == .ramp ? "Ramp capture" : "Marker capture",
             mode: result.sequence.summary,
             sourceFileNames: relativeNames,
-            sourceFPS: nil
+            sourceFPS: nil,
+            originID: id,
+            originDeviceID: DeviceIdentity.id
         )
 
         captures.insert(capture, at: 0)
@@ -7483,7 +7509,9 @@ final class AppModel: ObservableObject {
             // refresh runs anyway and agrees.
             sourceDurationSeconds: sequence.elapsedSeconds,
             sourceWidth: sequence.pixelSize?.width,
-            sourceHeight: sequence.pixelSize?.height)
+            sourceHeight: sequence.pixelSize?.height,
+            originID: id,
+            originDeviceID: DeviceIdentity.id)
 
         captures.insert(capture, at: 0)
         captures.sort { $0.createdAt > $1.createdAt }
@@ -7673,6 +7701,12 @@ final class AppModel: ObservableObject {
             clone.sourceFileNames = inputs.map { "source/\($0.deletingPathExtension().lastPathComponent).dng" }
             clone.clipEncodings = nil
             clone.importedFromID = nil
+            // A new shoot in its own right, derived from the parent: its own
+            // origin, minted here, and the parent's origin as the link that
+            // survives where `dng-archive.json` does not.
+            clone.originID = id
+            clone.originDeviceID = DeviceIdentity.id
+            clone.derivedFromOriginID = originID(of: capture)
             // A clone is a new arrival even though its source has been here for
             // months; without this it would inherit the original's date and
             // hide at the far end of an Added sort.
@@ -7752,7 +7786,9 @@ final class AppModel: ObservableObject {
                 originalName: url.lastPathComponent,
                 mode: Self.importedVideoMode,
                 sourceFileNames: [relativeName],
-                sourceFPS: nil)
+                sourceFPS: nil,
+                originID: id,
+                originDeviceID: DeviceIdentity.id)
             captures.insert(capture, at: 0)
             captures.sort { $0.createdAt > $1.createdAt }
             try persistLibrary()
@@ -8843,7 +8879,18 @@ final class AppModel: ObservableObject {
     /// earlier — so re-opening the same file finds the copy it made last time,
     /// and an archive exported from this Mac finds the project it came from.
     private func existingImport(of originID: UUID) -> CaptureProject? {
-        captures.first { $0.id == originID || $0.importedFromID == originID }
+        // Origin first — the id that is the same on every device — then the
+        // two legacy threads for records that predate it.
+        captures.first { self.originID(of: $0) == originID }
+            ?? captures.first { $0.id == originID || $0.importedFromID == originID }
+    }
+
+    /// The shoot's identity, for every site that needs one: the stored
+    /// `originID`, else the one-hop `importedFromID`, else the local `id` —
+    /// the same derivation the v4 migration writes down, so a record that
+    /// has not been persisted since still answers the same.
+    func originID(of capture: CaptureProject) -> UUID {
+        capture.originID ?? capture.importedFromID ?? capture.id
     }
 
     /// Whether this library already holds the project another device is
@@ -9012,7 +9059,12 @@ final class AppModel: ObservableObject {
         // staged tree waits on disk while the question is open, and is deleted
         // with the rest if the answer is no.
         let originID = originalCaptureID ?? manifest.capture.id
-        if let existing = existingImport(of: originID) {
+        // The archive's own origin when the sender knows it (W3); the
+        // sender's capture id when it predates that. Either way the
+        // duplicate question is asked by origin, which is what catches the
+        // second hop (A → B → C) that `importedFromID` alone never could.
+        let archiveOrigin = manifest.capture.originID ?? originID
+        if let existing = existingImport(of: archiveOrigin) {
             archiveImport?.phase = .duplicate(existingName: existing.name ?? existing.originalName)
             let importAgain = await withCheckedContinuation { continuation in
                 duplicateImportDecision = continuation
@@ -9028,6 +9080,8 @@ final class AppModel: ObservableObject {
         let newID = UUID()
         capture.id = newID
         capture.importedFromID = originID
+        capture.originID = archiveOrigin
+        // `originDeviceID` and `derivedFromOriginID` stay as sent.
         // The record came off another device, so its own stamp says when the
         // project landed THERE. `createdAt` is left alone on purpose — that is
         // the shoot's date and it travels — but "added" is a fact about this
@@ -9132,7 +9186,8 @@ final class AppModel: ObservableObject {
                     name: row.capture.name ?? row.capture.originalName,
                     createdAt: row.capture.createdAt,
                     frameCount: row.capture.sourceMediaCount,
-                    totalBytes: AppModel.directorySize(row.folder))
+                    totalBytes: AppModel.directorySize(row.folder),
+                    originID: row.capture.originID ?? row.capture.importedFromID ?? row.capture.id)
             }
         }.value
     }

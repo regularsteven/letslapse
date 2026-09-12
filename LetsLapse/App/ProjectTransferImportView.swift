@@ -575,7 +575,7 @@ struct ProjectTransferImportView: View {
             // the box takes its selection with it — otherwise the footer would
             // count bytes for projects nobody can see.
             if hidesImported {
-                selectedProjects.removeAll { model.hasImported(originID: $0.captureID) }
+                selectedProjects.removeAll { model.hasImported(originID: $0.originID ?? $0.captureID) }
             }
         } label: {
             HStack(spacing: 8) {
@@ -606,11 +606,11 @@ struct ProjectTransferImportView: View {
     /// pulled (or sent) before.
     private var visibleProjects: [PTProjectInfo] {
         guard hidesImported else { return client.projects }
-        return client.projects.filter { !model.hasImported(originID: $0.captureID) }
+        return client.projects.filter { !model.hasImported(originID: $0.originID ?? $0.captureID) }
     }
 
     private var importedCount: Int {
-        client.projects.filter { model.hasImported(originID: $0.captureID) }.count
+        client.projects.filter { model.hasImported(originID: $0.originID ?? $0.captureID) }.count
     }
 
     private func projectRow(_ project: PTProjectInfo) -> some View {
@@ -643,7 +643,7 @@ struct ProjectTransferImportView: View {
                     // Only ever seen with the box unticked — and then it is
                     // the reason the row was hidden, which is the one thing
                     // unticking has to explain.
-                    if model.hasImported(originID: project.captureID) {
+                    if model.hasImported(originID: project.originID ?? project.captureID) {
                         Text("Already in your library")
                             .font(.caption2)
                             .foregroundStyle(LL.accent)

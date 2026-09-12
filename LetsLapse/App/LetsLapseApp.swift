@@ -571,7 +571,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -834,6 +834,31 @@ struct ContentView: View {
         // LL_IMPORT_VIDEO=<path> — its movie twin.
         if let path = environment["LL_IMPORT_VIDEO"], !path.isEmpty {
             model.importVideo(from: URL(fileURLWithPath: path))
+        }
+        // LL_IMPORT_ARCHIVE=<path.lapse> — and the `.lapse` door, the same
+        // one a Finder double-click or the picker opens, so the duplicate
+        // question (by origin, Phase 1 W3) and the install can be driven
+        // headless against a scratch library.
+        if let path = environment["LL_IMPORT_ARCHIVE"], !path.isEmpty {
+            model.openArchive(at: URL(fileURLWithPath: path))
+        }
+        // LL_EXPORT_ARCHIVE=latest|<capture-uuid> — writes that project's
+        // `.lapse` to the temporary directory and logs the path, so a round
+        // trip (export → LL_IMPORT_ARCHIVE) needs no Share sheet.
+        if let which = environment["LL_EXPORT_ARCHIVE"], !which.isEmpty {
+            let capture = which == "latest"
+                ? model.captures.first
+                : UUID(uuidString: which).flatMap { id in model.captures.first { $0.id == id } }
+            if let capture {
+                Task {
+                    do {
+                        let url = try await model.exportProject(capture)
+                        LLog("LL_EXPORT_ARCHIVE wrote \(url.path)")
+                    } catch {
+                        LLog("LL_EXPORT_ARCHIVE failed: \(error)")
+                    }
+                }
+            }
         }
         if environment["LL_DETAIL"] == "latest", let capture = model.captures.first {
             selectedTab = .projects
