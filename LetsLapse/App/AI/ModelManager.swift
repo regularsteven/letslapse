@@ -342,11 +342,29 @@ final class ModelManager: ObservableObject {
 
     // MARK: - Locations
 
-    /// `Application Support/Models`, excluded from backup — re-downloadable bytes have no business
-    /// in an iCloud backup or a device transfer.
+    /// `Application Support/LetsLapse-Models` on the Mac, `Application Support/Models` inside an
+    /// iOS container (already branded by the container itself); excluded from backup —
+    /// re-downloadable bytes have no business in an iCloud backup or a device transfer.
+    ///
+    /// Branded on the Mac since 2026-09-13 (Phase 1 W12, Part 1 R20): the unsandboxed build used
+    /// to share the unbranded `~/Library/Application Support/Models` with any other app that
+    /// picked the same name. Weights already sitting in the old folder are still used from there
+    /// rather than moved — 3.5 GB is not something to shuffle silently at launch — and every new
+    /// download lands in the branded folder.
     static var modelsRootURL: URL {
-        var url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Models", isDirectory: true)
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #if os(macOS)
+        let branded = support.appendingPathComponent("LetsLapse-Models", isDirectory: true)
+        let legacy = support.appendingPathComponent("Models", isDirectory: true)
+        var url = branded
+        if !FileManager.default.fileExists(atPath: branded.path),
+           FileManager.default.fileExists(atPath: legacy.path),
+           !((try? FileManager.default.contentsOfDirectory(atPath: legacy.path)) ?? []).isEmpty {
+            url = legacy
+        }
+        #else
+        var url = support.appendingPathComponent("Models", isDirectory: true)
+        #endif
         if !FileManager.default.fileExists(atPath: url.path) {
             try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         }

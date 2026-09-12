@@ -1281,6 +1281,7 @@ final class AppModel: ObservableObject {
             return self?.libraryBusyForBackfill ?? false
         }
         sweepTrashAtLaunch()
+        sweepGPSBackups()
         scheduleAssetBackfill()
         // The Adjust and Guided previews level their source frames the way
         // the render will; they learn the current project's level from here.
@@ -2067,6 +2068,28 @@ final class AppModel: ObservableObject {
                 .appendingPathComponent(output.lastPathComponent))
         }
         purgeExpiredTrash()
+    }
+
+    /// Removes `.<movie>.gps-backup` clones a kill left beside a segment
+    /// (Part 1 R21, W12): `MovieLocation.inject` clones the movie before it
+    /// rewrites the header and restores from the clone on failure; a kill
+    /// between the two leaves the hidden clone for ever. Off the main actor,
+    /// one `contentsOfDirectory` per project.
+    func sweepGPSBackups() {
+        let root = projectsRootURL
+        Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            var removed = 0
+            for folder in (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+            where !folder.lastPathComponent.hasPrefix(".") {
+                let source = folder.appendingPathComponent("source", isDirectory: true)
+                for name in (try? fm.contentsOfDirectory(atPath: source.path)) ?? []
+                where name.hasPrefix(".") && name.hasSuffix(".gps-backup") {
+                    if (try? fm.removeItem(at: source.appendingPathComponent(name))) != nil { removed += 1 }
+                }
+            }
+            if removed > 0 { LLog("sweep: removed \(removed) .gps-backup leftover(s)") }
+        }
     }
 
     /// How long a deleted item stays recoverable.
@@ -7175,6 +7198,18 @@ final class AppModel: ObservableObject {
             withIntermediateDirectories: true
         )
         try copyReplacingItem(at: output.url, to: destination)
+        #if os(macOS)
+        // The Mac runner's scratch has done its job once the output is in
+        // `blends/` (W12). Kept only when the person asked to keep the
+        // extracted frames — that is what the setting means.
+        if !keepExtractedFrames, let job = MacVideoJobRunner.removableJobFolder(containing: output.url) {
+            try? FileManager.default.removeItem(at: job)
+            let jobs = job.deletingLastPathComponent()
+            if (try? FileManager.default.contentsOfDirectory(atPath: jobs.path).isEmpty) == true {
+                try? FileManager.default.removeItem(at: jobs)
+            }
+        }
+        #endif
 
         var blend = parameters
         blend.captureID = captureID

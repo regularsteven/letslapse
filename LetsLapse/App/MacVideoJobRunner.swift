@@ -149,7 +149,7 @@ enum MacVideoJobRunner {
         )
         let previousManifest = try? readManifest(from: paths.manifest)
         var manifest = previousManifest ?? Manifest(
-            sourcePath: inputURL.path,
+            sourcePath: relativePath(inputURL, jobRoot: paths.root),
             sourceName: inputURL.lastPathComponent,
             blendWindow: options.blendWindow,
             outputFPS: options.outputFPS,
@@ -197,7 +197,7 @@ enum MacVideoJobRunner {
                 progress: progress
             )
         } else {
-            manifest.sourcePath = inputURL.path
+            manifest.sourcePath = relativePath(inputURL, jobRoot: paths.root)
             manifest.sourceName = inputURL.lastPathComponent
             manifest.blendWindow = options.blendWindow
             manifest.outputFPS = options.outputFPS
@@ -257,7 +257,7 @@ enum MacVideoJobRunner {
         )
 
         manifest.status = "completed"
-        manifest.outputPath = paths.output.path
+        manifest.outputPath = relativePath(paths.output, jobRoot: paths.root)
         manifest.updatedAt = timestamp()
         try writeManifest(manifest, to: paths.manifest)
         try appendLog("Completed output \(paths.output.path)", to: paths.log)
@@ -273,13 +273,61 @@ enum MacVideoJobRunner {
         )
     }
 
+    /// Where a clip's job folder goes. Inside a project — the clip sits in
+    /// `Projects/<id>/source/` — it is `Projects/<id>/.jobs/<stem>.letslapse/`
+    /// (Phase 1 W12, Part 1 R19): hidden, so the transfer walker skips it,
+    /// and beside `source/` rather than in it, so a `.lapse` archive or a
+    /// clone never carries gigabytes of scratch and the audit never counts
+    /// it as media. A clip anywhere else keeps its job folder beside it, as
+    /// before.
+    static func jobFolderURL(for inputURL: URL) -> URL {
+        let stem = inputURL.deletingPathExtension().lastPathComponent
+        let parent = inputURL.deletingLastPathComponent()
+        if parent.lastPathComponent == "source" {
+            return parent.deletingLastPathComponent()
+                .appendingPathComponent(".jobs", isDirectory: true)
+                .appendingPathComponent("\(stem).letslapse", isDirectory: true)
+        }
+        return inputURL.deletingPathExtension().appendingPathExtension("letslapse")
+    }
+
+    /// The enclosing job folder of a runner output, or nil when the URL is
+    /// not inside one — what `storeBlend` removes once the output is copied
+    /// into `blends/` (the scratch was never deleted before; seven folders
+    /// on the Mac volume, Part 1 R19). Only the hidden `.jobs/` form: an
+    /// old-style folder beside a clip is left for its owner.
+    static func removableJobFolder(containing output: URL) -> URL? {
+        var url = output
+        while url.pathComponents.count > 1 {
+            let name = url.lastPathComponent
+            if name.hasSuffix(".letslapse"), url.deletingLastPathComponent().lastPathComponent == ".jobs" {
+                return url
+            }
+            url = url.deletingLastPathComponent()
+        }
+        return nil
+    }
+
+    /// A manifest path relative to the job folder's project (`source/x.mov`,
+    /// `output/x.mp4`), so a library move does not break a resume (Part 1
+    /// R17). Absolute when the file is outside the project.
+    private static func relativePath(_ url: URL, jobRoot: URL) -> String {
+        let project = jobRoot.deletingLastPathComponent().deletingLastPathComponent()
+        let prefix = project.standardizedFileURL.path + "/"
+        let path = url.standardizedFileURL.path
+        if jobRoot.deletingLastPathComponent().lastPathComponent == ".jobs", path.hasPrefix(prefix) {
+            return String(path.dropFirst(prefix.count))
+        }
+        return path
+    }
+
     private static func prepareJobFolder(
         for inputURL: URL,
         blendWindow: Int,
         trimHeadTailSeconds: Double,
         extractFormat: ImageFormat
     ) throws -> JobPaths {
-        let root = inputURL.deletingPathExtension().appendingPathExtension("letslapse")
+        let root = jobFolderURL(for: inputURL)
         let trim = max(0, trimHeadTailSeconds)
         let trimSuffix = trim > 0 ? String(format: "-trim-%0.1fs-each-end", trim) : ""
         let passName = String(format: "blend-%03d-to-001%@", max(1, blendWindow), trimSuffix)
