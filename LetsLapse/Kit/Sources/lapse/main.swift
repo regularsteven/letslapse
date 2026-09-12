@@ -101,6 +101,13 @@ USAGE:
       --json                Machine-readable report
       --plist FILE          A preferences plist copy to read the device id from
 
+  lapse metadata <image> [--json]               Read what an import would carry as the asset's
+                            metadata record — IPTC Core / XMP fields, camera,
+                            exposure, GPS — from the file's own header, its
+                            embedded XMP and the .xmp sidecar beside a raw
+                            (sidecar wins). The panel's Info and Metadata
+                            groups, headless.
+      --sidecar FILE        Lay this .xmp on top instead of the one beside the file
   lapse lightroom <file.xmp> [--json]           Read a Lightroom sidecar and report the import
   lapse lightroom <file.xmp> --render <out.jpg> [--variant ID] [--scale S] [--no-masks | --flip-masks] [--no-dehaze] [--no-hsl]
                                                 Render the sidecar's raw through a variant
@@ -565,6 +572,32 @@ do {
         } else {
             try runLightroomReport(
                 url: URL(fileURLWithPath: args[0]), asJSON: asJSON)
+        }
+
+    case "metadata":
+        let asJSON = takeFlag(["--json"])
+        let sidecarPath = takeOption(["--sidecar"])
+        guard args.count == 1 else { fail("metadata needs exactly one image file") }
+        let result = MetadataReader.read(
+            fileAt: URL(fileURLWithPath: args[0]), sidecar: sidecarPath.map { URL(fileURLWithPath: $0) })
+        if asJSON {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            var payload: [String: Any] = ["source": result.source]
+            if let sidecar = result.sidecarURL { payload["sidecar"] = sidecar.path }
+            if let object = try JSONSerialization.jsonObject(with: try encoder.encode(result.metadata)) as? [String: Any] {
+                payload["metadata"] = object
+            }
+            print(String(data: try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]), encoding: .utf8) ?? "{}")
+        } else {
+            print("metadata · \(URL(fileURLWithPath: args[0]).lastPathComponent) · from \(result.source)"
+                + (result.sidecarURL.map { " (\($0.lastPathComponent))" } ?? ""))
+            for field in MetadataField.allCases {
+                guard let value = result.metadata[field] else { continue }
+                print("  \(field.rawValue.padding(toLength: 26, withPad: " ", startingAt: 0)) \(value.textValue ?? "")")
+            }
+            if let line = result.metadata.exposureLine { print("  exposure line: \(line)") }
+            if let line = result.metadata.gpsLine { print("  gps line: \(line)") }
         }
 
     case "variants":

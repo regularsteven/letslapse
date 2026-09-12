@@ -46,7 +46,17 @@ let package = Package(
                 // A real Lightroom sidecar, with the AI mask's 229 KB payload
                 // trimmed to a stand-in — the parser has to find the table and
                 // key it by digest, not carry a quarter megabyte into the repo.
-                .copy("Fixtures/lightroom-_WEX3825.xmp")
+                .copy("Fixtures/lightroom-_WEX3825.xmp"),
+                // The metadata reader's ground truth (docs/data-model-scale-
+                // and-metadata-2026-09-12.md §2): a Photoshop-exported JPEG
+                // carrying the full IPTC Core set — title, caption, creator,
+                // rights, rating, the rights URLs and the creator contact
+                // block, in XMP and IIM both — and the Lightroom sidecar for
+                // the Sony ARW beside it on the Desktop. The ARW (19 MB) and
+                // the rendered DNG (47 MB) are too big to check in; their
+                // tests skip when the Desktop copies are absent.
+                .copy("Fixtures/metadata-demo.jpg"),
+                .copy("Fixtures/metadata-_WEX3518.xmp"),
             ]
         ),
     ]

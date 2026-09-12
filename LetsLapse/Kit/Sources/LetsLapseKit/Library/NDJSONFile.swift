@@ -14,7 +14,9 @@ public enum NDJSONFile {
     /// stable byte form for tests), ISO-8601 dates with fractional seconds.
     public static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
+        // `source/frame-00042.dng`, not `source\/frame-00042.dng`: the name is
+        // the record's key and is grepped for by humans and by `tools/`.
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
             try container.encode(FrameTimestamps.string(from: date))
@@ -66,9 +68,21 @@ public enum NDJSONFile {
             try data.write(to: url, options: .atomic)
             return
         }
-        let handle = try FileHandle(forWritingTo: url)
+        // Updating, not writing: the last byte has to be READ to know
+        // whether the previous line was closed.
+        let handle = try FileHandle(forUpdating: url)
         defer { try? handle.close() }
-        try handle.seekToEnd()
+        let end = try handle.seekToEnd()
+        // A file whose last write was torn ends mid-line. Closing that line
+        // off first keeps the torn fragment as the one unreadable line it
+        // already is, instead of gluing this record onto it and losing both.
+        if end > 0 {
+            try handle.seek(toOffset: end - 1)
+            if try handle.read(upToCount: 1) != Data([0x0A]) {
+                try handle.seekToEnd()
+                try handle.write(contentsOf: Data([0x0A]))
+            }
+        }
         try handle.write(contentsOf: data)
     }
 
