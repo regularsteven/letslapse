@@ -108,6 +108,24 @@ USAGE:
       --out FILE            With --rebuild-index: also write the rebuilt
                             manifest here (never into the library)
 
+  lapse index <root> [options]                  The library's SQLite index (Index/library.sqlite,
+                            a cache rebuilt from every project.json, assets.ndjson
+                            and metadata.json): its counts, a page of projects, or
+                            a search. <root> is the storage root. Read-only unless
+                            --rebuild is given; never touches the project files.
+      --rebuild             Rebuild the index from the files (deletes nothing
+                            but the index's own rows)
+      --verify              Compare the index's project ids with the documents
+                            on disk; exit 1 when they differ
+      --search TEXT         Full-text hits (projects and assets, best first)
+      --list                A page of projects
+      --sort KEY            created | added | modified | size | name (default created)
+      --asc                 Ascending (default: descending)
+      --kind K              video | photos
+      --tag T               Only projects carrying tag T (repeatable)
+      --offset N --limit N  The page (default 0, 30)
+      --json                Machine-readable output
+
   lapse project-diff <a.json> <b.json> [--ignore k1,k2]
                             Diff two project.json documents (or one against an
                             archive's manifest) in the same canonical form;
@@ -423,6 +441,85 @@ do {
             print(LibraryAudit.text(report))
         }
         exit(report.consistent ? 0 : 1)
+
+    case "index":
+        let asJSON = takeFlag(["--json"])
+        let rebuild = takeFlag(["--rebuild"])
+        let verify = takeFlag(["--verify"])
+        let list = takeFlag(["--list"])
+        let ascending = takeFlag(["--asc"])
+        let searchText = takeOption(["--search"])
+        let sortName = takeOption(["--sort"]) ?? "created"
+        let kind = takeOption(["--kind"])
+        var tags: [String] = []
+        while let tag = takeOption(["--tag"]) { tags.append(tag) }
+        let offset = Int(takeOption(["--offset"]) ?? "0") ?? 0
+        let limit = Int(takeOption(["--limit"]) ?? "30") ?? 30
+        guard args.count == 1 else { fail("index needs one library root (the folder holding Projects/ and Index/)") }
+        let root = URL(fileURLWithPath: args[0])
+        let projects = root.appendingPathComponent("Projects", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: projects.path) else { fail("no Projects/ under \(root.path)") }
+        let index = try LibraryIndex(at: LibraryIndex.url(inRoot: root))
+        var payload: [String: Any] = ["index": index.url.path]
+        if rebuild {
+            let outcome = try index.rebuild(fromProjectsFolder: projects)
+            payload["rebuild"] = ["projects": outcome.projects, "blends": outcome.blends, "assets": outcome.assets,
+                                  "unreadable": outcome.unreadableDocuments, "seconds": outcome.seconds] as [String: Any]
+            if !asJSON {
+                print(String(format: "rebuilt: %d projects · %d blends · %d assets in %.2f s%@", outcome.projects, outcome.blends, outcome.assets, outcome.seconds,
+                             outcome.unreadableDocuments.isEmpty ? "" : " · \(outcome.unreadableDocuments.count) unreadable documents"))
+            }
+        }
+        let counts = try index.counts()
+        payload["counts"] = ["projects": counts.projects, "deleted": counts.deletedProjects, "blends": counts.blends,
+                             "assets": counts.assets, "hashed": counts.hashedAssets, "searchRows": counts.searchRows]
+        if !asJSON {
+            print("index: \(index.url.path)")
+            print("  built \(index.meta("builtAt") ?? "never") · projects \(counts.projects) (+\(counts.deletedProjects) deleted) · blends \(counts.blends) · assets \(counts.assets) (\(counts.hashedAssets) hashed) · search rows \(counts.searchRows)")
+        }
+        var consistent = true
+        if verify {
+            let verification = try index.verify(againstProjectsFolder: projects)
+            consistent = verification.consistent
+            payload["verify"] = ["documents": verification.documents, "indexed": verification.indexed,
+                                 "missing": verification.missing.map(\.uuidString), "stale": verification.stale.map(\.uuidString),
+                                 "consistent": consistent]
+            if !asJSON {
+                print("  verify: \(verification.documents) documents · \(verification.indexed) indexed · missing from index \(verification.missing.count) · stale in index \(verification.stale.count) → \(consistent ? "CONSISTENT" : "INCONSISTENT")")
+            }
+        }
+        if let searchText {
+            let hits = try index.search(searchText, limit: limit)
+            payload["search"] = hits.map { ["kind": $0.kind, "project": $0.projectID.uuidString, "id": $0.id, "name": $0.name, "title": $0.title ?? "", "rank": $0.rank] }
+            if !asJSON {
+                print("  search \"\(searchText)\": \(hits.count) hits")
+                for hit in hits { print("    \(hit.kind.padding(toLength: 7, withPad: " ", startingAt: 0)) \(hit.projectID.uuidString.prefix(8))  \(hit.name)\(hit.title.map { " — \($0)" } ?? "")") }
+            }
+        }
+        if list || (!rebuild && !verify && searchText == nil) {
+            guard let sort = LibraryIndex.Sort(rawValue: sortName) else {
+                fail("unknown sort '\(sortName)' — choose from: \(LibraryIndex.Sort.allCases.map(\.rawValue).joined(separator: ", "))")
+            }
+            var query = LibraryIndex.ProjectQuery()
+            query.sort = sort; query.ascending = ascending; query.kind = kind; query.tags = tags
+            query.offset = offset; query.limit = limit
+            let page = try index.projects(query)
+            payload["page"] = ["total": page.total, "offset": page.offset,
+                               "rows": page.rows.map { ["id": $0.id.uuidString, "name": $0.displayName, "kind": $0.kind, "mode": $0.mode,
+                                                        "frames": $0.frameCount, "blends": $0.blendCount, "createdAt": FrameTimestamps.string(from: $0.createdAt),
+                                                        "sizeBytes": $0.sizeBytes ?? 0, "tags": $0.sceneTags, "title": $0.title ?? "", "folder": $0.folder] }]
+            if !asJSON {
+                print("  page \(page.offset)…\(page.offset + page.rows.count) of \(page.total) by \(sort.rawValue) \(ascending ? "asc" : "desc")")
+                for row in page.rows {
+                    print("    \(row.id.uuidString.prefix(8))  \(FrameTimestamps.string(from: row.createdAt).prefix(10))  \(row.kind.padding(toLength: 6, withPad: " ", startingAt: 0)) \(String(row.frameCount).padding(toLength: 5, withPad: " ", startingAt: 0)) \(row.displayName)\(row.blendCount > 0 ? " · \(row.blendCount) blends" : "")\(row.sceneTags.isEmpty ? "" : " · " + row.sceneTags.joined(separator: ", "))")
+                }
+            }
+        }
+        if asJSON {
+            FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]))
+            FileHandle.standardOutput.write(Data("\n".utf8))
+        }
+        exit(consistent ? 0 : 1)
 
     case "project-diff":
         let ignored = Set((takeOption(["--ignore"]) ?? "").split(separator: ",").map { String($0) })

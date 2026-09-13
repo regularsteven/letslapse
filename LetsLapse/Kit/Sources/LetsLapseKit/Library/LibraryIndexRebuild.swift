@@ -247,7 +247,9 @@ public struct LibraryIndexRebuild {
     // MARK: - Reading
 
     struct Document {
+        /// The folder name under `Projects/` or `Projects/.trash/`.
         var folder: String
+        var inTrash: Bool
         var captureID: String
         var capture: [String: Any]
         var blends: [[String: Any]]
@@ -305,7 +307,7 @@ public struct LibraryIndexRebuild {
                     report.documentFormatVersions[version, default: 0] += 1
                     if captureID != name.uppercased() { report.misfiledDocuments.append(name) }
                     documents.append(Document(
-                        folder: name, captureID: captureID, capture: capture,
+                        folder: name, inTrash: inTrash, captureID: captureID, capture: capture,
                         blends: object["blends"] as? [[String: Any]] ?? []))
                     report.documentsRead += 1
                     if inTrash { report.documentsInTrash += 1 }
