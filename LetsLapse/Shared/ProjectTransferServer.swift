@@ -791,8 +791,10 @@ final class ProjectTransferServer: ObservableObject {
                 onProgress(sent, entry.relativePath)
             }
 
-            // `project.json` is generated in memory and never exists on this
-            // device's disk — the one entry with no file behind it.
+            // `project.json` was read into memory before the job started
+            // (the project's own document, brought up to date by a persist)
+            // — the one entry sent from a buffer rather than a file handle,
+            // so a persist mid-transfer can never tear it.
             if entry.relativePath == "project.json" {
                 var offset = 0
                 while offset < manifestData.count {

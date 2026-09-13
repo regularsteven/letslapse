@@ -9195,6 +9195,10 @@ final class AppModel: ObservableObject {
 
     enum ExportError: LocalizedError {
         case insufficientStorage(available: Int64, needed: Int64)
+        /// The project's folder holds no `project.json` after a persist —
+        /// the folder is missing or unwritable, and an archive without its
+        /// manifest would not install anywhere.
+        case noProjectDocument
 
         var errorDescription: String? {
             switch self {
@@ -9204,6 +9208,8 @@ final class AppModel: ObservableObject {
                 \(LLFormat.bytes(needed)) but only \(LLFormat.bytes(available)) is available. \
                 Free up space and try again.
                 """
+            case .noProjectDocument:
+                return "This project's record couldn't be written into its folder, so it can't be exported."
             }
         }
     }
@@ -9232,14 +9238,20 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Builds a portable `.lapse` archive of one project: `project.json`
-    /// (capture + its blend entries) beside the project's `source/` and
-    /// `blends/` trees. The manifest is written into the project folder —
-    /// where Phase 2 keeps it anyway — so multi-gigabyte projects aren't
-    /// duplicated on disk first.
+    /// Builds a portable `.lapse` archive of one project: the project folder
+    /// — its `project.json` (capture + its blend entries; Phase 2 keeps it on
+    /// disk, so it is persisted here rather than synthesised), `source/`,
+    /// `blends/` and the sidecars — archived in place, so multi-gigabyte
+    /// projects aren't duplicated on disk first.
     func exportProject(_ capture: CaptureProject) async throws -> URL {
-        let document = ProjectDocument(capture: capture, blends: blends(for: capture))
         let folder = captureFolderURL(for: capture.id)
+        // The document on disk is what travels; a persist brings it up to
+        // the record in memory before the archive reads it.
+        try persistAndWait(reason: .valuesChanged)
+        let documentURL = ProjectDocumentFormat.url(inProjectFolder: folder)
+        guard FileManager.default.fileExists(atPath: documentURL.path) else {
+            throw ExportError.noProjectDocument
+        }
 
         let rawName = capture.name ?? capture.originalName
         let safeName = rawName
@@ -9248,9 +9260,6 @@ final class AppModel: ObservableObject {
             .trimmingCharacters(in: .whitespaces)
         let archiveURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(safeName.isEmpty ? "LetsLapse Project" : safeName).\(ProjectArchive.fileExtension)")
-
-        try ProjectDocumentFormat.makeEncoder().encode(document)
-            .write(to: ProjectDocumentFormat.url(inProjectFolder: folder), options: .atomic)
 
         try await Task.detached(priority: .userInitiated) {
             // lzfse shrinks the tree, but stills/ProRes barely compress, so the
@@ -9654,11 +9663,17 @@ final class AppModel: ObservableObject {
         return captureFolderURL(for: captureID)
     }
 
-    /// The `project.json` a receiving device installs from — the same document
-    /// `exportProject` writes into a `.lapse`, built in memory because on this
-    /// path it never touches the sending device's disk.
+    /// The `project.json` a receiving device installs from — the project's
+    /// own document, read off this device's disk after a persist has brought
+    /// it up to the record in memory (Phase 2). Synthesised only when the
+    /// folder has no document to read, which a persist that just succeeded
+    /// should never leave behind.
     func projectTransferManifestData(for captureID: UUID) throws -> Data? {
         guard let capture = captures.first(where: { $0.id == captureID }) else { return nil }
+        try persistAndWait(reason: .valuesChanged)
+        let url = ProjectDocumentFormat.url(inProjectFolder: captureFolderURL(for: captureID))
+        if let data = try? Data(contentsOf: url) { return data }
+        LLog("transfer: no project.json in \(captureID.uuidString.prefix(8)) — sending a synthesised one")
         let document = ProjectDocument(capture: capture, blends: blends(for: capture))
         return try ProjectDocumentFormat.makeEncoder().encode(document)
     }
