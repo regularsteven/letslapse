@@ -1,0 +1,51 @@
+lapse audit · /Volumes/letslapse
+  manifest: decoded · 2550533 bytes · schema 4
+  captures 366 · blends 140 · collections 1 · project folders 366 · 433.0 GB
+
+consistency
+  orphan folders (no record): 0
+  records with no folder: 0
+  records over an empty folder: 1  [C6F7D8CD-4543-423B-B6AF-371B07B55BF3]
+  listed source files missing on disk: 749 in 1 projects
+      C6F7D8CD ×749: source/frame-00001.dng, source/frame-00002.dng, source/frame-00003.dng, source/frame-00004.dng, source/frame-00005.dng
+  media in source/ not listed: 0 in 0 projects
+  .json names in sourceFileNames: 0 in 0 projects
+  blend files unlisted: 7 in 7 projects
+      385DC396 ×1: 53A785DE-F7D0-441C-B05E-479FF4BCC4CD.mp4
+      7DB15558 ×1: 1E86D994-D0E7-4223-ABAE-65627D8B0732.png
+      A5517BFB ×1: 971ECAB8-8F67-46EE-A595-F4C6757FBE42.mp4
+      5EFCC959 ×1: 269852AF-14CB-4A52-AE1D-C3E7462B0FFA.mp4
+      166353DC ×1: C1443186-204D-4A2C-BABD-0FAB4505050D.png
+      50A313ED ×1: 90E4681E-BEB9-478B-8BFF-EF348EFCF9A3.png
+      0B0109D4 ×1: 0D72D01C-35AC-4FD3-B1C4-9DD286B7ADC5.mp4
+  blend records whose file is missing: 0
+  blend records whose capture is missing: 0
+
+sidecars (projects carrying each)
+  assets.ndjson              365
+  dng-archive.json           4
+  metadata.json              349
+  notes/                     5
+  overlays.json              17
+  project.json               366
+  shapes.json                249
+  source/capture_log.json    298
+  source/documents.json      0
+  source/frames.exposure     128
+  source/frames.timestamps   332
+  source/frames.whitebalance 3
+  source/framing.json        6
+  source/sequence.json       15
+
+identity
+  originID: 366 of 366 captures · 365 distinct · originDeviceID 110 · derivedFromOriginID 4
+  importedFromID: 327 · resolvable locally 0
+  modifiedBy: captures 22 · blends 0 · collections 0
+
+tombstones
+  captures 0 · blends 0 · collections 0 · .trash 0 folders, 0 B
+
+hashes
+  hashed 57052 of 57052 assets (100.0%) · 429.1 GB of 429.1 GB · 365 projects with assets.ndjson · 0 stale records · 56870 records with metadata
+
+AUDIT INCONSISTENT

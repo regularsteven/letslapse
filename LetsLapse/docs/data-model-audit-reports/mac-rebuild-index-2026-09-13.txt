@@ -1,0 +1,11 @@
+lapse audit --rebuild-index · /Volumes/letslapse
+  index: decoded · captures 366 · blends 140
+  documents: 366 read (0 in .trash) · captures 366 · blends 140 · v2 ×366
+
+diff (index vs documents, canonical form)
+  only in the index: 0
+  only in the documents: 0
+  collections: 1 in the index · 1 in Collections/collections.json
+  differing records: 0 · differing fields: 0
+
+REBUILD IDENTICAL
