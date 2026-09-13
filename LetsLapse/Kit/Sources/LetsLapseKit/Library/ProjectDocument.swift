@@ -53,6 +53,23 @@ public enum ProjectDocumentFormat {
         NDJSONFile.makeDecoder()
     }
 
+    /// The collections' own document — `<root>/Collections/collections.json`,
+    /// `{formatVersion, collections}` with every collection, tombstoned ones
+    /// included. Collections span projects, so they have no per-project
+    /// document; this file is what lets a manifest be rebuilt from the
+    /// folders alone (Phase 4).
+    public static let collectionsFileName = "collections.json"
+    public static let collectionsFolderName = "Collections"
+    public static let collectionsFormat = 1
+
+    public static func collectionsURL(inRoot root: URL) -> URL {
+        root.appendingPathComponent(collectionsFolderName, isDirectory: true).appendingPathComponent(collectionsFileName)
+    }
+
+    /// Date keys that occur inside a collection record at any depth
+    /// (`lastExport.exportedAt` is nested).
+    public static let collectionDateKeys: Set<String> = ["createdAt", "modifiedAt", "deletedAt", "exportedAt"]
+
     // MARK: - The two date encodings
 
     /// A manifest date (`Double` seconds since 2001) as the document's string.

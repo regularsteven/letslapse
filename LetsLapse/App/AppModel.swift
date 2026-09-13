@@ -1270,6 +1270,10 @@ final class AppModel: ObservableObject {
         // read here so it exists before any record could name it (W2).
         LLog("device id \(DeviceIdentity.id.uuidString)")
         loadLibrary()
+        // Phase 4: folders with no record — a killed install, a project
+        // written straight into the folder — join the library from their
+        // own documents before anything else looks at the list.
+        reconcileFoldersAtLaunch()
         refreshShapeSummaries()
         persister.onFailure = { [weak self] error in
             self?.errorMessage = error.localizedDescription
@@ -8231,21 +8235,25 @@ final class AppModel: ObservableObject {
             // cannot be made after it. Step 4 backfills `originID`, links DNG
             // clones to their parent's origin and drops the `.json` names
             // misregistered as frames.
-            let migration: ManifestMigrations.Outcome
-            let manifest: LibraryManifest
+            let loaded: (migration: ManifestMigrations.Outcome, manifest: LibraryManifest)
             do {
-                migration = try ManifestMigrations.apply(to: data) { [self] id in
+                let migration = try ManifestMigrations.apply(to: data) { [self] id in
                     UUID(uuidString: id).map { captureFolderURL(for: $0) }
                 }
-                manifest = try JSONDecoder().decode(LibraryManifest.self, from: migration.data)
+                loaded = (migration, try JSONDecoder().decode(LibraryManifest.self, from: migration.data))
             } catch {
                 // W7: a manifest this build cannot decode is set aside, never
-                // overwritten. Until Phase 4's rebuild-from-folders there is
-                // no repair here, only the guard: an empty library, every
-                // write refused, and a banner naming the file.
+                // overwritten. Phase 4 adds the repair: the manifest is
+                // rebuilt from every project's own `project.json` and the
+                // collections document, and the library carries on. Only
+                // when that fails too is it the guard alone — an empty
+                // library, every write refused, and a banner naming the file.
                 setAsideUnreadableManifest(error)
-                return
+                guard let repaired = repairManifestFromDocuments() else { return }
+                loaded = repaired
             }
+            let migration = loaded.migration
+            let manifest = loaded.manifest
             // Tombstoned records (W9) split off here, so the live arrays are
             // what they always were and every view, export and transfer keeps
             // excluding the deleted for free.
@@ -8312,6 +8320,150 @@ final class AppModel: ObservableObject {
         persister.refuseWrites = why
         errorMessage = why
         LLog("library: manifest undecodable, set aside as \(name) — \(error)")
+    }
+
+    /// Phase 4: the manifest rebuilt from the project folders — every
+    /// `Projects/<id>/project.json` (live and in `.trash`) plus
+    /// `Collections/collections.json` — run through the same migrations and
+    /// decoder as a manifest read from disk, written as the new
+    /// `library.json`, and the persister unlocked. Nil, with the guard left
+    /// in place, when there are no documents to rebuild from or the result
+    /// does not decode either.
+    private func repairManifestFromDocuments() -> (migration: ManifestMigrations.Outcome, manifest: LibraryManifest)? {
+        guard let failure = libraryLoadFailure else { return nil }
+        let rebuilt = LibraryIndexRebuild.run(root: projectsRootURL)
+        guard rebuilt.documentsRead > 0 else {
+            LLog("library: no project documents to rebuild from")
+            return nil
+        }
+        do {
+            let data = try LibraryIndexRebuild.rebuiltManifest(root: projectsRootURL)
+            let migration = try ManifestMigrations.apply(to: data) { [self] id in
+                UUID(uuidString: id).map { captureFolderURL(for: $0) }
+            }
+            let manifest = try JSONDecoder().decode(LibraryManifest.self, from: migration.data)
+            try migration.data.write(to: manifestURL, options: .atomic)
+            persister.refuseWrites = nil
+            let notice = "The project library couldn't be read (\(failure.reason)) and was rebuilt from \(rebuilt.documentsRead) project folders" +
+                (rebuilt.collectionsDocumentRead ? " and the collections document." : "; the collections could not be recovered.") +
+                " The unreadable file was kept as \(failure.setAsideName)."
+            libraryLoadFailure = LibraryLoadFailure(
+                setAsideName: failure.setAsideName, reason: failure.reason,
+                rebuiltFromDocuments: rebuilt.documentsRead, collectionsRecovered: rebuilt.collectionsDocumentRead)
+            errorMessage = notice
+            LLog("library: rebuilt from \(rebuilt.documentsRead) documents (\(rebuilt.documentsInTrash) in .trash)\(rebuilt.unreadableDocuments.isEmpty ? "" : ", \(rebuilt.unreadableDocuments.count) unreadable"), collections \(rebuilt.collectionsDocumentRead ? "recovered" : "NOT recovered")")
+            return (migration, manifest)
+        } catch {
+            LLog("library: rebuild from documents failed — \(error)")
+            return nil
+        }
+    }
+
+    /// Phase 4: the folders under `Projects/` against the records, once per
+    /// launch, after the manifest has loaded.
+    ///
+    /// A folder with no record but with its own `project.json` is adopted —
+    /// the document IS the record (an install or a transfer killed between
+    /// the folder move and the persist; a project the Lightroom tool wrote
+    /// straight into the folder). A folder with no record and no document
+    /// but media in `source/` is registered as a recovered project, named
+    /// so, with what its files say; an empty folder is only logged. A record
+    /// with no folder is logged — it stays, and the audit counts it — since
+    /// nothing here deletes.
+    private func reconcileFoldersAtLaunch() {
+        guard libraryLoadFailure == nil || libraryLoadFailure?.rebuiltFromDocuments != nil else { return }
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: projectsRootURL.path) else { return }
+        let known = Set((captures + deletedCaptures).map(\.id))
+        var adopted = 0
+        var recovered = 0
+        var empty: [String] = []
+        for name in names.sorted() {
+            guard !name.hasPrefix("."), let id = UUID(uuidString: name), !known.contains(id) else { continue }
+            let folder = captureFolderURL(for: id)
+            var isDirectory: ObjCBool = false
+            guard fm.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else { continue }
+            let documentURL = ProjectDocumentFormat.url(inProjectFolder: folder)
+            if let data = try? Data(contentsOf: documentURL),
+               let document = try? ProjectDocumentFormat.makeDecoder().decode(ProjectDocument.self, from: data),
+               document.capture.id == id {
+                // A folder under `Projects/` is a live project, whatever its
+                // document says: one dragged back out of `.trash` by hand
+                // comes back live, blends and all, rather than being swept
+                // straight back in.
+                var capture = document.capture
+                capture.sourceFileNames.removeAll { $0.hasSuffix(".json") }
+                let restored = capture.deletedAt != nil
+                capture.deletedAt = nil
+                capture.deletedBy = nil
+                captures.append(capture)
+                for blend in document.blends {
+                    if restored {
+                        blends.append(blend.undeleted)
+                    } else if blend.deletedAt == nil {
+                        blends.append(blend)
+                    } else {
+                        deletedBlends.append(blend)
+                    }
+                }
+                adopted += 1
+                LLog("reconcile: \(restored ? "restored" : "adopted") \(name.prefix(8)) from its project.json (\(capture.sourceFileNames.count) files, \(document.blends.count) blends)")
+            } else if let capture = recoveredCapture(id: id, folder: folder) {
+                captures.append(capture)
+                recovered += 1
+                LLog("reconcile: recovered \(name.prefix(8)) from its folder (\(capture.sourceFileNames.count) files)")
+            } else {
+                empty.append(name)
+            }
+        }
+        for capture in captures where !fm.fileExists(atPath: captureFolderURL(for: capture.id).path) {
+            LLog("reconcile: record \(capture.id.uuidString.prefix(8)) has no folder")
+        }
+        if !empty.isEmpty {
+            LLog("reconcile: \(empty.count) folders with no record, no document and no media left alone: \(empty.map { $0.prefix(8) }.joined(separator: ", "))")
+        }
+        guard adopted + recovered > 0 else { return }
+        captures.sort { $0.createdAt > $1.createdAt }
+        blends.sort { $0.createdAt > $1.createdAt }
+        do {
+            try persistLibrary()
+            LLog("reconcile: \(adopted) adopted, \(recovered) recovered, persisted")
+        } catch {
+            LLog("reconcile: could not persist the adopted records — \(error)")
+        }
+    }
+
+    /// What a folder says about the project it holds, when it has no record
+    /// and no document: the media in `source/`, in name order.
+    private func recoveredCapture(id: UUID, folder: URL) -> CaptureProject? {
+        let source = folder.appendingPathComponent("source", isDirectory: true)
+        let items = ((try? FileManager.default.contentsOfDirectory(atPath: source.path)) ?? []).sorted()
+        let videoExtensions: Set<String> = ["mov", "mp4", "m4v"]
+        var stills: [String] = []
+        var clips: [String] = []
+        for item in items where !item.hasPrefix(".") {
+            let lower = item.lowercased()
+            if lower.contains("-corrected.") { continue }
+            let ext = (lower as NSString).pathExtension
+            if videoExtensions.contains(ext) { clips.append(item) }
+            else if ImportedStills.stillExtensions.contains(ext) { stills.append(item) }
+        }
+        guard !stills.isEmpty || !clips.isEmpty else { return nil }
+        let isVideo = !clips.isEmpty && stills.isEmpty
+        let names = (isVideo ? clips : stills).map { "source/\($0)" }
+        let created = (try? folder.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date()
+        return CaptureProject(
+            id: id,
+            kind: isVideo ? .video : .photos,
+            createdAt: created,
+            originalName: isVideo ? clips[0] : "\(stills.count) photos",
+            mode: "Recovered",
+            sourceFileNames: names,
+            sourceFPS: nil,
+            name: "Recovered · \(id.uuidString.prefix(8))",
+            originID: id,
+            originDeviceID: DeviceIdentity.id
+        )
     }
 
     /// One-time migration for the engine rebuild's default flip: projects
@@ -8391,6 +8543,7 @@ final class AppModel: ObservableObject {
     /// `LibraryPersister`.
     let persister = LibraryPersister(
         projectsRoot: StorageRoot.current.appendingPathComponent("Projects", isDirectory: true),
+        collectionsURL: ProjectDocumentFormat.collectionsURL(inRoot: StorageRoot.current),
         indexURL: LibraryIndex.url(inRoot: StorageRoot.current))
 
     /// The library's index (Phase 3): paged lists, tag counts and full-text
@@ -8407,6 +8560,11 @@ final class AppModel: ObservableObject {
     struct LibraryLoadFailure: Equatable {
         var setAsideName: String
         var reason: String
+        /// Phase 4: set when the manifest was rebuilt from the project
+        /// documents and the library is live again — the banner then tells
+        /// the person what happened rather than that nothing is saved.
+        var rebuiltFromDocuments: Int?
+        var collectionsRecovered = false
     }
     @Published private(set) var libraryLoadFailure: LibraryLoadFailure?
 

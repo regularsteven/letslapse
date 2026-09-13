@@ -12,6 +12,15 @@ struct ProjectDocument: Codable, Equatable {
     var blends: [AppModel.BlendProject]
 }
 
+/// Every collection, tombstoned ones included, as one document —
+/// `<root>/Collections/collections.json` (Phase 4). Collections span
+/// projects and so have no per-project document; without this file a
+/// manifest rebuilt from the project folders would come back without them.
+struct CollectionsDocument: Codable, Equatable {
+    var formatVersion: Int = ProjectDocumentFormat.collectionsFormat
+    var collections: [LapseCollection]
+}
+
 /// Writes `project.json` for every project a persisted manifest changed.
 ///
 /// Runs on the `LibraryPersister`'s queue, after `library.json` has landed:
@@ -43,11 +52,14 @@ struct ProjectDocument: Codable, Equatable {
 final class ProjectDocumentWriter {
 
     private let projectsRoot: URL
+    private let collectionsURL: URL
     private let index: LibraryIndex?
     private var lastWritten: [UUID: ProjectDocument] = [:]
+    private var lastWrittenCollections: CollectionsDocument?
 
-    init(projectsRoot: URL, index: LibraryIndex?) {
+    init(projectsRoot: URL, collectionsURL: URL, index: LibraryIndex?) {
         self.projectsRoot = projectsRoot
+        self.collectionsURL = collectionsURL
         self.index = index
     }
 
@@ -106,7 +118,30 @@ final class ProjectDocumentWriter {
             do { try index?.removeProject(id: id) } catch { LLog("index: could not remove \(id.uuidString.prefix(8)): \(error)") }
         }
         lastWritten = lastWritten.filter { seen.contains($0.key) }
+        syncCollections(manifest, outcome: &outcome)
         return outcome
+    }
+
+    /// The collections document follows the manifest the same way: written
+    /// when it differs from the last one written (or, at launch, from the
+    /// file on disk).
+    private func syncCollections(_ manifest: AppModel.LibraryManifest, outcome: inout Outcome) {
+        let document = CollectionsDocument(collections: manifest.collections ?? [])
+        if lastWrittenCollections == document { return }
+        do {
+            let data = try ProjectDocumentFormat.makeEncoder().encode(document)
+            if lastWrittenCollections == nil, let existing = try? Data(contentsOf: collectionsURL), existing == data {
+                lastWrittenCollections = document
+                return
+            }
+            try FileManager.default.createDirectory(at: collectionsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: collectionsURL, options: .atomic)
+            lastWrittenCollections = document
+            outcome.written += 1
+        } catch {
+            outcome.failed += 1
+            LLog("collections document: could not write \(collectionsURL.path): \(error)")
+        }
     }
 
     /// At launch: brings every document on disk up to the manifest, byte
@@ -144,6 +179,7 @@ final class ProjectDocumentWriter {
                 LLog("project document: could not reconcile \(url.path): \(error)")
             }
         }
+        syncCollections(manifest, outcome: &outcome)
         guard let index else { return outcome }
         do {
             if freshIndex, !seen.isEmpty {
@@ -213,8 +249,14 @@ final class ProjectDocumentWriter {
         return path.hasPrefix(prefix) ? String(path.dropFirst(prefix.count)) : folder.lastPathComponent
     }
 
+    /// Through a fresh URL every time: a `URL` caches its resource values,
+    /// and an atomic `Data.write` has already stat'ed the destination
+    /// through the one it was given — so reading the date back through that
+    /// same value returns the PREVIOUS file's stamp (measured 2026-09-13:
+    /// seven of eight documents re-indexed on the next launch for exactly
+    /// this reason).
     private func modificationDate(_ url: URL) -> Date? {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        (try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
     }
 
     /// Where a project's document lives, or nil when it has no folder.

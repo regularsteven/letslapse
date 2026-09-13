@@ -111,12 +111,7 @@ public struct LibraryAudit {
     /// folder itself.
     public static func run(root: URL, options: Options = Options()) -> Report {
         let fm = FileManager.default
-        let projects: URL
-        if fm.fileExists(atPath: root.appendingPathComponent("library.json").path) {
-            projects = root
-        } else {
-            projects = root.appendingPathComponent("Projects", isDirectory: true)
-        }
+        let projects = LibraryIndexRebuild.projectsFolder(under: root)
         var report = Report(
             root: root.path, projectsFolder: projects.path,
             manifestPath: projects.appendingPathComponent("library.json").path)

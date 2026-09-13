@@ -299,8 +299,8 @@ struct ContentView: View {
             tabs
 
             // W7: the library on disk could not be read and was set aside.
-            // Over every tab, until the app is relaunched against a repaired
-            // manifest — there is no repair to offer before Phase 4.
+            // Over every tab — until relaunch when nothing could be rebuilt,
+            // or as the account of the rebuild (Phase 4) when it could.
             if let failure = model.libraryLoadFailure {
                 VStack {
                     LibraryUnreadableBanner(failure: failure)
@@ -1617,12 +1617,24 @@ struct LibraryUnreadableBanner: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(LL.amber)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Library not loaded — nothing is being saved")
-                    .font(.system(size: 13, weight: .semibold))
-                Text("\(failure.reason) The manifest was set aside as \(failure.setAsideName) in the Projects folder; every grade, tag and blend record is still in it. Quit, repair or restore it, and relaunch.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let rebuilt = failure.rebuiltFromDocuments {
+                    // Phase 4: the rebuild from the project folders worked
+                    // and the library is live; the set-aside file is kept
+                    // until the person has checked nothing is missing.
+                    Text("Library rebuilt from \(rebuilt) project folders")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("\(failure.reason) The manifest was set aside as \(failure.setAsideName) in the Projects folder and the library was rebuilt from each project's own record\(failure.collectionsRecovered ? "" : " — the collections could not be recovered"). Check that nothing is missing before deleting the set-aside file.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("Library not loaded — nothing is being saved")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("\(failure.reason) The manifest was set aside as \(failure.setAsideName) in the Projects folder; every grade, tag and blend record is still in it. Quit, repair or restore it, and relaunch.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer(minLength: 0)
         }

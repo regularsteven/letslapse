@@ -64,9 +64,9 @@ final class LibraryPersister: @unchecked Sendable {
     /// being thrown away, in which case the app runs without one.
     let index: LibraryIndex?
 
-    init(projectsRoot: URL, indexURL: URL) {
+    init(projectsRoot: URL, collectionsURL: URL, indexURL: URL) {
         index = Self.openIndex(at: indexURL)
-        documents = ProjectDocumentWriter(projectsRoot: projectsRoot, index: index)
+        documents = ProjectDocumentWriter(projectsRoot: projectsRoot, collectionsURL: collectionsURL, index: index)
     }
 
     /// Opens the index, discarding a database that will not open — it is a

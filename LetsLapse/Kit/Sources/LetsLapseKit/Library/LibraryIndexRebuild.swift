@@ -69,6 +69,10 @@ public struct LibraryIndexRebuild {
         /// Records in documents that the index does not list.
         public var onlyInDocuments: [String] = []
         public var differences: [Difference] = []
+        /// True when `Collections/collections.json` exists and was compared.
+        public var collectionsDocumentRead = false
+        public var indexCollections = 0
+        public var documentCollections = 0
 
         /// True when the index and the documents describe the same records.
         public var identical: Bool {
@@ -121,7 +125,38 @@ public struct LibraryIndexRebuild {
         guard report.indexReadable else { return report }
         compare(kind: "capture", index: indexCaptures, documents: rebuiltCaptures, report: &report)
         compare(kind: "blend", index: indexBlends, documents: rebuiltBlends, report: &report)
+
+        // 4. Collections, when they have their own document.
+        var documentCollections: [String: [String: Any]] = [:]
+        if let documented = readCollectionsDocument(root: projects.deletingLastPathComponent()) {
+            report.collectionsDocumentRead = true
+            for collection in documented {
+                guard let id = recordID(collection) else { continue }
+                documentCollections[id] = collection
+            }
+            report.documentCollections = documentCollections.count
+        }
+        if case .success(let object) = readIndex(at: projects.appendingPathComponent("library.json")) {
+            var indexCollections: [String: [String: Any]] = [:]
+            for collection in object["collections"] as? [[String: Any]] ?? [] {
+                guard let id = recordID(collection) else { continue }
+                indexCollections[id] = collection
+            }
+            report.indexCollections = indexCollections.count
+            if report.collectionsDocumentRead {
+                compare(kind: "collection", index: indexCollections, documents: documentCollections, report: &report)
+            }
+        }
         return report
+    }
+
+    /// The collections in `<root>/Collections/collections.json`, or nil when
+    /// there is no such file (or it does not parse).
+    static func readCollectionsDocument(root: URL) -> [[String: Any]]? {
+        let url = ProjectDocumentFormat.collectionsURL(inRoot: root)
+        guard let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return object["collections"] as? [[String: Any]] ?? []
     }
 
     /// The manifest the documents describe, encoded the way the app encodes
@@ -134,8 +169,14 @@ public struct LibraryIndexRebuild {
         let documents = readDocuments(in: projects, report: &report)
         var collections: [Any] = []
         var schema = ManifestMigrations.current
-        if case .success(let object) = readIndex(at: projects.appendingPathComponent("library.json")) {
+        // The collections' own document first (Phase 4); the index's copy
+        // only for a library from before it existed.
+        if let documented = readCollectionsDocument(root: projects.deletingLastPathComponent()) {
+            collections = documented.map { manifestDates(in: $0, keys: ProjectDocumentFormat.collectionDateKeys) }
+        } else if case .success(let object) = readIndex(at: projects.appendingPathComponent("library.json")) {
             collections = object["collections"] as? [Any] ?? []
+        }
+        if case .success(let object) = readIndex(at: projects.appendingPathComponent("library.json")) {
             schema = max(schema, object["gradingSchemaVersion"] as? Int ?? 0)
         }
         // The app's own order: live captures newest first, then the
@@ -161,34 +202,63 @@ public struct LibraryIndexRebuild {
 
     // MARK: - Canonical form and diff
 
-    /// A capture or blend record with every date key in the document's
-    /// string form, whichever encoding it arrived in. Dates already written
-    /// as strings are re-formatted through the same formatter, so a whole-
+    /// A record with every date key, at any depth, in the document's string
+    /// form, whichever encoding it arrived in. Dates already written as
+    /// strings are re-formatted through the same formatter, so a whole-
     /// second stamp and a millisecond stamp of the same instant agree.
     public static func canonical(_ record: [String: Any]) -> [String: Any] {
-        var out = record
-        for key in ProjectDocumentFormat.dateKeys {
-            guard let value = record[key] else { continue }
-            if let number = value as? NSNumber, !(value is Bool) {
-                out[key] = ProjectDocumentFormat.documentDate(fromManifestSeconds: number.doubleValue)
-            } else if let text = value as? String,
-                      let seconds = ProjectDocumentFormat.manifestSeconds(fromDocumentDate: text) {
-                out[key] = ProjectDocumentFormat.documentDate(fromManifestSeconds: seconds)
-            }
-        }
-        return out
+        let keys = ProjectDocumentFormat.dateKeys.union(ProjectDocumentFormat.collectionDateKeys)
+        return canonicalDates(in: record, keys: keys) as? [String: Any] ?? record
     }
 
-    /// A document record as the manifest writes it: date strings back to
-    /// seconds since 2001.
-    static func manifestRecord(_ record: [String: Any]) -> [String: Any] {
-        var out = record
-        for key in ProjectDocumentFormat.dateKeys {
-            guard let text = record[key] as? String,
-                  let seconds = ProjectDocumentFormat.manifestSeconds(fromDocumentDate: text) else { continue }
-            out[key] = seconds
+    private static func canonicalDates(in value: Any, keys: Set<String>) -> Any {
+        if let object = value as? [String: Any] {
+            var out: [String: Any] = [:]
+            for (key, inner) in object {
+                if keys.contains(key) {
+                    if let number = inner as? NSNumber, !(inner is Bool) {
+                        out[key] = ProjectDocumentFormat.documentDate(fromManifestSeconds: number.doubleValue)
+                        continue
+                    } else if let text = inner as? String,
+                              let seconds = ProjectDocumentFormat.manifestSeconds(fromDocumentDate: text) {
+                        out[key] = ProjectDocumentFormat.documentDate(fromManifestSeconds: seconds)
+                        continue
+                    }
+                }
+                out[key] = canonicalDates(in: inner, keys: keys)
+            }
+            return out
         }
-        return out
+        if let list = value as? [Any] { return list.map { canonicalDates(in: $0, keys: keys) } }
+        return value
+    }
+
+    /// A document record as the manifest writes it: date strings under
+    /// `keys`, at any depth, back to seconds since 2001.
+    static func manifestDates(in record: [String: Any], keys: Set<String>) -> [String: Any] {
+        manifestDates(in: record as Any, keys: keys) as? [String: Any] ?? record
+    }
+
+    private static func manifestDates(in value: Any, keys: Set<String>) -> Any {
+        if let object = value as? [String: Any] {
+            var out: [String: Any] = [:]
+            for (key, inner) in object {
+                if keys.contains(key), let text = inner as? String,
+                   let seconds = ProjectDocumentFormat.manifestSeconds(fromDocumentDate: text) {
+                    out[key] = seconds
+                } else {
+                    out[key] = manifestDates(in: inner, keys: keys)
+                }
+            }
+            return out
+        }
+        if let list = value as? [Any] { return list.map { manifestDates(in: $0, keys: keys) } }
+        return value
+    }
+
+    /// A capture or blend document record as the manifest writes it.
+    static func manifestRecord(_ record: [String: Any]) -> [String: Any] {
+        manifestDates(in: record, keys: ProjectDocumentFormat.dateKeys)
     }
 
     /// Every leaf that differs between two JSON values, by key path.
@@ -227,11 +297,25 @@ public struct LibraryIndexRebuild {
         switch (a, b) {
         case (nil, nil): return true
         case (nil, _), (_, nil): return false
-        case (let x as NSNumber, let y as NSNumber): return x == y
+        case (let x as NSNumber, let y as NSNumber): return numbersEqual(x, y)
         case (let x as String, let y as String): return x == y
         case (is NSNull, is NSNull): return true
         default: return false
         }
+    }
+
+    /// Integers compare exactly. Fractions compare to a relative 1e-9:
+    /// `JSONSerialization` spells a double with 17 digits and reads a
+    /// 17-digit literal back as an `NSDecimalNumber` whose `doubleValue` is
+    /// off in the last place, so the same slider value can arrive as
+    /// `-0.093221605` from one encoder and `-0.093221604999999999` from the
+    /// other. No edit moves a value by a billionth.
+    private static func numbersEqual(_ x: NSNumber, _ y: NSNumber) -> Bool {
+        if x == y { return true }
+        let a = x.doubleValue, b = y.doubleValue
+        let integral = a == a.rounded() && b == b.rounded() && abs(a) < 9e15 && abs(b) < 9e15
+        if integral { return a == b }
+        return abs(a - b) <= 1e-9 * max(abs(a), abs(b), 1)
     }
 
     private static func describe(_ value: Any?) -> String {
@@ -255,11 +339,17 @@ public struct LibraryIndexRebuild {
         var blends: [[String: Any]]
     }
 
+    /// `root` is the storage root when it holds a `Projects/` folder, and
+    /// the `Projects/` folder itself otherwise — the manifest's presence is
+    /// not the test, because the repair path runs exactly when the manifest
+    /// has just been moved aside.
     static func projectsFolder(under root: URL) -> URL {
-        if FileManager.default.fileExists(atPath: root.appendingPathComponent("library.json").path) {
-            return root
+        let nested = root.appendingPathComponent("Projects", isDirectory: true)
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: nested.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            return nested
         }
-        return root.appendingPathComponent("Projects", isDirectory: true)
+        return root
     }
 
     static func readIndex(at url: URL) -> Result<[String: Any], Error> {
@@ -361,6 +451,9 @@ public struct LibraryIndexRebuild {
         lines.append("diff (index vs documents, canonical form)")
         lines.append("  only in the index: \(r.onlyInIndex.count)" + list(r.onlyInIndex))
         lines.append("  only in the documents: \(r.onlyInDocuments.count)" + list(r.onlyInDocuments))
+        if r.collectionsDocumentRead {
+            lines.append("  collections: \(r.indexCollections) in the index · \(r.documentCollections) in Collections/collections.json")
+        }
         lines.append("  differing records: \(Set(r.differences.map(\.record)).count) · differing fields: \(r.differences.count)")
         for difference in r.differences.prefix(24) { lines.append("      \(difference)") }
         if r.differences.count > 24 { lines.append("      … \(r.differences.count - 24) more") }
@@ -380,6 +473,7 @@ public struct LibraryIndexRebuild {
                 "misfiled": r.misfiledDocuments,
                 "formatVersions": Dictionary(uniqueKeysWithValues: r.documentFormatVersions.map { (String($0.key), $0.value) }),
             ] as [String: Any],
+            "collections": ["documentRead": r.collectionsDocumentRead, "index": r.indexCollections, "document": r.documentCollections] as [String: Any],
             "diff": [
                 "onlyInIndex": r.onlyInIndex,
                 "onlyInDocuments": r.onlyInDocuments,

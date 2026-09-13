@@ -205,6 +205,56 @@ final class LibraryIndexRebuildTests: XCTestCase {
         XCTAssertTrue(LibraryIndexRebuild.run(root: root).identical)
     }
 
+    func testCollectionsDocumentIsComparedAndUsedByTheRebuild() throws {
+        try writeAgreeingTree()
+        let collection: [String: Any] = [
+            "id": "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC", "name": "Best of", "createdAt": 810900000.25,
+            "entries": [["blendID": blendA, "inPoint": 0, "outPoint": 1, "crops": [:]]],
+            "lastExport": ["fileName": "x.mp4", "exportedAt": 810900100.5, "recipe": "r"],
+        ]
+        let object: [String: Any] = ["captures": [indexCapture(live), indexCapture(gone, deleted: true)],
+                                     "blends": [indexBlend(blendA, capture: live), indexBlend(blendB, capture: gone)],
+                                     "collections": [collection], "gradingSchemaVersion": 4]
+        try JSONSerialization.data(withJSONObject: object).write(to: projects.appendingPathComponent("library.json"))
+        // No document yet: nothing to compare, the rebuild takes the index's copy.
+        var report = LibraryIndexRebuild.run(root: root)
+        XCTAssertFalse(report.collectionsDocumentRead)
+        XCTAssertEqual(report.indexCollections, 1)
+        XCTAssertTrue(report.identical)
+
+        // The document, with the nested export date in the document form.
+        let document: [String: Any] = ["formatVersion": 1, "collections": [documentForm(collection).merging(
+            ["lastExport": ["fileName": "x.mp4", "exportedAt": ProjectDocumentFormat.documentDate(fromManifestSeconds: 810900100.5), "recipe": "r"]]) { $1 }]]
+        let url = ProjectDocumentFormat.collectionsURL(inRoot: root)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: document).write(to: url)
+        report = LibraryIndexRebuild.run(root: root)
+        XCTAssertTrue(report.collectionsDocumentRead)
+        XCTAssertEqual(report.documentCollections, 1)
+        XCTAssertTrue(report.identical, LibraryIndexRebuild.text(report))
+
+        // With the index gone, the rebuilt manifest still has the collection,
+        // dates back in seconds — nested one too.
+        try FileManager.default.removeItem(at: projects.appendingPathComponent("library.json"))
+        let rebuilt = try XCTUnwrap(JSONSerialization.jsonObject(with: LibraryIndexRebuild.rebuiltManifest(root: root)) as? [String: Any])
+        let collections = try XCTUnwrap(rebuilt["collections"] as? [[String: Any]])
+        XCTAssertEqual(collections.count, 1)
+        XCTAssertEqual(collections[0]["createdAt"] as? Double ?? 0, 810900000.25, accuracy: 0.0005)
+        XCTAssertEqual((collections[0]["lastExport"] as? [String: Any])?["exportedAt"] as? Double ?? 0, 810900100.5, accuracy: 0.0005)
+        XCTAssertEqual((rebuilt["captures"] as? [[String: Any]])?.count, 2)
+    }
+
+    func testSeventeenDigitFloatsCompareEqual() {
+        // `JSONSerialization` spells a double with 17 digits and reads such a
+        // literal back as an NSDecimalNumber a hair off — the same slider
+        // value from the two encoders must not read as an edit.
+        let a = try! JSONSerialization.jsonObject(with: Data("{\"v\":-0.093221604999999999,\"n\":42}".utf8)) as! [String: Any]
+        let b = try! JSONSerialization.jsonObject(with: Data("{\"v\":-0.093221605,\"n\":42}".utf8)) as! [String: Any]
+        XCTAssertEqual(LibraryIndexRebuild.differences(between: a, and: b, record: "x"), [])
+        let c = try! JSONSerialization.jsonObject(with: Data("{\"v\":-0.0932,\"n\":43}".utf8)) as! [String: Any]
+        XCTAssertEqual(LibraryIndexRebuild.differences(between: a, and: c, record: "x").map(\.path), ["n", "v"])
+    }
+
     func testUnreadableIndexIsReportedNotDiffed() throws {
         try writeAgreeingTree()
         try Data("{".utf8).write(to: projects.appendingPathComponent("library.json"))
