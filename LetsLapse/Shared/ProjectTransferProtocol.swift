@@ -179,7 +179,7 @@ enum PTCoder {
         return (type, length)
     }
 
-    /// ISO-8601 dates on both ends: `ProjectArchiveManifest` is written that
+    /// ISO-8601 dates on both ends: the project document is written that
     /// way and a project's `createdAt` has to survive the trip unchanged.
     static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()

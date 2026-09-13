@@ -606,7 +606,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private struct LibraryManifest: Codable {
+    /// `Projects/library.json` as one document. Internal rather than private
+    /// so the persister and the project-document writer (Phase 2) can take
+    /// a snapshot of it by type.
+    struct LibraryManifest: Codable {
         var captures: [CaptureProject] = []
         var blends: [BlendProject] = []
         /// Optional so manifests written before Collections existed decode.
@@ -1282,6 +1285,10 @@ final class AppModel: ObservableObject {
         }
         sweepTrashAtLaunch()
         sweepGPSBackups()
+        // Phase 2: every project's `project.json` brought up to the manifest
+        // once per launch — after the trash sweep, so a tombstoned project's
+        // document is written where its folder has ended up.
+        persister.reconcileDocuments(currentManifest())
         scheduleAssetBackfill()
         // The Adjust and Guided previews level their source frames the way
         // the render will; they learn the current project's level from here.
@@ -8381,7 +8388,7 @@ final class AppModel: ObservableObject {
     /// versioned on the main actor and written by one serial queue that
     /// drops anything older than what is already on disk. See
     /// `LibraryPersister`.
-    let persister = LibraryPersister()
+    let persister = LibraryPersister(projectsRoot: StorageRoot.current.appendingPathComponent("Projects", isDirectory: true))
 
     /// Set when the manifest on disk could not be decoded (Phase 1 W7): the
     /// file was moved aside under `setAsideName`, the library is empty in
@@ -8442,12 +8449,18 @@ final class AppModel: ObservableObject {
             projectStorageBytes.removeAll()
             validatedSourceFrames.removeAll()
         }
+        return (currentManifest(), persister.mint())
+    }
+
+    /// The library as it would be written now — what every persist snapshots
+    /// and what the launch pass over the project documents reads.
+    private func currentManifest() -> LibraryManifest {
         var manifest = LibraryManifest(
             captures: captures.map(stampingPresetState) + deletedCaptures,
             blends: blends + deletedBlends,
             collections: collections + deletedCollections)
         manifest.gradingSchemaVersion = max(gradingSchemaVersion, 1)
-        return (manifest, persister.mint())
+        return manifest
     }
 
     /// A capture with its preset state written out explicitly.
@@ -9221,11 +9234,11 @@ final class AppModel: ObservableObject {
 
     /// Builds a portable `.lapse` archive of one project: `project.json`
     /// (capture + its blend entries) beside the project's `source/` and
-    /// `blends/` trees. The manifest is written into the project folder for
-    /// the duration of the archive pass so multi-gigabyte projects aren't
+    /// `blends/` trees. The manifest is written into the project folder —
+    /// where Phase 2 keeps it anyway — so multi-gigabyte projects aren't
     /// duplicated on disk first.
     func exportProject(_ capture: CaptureProject) async throws -> URL {
-        let manifest = ProjectArchiveManifest(capture: capture, blends: blends(for: capture))
+        let document = ProjectDocument(capture: capture, blends: blends(for: capture))
         let folder = captureFolderURL(for: capture.id)
 
         let rawName = capture.name ?? capture.originalName
@@ -9236,12 +9249,8 @@ final class AppModel: ObservableObject {
         let archiveURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(safeName.isEmpty ? "LetsLapse Project" : safeName).\(ProjectArchive.fileExtension)")
 
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let manifestURL = folder.appendingPathComponent("project.json")
-        try encoder.encode(manifest).write(to: manifestURL, options: .atomic)
-        defer { try? FileManager.default.removeItem(at: manifestURL) }
+        try ProjectDocumentFormat.makeEncoder().encode(document)
+            .write(to: ProjectDocumentFormat.url(inProjectFolder: folder), options: .atomic)
 
         try await Task.detached(priority: .userInitiated) {
             // lzfse shrinks the tree, but stills/ProRes barely compress, so the
@@ -9453,14 +9462,16 @@ final class AppModel: ObservableObject {
         at staging: URL,
         originalCaptureID: UUID? = nil
     ) async throws -> CaptureProject? {
-        let manifestURL = staging.appendingPathComponent("project.json")
+        let manifestURL = ProjectDocumentFormat.url(inProjectFolder: staging)
         guard FileManager.default.fileExists(atPath: manifestURL.path) else {
             throw ProjectArchiveError.notAProjectArchive
         }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let manifest = try decoder.decode(ProjectArchiveManifest.self, from: Data(contentsOf: manifestURL))
-        guard manifest.formatVersion == 1 else {
+        // Format 1 (the transient archive manifest, whole-second dates) and
+        // format 2 (the persistent document) both read; the decoder takes
+        // either date form.
+        let manifest = try ProjectDocumentFormat.makeDecoder()
+            .decode(ProjectDocument.self, from: Data(contentsOf: manifestURL))
+        guard (1...ProjectDocumentFormat.current).contains(manifest.formatVersion) else {
             throw ProjectArchiveError.unsupportedVersion(manifest.formatVersion)
         }
 
@@ -9643,16 +9654,13 @@ final class AppModel: ObservableObject {
         return captureFolderURL(for: captureID)
     }
 
-    /// The `project.json` a receiving device installs from — the same manifest
+    /// The `project.json` a receiving device installs from — the same document
     /// `exportProject` writes into a `.lapse`, built in memory because on this
     /// path it never touches the sending device's disk.
     func projectTransferManifestData(for captureID: UUID) throws -> Data? {
         guard let capture = captures.first(where: { $0.id == captureID }) else { return nil }
-        let manifest = ProjectArchiveManifest(capture: capture, blends: blends(for: capture))
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(manifest)
+        let document = ProjectDocument(capture: capture, blends: blends(for: capture))
+        return try ProjectDocumentFormat.makeEncoder().encode(document)
     }
 
     /// Somewhere for an incoming project to land — cleared, not merged into.

@@ -82,6 +82,14 @@ public enum ProjectFileRegistry {
     /// interval shoot, and the one a Photo project's panel edits outright.
     public static let projectMetadataName = "metadata.json"
 
+    /// The project's own record — `{formatVersion, capture, blends}` — the
+    /// document that will be the truth once `library.json` becomes an index
+    /// (data model Phase 2; `ProjectDocumentFormat`). It travels FIRST in an
+    /// archive and a transfer, and the installer reads and re-keys it rather
+    /// than moving it into place, which is why `travellingRootFiles` leaves
+    /// it out.
+    public static let projectDocumentName = "project.json"
+
     public static let all: [ProjectFile] = [
         // Capture-time records, beside the media.
         ProjectFile("frames.timestamps", at: .source, class: .captureFact, travels: true, isHotPath: true),
@@ -98,6 +106,7 @@ public enum ProjectFileRegistry {
         ProjectFile("shapes.json", at: .root, class: .edit, travels: true),
         ProjectFile(assetRecordsName, at: .root, class: .edit, travels: true),
         ProjectFile(projectMetadataName, at: .root, class: .edit, travels: true),
+        ProjectFile(projectDocumentName, at: .root, class: .edit, travels: true),
         ProjectFile("notes/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("masks/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("fonts/", at: .root, class: .edit, isDirectory: true, travels: true),
@@ -111,10 +120,14 @@ public enum ProjectFileRegistry {
         ProjectFile("source/", at: .root, class: .captureFact, isDirectory: true, travels: true),
     ]
 
-    /// The root-level FILES an archive and a transfer carry — what
-    /// `ProjectArchive.transferableFiles` reads.
+    /// The root-level FILES an archive and a transfer carry as files — what
+    /// `ProjectArchive.transferableFiles` reads. The project document is not
+    /// among them although it travels: it is the manifest the far side
+    /// installs FROM (read, re-keyed, then written afresh by the first
+    /// persist), never a file moved into place as it arrived.
     public static var travellingRootFiles: [String] {
-        all.filter { $0.location == .root && !$0.isDirectory && $0.travels }.map(\.name)
+        all.filter { $0.location == .root && !$0.isDirectory && $0.travels && $0.name != projectDocumentName }
+            .map(\.name)
     }
 
     /// The subfolders an archive and a transfer carry — what

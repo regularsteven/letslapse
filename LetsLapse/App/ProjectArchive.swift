@@ -2,13 +2,10 @@ import Foundation
 import LetsLapseKit
 import UniformTypeIdentifiers
 
-/// The manifest at the root of a portable `.lapse` project archive, beside
-/// the project folder's `source/` and `blends/` trees.
-struct ProjectArchiveManifest: Codable {
-    var formatVersion: Int = 1
-    var capture: AppModel.CaptureProject
-    var blends: [AppModel.BlendProject]
-}
+// The manifest at the root of a `.lapse` archive is the project's own
+// `project.json` (`ProjectDocument`, data model Phase 2) — the file that
+// lives in the project folder, archived with the rest of it, not a manifest
+// synthesised for the trip.
 
 enum ProjectArchiveError: LocalizedError {
     case notAProjectArchive
@@ -55,8 +52,8 @@ enum ProjectArchive {
     /// fails silently in the same way: overlays.json (the text overlays and
     /// their mask dials) was dropped at install until 2026-08-31, so an
     /// AirDropped project arrived with its text gone and had to be re-typed
-    /// on the far side. `project.json` is NOT here: the manifest is written
-    /// by the sender and re-keyed by the installer, never moved.
+    /// on the far side. `project.json` is NOT here: the registry keeps it out
+    /// of this list because the installer reads and re-keys it, never moves it.
     // `assets.ndjson` (the per-asset records: hashes and metadata layers) and
     // `metadata.json` (the project-level record) joined on 2026-09-13.
     static let transferableFiles = ProjectFileRegistry.travellingRootFiles

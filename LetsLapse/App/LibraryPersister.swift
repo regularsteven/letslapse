@@ -18,7 +18,14 @@ import LetsLapseKit
 /// decoded, no snapshot may overwrite it — the set-aside file is the only
 /// copy of every grade, tag and blend record, and a fresh manifest with one
 /// new capture in it would be the data loss Part 1 R1 described.
+///
+/// Since Phase 2 every admitted snapshot is also handed to the
+/// `ProjectDocumentWriter`, on this same queue, right after `library.json`
+/// has landed: the per-project `project.json` documents follow the
+/// manifest, which stays authoritative until Phase 3 makes it an index.
 final class LibraryPersister: @unchecked Sendable {
+
+    typealias Manifest = AppModel.LibraryManifest
 
     enum Reason {
         /// Files were added, converted, rotated or deleted — the size and
@@ -49,7 +56,12 @@ final class LibraryPersister: @unchecked Sendable {
     /// every slider tick.
     var onFailure: (@MainActor (Error) -> Void)?
 
-    init() {}
+    /// The per-project document writer (Phase 2). Used only on `queue`.
+    private let documents: ProjectDocumentWriter
+
+    init(projectsRoot: URL) {
+        documents = ProjectDocumentWriter(projectsRoot: projectsRoot)
+    }
 
     /// The reason every write is refused, or nil when writes are allowed.
     var refuseWrites: String? {
@@ -65,7 +77,7 @@ final class LibraryPersister: @unchecked Sendable {
     }
 
     /// Queues an encoded snapshot. Returns at once.
-    func persist<Manifest: Encodable>(_ manifest: Manifest, version: Int, to url: URL) {
+    func persist(_ manifest: Manifest, version: Int, to url: URL) {
         queue.async { [self] in
             do {
                 try write(manifest, version: version, to: url)
@@ -78,7 +90,7 @@ final class LibraryPersister: @unchecked Sendable {
     /// Writes the snapshot and returns only when it is on disk (or throws).
     /// A snapshot older than the newest written is dropped silently — that
     /// is not a failure, it is the gate doing its job.
-    func persistAndWait<Manifest: Encodable>(_ manifest: Manifest, version: Int, to url: URL) throws {
+    func persistAndWait(_ manifest: Manifest, version: Int, to url: URL) throws {
         try queue.sync { [self] in
             do {
                 try write(manifest, version: version, to: url)
@@ -94,9 +106,25 @@ final class LibraryPersister: @unchecked Sendable {
         queue.sync {}
     }
 
+    /// The one-time launch pass over the project documents (Phase 2): every
+    /// project's `project.json` is brought up to `manifest` and remembered,
+    /// so the persists that follow rewrite only what changes. Queued behind
+    /// whatever is already waiting and ahead of whatever comes next, which
+    /// is what keeps a persist from being overtaken by a stale pass. Skipped
+    /// entirely while writes are refused.
+    func reconcileDocuments(_ manifest: Manifest) {
+        queue.async { [self] in
+            guard refuseWrites == nil else { return }
+            let started = Date()
+            let outcome = documents.reconcile(manifest)
+            LLog(String(format: "project documents: reconciled %d written · %d current · %d without a folder · %d failed in %.2f s",
+                        outcome.written, outcome.unchanged, outcome.homeless, outcome.failed, Date().timeIntervalSince(started)))
+        }
+    }
+
     // MARK: - On the queue
 
-    private func write<Manifest: Encodable>(_ manifest: Manifest, version: Int, to url: URL) throws {
+    private func write(_ manifest: Manifest, version: Int, to url: URL) throws {
         if let why = refuseWrites {
             throw PersistError.refused(why)
         }
@@ -109,6 +137,10 @@ final class LibraryPersister: @unchecked Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(manifest)
         try data.write(to: url, options: .atomic)
+        // The documents follow the manifest. A document that fails to
+        // write is logged by the writer and tried again at the next
+        // persist; it does not fail the persist, whose file is the truth.
+        documents.sync(manifest)
     }
 
     private func report(_ error: Error) {
