@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1310 92" width="1310" height="92" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Gallery filmstrip · interval</title>
+  <desc>Mirrors GalleryFilmstrip in App/GalleryItemView.swift (macOS, 2026-09-13) — the grid folded into one row under the Gallery's item view: every project the sidebar, the search and the sort leave in the grid, in the grid's order, as 80×60 ProjectThumbnailView tiles (4:3, cornerRadius 6) 8 pt apart in a LazyHStack padded 16 at the sides and 12 above and below, inside a horizontal ScrollView with no indicators; the focused project carries the grid's own 2.5 pt LL.accent ring and is kept centred (ScrollViewReader, anchor .center, 0.25 s easeInOut on a change); a click on any other tile asks the host to move there (GalleryView.move(to:)), ← → step through the same order, and the header trailing reads "n of N". Full window width, on LL.cardBackground — under the inspector and the rail alike, the Lightroom / Photos convention, and the one place a strip can go without either editor knowing about it. Drawn here as measured on the Debug build at 1310×800 (2026-09-13): the strip is 92 pt from its divider to the tab bar's safe-area clearance — tiles at y 12–72 — although its frame is 84; the white background then continues under the 58 pt clearance to the window edge (a SwiftUI .background ignores the safe-area inset), which the screen files draw. This file's fourteen tiles are the gallery mirrors' own tile art in the grid's order (gallery.svg t1…t12 and two more), so the strip reads as the same library the grid shows. One file per focused position — see components/README.md.</desc>
+  <style>text{font-family:inherit}</style>
+  <defs>
+    <linearGradient id="fs-dusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/></linearGradient>
+    <linearGradient id="fs-dawn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7E9AB8"/><stop offset="0.6" stop-color="#E4C39A"/><stop offset="1" stop-color="#F7E6C8"/></linearGradient>
+    <linearGradient id="fs-roof" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9BB0C4"/><stop offset="1" stop-color="#D8C6AE"/></linearGradient>
+    <linearGradient id="fs-fog" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C7CFD6"/><stop offset="1" stop-color="#8E9AA4"/></linearGradient>
+    <linearGradient id="fs-night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#131A2A"/><stop offset="1" stop-color="#2E3348"/></linearGradient>
+    <linearGradient id="fs-storm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4A5464"/><stop offset="1" stop-color="#A9A08E"/></linearGradient>
+    <linearGradient id="fs-water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B7A272"/><stop offset="1" stop-color="#4E5A63"/></linearGradient>
+  </defs>
+  <g id="gallery-filmstrip" data-state="interval">
+    <rect x="0" y="0" width="1310" height="92" fill="#FFFFFF"/>
+    <g data-tile="1">
+      <clipPath id="fs-t1"><rect x="16" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t1)"><rect x="16" y="12" width="80" height="60" fill="url(#fs-dusk)"/><rect x="16" y="54" width="80" height="18" fill="#3B4450" opacity="0.85"/></g>
+    </g>
+    <g data-tile="2">
+      <clipPath id="fs-t2"><rect x="104" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t2)"><rect x="104" y="12" width="80" height="60" fill="url(#fs-dawn)"/><rect x="104" y="50" width="80" height="22" fill="#7C8698" opacity="0.85"/></g>
+    </g>
+    <g data-tile="3">
+      <clipPath id="fs-t3"><rect x="192" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t3)"><rect x="192" y="12" width="80" height="60" fill="url(#fs-roof)"/><rect x="192" y="50" width="80" height="22" fill="#C8B79E" opacity="0.85"/></g>
+    </g>
+    <g data-tile="4">
+      <clipPath id="fs-t4"><rect x="280" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t4)"><rect x="280" y="12" width="80" height="60" fill="url(#fs-fog)"/><rect x="280" y="54" width="80" height="18" fill="#7A858F" opacity="0.85"/></g>
+    </g>
+    <g data-tile="5">
+      <clipPath id="fs-t5"><rect x="368" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t5)"><rect x="368" y="12" width="80" height="60" fill="url(#fs-night)"/><rect x="368" y="50" width="80" height="22" fill="#0E1220" opacity="0.85"/></g>
+    </g>
+    <g data-tile="6">
+      <clipPath id="fs-t6"><rect x="456" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t6)"><rect x="456" y="12" width="80" height="60" fill="url(#fs-storm)"/><rect x="456" y="50" width="80" height="22" fill="#8E8571" opacity="0.85"/></g>
+    </g>
+    <g data-tile="7">
+      <clipPath id="fs-t7"><rect x="544" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t7)"><rect x="544" y="12" width="80" height="60" fill="url(#fs-dusk)"/><rect x="544" y="54" width="80" height="18" fill="#5A4B3E" opacity="0.85"/></g>
+    </g>
+    <g data-tile="8">
+      <clipPath id="fs-t8"><rect x="632" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t8)"><rect x="632" y="12" width="80" height="60" fill="url(#fs-night)"/><rect x="632" y="50" width="80" height="22" fill="#0C1018" opacity="0.85"/></g>
+    </g>
+    <g data-tile="9">
+      <clipPath id="fs-t9"><rect x="720" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t9)"><rect x="720" y="12" width="80" height="60" fill="url(#fs-water)"/><rect x="720" y="50" width="80" height="22" fill="#4A555E" opacity="0.85"/></g>
+    </g>
+    <g data-tile="10">
+      <clipPath id="fs-t10"><rect x="808" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t10)"><rect x="808" y="12" width="80" height="60" fill="url(#fs-dawn)"/><rect x="808" y="54" width="80" height="18" fill="#5D6675" opacity="0.85"/></g>
+    </g>
+    <g data-tile="11">
+      <clipPath id="fs-t11"><rect x="896" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t11)"><rect x="896" y="12" width="80" height="60" fill="url(#fs-roof)"/><rect x="896" y="50" width="80" height="22" fill="#A5613F" opacity="0.85"/></g>
+    </g>
+    <g data-tile="12">
+      <clipPath id="fs-t12"><rect x="984" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t12)"><rect x="984" y="12" width="80" height="60" fill="url(#fs-fog)"/><rect x="984" y="50" width="80" height="22" fill="#6E7A85" opacity="0.85"/></g>
+    </g>
+    <g data-tile="13">
+      <clipPath id="fs-t13"><rect x="1072" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t13)"><rect x="1072" y="12" width="80" height="60" fill="url(#fs-storm)"/><rect x="1072" y="54" width="80" height="18" fill="#39414E" opacity="0.85"/></g>
+    </g>
+    <g data-tile="14">
+      <clipPath id="fs-t14"><rect x="1160" y="12" width="80" height="60" rx="6"/></clipPath>
+      <g clip-path="url(#fs-t14)"><rect x="1160" y="12" width="80" height="60" fill="url(#fs-water)"/><rect x="1160" y="50" width="80" height="22" fill="#3F4A52" opacity="0.85"/></g>
+    </g>
+    <rect x="17.25" y="13.25" width="77.5" height="57.5" rx="6" fill="none" stroke="#C36A00" stroke-width="2.5" data-focus="1"/>
+  </g>
+</svg>

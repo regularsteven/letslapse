@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 57" width="302" height="57" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Output actions · clip · narrow</title>
+  <desc>Mirrors GalleryPreviewPanel.outputSection's button row (App/GalleryPreviewPanel.swift, .inspector style, macOS item view 2026-09-13) — the OUTPUT group at the foot of the Gallery item view's inspector: what comes of the project. An interval or video project: New clip (the blend flow, onNewClip) and Share project (the .lapse archive the pane's Share footer button makes — exportShare, reading “Sharing…” and disabled while it runs). The same actionButton the pane's action grid uses: 57 pt tall, radius 9, primary at 7 %, a 16 pt medium glyph over an 11 pt medium label, 8 pt apart, equal widths across the 302 pt column. The BLENDED CLIPS header, filter and list that follow are the screen's own (blend-list-filter + blended-clip-row components). See components/README.md.</desc>
+  <style>text{font-family:inherit}.m{font-weight:500}</style>
+  <g id="output-actions" data-state="clip" data-width="narrow">
+    <rect x="0" y="0" width="147" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+    <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="plus.circle"><circle cx="73.5" cy="19" r="8"/><path d="M69.5 19 h8 M73.5 15 v8" stroke-linecap="round"/></g>
+    <text x="73.5" y="47" font-size="11" class="m" text-anchor="middle" fill="#000">New clip</text>
+    <rect x="155" y="0" width="147" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+    <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="square.and.arrow.up"><path d="M228.5 22 v-11 M224.5 15 l4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/><path d="M221.5 18 v9 h14 v-9"/></g>
+    <text x="228.5" y="47" font-size="11" class="m" text-anchor="middle" fill="#000">Share project</text>
+  </g>
+</svg>

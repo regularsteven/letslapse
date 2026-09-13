@@ -1,0 +1,166 @@
+<svg viewBox="0 0 1350 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Gallery · item view · video · 1310×800</title>
+  <desc>Mirrors the Gallery's ITEM VIEW on the Mac (2026-09-13, code first — Steven: build it to feel it — mirrored after his sign-off the same evening): App/GalleryView.swift (wideLayout, itemHeader, the item-view actions), App/GalleryItemView.swift (GalleryFocus, GalleryItemEditor, GalleryFilmstrip), App/GalleryPreviewPanel.swift (.inspector style, outputSection), App/EditorLaunch.swift (EditorExitRequest) and the editor's own exitRequest / onExit. THE MODE: the editor is no longer a window the Gallery opens. Open, ⏎, a double-click, Edit, Text, Shapes and the tile menu's Edit all put the project in GalleryFocus (owned by ContentView beside galleryPath, so a tab round-trip lands back on it) and the SAME HStack changes mode — nothing is pushed: the left column swaps the Library for the project's INSPECTOR (GalleryPreviewPanel in its .inspector dress, 330 pt; the Library's 200 animates to it over 0.25 s), the grid and its pane swap for the EDITOR — the media beside its own fixed 330 pt rail (railWidth, macOS), so the right-hand divider stays exactly where the grid's pane put it — and a FILMSTRIP of the grid's current result set (sidebar filter, search, sort, order) runs under everything at full width (components/gallery-filmstrip.*). Drawn at the gallery mirrors' 1310×800; every measurement here is read off the Debug build over the scratch library (LL_TAB=gallery LL_ITEM=…). HEADER (52 pt, where the grid's header was — same height, so the divider under it does not move on the way in): the ▤ library button keeps its seat 16 in (accent while the column shows; it now collapses the inspector, the same gallery.showSidebar), then ‹ Gallery 10 after it (a 26 pt capsule on primary 6 %, chevron.left + 13 pt medium accent), the project's name 16 pt bold centred between two spacers, and "n of N" — the focused project's place in the filmstrip's order — 12 pt secondary trailing. The window title carries the name too (.navigationTitle). Back and ⎋ leave through the editor's own exit (EditorExitRequest offersPresetSave: true → requestExit → the Back button's preset offer where there is one → finishExit → onExit → focus = nil); a filmstrip click or ← → sends offersPresetSave: false and the next project's editor takes the old one's place (.id(captureID)), the page carrying over where the next editor has it (Masks → Editor for a video). INSPECTOR (x 20–350, LL.cardBackground, its own ScrollView): the panel's phases one and three — management above, what comes next below — with no thumbnail (the picture is on screen), no action grid and no PRESETS (the editor is right there): title 16 pt bold 18 under the top, the 12 pt date · size line, a full-bleed divider 16 under; then the pane's own stack 12 under it (TAGS with its origin marker, the scope switch on an interval or video project, INFO, METADATA — the shared components at 302), the In frame / Storage / Field notes rows, a divider, the footer as Rename · Finder · Delete… (Share moved down), a divider, and OUTPUT: components/output-actions.*.narrow (New clip · Share project, or Share project alone on a Photo capture) with the BLENDED CLIPS header, tick-chip filter and list under it when the project has any. EDITOR: PhotoViewerView for a still, VideoEditorView for a movie — exactly the views the Mac's editor windows host (those scenes remain for the Projects tab's hero Edit pill), on the window's light surface; the rail is drawn idle here (no group open) since the item view is where a project is looked at as much as tuned — the six photo-viewer.* files draw the open groups. THIS FILE: a video project — "Vltava Embankment", the grid's 3rd tile — in VideoEditorView, the movie editor's differences drawn as shipped: the tab pill has TWO segments (Editor · Text — no Frames, no Masks), the rail no Masks card, the VIDEO · 32 s badge TOP-leading (12, 12) clear of AVKit's transport, the player fitted 16:9 to the pane's width (648×364.5, centred in the 514 pt pane) and the strip under it on the movie's own clock — paused glyph, the playhead at 0:03 with its bubble, 0:00 / 0:32 end labels (a movie opens playing). Inspector head: title and the date · size line, TAGS edited here with the revert (tag-field.applied — the five app-tagged keywords), the Whole project / This frame switch (drawn as shipped: MetadataScopeControl shows for every non-photo capture, a video included), INFO reading "Nothing in the file." (an iPhone movie carries no record) and METADATA empty. Group bar: Presets · Light · Color · Effects lit, Reset adjustments live. Filmstrip ring on tile 3. STATES NOT DRAWN (desc-only): AVKit's transport bar (it appears on hover over the player); the inspector's foot (the interval file: New clip · Share project and the clips list — a movie's rows are the from-codec / true-light ones); the Text page over a movie. Hooks: LL_TAB=gallery LL_ITEM=latest|&lt;uuid&gt;[:editor|text|frames|masks]; -gallery.showSidebar NO collapses the inspector.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1310" height="800" rx="11"/></clipPath>
+    <clipPath id="inspector"><rect x="20" y="48" width="330" height="621"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FA3B8"/><stop offset="0.45" stop-color="#E8B98C"/><stop offset="1" stop-color="#F6DFB2"/></linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9A45E"/><stop offset="1" stop-color="#5C666E"/></linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="8" stdDeviation="7.5" flood-color="#000" flood-opacity="0.14"/></filter>
+    <!-- The picture: photo-viewer.svg's flat Prague sunset in its own 660×495 drawing space (20,110)–(680,605). -->
+    <symbol id="picture" viewBox="20 110 660 495" preserveAspectRatio="xMidYMid slice">
+        <rect x="20" y="110" width="660" height="495" fill="url(#sky)"/>
+        <ellipse cx="200" cy="180" rx="160" ry="24" fill="#7E93A9" opacity="0.35"/>
+        <ellipse cx="480" cy="150" rx="190" ry="22" fill="#8A9DB1" opacity="0.3"/>
+        <ellipse cx="360" cy="240" rx="230" ry="22" fill="#EACBA0" opacity="0.45"/>
+        <ellipse cx="150" cy="300" rx="170" ry="16" fill="#F2D9AE" opacity="0.5"/>
+        <!-- Skyline band. -->
+        <path d="M20 380 L20 356 L60 356 L60 350 L118 350 L118 358 L175 358 L175 352 L240 352 L240 360 L300 360 L300 350 L332 344 L385 340 L448 344 L470 352 L520 349 L520 356 L575 356 L575 347 L620 347 L620 355 L680 355 L680 380 Z" fill="#5D5346"/>
+        <!-- Bridge deck with piers at the river head. -->
+        <rect x="20" y="380" width="660" height="8" fill="#8C7B5F"/>
+        <rect x="20" y="388" width="660" height="6" fill="#6E6152"/>
+        <g fill="#524A40">
+          <rect x="252" y="394" width="10" height="12"/><rect x="316" y="394" width="10" height="12"/>
+          <rect x="380" y="394" width="10" height="12"/><rect x="444" y="394" width="10" height="12"/>
+        </g>
+        <!-- River with the sunset's reflection. -->
+        <rect x="20" y="394" width="660" height="146" fill="url(#river)"/>
+        <rect x="120" y="410" width="260" height="6" rx="3" fill="#EBC27E" opacity="0.5"/>
+        <rect x="90" y="430" width="330" height="6" rx="3" fill="#E0B26B" opacity="0.4"/>
+        <rect x="140" y="452" width="240" height="6" rx="3" fill="#D2A45F" opacity="0.3"/>
+        <!-- Quay diagonal, crowd, railing — the right embankment. -->
+        <path d="M330 540 L680 436 L680 605 L240 605 Z" fill="#8A7A55"/>
+        <path d="M500 605 L680 470 L680 605 Z" fill="#3F4438"/>
+        <g fill="#221F1C">
+          <circle cx="380" cy="560" r="4"/><circle cx="416" cy="550" r="4"/><circle cx="452" cy="540" r="4"/>
+          <circle cx="492" cy="528" r="4"/><circle cx="352" cy="576" r="4"/><circle cx="530" cy="516" r="4"/>
+        </g>
+      
+    </symbol>
+    <clipPath id="movie"><rect x="351" y="175.75" width="648" height="364.5"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1310" height="800" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="1310" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="675" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Vltava Embankment</text>
+    </g>
+
+    <rect x="20" y="48" width="330" height="621" fill="#FFFFFF"/>
+    <line x1="350.5" y1="48" x2="350.5" y2="669" stroke="#000" stroke-opacity="0.10"/>
+    <g id="inspector" clip-path="url(#inspector)">
+      <text x="34" y="81" font-size="16" class="b" fill="#000">Vltava Embankment</text>
+      <text x="34" y="99" font-size="12" fill="#6D6D72">22. 8. 2026</text>
+      <text x="106.2" y="99" font-size="12" fill="#000" fill-opacity="0.3">·</text>
+      <text x="115.2" y="99" font-size="12" fill="#6D6D72">54,2 MB</text>
+      <line x1="20" y1="121" x2="350" y2="121" stroke="#000" stroke-opacity="0.10"/>
+      <text x="38" y="146" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+      <text x="322" y="146" font-size="10" class="m" text-anchor="end" fill="#C36A00">edited here</text>
+      <g data-symbol="arrow.uturn.backward" data-action="revert" transform="translate(326,137.5)" fill="none" stroke="#C36A00" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3 l-2.5 2.5 2.5 2.5 M0.5 5.5 h5.5 a2.5 2.5 0 0 0 0 -5 h-1"/></g>
+      <image href="../components/tag-field.applied.narrow.svg" x="34" y="154.5" width="302" height="115"/>
+      <image href="../components/metadata-scope.project.narrow.svg" x="34" y="283.5" width="302" height="22"/>
+      <text x="38" y="332" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">INFO</text>
+      <text x="34" y="356" font-size="12" fill="#6D6D72">Nothing in the file.</text>
+      <image href="../components/metadata-fields.empty.narrow.svg" x="34" y="368.5" width="302" height="1218"/>
+    </g>
+
+    <g id="item-header">
+      <rect x="367" y="58" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.7" data-symbol="sidebar.left">
+        <rect x="375" y="66" width="16" height="16" rx="2.6"/><path d="M381 66 v16"/>
+      </g>
+      <rect x="409" y="61" width="77" height="26" rx="13" fill="#000" fill-opacity="0.06"/>
+      <path d="M425 69 l-5 5 5 5" fill="none" stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+      <text x="431" y="79" font-size="13" class="m" fill="#C36A00">Gallery</text>
+      <text x="879.5" y="80" font-size="16" class="b" text-anchor="middle" fill="#000">Vltava Embankment</text>
+      <text x="1314" y="78" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">3 of 14</text>
+    </g>
+    <line x1="351" y1="100.5" x2="1330" y2="100.5" stroke="#000" stroke-opacity="0.10"/>
+    <g id="media">
+      <rect x="351" y="101" width="648" height="514" fill="#000000"/>
+      <!-- the same river, as a movie: the 4:3 art fitted to the width and its middle band shown 16:9 -->
+      <g clip-path="url(#movie)"><use href="#picture" x="351" y="115" width="648" height="486"/></g>
+      <g id="marquee-badge"><rect x="363" y="113" width="80" height="20" rx="10" fill="#000000" fill-opacity="0.5"/><text x="374" y="127" font-size="11" class="sb" fill="#FFFFFF">VIDEO · 32 s</text></g>
+    </g>
+    <g id="strip">
+      <circle cx="380" cy="646" r="13" fill="#E9E9EB"/>
+      <rect x="376" y="640" width="3" height="12" rx="1" fill="#C36A00"/><rect x="382" y="640" width="3" height="12" rx="1" fill="#C36A00"/>
+      <rect x="405" y="644.5" width="514" height="3" rx="1.5" fill="#000000" fill-opacity="0.18"/>
+      <rect x="451.688" y="636" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
+      <rect x="427.188" y="625" width="52" height="15" rx="7.5" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+      <text x="453.188" y="636" font-size="10" class="sb mono" text-anchor="middle" fill="#000">0:03</text>
+      <text x="405" y="670" font-size="10" class="mono" fill="#6D6D72">0:00</text>
+      <text x="919" y="670" font-size="10" class="mono" text-anchor="end" fill="#6D6D72">0:32</text>
+      <g opacity="1"><circle cx="938" cy="646" r="13" fill="#E9E9EB"/><path d="M940.5 641.5 L936 646 L940.5 650.5" fill="none" stroke="#C36A00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/></g>
+      <circle cx="970" cy="646" r="13" fill="#E9E9EB"/><path d="M967.5 641.5 L972 646 L967.5 650.5" fill="none" stroke="#C36A00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+    </g>
+    <line x1="999.5" y1="101" x2="999.5" y2="669" stroke="#000" stroke-opacity="0.10"/>
+    <g id="rail">
+      <g id="railtabs">
+        <rect x="1016" y="115" width="298" height="36" rx="18" fill="#FFFFFF"/>
+        <rect x="1019" y="118" width="145" height="30" rx="15" fill="#C36A00"/>
+        <text x="1091.5" y="138" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
+        <text x="1238.5" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
+      </g>
+      <g id="groupbar" transform="translate(310,53)">
+        <rect x="706" y="110" width="298" height="62" rx="12" fill="#FFFFFF"/>
+        <g transform="translate(726,122) scale(0.75)" data-symbol="photo.stack"><rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/></g>
+        <text x="735" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Presets</text>
+                <g transform="translate(774,122) scale(0.75)" data-symbol="sun.max"><circle cx="12" cy="12" r="4" fill="none" stroke="#6D6D72" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round"/></g>
+        <text x="783" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Light</text>
+        <g transform="translate(822,122) scale(0.75)" data-symbol="circle.lefthalf.filled"><circle cx="12" cy="12" r="9" fill="none" stroke="#6D6D72" stroke-width="1.8"/><path d="M12 3a9 9 0 0 0 0 18z" fill="#6D6D72"/></g>
+        <text x="831" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Color</text>
+        <g transform="translate(870,122) scale(0.75)" data-symbol="sparkles"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" fill="#6D6D72"/></g>
+        <text x="879" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Effects</text>
+        <g transform="translate(918,122) scale(0.75)" data-symbol="triangle"><path d="M12 4l9 16H3z" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/></g>
+        <text x="927" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Detail</text>
+        <g transform="translate(966,122) scale(0.75)" data-symbol="crop.rotate"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round"/></g>
+        <text x="975" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Crop</text>
+        <circle cx="735" cy="162" r="2" fill="#C36A00"/>
+        <circle cx="783" cy="162" r="2" fill="#C36A00"/>
+        <circle cx="831" cy="162" r="2" fill="#C36A00"/>
+        <circle cx="879" cy="162" r="2" fill="#C36A00"/>
+      </g>
+      <text x="1020" y="250" font-size="13" class="sb" fill="#C36A00" id="reset-adjustments">Reset adjustments</text>
+    </g>
+
+    <!-- The filmstrip (components/gallery-filmstrip.*.svg): the grid as one row, full width, its white ground
+         continuing under the tab bar's 58 pt clearance to the window edge — a .background ignores the safe-area inset. -->
+    <line x1="20" y1="669.5" x2="1330" y2="669.5" stroke="#000" stroke-opacity="0.10"/>
+    <rect x="20" y="670" width="1310" height="150" fill="#FFFFFF"/>
+    <image href="../components/gallery-filmstrip.video.svg" x="20" y="670" width="1310" height="92"/>
+
+<g id="tab-bar" transform="translate(15,0)">
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(520 772) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+        <text x="520" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+      </g>
+      <rect x="557" y="757" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+      <g fill="none" stroke="#C36A00">
+        <g transform="translate(590 772) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+        <text x="590" y="796" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(660 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="660" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(730 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="730" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(800 772) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+        <text x="800" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1310" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="675" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · item view · a video project in the movie editor · 1310×800 pt window</text>
+  <text x="675" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GalleryView.swift + App/GalleryItemView.swift + App/GalleryPreviewPanel.swift (.inspector) + App/VideoEditorView.swift (railBody · timelineStrip) — LL_TAB=gallery LL_ITEM=&lt;video uuid&gt;</text>
+</svg>

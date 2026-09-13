@@ -1,11 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 33" width="272" height="33" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 33" width="302" height="33" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>Component · Tag field · empty · narrow</title>
-  <desc>Mirrors the one tag editor shared by App/AI/AutoNameSheet.swift (its SUBJECT TAGS section), App/ProjectDetailView.swift (the managementCard Tags row and the sheet it raises) and App/GalleryPreviewPanel.swift (the TAGS block). The state that made this component necessary: a project the analysis returned NO subject tags for, or one that has never been analysed. The field is still drawn — only the "+ Add tag" chip is left — so tagging by hand is reachable without an AI run at all. Width is the macOS Gallery preview panel's 272pt content column, where the block runs full width under its own TAGS header rather than inside a 72pt-label metaRow.</desc>
+  <desc>Mirrors the one tag editor shared by App/AI/AutoNameSheet.swift (its SUBJECT TAGS section), App/ProjectDetailView.swift (the managementCard Tags row and the sheet it raises) and App/GalleryPreviewPanel.swift (the TAGS block). The state that made this component necessary: a project the analysis returned NO subject tags for, or one that has never been analysed. The field is still drawn — only the "+ Add tag" chip is left — so tagging by hand is reachable without an AI run at all. Width is the macOS Gallery preview panel's 302pt content column, where the block runs full width under its own TAGS header rather than inside a 72pt-label metaRow.</desc>
 <!-- LetsLapse design component · tag field. Chips are 33pt tall, rx 16.5, in an 8pt-gap
      wrapping flow with 8pt between rows — blend-list-filter's own chip metrics. An applied chip is
      LL.accent with a 14pt semibold white label 12pt in, an xmark 6pt after it and 11pt right pad
      (width = text + 41); tapping the chip drops the tag. The dashed "+ Add tag" chip always sits
      LAST in the flow and raises the picker (tag-suggestions.*). See components/README.md. -->
+  
+<!-- 2026-09-13 (later): narrow is 302 pt now — the Gallery pane went 300 → 330 with the item view, so its
+     content column is 302; there is no 272 pt column left anywhere (the iPad pane takes the same code). -->
   <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
   <g id="tag-field" data-state="empty" data-width="narrow">
     <g data-chip="add" transform="translate(0,0)">

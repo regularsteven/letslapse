@@ -1,14 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 22" width="272" height="22" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 22" width="302" height="22" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>Component · Metadata scope · project · narrow</title>
-  <desc>Mirrors MetadataScopeControl in App/MetadataPanelSections.swift — the Whole project / This frame switch an interval project shows above the Info and Metadata groups (a Photo or video project is one asset and draws nothing here). This frame adds the frame stepper: ‹ · the frame's file name over 'n of N' · ›, the back chevron dimmed on the first frame. Frame scope reads and writes that frame's own line in assets.ndjson; Whole project the project record. Width is the macOS Gallery preview panel's 272pt column.</desc>
+  <desc>Mirrors MetadataScopeControl in App/MetadataPanelSections.swift — the Whole project / This frame switch an interval project shows above the Info and Metadata groups (a Photo or video project is one asset and draws nothing here). This frame adds the frame stepper: ‹ · the frame's file name over 'n of N' · ›, the back chevron dimmed on the first frame. Frame scope reads and writes that frame's own line in assets.ndjson; Whole project the project record. Width is the macOS Gallery preview panel's 302pt column.</desc>
 <!-- LetsLapse design component · metadata scope. Segmented picker 22pt tall on a #E9E9EB track (LL.controlFill),
      rx 6, the selected half white; stepper 8pt under it: two 28pt square buttons (rx 7, black at 7%) with the
      name (12pt semibold) over the position (11pt secondary) centred between. See components/README.md. -->
+  
+<!-- 2026-09-13 (later): narrow is 302 pt now — the Gallery pane went 300 → 330 with the item view, so its
+     content column is 302; there is no 272 pt column left anywhere (the iPad pane takes the same code). -->
   <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
   <g id="metadata-scope" data-state="project" data-width="narrow">
-    <rect x="0" y="0" width="272" height="22" rx="6" fill="#E9E9EB"/>
-    <rect x="1.5" y="1.5" width="133.0" height="19" rx="5" fill="#FFF" stroke="#000" stroke-opacity="0.08"/>
-    <text x="68.0" y="15.5" font-size="13" class="m" text-anchor="middle" fill="#000" fill-opacity="1">Whole project</text>
-    <text x="204.0" y="15.5" font-size="13" class="m" text-anchor="middle" fill="#000" fill-opacity="0.85">This frame</text>
+    <rect x="0" y="0" width="302" height="22" rx="6" fill="#E9E9EB"/>
+    <rect x="1.5" y="1.5" width="148.0" height="19" rx="5" fill="#FFF" stroke="#000" stroke-opacity="0.08"/>
+    <text x="75.5" y="15.5" font-size="13" class="m" text-anchor="middle" fill="#000" fill-opacity="1">Whole project</text>
+    <text x="226.5" y="15.5" font-size="13" class="m" text-anchor="middle" fill="#000" fill-opacity="0.85">This frame</text>
   </g>
 </svg>

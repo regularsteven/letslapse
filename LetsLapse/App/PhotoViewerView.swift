@@ -42,6 +42,12 @@ struct PhotoViewerView: View {
     /// sheet embeds this view as its photo page and draws its own close button,
     /// share and page counter above it.
     var showsBackButton: Bool = true
+    /// Set by a host that embeds the editor as a column of its own window
+    /// (the Gallery's item view on the Mac): the host's Back and its filmstrip
+    /// ask to leave through here, so the exit path runs — and `onExit` is
+    /// where the editor then goes, in place of `dismiss`.
+    var exitRequest: EditorExitRequest? = nil
+    var onExit: (() -> Void)? = nil
 
     /// Live edit state. Seeded from the project on appear and written back —
     /// debounced — as the controls move, so the detail screen and the export
@@ -1207,6 +1213,10 @@ struct PhotoViewerView: View {
         // this window may already exist: reopening fronts it, and this is the
         // only way a fronted window learns which page it was opened for.
         .onReceive(model.$requestedEditorPage) { consumePageRequest($0) }
+        .onChange(of: exitRequest) { _, request in
+            guard let request else { return }
+            if request.offersPresetSave { requestExit() } else { finishExit() }
+        }
         .onChange(of: frameWindowKey) { _, _ in refreshFrameWindow() }
         .onChange(of: displayedURL) { _, _ in
             // A scrub moved to a different still: what is on screen at full
@@ -4393,7 +4403,7 @@ struct PhotoViewerView: View {
         // goes away so closing the app right after closing the editor can't
         // lose the last gesture.
         model.flushLibraryPersists()
-        dismiss()
+        if let onExit { onExit() } else { dismiss() }
     }
 
     private func render() async {

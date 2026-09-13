@@ -1,10 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 74" width="272" height="74" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 74" width="302" height="74" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>Component · Blend list filter · all · narrow</title>
-  <desc>Mirrors blend-list-filter.all.wide.svg — see there for the full mirror note. Narrow is the macOS Gallery preview panel's 272pt content column: the four chips don't fit one row at this width, so they wrap to two — Blends/Slices, then Image/Video — which conveniently makes the facet grouping the wide set signals with an extra 16pt gap fully explicit here instead, for free.</desc>
-<!-- LetsLapse design component · blend list filter · all · narrow (272pt, the macOS gallery preview-panel column).
+  <desc>Mirrors blend-list-filter.all.wide.svg — see there for the full mirror note. Narrow is the macOS Gallery preview panel's 302pt content column: the four chips don't fit one row at this width, so they wrap to two — Blends/Slices, then Image/Video — which conveniently makes the facet grouping the wide set signals with an extra 16pt gap fully explicit here instead, for free.</desc>
+<!-- LetsLapse design component · blend list filter · all · narrow (302pt, the macOS gallery preview-panel column).
      Two 33pt rows, 8pt apart (row 2 at y=41), each an ordinary 8pt-gap chip pair — no extra mid-row gap needed,
      the row break already separates Blends/Slices from Image/Video. See components/README.md. -->
   <defs><filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter></defs>
+  
+<!-- 2026-09-13 (later): narrow is 302 pt now — the Gallery pane went 300 → 330 with the item view, so its
+     content column is 302; there is no 272 pt column left anywhere (the iPad pane takes the same code). -->
   <style>text{font-family:inherit}.sb{font-weight:600}</style>
   <g id="blend-list-filter" data-state="all" data-width="narrow">
     <g data-chip="blends" data-ticked="true">

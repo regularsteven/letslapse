@@ -47,6 +47,18 @@ struct EditorPageRequest: Equatable {
     let page: RailTab
 }
 
+/// A host asking an embedded editor to leave (the Gallery's item view on the
+/// Mac, 2026-09-13, where the editor is a column of the Gallery window rather
+/// than a window of its own). The editor answers through its own exit path —
+/// the debounced grade write, the overlay write, the library flush — and then
+/// calls `onExit` instead of `dismiss`. `offersPresetSave` is the Back
+/// button's exit-time offer; a filmstrip move skips it, the way a photo app
+/// walks a catalogue without a prompt at every step.
+struct EditorExitRequest: Equatable {
+    let id = UUID()
+    var offersPresetSave: Bool
+}
+
 extension AppModel {
     /// The asset the editor opens on: a video project's movie, a Photo
     /// capture's hero image, an interval shoot's poster frame. nil when the

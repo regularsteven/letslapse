@@ -1,9 +1,9 @@
-<svg viewBox="0 0 1320 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>macOS · Gallery · batch mode — three projects selected, the batch panel · 1280×800</title>
-  <desc>Mirrors App/GalleryView.swift (selectionHeader, the batch pane) + App/GalleryGridContent.swift (tap(_:order:), the selection circles) + App/GalleryTile.swift (selectionCircle) + App/GalleryBatchPanel.swift + App/GallerySelection.swift — gallery.svg's window with THREE tiles selected (2026-09-13, code first, mirrored after Steven's verification on his Mac): tile 1 clicked, tiles 2 and 6 ⌘-clicked. SELECTION: `GallerySelection` is a set with an anchor (the last plain or ⌘ click) and a selecting flag. On the Mac a plain click selects one tile, ⌘-click toggles a tile, ⇧-click adds the run from the anchor to the clicked tile in the grid's own order (the timeline's day groups included), ⌘A selects every tile the sidebar and the search field leave visible, ⌘D selects none; the arrows move the selection to the neighbouring tile (up and down keep the column, ⇧ grows the run) and the grid scrolls it into view; 0–5 rate every selected project, 0 clearing the rating — all from a local key monitor scoped to the Gallery's window that steps aside while a text field is first responder. The tile menu (gallery.menu.svg) adds Select Multiple, which puts the empty circle on every tile so tap after tap adds to the selection, and Select All. More than one tile selected — or Select Multiple on — is BATCH MODE: the header row becomes Done · "3 selected" · Select All (Deselect All once every visible tile is in) and search, sort, zoom and Timeline are gone; every tile wears its circle, ticked where selected, and a click on the circle toggles that tile without touching the rest. A click in a gutter or the margin selects none. THE BATCH PANEL takes the pane the preview panel had: "3 projects" 16 pt bold over "Changes here apply to every selected project." 12 pt secondary, a divider, then the three groups the single panel leads with, read over the selection — TAGS as the union of the projects' keywords, a solid chip (accent, xmark) for a tag on every project and a MIXED chip (accent at 13 %, LL.accentDeep text, the count 11 pt at 70 %) for a tag on some: the xmark takes the tag off every project, the body of a mixed chip puts it on every project, + Add tag raises the shared picker over the tags on all so anything it adds lands on all; PRESETS as the collapsed disclosure row with the pill reading the common state or "Mixed" (grey, styled as Edited) — open, it is gallery.presets.svg's grid previewed on the FIRST selected project with a "Previewed on River Sunset to Dusk" 11 pt caption under it, a tile tap applying the preset to every selected project through AppModel.applyPreset / applyCustomPreset (each keeps its own rotation, crop and owned white) after a confirmation that counts the Edited ones ("1 of the 3 selected projects carries manual adjustments, which the Cinema preset will replace; the rest simply take the preset. There's no undo."); METADATA as components/metadata-fields.mixed.narrow.svg — every row the value the projects agree on or "Mixed", a commit writing all of them, a revert reverting all of them. No INFO (nothing the files said is true of several files), no meta rows, no footer, no clips list. Tiles render through each project's grade (ProjectThumbnailCache.thumbnail(for:kind:grade:)), so a preset applied here shows in the grid at once. STATES NOT DRAWN: Select Multiple with nothing selected (the header reads "Select projects", every circle empty, no pane — iOS/gallery.selecting.portrait.svg draws it); the batch panel with PRESETS open; the batch preset confirmation; the picker over the batch field. Hooks: LL_TAB=gallery LL_SELECT=all|multiple|&lt;uuid&gt;,&lt;uuid&gt; (LL_PANEL=presets opens the row). Verified 2026-09-13 on the Mac Debug build over a scratch library and by Steven on his own Mac (⌘/⇧-click, ⌘A).</desc>
+<svg viewBox="0 0 1350 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Gallery · batch mode — three projects selected, the batch panel · 1310×800</title>
+  <desc>Mirrors App/GalleryView.swift (selectionHeader, the batch pane) + App/GalleryGridContent.swift (tap(_:order:), the selection circles) + App/GalleryTile.swift (selectionCircle) + App/GalleryBatchPanel.swift + App/GallerySelection.swift — gallery.svg's window with THREE tiles selected (2026-09-13, code first, mirrored after Steven's verification on his Mac): tile 1 clicked, tiles 2 and 6 ⌘-clicked. SELECTION: `GallerySelection` is a set with an anchor (the last plain or ⌘ click) and a selecting flag. On the Mac a plain click selects one tile, ⌘-click toggles a tile, ⇧-click adds the run from the anchor to the clicked tile in the grid's own order (the timeline's day groups included), ⌘A selects every tile the sidebar and the search field leave visible, ⌘D selects none; the arrows move the selection to the neighbouring tile (up and down keep the column, ⇧ grows the run) and the grid scrolls it into view; 0–5 rate every selected project, 0 clearing the rating — all from a local key monitor scoped to the Gallery's window that steps aside while a text field is first responder. The tile menu (gallery.menu.svg) adds Select Multiple, which puts the empty circle on every tile so tap after tap adds to the selection, and Select All. More than one tile selected — or Select Multiple on — is BATCH MODE: the header row becomes Done · "3 selected" · Select All (Deselect All once every visible tile is in) and search, sort, zoom and Timeline are gone; every tile wears its circle, ticked where selected, and a click on the circle toggles that tile without touching the rest. A click in a gutter or the margin selects none. THE BATCH PANEL takes the pane the preview panel had: "3 projects" 16 pt bold over "Changes here apply to every selected project." 12 pt secondary, a divider, then the three groups the single panel leads with, read over the selection — TAGS as the union of the projects' keywords, a solid chip (accent, xmark) for a tag on every project and a MIXED chip (accent at 13 %, LL.accentDeep text, the count 11 pt at 70 %) for a tag on some: the xmark takes the tag off every project, the body of a mixed chip puts it on every project, + Add tag raises the shared picker over the tags on all so anything it adds lands on all; PRESETS as the collapsed disclosure row with the pill reading the common state or "Mixed" (grey, styled as Edited) — open, it is gallery.presets.svg's grid previewed on the FIRST selected project with a "Previewed on River Sunset to Dusk" 11 pt caption under it, a tile tap applying the preset to every selected project through AppModel.applyPreset / applyCustomPreset (each keeps its own rotation, crop and owned white) after a confirmation that counts the Edited ones ("1 of the 3 selected projects carries manual adjustments, which the Cinema preset will replace; the rest simply take the preset. There's no undo."); METADATA as components/metadata-fields.mixed.narrow.svg — every row the value the projects agree on or "Mixed", a commit writing all of them, a revert reverting all of them. No INFO (nothing the files said is true of several files), no meta rows, no footer, no clips list. Tiles render through each project's grade (ProjectThumbnailCache.thumbnail(for:kind:grade:)), so a preset applied here shows in the grid at once. STATES NOT DRAWN: Select Multiple with nothing selected (the header reads "Select projects", every circle empty, no pane — iOS/gallery.selecting.portrait.svg draws it); the batch panel with PRESETS open; the batch preset confirmation; the picker over the batch field. Hooks: LL_TAB=gallery LL_SELECT=all|multiple|&lt;uuid&gt;,&lt;uuid&gt; (LL_PANEL=presets opens the row). Verified 2026-09-13 on the Mac Debug build over a scratch library and by Steven on his own Mac (⌘/⇧-click, ⌘A). **2026-09-13, evening — the pane is 330 pt (item view, code first, mirrored after Steven's sign-off):** GalleryColumns.pane went 300 → 330 (the batch panel shares the constant) so the right-hand divider holds still when the Gallery changes into its item view; the content column is 302 and `metadata-fields.mixed.narrow` is drawn at 302. The window is drawn at 1310×800 so the centre column keeps its 778 pt and the tiles their size. The mixed tag chips flow the same four rows at 302 (row 2 would need 363 for Rooftops); the PRESETS pill and chevron sit 30 pt further right, the tab bar 15.</desc>
 
   <defs>
-    <clipPath id="win"><rect x="20" y="20" width="1280" height="800" rx="11"/></clipPath>
+    <clipPath id="win"><rect x="20" y="20" width="1310" height="800" rx="11"/></clipPath>
     <clipPath id="grid"><rect x="221" y="101" width="778" height="719"/></clipPath>
     <clipPath id="searchclip"><rect x="457" y="57" width="168" height="34"/></clipPath>
     <clipPath id="t1"><rect x="235" y="115" width="242" height="181.5" rx="8"/></clipPath>
@@ -18,7 +18,7 @@
     <clipPath id="t10"><rect x="235" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
     <clipPath id="t11"><rect x="489" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
     <clipPath id="t12"><rect x="743" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
-    <clipPath id="hero"><rect x="1014" y="70" width="272" height="150" rx="10"/></clipPath>
+    <clipPath id="hero"><rect x="1014" y="70" width="302" height="150" rx="10"/></clipPath>
 
     <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
@@ -49,14 +49,14 @@
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
 
   <g clip-path="url(#win)">
-    <rect x="20" y="20" width="1280" height="800" fill="#F2F2F7"/>
+    <rect x="20" y="20" width="1310" height="800" fill="#F2F2F7"/>
 
     <!-- Window chrome. The title is "Gallery", not "LetsLapse": GalleryView's
          macOS branch sets .navigationTitle, which retitles the main Window. -->
     <g id="titlebar">
-      <rect x="20" y="20" width="1280" height="28" fill="#F6F6F8"/>
+      <rect x="20" y="20" width="1310" height="28" fill="#F6F6F8"/>
       <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
-      <text x="660" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Gallery</text>
+      <text x="675" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Gallery</text>
     </g>
 
     <!-- ================= SIDEBAR (GallerySidebar, fixed 200pt) ================= -->
@@ -338,11 +338,11 @@
     <!-- ================= BATCH PANEL (GalleryBatchPanel, fixed 300pt) ================= -->
     <line x1="999.5" y1="48" x2="999.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
     <g id="batch-panel">
-      <rect x="1000" y="48" width="300" height="772" fill="#FFFFFF"/>
+      <rect x="1000" y="48" width="330" height="772" fill="#FFFFFF"/>
       <text x="1014" y="85" font-size="16" class="b" fill="#000">3 projects</text>
       <text x="1014" y="101" font-size="12" fill="#6D6D72">Changes here apply to every</text>
       <text x="1014" y="115.5" font-size="12" fill="#6D6D72">selected project.</text>
-      <line x1="1000" y1="138.5" x2="1300" y2="138.5" stroke="#000" stroke-opacity="0.10"/>
+      <line x1="1000" y1="138.5" x2="1330" y2="138.5" stroke="#000" stroke-opacity="0.10"/>
       <!-- TAGS over the three: Water on all three (solid), Sky & weather and Urban on two,
            Nature, Rooftops and Landmark on one each (mixed, with the count). -->
       <g id="tags">
@@ -404,16 +404,16 @@
       </g>
       <g id="presets" data-state="collapsed">
         <text x="1018" y="358.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
-        <rect x="1209" y="341.5" width="60" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
-        <text x="1239" y="358.5" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Mixed</text>
-        <path d="M1277 349.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+        <rect x="1239" y="341.5" width="60" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
+        <text x="1269" y="358.5" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Mixed</text>
+        <path d="M1307 349.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
       </g>
-      <image href="../components/metadata-fields.mixed.narrow.svg" x="1014" y="380.5" width="272" height="1218"/>
+      <image href="../components/metadata-fields.mixed.narrow.svg" x="1014" y="380.5" width="302" height="1218"/>
       <!-- the rest of the record scrolls under the window edge -->
     </g>
 
     <!-- ================= FLOATING TAB BAR (over all three panes) ================= -->
-    <g id="tab-bar">
+    <g id="tab-bar" transform="translate(15,0)">
       <rect x="481" y="751" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
       <rect x="481" y="751" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
       <g fill="none" stroke="#8E8E93">
@@ -440,7 +440,7 @@
     </g>
   </g>
 
-  <rect x="20" y="20" width="1280" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
-  <text x="660" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · batch mode — 3 selected, the batch panel · 1280×800 pt window</text>
-  <text x="660" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">⌘-click / ⇧-click / ⌘A select many; the selection row replaces the header and GalleryBatchPanel the pane — tags, presets and metadata on every selected project at once</text>
+  <rect x="20" y="20" width="1310" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="675" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · batch mode — 3 selected, the batch panel · 1310×800 pt window</text>
+  <text x="675" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">⌘-click / ⇧-click / ⌘A select many; the selection row replaces the header and GalleryBatchPanel the pane — tags, presets and metadata on every selected project at once</text>
 </svg>

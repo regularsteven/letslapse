@@ -90,7 +90,7 @@ One row of a project's **BLENDED CLIPS** list — `App/ProjectDetailView.swift`'
 | Width | Total | Thumbnail x | Title/subtitle x | "Open" x (`text-anchor="end"`) |
 |---|---|---|---|---|
 | `wide` | 361 pt — the iOS project-detail card | 14 | 84 | 347 |
-| `narrow` | 272 pt — the macOS Gallery preview-panel column | 14 | 84 | 258 |
+| `narrow` | 302 pt — the macOS (and iPad) Gallery pane's column since the pane went 330 pt on 2026-09-13; 272 until then | 14 | 84 | 288 |
 
 (x values are relative to the row's own left edge; `narrow` additionally clips its title/subtitle column — see States)
 
@@ -105,7 +105,7 @@ One row of a project's **BLENDED CLIPS** list — `App/ProjectDetailView.swift`'
 | `true-light` | "Blended clip 1 · 50× · 2.4 s" / "30 fps · true-light · 2 days ago" — the `linearLight` flag | `project-detail.video.portrait` (row 2) · macOS Gallery preview (row 3 of 3) |
 | `sliced` | "timeslice-vert-left-segs_24-lag_2 · 2.4 s" / "30 fps · yesterday" — a time-sliced VIDEO export, `blend.timeSlice != nil`; the title is `TimeSliceRecipe.displayName` (`Kit/TimeSlice.swift:164`), not "Blended clip N" | `project-detail.video.filtered.portrait` (Part 2 demo) — added 2026-09-07 for the filter mockup, so filtering to Time slices has something real to show |
 
-`narrow` rows carry the identical title/subtitle strings, clipped to a 135pt-wide column (x 84–219) rather than hand-shortened — the same simplification the searchclip in `macOS/gallery.svg` already makes for its placeholder, and the nearest static equivalent of SwiftUI's own `.lineLimit(1)` truncation on a tighter width. `sliced.wide` needs the same clip (224pt, x 84–308) even at the full 361pt width — it is the one state whose real string is long enough to overflow there too.
+`narrow` rows carry the identical title/subtitle strings, clipped to a 165pt-wide column (x 84–249; 135 pt when the column was 272) rather than hand-shortened — the same simplification the searchclip in `macOS/gallery.svg` already makes for its placeholder, and the nearest static equivalent of SwiftUI's own `.lineLimit(1)` truncation on a tighter width. `sliced.wide` needs the same clip (224pt, x 84–308) even at the full 361pt width — it is the one state whose real string is long enough to overflow there too.
 
 **Clip-width trap (found and fixed 2026-09-07):** the clip must end 8pt before "Open"'s own **left edge**, not before its `text-anchor="end"` anchor point. Open's anchor sits at `cardWidth−14`, but the label itself is ~31pt wide and drawn *leftward* from that anchor, so a clip sized off the anchor alone (the first cut of `sliced.wide`/`.narrow` used 255pt/160pt, ending only 8pt before the anchor) still overlaps Open's rendered text once the clipped string is long enough to reach the clip's own edge. Every row's title/subtitle was short enough in Part 1 to never actually reach that far, which is why this went unnoticed until `sliced`'s much longer real string exposed it live in the browser. Fixed by ending each clip 8pt before Open's left edge instead: 224pt (wide) / 135pt (narrow).
 
@@ -122,7 +122,7 @@ Part 2 (design-first, 2026-09-07) of the blended-clips-list work: **four indepen
 **Coordinate contract.** 1 unit = 1 pt, origin at the block's own top-left; width matches whatever card the block sits above. Chip height is always 33 pt (`preset-strip`'s own height), `rx=16.5`; a normal gap between adjacent chips is 8 pt (`preset-strip`'s own gap). The two semantic pairs are marked without a divider or track:
 
 - `wide` (361 pt, the iOS project-detail card): all four chips fit one row; the pair boundary is a **16 pt gap** between Slices and Image instead of the usual 8.
-- `narrow` (272 pt, the macOS Gallery preview-panel column): four chips don't fit one row at this width, so they **wrap to two 33 pt rows**, 8 pt apart (row 2 at y=41) — Blends/Slices on top, Image/Video below. The row break marks the pair boundary here instead of an extra gap, for free.
+- `narrow` (302 pt since 2026-09-13, 272 before — the macOS Gallery pane's column): four chips don't fit one row at either width, so they **wrap to two 33 pt rows**, 8 pt apart (row 2 at y=41) — Blends/Slices on top, Image/Video below. The row break marks the pair boundary here instead of an extra gap, for free.
 
 A ticked chip is `fill=#C36A00` (accent) with white `font-size=13.5` class `sb` (semibold) text and a small white checkmark (`M{x} {y} l2.5 2.8 l5 -5.5`, `stroke-width=1.8`, round cap/join) 14pt in from the chip's left edge, text starting 27pt in (14 + 9pt checkmark + 4pt gap). An unticked chip is `fill=#FFF` with the file's `#soft` drop-shadow (matching `preset-strip`'s own unselected chips exactly) and **black** text with **no checkmark**, text starting 12pt in — so an unticked chip is narrower than its ticked self, the same way a SwiftUI HStack chip would naturally shrink without the checkmark's reserved space; toggling a chip is expected to visibly resize it, not just recolor it.
 
@@ -179,7 +179,7 @@ sits in, so a file is placed at its natural size and never scaled:
 | Width | Total | Container |
 |---|---|---|
 | `wide` | 329 pt | an iOS card's content box — the 361 pt column less 16 pt padding each side. Also the macOS sheet's, which is why that sheet is specified at 393 pt (see `macOS/auto-name.svg`): at AppKit's own ~470 pt the box is 406 and the chips wrap differently for no reason a reader could name |
-| `narrow` | 272 pt | the macOS Gallery preview panel's column. The tag block is promoted OUT of the 72 pt-label metaRow grid to full width — at 190 pt a single "Sky & weather" chip is nearly the whole row |
+| `narrow` | 302 pt (272 until 2026-09-13's 330 pt pane) | the macOS Gallery preview panel's column. The tag block is promoted OUT of the 72 pt-label metaRow grid to full width — at 190 pt a single "Sky & weather" chip is nearly the whole row |
 
 `tag-suggestions` is `wide` only. A Mac popover is free to be 361 pt whatever panel raised it, so
 one file serves both platforms.
@@ -204,7 +204,7 @@ lets `AutoNameSheet` and the Gallery panel show literally the same file.
 | File | Shows | Used by |
 |---|---|---|
 | `tag-field.applied.wide` | the canonical five tags plus **+ Add tag**, two rows | `iOS/auto-name.portrait`, `macOS/auto-name` |
-| `tag-field.applied.narrow` | the same five, three rows at 272 pt | `macOS/gallery`, `macOS/gallery.tags` |
+| `tag-field.applied.narrow` | the same five, three rows at 302 pt (Water · Sky & weather / Urban · Nature · Rooftops / + Add tag) | `macOS/gallery`, `macOS/gallery.tags`, `macOS/gallery.item.video` |
 | `tag-field.plain.wide` | the same five, no **+ Add tag** — the picker's own applied row | `iOS/project-tags.portrait`, `iOS/project-tags.adding.portrait` |
 | `tag-field.empty.wide` / `.narrow` | nothing applied: the **+ Add tag** chip alone | `iOS/auto-name.no-tags.portrait`; `.narrow` is drawn for the Gallery panel's own empty project, which no screen file exercises yet |
 | `tag-suggestions.default` | the field at rest, SUGGESTED + YOUR TAGS | `iOS/project-tags.portrait`, `macOS/gallery.tags` |
@@ -215,7 +215,7 @@ the taxonomy, plus **Rooftops**, typed by the user. A custom tag is drawn identi
 one on purpose — once applied there is no difference worth showing, and the whole point of the pass
 is that the model's guesses and your own words end up in the same field. The set is chosen to make
 the two widths genuinely different rather than coincidentally equal: "Sky & weather" is long enough
-that 272 pt takes three rows where 329 pt takes two. `YOUR TAGS` carries **Prague** and **Client
+that 302 pt takes three rows where 329 pt takes two. `YOUR TAGS` carries **Prague** and **Client
 work**, custom tags this library holds but this project does not.
 
 A partial match — text typed that some tag does contain — needs no file of its own: the Create row
@@ -298,7 +298,7 @@ other — the width also chooses the control metrics:
 
 | Width | Total | Container | Controls |
 |---|---|---|---|
-| `narrow` | 272 pt | the macOS Gallery preview panel's column (the 300 pt panel less 14 pt each side); also the iPad's identical panel | AppKit: `.roundedBorder` fields 22 pt, rx 4; Copyright status a full-width `NSPopUpButton` with the accent up/down control trailing; the segmented picker 22 pt |
+| `narrow` | 302 pt | the macOS Gallery pane's column (the 330 pt pane less 14 pt each side — 272 until 2026-09-13, when the pane went 330 for the item view) and the item view's inspector; also the iPad's identical pane | AppKit: `.roundedBorder` fields 22 pt, rx 4; Copyright status a full-width `NSPopUpButton` with the accent up/down control trailing; the segmented picker 22 pt |
 | `phone` | 365 pt | the iPhone preview sheet's column (393 pt less 14 pt each side) | UIKit: fields 33 pt, rx 5, `#C6C6CB` border; Copyright status an `LL.accent` `.menu` label with `chevron.up.chevron.down`; Caption wraps (1–4 lines) where the Mac's clips at one |
 
 The iPad panel is the narrow width drawn with the phone file's control heights; no third file
@@ -338,6 +338,48 @@ fallback for keywords, the writes), the records in `Kit/Sources/LetsLapseKit/Lib
 the reader in `Kit/…/Metadata/`. Screens: `macOS/gallery.svg` (interval, at rest),
 `macOS/gallery.metadata.svg` (the imported photo), `macOS/gallery.tags.svg` (the panel scrolled
 to Keywords, picker open), `iOS/gallery.preview.portrait.svg` (the iPhone sheet on the photo).
+
+## Gallery filmstrip — `gallery-filmstrip.<focus>.svg`
+
+The Gallery item view's strip (macOS, 2026-09-13 — `GalleryFilmstrip` in `App/GalleryItemView.swift`): the grid folded into one
+row under the inspector, the media and the rail, so the next project is one click or one arrow away. Fourteen 80×60 tiles
+(4:3, radius 6) 8 pt apart in a LazyHStack padded 16 at the sides and 12 above and below, in the grid's current order — the
+gallery mirrors' own tile art, so the strip reads as the same library the grid shows; the focused project wears the grid's
+2.5 pt `LL.accent` ring and is kept centred. Full window width (1310 pt in the item files), on `LL.cardBackground`.
+
+**Coordinate contract.** 1 unit = 1 pt, origin at the strip's top-left, 1310×92. Tile *i* (1-based) at x = 16 + 88 (i−1),
+y 12–72. The strip's frame is 84 but it measures 92 from its divider to the tab bar's clearance on the Debug build, and its
+white ground then continues under the 58 pt clearance to the window edge (a SwiftUI `.background` ignores the safe-area inset)
+— the screen draws that bleed itself (`<rect … height="150" fill="#FFFFFF"/>` under the strip's divider at y 669.5) and places
+the component at (20, 670).
+
+| File | Focus | Used by |
+|---|---|---|
+| `interval` | tile 1 — gallery.svg's "River Sunset to Dusk" | `macOS/gallery.item.interval` |
+| `video` | tile 3 — the grid's video project | `macOS/gallery.item.video` |
+| `photo` | tile 5 — gallery.metadata.svg's `_WEX3518` | `macOS/gallery.item`, `macOS/gallery.item.collapsed` |
+
+**Mirrors.** `App/GalleryItemView.swift` `GalleryFilmstrip` (`ProjectThumbnailView` tiles, `ScrollViewReader` centring,
+`onSelect` → `GalleryView.move(to:)`); ← → step the same order (`GalleryView.step`). Drawn 2026-09-13 from the running Debug
+build at 1310×800.
+
+## Output actions — `output-actions.<state>.narrow.svg`
+
+The button row of the OUTPUT group at the foot of the item view's inspector — `GalleryPreviewPanel.outputSection`
+(`.inspector` style, 2026-09-13): what comes of the project, Steven's phase three (tags / titles / metadata are management,
+the editor is craft, blends / export / share are what's next — phases one and three share the inspector, in that order).
+The same `actionButton` the pane's action grid uses: 57 pt tall, radius 9, primary at 7 %, a 16 pt medium glyph over an
+11 pt medium label, equal widths 8 pt apart across the 302 pt column. The BLENDED CLIPS header, the tick-chip filter and the
+list under it are the screen's (`blend-list-filter.*.narrow`, `blended-clip-row.*.narrow`), since an `<image>` inside an
+`<image>` is not reliably followed.
+
+| File | Shows | Used by |
+|---|---|---|
+| `clip` | **New clip** (the blend flow) · **Share project** (the .lapse archive — "Sharing…", disabled, while it runs) | `macOS/gallery.item.interval` (a video project takes the same two) |
+| `share` | **Share project** alone, full width — a Photo capture is one photo, nothing to blend | the photo item files' foot (below the fold in `macOS/gallery.item`; drawn in no file yet) |
+
+**Mirrors.** `App/GalleryPreviewPanel.swift` `outputSection` (`onNewClip`, `exportShare`, `isExporting`). Export lands here
+when there is a graded-still export to offer (docs/TODO.md "Graded still export"); none is drawn.
 
 ## Library banner — `library-banner.unreadable.<width>.svg`
 

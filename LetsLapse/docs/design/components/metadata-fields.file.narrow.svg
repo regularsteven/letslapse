@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 1218" width="272" height="1218" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 1218" width="302" height="1218" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>Component · Metadata fields · file · narrow</title>
   <desc>Mirrors MetadataEditSection in App/MetadataPanelSections.swift — the editable IPTC Core record in the Gallery preview panel, in the brief's order: Title, Caption, Creator, Copyright, Rating, Copyright status, Copyright URL, Usage terms, then the Creator contact block (Address … Website) and the Location block (Sublocation … Country code). The Keywords row that follows is the shared tag editor (tag-field.*) under a 'Keywords' label the screen draws — tags ARE keywords. Every row carries its origin at the trailing end: 'from file' when the value is the file's own (the imported layer), 'edited here' with a revert arrow when a person changed it in this app (the edited layer; revert returns the file's value), nothing when the record has no value. Edits never touch the original file. Demo content is the _WEX3518 Lightroom export set — with Title edited here to show the third treatment — for the file state, and an untouched iPhone shoot for the empty state.</desc>
 <!-- LetsLapse design component · metadata fields. Header LLSectionHeader, 10pt under it; rows 10pt apart, each
@@ -8,39 +8,42 @@
      vertical-axis, 1–4 lines. Rating is five 15pt stars (LL.amber when set; the same star again clears).
      Copyright status is a full-width NSPopUpButton on the Mac and an accent .menu label on iOS. Group labels
      (Creator contact, Location) are 12pt semibold secondary with 6pt above. See components/README.md. -->
+  
+<!-- 2026-09-13 (later): narrow is 302 pt now — the Gallery pane went 300 → 330 with the item view, so its
+     content column is 302; there is no 272 pt column left anywhere (the iPad pane takes the same code). -->
   <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
   <g id="metadata-fields" data-state="file" data-width="narrow">
     <text x="4" y="12.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">METADATA</text>
     <g data-field="title">
       <text x="0" y="39.5" font-size="12" class="sb" fill="#6D6D72">Title</text>
-      <text x="258" y="39.5" font-size="10" class="m" text-anchor="end" fill="#C36A00">edited here</text>
-      <g data-symbol="arrow.uturn.backward" data-action="revert" transform="translate(262,31.0)" fill="none" stroke="#C36A00" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <text x="288" y="39.5" font-size="10" class="m" text-anchor="end" fill="#C36A00">edited here</text>
+      <g data-symbol="arrow.uturn.backward" data-action="revert" transform="translate(292,31.0)" fill="none" stroke="#C36A00" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 3 l-2.5 2.5 2.5 2.5 M0.5 5.5 h5.5 a2.5 2.5 0 0 0 0 -5 h-1"/>
       </g>
-      <rect x="0.5" y="47.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="47.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="62.0" font-size="12" fill="#000">Charles Bridge, blue hour</text>
     </g>
     <g data-field="caption">
       <text x="0" y="94.0" font-size="12" class="sb" fill="#6D6D72">Caption</text>
-      <text x="272" y="94.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-      <rect x="0.5" y="101.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="302" y="94.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="101.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="116.5" font-size="12" fill="#000">Beautiful at dusk, Charles Bridge is a crown</text>
     </g>
     <g data-field="creator">
       <text x="0" y="148.5" font-size="12" class="sb" fill="#6D6D72">Creator</text>
-      <text x="272" y="148.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-      <rect x="0.5" y="156.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="302" y="148.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="156.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="171.0" font-size="12" fill="#000">Steven Wright</text>
     </g>
     <g data-field="rights">
       <text x="0" y="203.0" font-size="12" class="sb" fill="#6D6D72">Copyright</text>
-      <text x="272" y="203.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-      <rect x="0.5" y="210.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="302" y="203.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="210.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="225.5" font-size="12" fill="#000">© 2026 Steven Wright</text>
     </g>
     <g data-field="rating">
       <text x="0" y="257.5" font-size="12" class="sb" fill="#6D6D72">Rating</text>
-      <text x="272" y="257.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <text x="302" y="257.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
       <polygon data-symbol="star.fill" points="7.5,266.0 5.6,270.9 0.4,271.2 4.5,274.5 3.1,279.6 7.5,276.7 11.9,279.6 10.5,274.5 14.6,271.2 9.4,270.9" fill="#FFB340" stroke="#FFB340" stroke-width="1" stroke-linejoin="round"/>
       <polygon data-symbol="star.fill" points="26.5,266.0 24.6,270.9 19.4,271.2 23.5,274.5 22.1,279.6 26.5,276.7 30.9,279.6 29.5,274.5 33.6,271.2 28.4,270.9" fill="#FFB340" stroke="#FFB340" stroke-width="1" stroke-linejoin="round"/>
       <polygon data-symbol="star.fill" points="45.5,266.0 43.6,270.9 38.4,271.2 42.5,274.5 41.1,279.6 45.5,276.7 49.9,279.6 48.5,274.5 52.6,271.2 47.4,270.9" fill="#FFB340" stroke="#FFB340" stroke-width="1" stroke-linejoin="round"/>
@@ -49,80 +52,80 @@
     </g>
     <g data-field="rightsStatus">
       <text x="0" y="308.0" font-size="12" class="sb" fill="#6D6D72">Copyright status</text>
-      <rect x="0.5" y="315.5" width="271" height="21" rx="5" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="315.5" width="301" height="21" rx="5" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="8" y="330.5" font-size="12" fill="#000">Unknown</text>
-      <rect x="252" y="318.0" width="16" height="16" rx="4" fill="#C36A00"/>
-      <path data-symbol="chevron.up.chevron.down" d="M257 324.0 l3-3 3 3 M257 328.0 l3 3 3-3" fill="none" stroke="#FFF" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="282" y="318.0" width="16" height="16" rx="4" fill="#C36A00"/>
+      <path data-symbol="chevron.up.chevron.down" d="M287 324.0 l3-3 3 3 M287 328.0 l3 3 3-3" fill="none" stroke="#FFF" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
     <g data-field="rightsURL">
       <text x="0" y="362.5" font-size="12" class="sb" fill="#6D6D72">Copyright URL</text>
-      <rect x="0.5" y="370.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="370.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="385.0" font-size="12" fill="#000" fill-opacity="0.25">https://</text>
     </g>
     <g data-field="usageTerms">
       <text x="0" y="417.0" font-size="12" class="sb" fill="#6D6D72">Usage terms</text>
-      <rect x="0.5" y="424.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="424.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <text x="0" y="475.5" font-size="12" class="sb" fill="#6D6D72">Creator contact</text>
     <g data-field="contactAddress">
       <text x="0" y="502.0" font-size="12" class="sb" fill="#6D6D72">Address</text>
-      <rect x="0.5" y="509.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="509.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <g data-field="contactCity">
       <text x="0" y="556.5" font-size="12" class="sb" fill="#6D6D72">City</text>
-      <rect x="0.5" y="564.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="564.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <g data-field="contactState">
       <text x="0" y="611.0" font-size="12" class="sb" fill="#6D6D72">State</text>
-      <rect x="0.5" y="618.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="618.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <g data-field="contactPostcode">
       <text x="0" y="665.5" font-size="12" class="sb" fill="#6D6D72">Postcode</text>
-      <rect x="0.5" y="673.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="673.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <g data-field="contactCountry">
       <text x="0" y="720.0" font-size="12" class="sb" fill="#6D6D72">Country</text>
-      <rect x="0.5" y="727.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="727.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <g data-field="contactPhone">
       <text x="0" y="774.5" font-size="12" class="sb" fill="#6D6D72">Phone</text>
-      <rect x="0.5" y="782.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="782.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <g data-field="contactEmail">
       <text x="0" y="829.0" font-size="12" class="sb" fill="#6D6D72">Email</text>
-      <rect x="0.5" y="836.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="836.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <g data-field="contactWebsite">
       <text x="0" y="883.5" font-size="12" class="sb" fill="#6D6D72">Website</text>
-      <rect x="0.5" y="891.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="891.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <text x="0" y="942.0" font-size="12" class="sb" fill="#6D6D72">Location</text>
     <g data-field="locationSublocation">
       <text x="0" y="968.5" font-size="12" class="sb" fill="#6D6D72">Sublocation</text>
-      <text x="272" y="968.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-      <rect x="0.5" y="976.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="302" y="968.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="976.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="991.0" font-size="12" fill="#000">Mala Strana</text>
     </g>
     <g data-field="locationCity">
       <text x="0" y="1023.0" font-size="12" class="sb" fill="#6D6D72">City</text>
-      <rect x="0.5" y="1030.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="1030.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
     </g>
     <g data-field="locationState">
       <text x="0" y="1077.5" font-size="12" class="sb" fill="#6D6D72">State</text>
-      <text x="272" y="1077.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-      <rect x="0.5" y="1085.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="302" y="1077.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="1085.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="1100.0" font-size="12" fill="#000">Prague</text>
     </g>
     <g data-field="locationCountry">
       <text x="0" y="1132.0" font-size="12" class="sb" fill="#6D6D72">Country</text>
-      <text x="272" y="1132.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-      <rect x="0.5" y="1139.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="302" y="1132.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="1139.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="1154.5" font-size="12" fill="#000">Czech Republic</text>
     </g>
     <g data-field="locationCountryCode">
       <text x="0" y="1186.5" font-size="12" class="sb" fill="#6D6D72">Country code</text>
-      <text x="272" y="1186.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-      <rect x="0.5" y="1194.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="302" y="1186.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="1194.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="1209.0" font-size="12" fill="#000">CZ</text>
     </g>
   </g>

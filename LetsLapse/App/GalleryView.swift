@@ -11,10 +11,20 @@ import SwiftUI
 /// macOS and wide iPad (regular width):   sidebar | grid | preview panel  (HStack)
 /// iPhone and narrow iPad (compact width): just the grid; sidebar and preview
 ///   are sheets.
+///
+/// The item view (macOS, 2026-09-13 — see GalleryItemView.swift): with a
+/// project in `focus` the same three columns change mode instead of pushing a
+/// screen — Library → inspector on the left, grid + pane → editor with its own
+/// rail in the middle and right — and a filmstrip runs under them. Open, Edit,
+/// Text and Shapes all lead here; the Mac's editor windows are no longer the
+/// Gallery's door to the editor.
 struct GalleryView: View {
     @EnvironmentObject var model: AppModel
     /// Owned by ContentView so the tab bar can pop to the list.
     @Binding var path: [UUID]
+    /// The item view's project — owned by ContentView too, for the same
+    /// reason: the tab's view is rebuilt on every tab switch.
+    @Binding var focus: GalleryFocus?
 
     // MARK: Persistent state
     @AppStorage("gallery.showSidebar")   private var showSidebar   = true
@@ -35,6 +45,18 @@ struct GalleryView: View {
     @State private var deleteFailure: String?
     /// A tile the keyboard moved the selection to, for the grid to scroll to.
     @State private var scrollTarget: UUID?
+    /// The item view's way out: the editor is asked to leave (so its exit path
+    /// runs — the debounced writes, the library flush, the Back button's
+    /// preset offer), and `itemTransition` says where to go once it has.
+    @State private var exitRequest: EditorExitRequest?
+    @State private var itemTransition: ItemTransition?
+
+    /// Where the editor goes once it has left: back to the grid, or on to the
+    /// project the filmstrip (or an arrow) named.
+    private enum ItemTransition: Equatable {
+        case back
+        case move(GalleryFocus)
+    }
     #if os(macOS)
     /// The Gallery's keys — see `installKeyboardShortcuts`.
     @State private var keyMonitor: Any?
@@ -130,7 +152,7 @@ struct GalleryView: View {
             #if os(iOS)
             .toolbar(.hidden, for: .navigationBar)
             #else
-            .navigationTitle("Gallery")
+            .navigationTitle(focusedCapture?.displayTitle ?? "Gallery")
             #endif
             .navigationDestination(for: UUID.self) { captureID in
                 ProjectDetailView(captureID: captureID)
@@ -141,6 +163,13 @@ struct GalleryView: View {
             // The Shapes rows read each project's `shapes.json`; re-check on every visit.
             .onAppear   { model.refreshShapeSummaries() }
             .onAppear   { consumeSelectHook() }
+            .onAppear   { consumeItemHook() }
+            // A focused project that leaves the library (deleted here, or
+            // from another tab) takes the item view with it — there is no
+            // editor left to ask.
+            .onChange(of: model.libraryCaptures.map(\.id)) { _, ids in
+                if let focus, !ids.contains(focus.captureID) { self.focus = nil }
+            }
             // A filter or search that hides a selected tile drops it from the
             // selection, so "N selected" only ever counts what is on screen.
             .onChange(of: sortedCaptures.map(\.id)) { _, visible in
@@ -208,49 +237,7 @@ struct GalleryView: View {
     @ViewBuilder
     private var mainLayout: some View {
         if isWide {
-            HStack(spacing: 0) {
-                if showSidebar {
-                    GallerySidebar(
-                        filter: $filter,
-                        tagSelection: $query.tags,
-                        shapeSelection: $shapeSelection,
-                        allCaptures: visibleCaptures
-                    )
-                    .frame(width: 200)
-                    Divider()
-                }
-
-                VStack(spacing: 0) {
-                    galleryHeader
-                    Divider()
-                    GalleryGridContent(
-                        captures:     sortedCaptures,
-                        columnCount:  columnCount,
-                        timelineMode: timelineMode,
-                        selection:    $selection,
-                        scrollTarget: $scrollTarget,
-                        onOpen: { path.append($0) }
-                    )
-                }
-
-                // The pane: the batch panel over more than one project, the
-                // preview panel over exactly one, nothing over none.
-                if selection.isBatch {
-                    Divider()
-                    GalleryBatchPanel(captures: batchCaptures)
-                        .frame(width: 300)
-                } else if let id = selection.single,
-                          let capture = model.libraryCaptures.first(where: { $0.id == id }) {
-                    Divider()
-                    GalleryPreviewPanel(
-                        capture: capture,
-                        onOpen:    { path.append(capture.id) },
-                        onNewClip: { model.openCapture(capture) },
-                        onDelete:  { delete(capture) }
-                    )
-                    .frame(width: 300)
-                }
-            }
+            wideLayout
         } else {
             // Compact: just the grid + header
             VStack(spacing: 0) {
@@ -282,6 +269,214 @@ struct GalleryView: View {
     /// edits and what its preset tiles are previewed on (the first).
     private var batchCaptures: [AppModel.CaptureProject] {
         sortedCaptures.filter { selection.ids.contains($0.id) }
+    }
+
+    // MARK: Wide layout (grid mode and the item view)
+
+    /// The Gallery's column widths. The pane and the editor's rail share one
+    /// width (the rail's 330, `railWidth(in:)` in both editors) so the
+    /// right-hand divider never moves between the grid and the item view; the
+    /// left column widens from the Library's 200 to the inspector's 330 on
+    /// the way in. Set `sidebar` to 330 to try the version where nothing
+    /// moves at all.
+    private enum GalleryColumns {
+        static let sidebar: CGFloat = 200
+        static let inspector: CGFloat = 330
+        static let pane: CGFloat = 330
+    }
+
+    /// The project the item view is showing — `focus` resolved against the
+    /// library, nil once it is gone.
+    private var focusedCapture: AppModel.CaptureProject? {
+        guard let focus else { return nil }
+        return model.libraryCaptures.first { $0.id == focus.captureID }
+    }
+
+    /// One `HStack` for both modes, so the columns swap content in place: the
+    /// left column is the Library or the inspector, the rest of the row is
+    /// the grid with its pane or the editor with its rail. The filmstrip is
+    /// a row under the whole thing, full width.
+    private var wideLayout: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                if showSidebar {
+                    leftColumn
+                        .frame(width: focusedCapture == nil
+                               ? GalleryColumns.sidebar : GalleryColumns.inspector)
+                    Divider()
+                }
+
+                if let focus, let capture = focusedCapture {
+                    itemColumn(focus: focus, capture: capture)
+                        .transition(.opacity)
+                } else {
+                    gridColumn
+                        .transition(.opacity)
+                    paneColumn
+                        .transition(.opacity)
+                }
+            }
+
+            if let focus, focusedCapture != nil {
+                Divider()
+                GalleryFilmstrip(
+                    captures: sortedCaptures,
+                    focusedID: focus.captureID,
+                    onSelect: { move(to: $0) })
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
+    /// Library in grid mode, the project's inspector in the item view — the
+    /// preview panel in its `.inspector` dress: what the project is and what
+    /// came of it, with the editor doing the rest beside it.
+    @ViewBuilder
+    private var leftColumn: some View {
+        if let capture = focusedCapture {
+            GalleryPreviewPanel(
+                capture: capture,
+                onOpen:    {},
+                onNewClip: { model.openCapture(capture) },
+                onDelete:  { delete(capture) },
+                style: .inspector
+            )
+            .transition(.opacity)
+        } else {
+            GallerySidebar(
+                filter: $filter,
+                tagSelection: $query.tags,
+                shapeSelection: $shapeSelection,
+                allCaptures: visibleCaptures
+            )
+            .transition(.opacity)
+        }
+    }
+
+    private var gridColumn: some View {
+        VStack(spacing: 0) {
+            galleryHeader
+            Divider()
+            GalleryGridContent(
+                captures:     sortedCaptures,
+                columnCount:  columnCount,
+                timelineMode: timelineMode,
+                selection:    $selection,
+                scrollTarget: $scrollTarget,
+                onOpen: { open($0) },
+                onEdit: gridEditHandler
+            )
+        }
+    }
+
+    /// The item view is the Mac's (2026-09-13). Elsewhere the panel and the
+    /// tile menu keep their own doors to the editor — the iPad's cover has
+    /// chrome of its own that a column of the Gallery cannot host yet.
+    private var gridEditHandler: ((UUID) -> Void)? {
+        #if os(macOS)
+        return { id in
+            if let capture = model.libraryCaptures.first(where: { $0.id == id }) {
+                enterItem(capture, page: .editor)
+            }
+        }
+        #else
+        return nil
+        #endif
+    }
+
+    private func paneEditHandler(for capture: AppModel.CaptureProject) -> ((RailTab) -> Void)? {
+        #if os(macOS)
+        return { page in enterItem(capture, page: page) }
+        #else
+        return nil
+        #endif
+    }
+
+    /// The pane: the batch panel over more than one project, the preview
+    /// panel over exactly one, nothing over none.
+    @ViewBuilder
+    private var paneColumn: some View {
+        if selection.isBatch {
+            Divider()
+            GalleryBatchPanel(captures: batchCaptures)
+                .frame(width: GalleryColumns.pane)
+        } else if let id = selection.single,
+                  let capture = model.libraryCaptures.first(where: { $0.id == id }) {
+            Divider()
+            GalleryPreviewPanel(
+                capture: capture,
+                onOpen:    { open(capture.id) },
+                onNewClip: { model.openCapture(capture) },
+                onDelete:  { delete(capture) },
+                onEdit:    paneEditHandler(for: capture)
+            )
+            .frame(width: GalleryColumns.pane)
+        }
+    }
+
+    /// The item view's middle and right: its header where the grid's was,
+    /// then the editor — media beside its own rail.
+    private func itemColumn(focus: GalleryFocus, capture: AppModel.CaptureProject) -> some View {
+        VStack(spacing: 0) {
+            itemHeader(capture)
+            Divider()
+            GalleryItemEditor(
+                focus: focus,
+                exitRequest: exitRequest,
+                onExit: completeItemTransition)
+        }
+    }
+
+    /// The grid header's row, in the item view: the library toggle keeps its
+    /// seat (it now collapses the inspector), Back beside it, the project's
+    /// name where "Gallery" was, and its place in the filmstrip trailing.
+    private func itemHeader(_ capture: AppModel.CaptureProject) -> some View {
+        HStack(spacing: 10) {
+            libraryButton
+
+            Button {
+                leaveItem()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("Gallery")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundStyle(LL.accent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back to the gallery")
+
+            Spacer(minLength: 0)
+
+            Text(capture.displayTitle)
+                .font(.system(size: 16, weight: .bold))
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            if let position = filmstripPosition {
+                Text("\(position.index) of \(position.count)")
+                    .font(.system(size: 12))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minHeight: 52)
+    }
+
+    /// "3 of 48": where the focused project sits in the grid's order.
+    private var filmstripPosition: (index: Int, count: Int)? {
+        guard let focus,
+              let index = sortedCaptures.firstIndex(where: { $0.id == focus.captureID })
+        else { return nil }
+        return (index + 1, sortedCaptures.count)
     }
 
     // MARK: Header
@@ -563,9 +758,103 @@ struct GalleryView: View {
         do {
             try withAnimation { try model.deleteCapture(capture) }
             selection.remove(capture.id)
+            if focus?.captureID == capture.id { focus = nil }
         } catch {
             deleteFailure = error.localizedDescription
         }
+    }
+
+    /// Open — a double-click, the panel's Open, ⏎, the tile menu: the item
+    /// view on the Mac, the project screen elsewhere (and on the Mac when the
+    /// project has nothing the editor can open).
+    private func open(_ id: UUID) {
+        #if os(macOS)
+        if let capture = model.libraryCaptures.first(where: { $0.id == id }),
+           enterItem(capture, page: .editor) {
+            return
+        }
+        #endif
+        path.append(id)
+    }
+
+    // MARK: Item view
+
+    /// Enters the item view on `capture`, the editor on `page`. False when
+    /// the project has no asset to open on. The tile is selected too, so the
+    /// grid is on it on the way back.
+    @discardableResult
+    private func enterItem(_ capture: AppModel.CaptureProject, page: RailTab) -> Bool {
+        guard let request = model.stageEditor(for: capture, page: page) else { return false }
+        selection.select(only: capture.id)
+        scrollTarget = capture.id
+        withAnimation(.easeInOut(duration: 0.25)) {
+            focus = GalleryFocus(request: request, page: page)
+        }
+        return true
+    }
+
+    /// Back: through the editor's own exit, offer and all.
+    private func leaveItem() {
+        guard focus != nil else { return }
+        itemTransition = .back
+        exitRequest = EditorExitRequest(offersPresetSave: true)
+    }
+
+    /// The filmstrip (or an arrow): the current editor leaves — writes made,
+    /// no offer in the way — and the next project's editor takes its place.
+    /// The page carries over where the next editor has it; a video has no
+    /// Masks page, so that one falls back to Editor.
+    private func move(to id: UUID) {
+        guard let focus, id != focus.captureID, itemTransition == nil,
+              let capture = sortedCaptures.first(where: { $0.id == id }) else { return }
+        let page: RailTab = (capture.kind == .video && focus.page == .masks) ? .editor : focus.page
+        guard let request = model.stageEditor(for: capture, page: page) else { return }
+        itemTransition = .move(GalleryFocus(request: request, page: page))
+        exitRequest = EditorExitRequest(offersPresetSave: false)
+    }
+
+    /// ← / → in the item view: the neighbour in the grid's order.
+    private func step(_ delta: Int) {
+        guard let focus,
+              let index = sortedCaptures.firstIndex(where: { $0.id == focus.captureID })
+        else { return }
+        let next = index + delta
+        guard sortedCaptures.indices.contains(next) else { return }
+        move(to: sortedCaptures[next].id)
+    }
+
+    /// The editor has left. Go where the transition said.
+    private func completeItemTransition() {
+        let transition = itemTransition
+        itemTransition = nil
+        exitRequest = nil
+        switch transition {
+        case .move(let next):
+            selection.select(only: next.captureID)
+            scrollTarget = next.captureID
+            withAnimation(.easeInOut(duration: 0.2)) { focus = next }
+        case .back, nil:
+            withAnimation(.easeInOut(duration: 0.25)) { focus = nil }
+        }
+    }
+
+    /// `LL_ITEM=latest|<capture-uuid>[:editor|text|frames|masks]` — the item
+    /// view open from launch, for screenshots. `latest` is the first tile in
+    /// the current sort. Pair with `LL_TAB=gallery`.
+    private func consumeItemHook() {
+        #if DEBUG && os(macOS)
+        guard focus == nil,
+              let raw = ProcessInfo.processInfo.environment["LL_ITEM"] else { return }
+        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+        let page = parts.count > 1 ? (RailTab(rawValue: parts[1].capitalized) ?? .editor) : .editor
+        let capture: AppModel.CaptureProject?
+        if parts[0] == "latest" {
+            capture = sortedCaptures.first
+        } else {
+            capture = UUID(uuidString: parts[0]).flatMap { id in sortedCaptures.first { $0.id == id } }
+        }
+        if let capture { enterItem(capture, page: page) }
+        #endif
     }
 
     #if os(macOS)
@@ -583,10 +872,32 @@ struct GalleryView: View {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard let window = event.window,
                   !(window.firstResponder is NSTextView) else { return event }
+            // The arrows report `.numericPad` and `.function` on a real
+            // keyboard (AppKit counts them as keypad and function keys), and
+            // neither is a modifier anyone holds — drop them so a plain arrow
+            // reads as plain.
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                .subtracting([.numericPad, .function])
             let key = event.charactersIgnoringModifiers ?? ""
             let handled = MainActor.assumeIsolated { () -> Bool in
                 guard window === hostWindow else { return false }
+                // The item view: ← → walk the filmstrip, ⎋ leaves. The rest
+                // of the Gallery's keys are the grid's.
+                if focus != nil {
+                    guard flags.isEmpty else { return false }
+                    if event.keyCode == 53 { leaveItem(); return true }   // ⎋
+                    switch Self.arrow(for: event) {
+                    case .left?:  step(-1); return true
+                    case .right?: step(1);  return true
+                    default: return false
+                    }
+                }
+                // ⏎ on one selected tile opens it.
+                if flags.isEmpty, event.keyCode == 36 || event.keyCode == 76,
+                   !selection.isSelecting, let id = selection.single {
+                    open(id)
+                    return true
+                }
                 if flags == .command, key == "a" {
                     selection.selectAll(sortedCaptures.map(\.id))
                     return true
@@ -610,7 +921,17 @@ struct GalleryView: View {
         }
     }
 
+    /// By key code first: the arrows' codes are the same on every layout,
+    /// and a posted event (the run skill's `hid key right`) carries the code
+    /// but not always the function-key character `specialKey` is read from.
     private static func arrow(for event: NSEvent) -> GalleryArrow? {
+        switch event.keyCode {
+        case 123: return .left
+        case 124: return .right
+        case 126: return .up
+        case 125: return .down
+        default: break
+        }
         switch event.specialKey {
         case .leftArrow?: return .left
         case .rightArrow?: return .right

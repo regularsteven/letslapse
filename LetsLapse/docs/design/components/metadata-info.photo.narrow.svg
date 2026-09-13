@@ -1,10 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 250" width="272" height="250" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 221" width="302" height="221" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>Component · Metadata info · photo · narrow</title>
   <desc>Mirrors MetadataInfoSection in App/MetadataPanelSections.swift — the read-only group under the Gallery preview panel's action buttons: what the camera and the file said (the imported layer only), never editable here. Rows appear only when the resolved record has them; a project whose frames disagree shows nothing of the whole and the copy 'Varies by frame — choose This frame.'; before the reader has landed, 'Reading the files…'; a file with nothing, 'Nothing in the file.'. Demo content is the _WEX3518 Lightroom export set the panel was verified with (photo) and an iPhone interval JPEG shoot (interval). The GPS row carries an Open in Maps link (SF Symbol map, LL.accent).</desc>
 <!-- LetsLapse design component · metadata info. Header LLSectionHeader (13pt semibold secondary, kerning 0.5,
      4pt in) with 4pt under it; rows are a 72pt label column (12pt semibold secondary) + 10pt gap + the value
      (12pt primary, wrapping), 5pt padding above and below — 25pt per single-line row, 14.5pt per extra line.
-     narrow = 272pt (macOS Gallery panel), phone = 365pt (the iPhone preview sheet). See components/README.md. -->
+     narrow = 302pt (macOS Gallery panel), phone = 365pt (the iPhone preview sheet). See components/README.md. -->
+  
+<!-- 2026-09-13 (later): narrow is 302 pt now — the Gallery pane went 300 → 330 with the item view, so its
+     content column is 302; there is no 272 pt column left anywhere (the iPad pane takes the same code).
+     At 302 the 220 pt value column takes Captured and GPS on one line each (250 → 221 tall); Exposure and
+     Software still wrap, the latter now after the version. -->
   <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
   <g id="metadata-info" data-state="photo" data-width="narrow">
     <text x="4" y="12.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">INFO</text>
@@ -23,25 +28,23 @@
     </g>
     <g data-row="captured">
       <text x="0" y="124.5" font-size="12" class="sb" fill="#6D6D72">Captured</text>
-      <text x="82" y="124.5" font-size="12" fill="#000">31 Aug 2026, 20:29:30</text>
-      <text x="82" y="139.0" font-size="12" fill="#000">(UTC+01:00)</text>
+      <text x="82" y="124.5" font-size="12" fill="#000">31 Aug 2026, 20:29:30 (UTC+01:00)</text>
     </g>
     <g data-row="gps">
-      <text x="0" y="163.5" font-size="12" class="sb" fill="#6D6D72">GPS</text>
-      <text x="82" y="163.5" font-size="12" fill="#000">50.0897° N 14.4116° E · 2</text>
-      <text x="82" y="178.0" font-size="12" fill="#000">m</text>
-      <g data-symbol="map" transform="translate(232.6,160.5)" fill="none" stroke="#C36A00" stroke-width="1.3" stroke-linejoin="round">
+      <text x="0" y="149.0" font-size="12" class="sb" fill="#6D6D72">GPS</text>
+      <text x="82" y="149.0" font-size="12" fill="#000">50.0897° N 14.4116° E · 2 m</text>
+      <g data-symbol="map" transform="translate(245.6,140.0)" fill="none" stroke="#C36A00" stroke-width="1.3" stroke-linejoin="round">
         <path d="M0.5 2.5 l3.5-1.5 4 1.5 3.5-1.5 v9 l-3.5 1.5 -4-1.5 -3.5 1.5 z M4 1 v9 M8 2.5 v9"/>
       </g>
     </g>
     <g data-row="size">
-      <text x="0" y="202.5" font-size="12" class="sb" fill="#6D6D72">Size</text>
-      <text x="82" y="202.5" font-size="12" fill="#000">4608 × 3072 · ARW</text>
+      <text x="0" y="173.5" font-size="12" class="sb" fill="#6D6D72">Size</text>
+      <text x="82" y="173.5" font-size="12" fill="#000">4608 × 3072 · ARW</text>
     </g>
     <g data-row="software">
-      <text x="0" y="227.0" font-size="12" class="sb" fill="#6D6D72">Software</text>
-      <text x="82" y="227.0" font-size="12" fill="#000">Adobe Photoshop Lightroom</text>
-      <text x="82" y="241.5" font-size="12" fill="#000">15.5.1 Classic (Macintosh)</text>
+      <text x="0" y="198.0" font-size="12" class="sb" fill="#6D6D72">Software</text>
+      <text x="82" y="198.0" font-size="12" fill="#000">Adobe Photoshop Lightroom 15.5.1</text>
+      <text x="82" y="212.5" font-size="12" fill="#000">Classic (Macintosh)</text>
     </g>
   </g>
 </svg>

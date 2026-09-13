@@ -263,6 +263,9 @@ struct ContentView: View {
     @AppStorage(LayoutSettings.scansMenuKey) private var scansMenuEnabled = true
     @State private var selectedTab: LLTab = .create
     @State private var galleryPath: [UUID] = []
+    /// The Gallery's item view (macOS) — here beside its path so a trip to
+    /// another tab and back lands on the same project, not the grid.
+    @State private var galleryFocus: GalleryFocus?
     @State private var scansPath: [UUID] = []
     @State private var projectsPath: [UUID] = []
     @State private var collectionsPath: [UUID] = []
@@ -1264,7 +1267,7 @@ struct ContentView: View {
                 case .create:
                     createContent
                 case .gallery:
-                    GalleryView(path: $galleryPath)
+                    GalleryView(path: $galleryPath, focus: $galleryFocus)
                 case .scans:
                     ScansView(path: $scansPath)
                 case .projects:
@@ -1322,7 +1325,7 @@ struct ContentView: View {
             .tabItem { Label(LLTab.create.title, systemImage: LLTab.create.systemImage) }
             .tag(LLTab.create)
 
-            GalleryView(path: $galleryPath)
+            GalleryView(path: $galleryPath, focus: $galleryFocus)
                 .hiddenSystemTabBar()
                 .hiddenMoreNavigationBar()
                 .tabItem { Label(LLTab.gallery.title, systemImage: LLTab.gallery.systemImage) }
@@ -1398,6 +1401,7 @@ struct ContentView: View {
             }
         case .gallery:
             galleryPath = []
+            galleryFocus = nil
         case .scans:
             scansPath = []
         case .projects:

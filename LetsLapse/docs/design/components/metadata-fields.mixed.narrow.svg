@@ -1,28 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 1218" width="272" height="1218" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 1218" width="302" height="1218" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>Component · Metadata fields · mixed · narrow</title>
   <desc>Mirrors GalleryBatchPanel.metadataSection in App/GalleryBatchPanel.swift — the editable IPTC Core record read over SEVERAL selected projects (batch mode, 2026-09-13). Same rows, same order and rhythm as metadata-fields.empty/file: each shows the value every selected project agrees on, or the placeholder "Mixed" when they differ; no origin marker where the provenance differs (a common origin shows the usual from file / edited here + revert). A commit writes the value to every selected project, a revert reverts every one. Rating draws the common stars (none here) with "Mixed" 11pt secondary after them; Copyright status is a borderless accent menu reading the common status or "Mixed" — on the Mac the menu draws its own up/down control, on iOS the label carries chevron.up.chevron.down. Drawn with every field mixed, which is what a fresh multi-selection of unrelated projects reads.</desc>
   <!-- LetsLapse design component · metadata fields, mixed state (the batch panel). Rows as metadata-fields.empty: label line, 4pt, the control; "Mixed" is the placeholder at 25% black. See components/README.md. -->
+  
+<!-- 2026-09-13 (later): narrow is 302 pt now — the Gallery pane went 300 → 330 with the item view, so its
+     content column is 302; there is no 272 pt column left anywhere (the iPad pane takes the same code). -->
   <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
   <g id="metadata-fields" data-state="mixed" data-width="narrow">
     <text x="4" y="12.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">METADATA</text>
     <g data-field="title">
       <text x="0" y="39.5" font-size="12" class="sb" fill="#6D6D72">Title</text>
-      <rect x="0.5" y="47.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="47.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="62.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="caption">
       <text x="0" y="94.0" font-size="12" class="sb" fill="#6D6D72">Caption</text>
-      <rect x="0.5" y="101.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="101.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="116.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="creator">
       <text x="0" y="148.5" font-size="12" class="sb" fill="#6D6D72">Creator</text>
-      <rect x="0.5" y="156.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="156.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="171.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="rights">
       <text x="0" y="203.0" font-size="12" class="sb" fill="#6D6D72">Copyright</text>
-      <rect x="0.5" y="210.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="210.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="225.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="rating">
@@ -41,79 +44,79 @@
     </g>
     <g data-field="rightsURL">
       <text x="0" y="362.5" font-size="12" class="sb" fill="#6D6D72">Copyright URL</text>
-      <rect x="0.5" y="370.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="370.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="385.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="usageTerms">
       <text x="0" y="417.0" font-size="12" class="sb" fill="#6D6D72">Usage terms</text>
-      <rect x="0.5" y="424.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="424.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="439.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <text x="0" y="475.5" font-size="12" class="sb" fill="#6D6D72">Creator contact</text>
     <g data-field="contactAddress">
       <text x="0" y="502.0" font-size="12" class="sb" fill="#6D6D72">Address</text>
-      <rect x="0.5" y="509.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="509.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="524.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="contactCity">
       <text x="0" y="556.5" font-size="12" class="sb" fill="#6D6D72">City</text>
-      <rect x="0.5" y="564.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="564.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="579.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="contactState">
       <text x="0" y="611.0" font-size="12" class="sb" fill="#6D6D72">State</text>
-      <rect x="0.5" y="618.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="618.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="633.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="contactPostcode">
       <text x="0" y="665.5" font-size="12" class="sb" fill="#6D6D72">Postcode</text>
-      <rect x="0.5" y="673.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="673.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="688.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="contactCountry">
       <text x="0" y="720.0" font-size="12" class="sb" fill="#6D6D72">Country</text>
-      <rect x="0.5" y="727.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="727.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="742.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="contactPhone">
       <text x="0" y="774.5" font-size="12" class="sb" fill="#6D6D72">Phone</text>
-      <rect x="0.5" y="782.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="782.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="797.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="contactEmail">
       <text x="0" y="829.0" font-size="12" class="sb" fill="#6D6D72">Email</text>
-      <rect x="0.5" y="836.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="836.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="851.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="contactWebsite">
       <text x="0" y="883.5" font-size="12" class="sb" fill="#6D6D72">Website</text>
-      <rect x="0.5" y="891.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="891.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="906.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <text x="0" y="942.0" font-size="12" class="sb" fill="#6D6D72">Location</text>
     <g data-field="locationSublocation">
       <text x="0" y="968.5" font-size="12" class="sb" fill="#6D6D72">Sublocation</text>
-      <rect x="0.5" y="976.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="976.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="991.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="locationCity">
       <text x="0" y="1023.0" font-size="12" class="sb" fill="#6D6D72">City</text>
-      <rect x="0.5" y="1030.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="1030.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="1045.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="locationState">
       <text x="0" y="1077.5" font-size="12" class="sb" fill="#6D6D72">State</text>
-      <rect x="0.5" y="1085.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="1085.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="1100.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="locationCountry">
       <text x="0" y="1132.0" font-size="12" class="sb" fill="#6D6D72">Country</text>
-      <rect x="0.5" y="1139.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="1139.5" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="1154.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
     <g data-field="locationCountryCode">
       <text x="0" y="1186.5" font-size="12" class="sb" fill="#6D6D72">Country code</text>
-      <rect x="0.5" y="1194.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <rect x="0.5" y="1194.0" width="301" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
       <text x="7" y="1209.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
     </g>
   </g>

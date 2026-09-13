@@ -2,9 +2,12 @@ import SwiftUI
 
 // MARK: - Gallery preview panel
 
-/// The 300pt right-hand panel that slides in when a tile is selected.
+/// The 330pt right-hand panel that slides in when a tile is selected — and,
+/// in its `.inspector` dress, the left column of the Gallery's item view on
+/// the Mac (2026-09-13), where the editor beside it does the tuning and this
+/// column keeps to management and what comes after.
 ///
-/// Contains:
+/// Contains (`.pane`):
 /// - Thumbnail (150pt height)
 /// - Title, date, size
 /// - Actions: Open, then Edit / Text / Shapes / New clip (see `actionGrid`)
@@ -19,7 +22,23 @@ import SwiftUI
 ///   (`MetadataPanelSections.swift`)
 /// - Metadata rows: In frame, Storage, Field notes
 /// - Footer: Rename, Share, Show in Finder, Delete…
+///
+/// `.inspector` reads top to bottom as the project's life: no thumbnail (the
+/// picture is on screen), no action grid and no Presets (the editor is right
+/// there) — title and date, then Tags, Info and Metadata, the footer with
+/// Rename / Finder / Delete, and an OUTPUT group at the foot: New clip, Share
+/// project and the blended-clips list. Steven's three phases (2026-09-13):
+/// tags / titles / metadata are management, the editor is craft, blends /
+/// export / share are what comes next — phases one and three share this
+/// column, in that order.
 struct GalleryPreviewPanel: View {
+    enum Style {
+        /// The Gallery's right-hand pane over a selected tile.
+        case pane
+        /// The item view's left column, beside the editor.
+        case inspector
+    }
+
     @EnvironmentObject var model: AppModel
     @ObservedObject private var presetStore = CustomPresetStore.shared
     #if os(macOS)
@@ -38,6 +57,11 @@ struct GalleryPreviewPanel: View {
     /// an iPhone the flow rises over the tabs, under a sheet that doesn't go.
     var onNewClip: () -> Void
     var onDelete: () -> Void
+    var style: Style = .pane
+    /// Edit / Text / Shapes, when the host has a place of its own for the
+    /// editor (the Gallery's item view on the Mac); nil opens the editor the
+    /// way the panel always did — a window on the Mac, a cover on iOS.
+    var onEdit: ((RailTab) -> Void)? = nil
 
     // Async loads
     @State private var storageBytes: Int64?
@@ -91,24 +115,30 @@ struct GalleryPreviewPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                thumbnail
-                    .padding(.top, 22)
-                    .padding(.horizontal, 14)
+                if style == .pane {
+                    thumbnail
+                        .padding(.top, 22)
+                        .padding(.horizontal, 14)
 
-                titleSection
-                    .padding(.top, 12)
-                    .padding(.horizontal, 14)
+                    titleSection
+                        .padding(.top, 12)
+                        .padding(.horizontal, 14)
 
-                actionGrid
-                    .padding(.top, 16)
-                    .padding(.horizontal, 14)
+                    actionGrid
+                        .padding(.top, 16)
+                        .padding(.horizontal, 14)
+                } else {
+                    titleSection
+                        .padding(.top, 18)
+                        .padding(.horizontal, 14)
+                }
 
                 Divider()
                     .padding(.top, 16)
 
                 VStack(alignment: .leading, spacing: 14) {
                     tagsSection
-                    if !capture.isScannerCapture {
+                    if style == .pane, !capture.isScannerCapture {
                         presetsSection
                     }
                     recordSections
@@ -126,7 +156,13 @@ struct GalleryPreviewPanel: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
 
-                if !blends.isEmpty {
+                if style == .inspector {
+                    Divider()
+
+                    outputSection
+                        .padding(.horizontal, 14)
+                        .padding(.top, 16)
+                } else if !blends.isEmpty {
                     Divider()
 
                     blendedClipsSection
@@ -268,10 +304,12 @@ struct GalleryPreviewPanel: View {
         }
     }
 
-    /// The editor, straight from here, on the page named: a full-screen cover
+    /// The editor, straight from here, on the page named: the host's own
+    /// place for it when it has one (the item view), else a full-screen cover
     /// on iOS/iPadOS, a window on the Mac (fronted if it is already open —
     /// the page request moves it).
     private func openEditor(page: RailTab) {
+        if let onEdit { onEdit(page); return }
         guard let request = model.stageEditor(for: capture, page: page) else { return }
         #if os(macOS)
         request.open(with: openWindow)
@@ -555,6 +593,35 @@ struct GalleryPreviewPanel: View {
         )
     }
 
+    // MARK: Output (inspector only)
+
+    /// What comes of the project, at the foot of the inspector: New clip (an
+    /// interval or video project — a Photo capture is one photo, nothing to
+    /// blend), Share project (the .lapse archive the pane's Share footer
+    /// button makes), and the blended-clips list under them. Export lands
+    /// here too when there is one to offer (Steven, 2026-09-13).
+    private var outputSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LLSectionHeader("Output")
+            HStack(spacing: 8) {
+                if !capture.isPhotoCapture {
+                    actionButton("New clip", icon: "plus.circle") {
+                        onNewClip()
+                    }
+                }
+                actionButton(isExporting ? "Sharing…" : "Share project",
+                             icon: "square.and.arrow.up") {
+                    exportShare()
+                }
+                .disabled(isExporting)
+            }
+            if !blends.isEmpty {
+                blendedClipsSection
+                    .padding(.top, 4)
+            }
+        }
+    }
+
     // MARK: Footer
 
     private var footerRow: some View {
@@ -563,9 +630,11 @@ struct GalleryPreviewPanel: View {
                 renameText = capture.displayTitle
                 isRenaming = true
             }
-            Divider().frame(height: 20)
-            footerButton("Share", icon: "square.and.arrow.up") {
-                exportShare()
+            if style == .pane {
+                Divider().frame(height: 20)
+                footerButton("Share", icon: "square.and.arrow.up") {
+                    exportShare()
+                }
             }
             #if os(macOS)
             Divider().frame(height: 20)

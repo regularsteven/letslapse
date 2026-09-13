@@ -44,6 +44,9 @@ struct VideoEditorView: View {
 
     let captureID: UUID
     let url: URL
+    /// The embedding host's exit — see `PhotoViewerView.exitRequest`.
+    var exitRequest: EditorExitRequest? = nil
+    var onExit: (() -> Void)? = nil
 
     /// Live edit state. Seeded from the project on appear and written back —
     /// debounced — as the controls move, exactly like the photo editor.
@@ -313,6 +316,10 @@ struct VideoEditorView: View {
         // The Gallery panel's Text button asking for a page — `onReceive` so a
         // Mac window that was merely fronted hears it too (see the photo editor).
         .onReceive(model.$requestedEditorPage) { consumePageRequest($0) }
+        .onChange(of: exitRequest) { _, request in
+            guard let request else { return }
+            if request.offersPresetSave { requestExit() } else { finishExit() }
+        }
         .onDisappear {
             player.pause()
             if let timeObserver { player.removeTimeObserver(timeObserver) }
@@ -1331,7 +1338,7 @@ struct VideoEditorView: View {
         // The library write is asynchronous now; drain it before the editor
         // goes away.
         model.flushLibraryPersists()
-        dismiss()
+        if let onExit { onExit() } else { dismiss() }
     }
 
     private func persist() {

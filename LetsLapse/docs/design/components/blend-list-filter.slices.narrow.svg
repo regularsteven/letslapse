@@ -1,8 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 74" width="272" height="74" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 74" width="302" height="74" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>Component · Blend list filter · slices · narrow</title>
   <desc>Blends unticked, Slices/Image/Video ticked. See blend-list-filter.all.wide.svg and .all.narrow.svg for the full mirror notes.</desc>
-<!-- LetsLapse design component · blend list filter · slices · narrow (272pt). Same contract as all.narrow — see components/README.md. -->
+<!-- LetsLapse design component · blend list filter · slices · narrow (302pt). Same contract as all.narrow — see components/README.md. -->
   <defs><filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter></defs>
+  
+<!-- 2026-09-13 (later): narrow is 302 pt now — the Gallery pane went 300 → 330 with the item view, so its
+     content column is 302; there is no 272 pt column left anywhere (the iPad pane takes the same code). -->
   <style>text{font-family:inherit}.sb{font-weight:600}</style>
   <g id="blend-list-filter" data-state="slices" data-width="narrow">
     <g data-chip="blends" data-ticked="false">

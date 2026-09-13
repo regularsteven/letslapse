@@ -1179,6 +1179,86 @@ masked-recipe pass and moving both callers together.
 
 ---
 
+### Gallery item view (macOS) — the editor as a mode of the Gallery, not a window
+
+**Raised:** 2026-09-13 · **code shipped the same day, signed off by Steven
+("feel great"), design mirrors DRAWN the same evening — uncommitted** ·
+**Size:** what is left is decisions, seams:
+`App/GalleryView.swift` (`wideLayout`, `itemHeader`, the item-view actions),
+`App/GalleryItemView.swift` (`GalleryFocus`, `GalleryItemEditor`,
+`GalleryFilmstrip`), `App/GalleryPreviewPanel.swift` (`.inspector` style,
+`outputSection`), `App/EditorLaunch.swift` (`EditorExitRequest`),
+`PhotoViewerView` / `VideoEditorView` (`exitRequest` / `onExit`)
+
+Steven's brief: on the Mac, Edit / Text / Shapes opened a second window, which
+felt like the wrong model. Built code-first so it could be felt before it was
+drawn. What the code does now:
+
+- **Open, ⏎, a double-click, Edit, Text, Shapes and the tile menu's Edit** all
+  put the project in `GalleryFocus` (owned by ContentView beside
+  `galleryPath`, so a tab round-trip lands back on it). The same three-column
+  `HStack` changes mode: the left column swaps the Library for the project's
+  **inspector** (the preview panel in its `.inspector` dress — title/date,
+  TAGS, INFO, METADATA, the Rename/Finder/Delete footer, then an **OUTPUT**
+  group: New clip, Share project, the blended-clips list; no thumbnail, no
+  action grid, no PRESETS), the grid and its pane swap for the editor with
+  its own 330pt rail, and a **filmstrip** of the grid's current result set
+  runs under everything at full width.
+- **Widths:** pane 300 → **330** so the right divider never moves; the left
+  column animates 200 → 330 on the way in (`GalleryColumns` — set `sidebar`
+  to 330 to try the version where nothing moves). ▤ collapses the inspector
+  in the item view (shared `gallery.showSidebar`).
+- **Keys:** grid — ⏎ opens the selected tile; item view — ← → walk the
+  filmstrip, ⎋ leaves. Arrows are now read by key code and ignore the
+  `.numericPad`/`.function` flags a real keyboard puts on them (the grid's
+  arrows were checking `flags.isEmpty`, which a physical arrow key never
+  satisfies).
+- **Exit path:** the host never tears the editor down under it. Back sends
+  `EditorExitRequest(offersPresetSave: true)` (the Back button's preset
+  offer applies); a filmstrip move sends `offersPresetSave: false`; both run
+  the editor's own `finishExit` (persist, overlays, library flush) and then
+  `onExit` — where the Gallery goes back or on to the next project. The
+  page carries over on a move (Masks → Editor for a video).
+- Verified on the Debug build over a scratch library (`LL_TAB=gallery
+  LL_ITEM=latest`, the run skill's `hid` keys and clicks): photo → interval
+  (timeline strip, Frames tab) → video (AVKit player, Editor/Text) in one
+  window; ▤; Projects-and-back; ⏎ / ← → / ⎋.
+
+**Owed / open:**
+
+- ~~**Design mirrors.**~~ DONE 2026-09-13 evening: `macOS/gallery.item.svg`,
+  `.item.interval.svg` (inspector at OUTPUT), `.item.video.svg`,
+  `.item.collapsed.svg`; `components/gallery-filmstrip.<focus>.svg` and
+  `output-actions.<state>.narrow.svg`; the `narrow` component set widened
+  272 → 302 in place (no 272 column exists any more) and the six
+  `gallery.*.svg` re-based to the 330 pane at 1310×800. Two pre-existing
+  mismatches the captures showed, noted in `macOS/INDEX.md` and not fixed:
+  tag chips are ~31 pt in the app vs 33 drawn; the floating tab bar is 395 pt
+  wide in the app vs 358 drawn everywhere.
+- **Decide the left width.** 200 → 330 slides the divider on entry; making the
+  Library 330 too keeps every divider still (one constant) at the cost of
+  130pt of grid.
+- **Decide what "Open" means now.** Open, ⏎ and double-click all enter the
+  item view on the Editor page, the same as Edit — the panel's full-width
+  Open button is redundant with Edit on the Mac. The project screen
+  (`ProjectDetailView`: source clips, rotate, DNG archive, review photos,
+  notes) is no longer reachable from the Gallery on the Mac, only from the
+  Projects tab and `requestedProjectDetailID`.
+- **Export.** Steven plans an Export entry in OUTPUT; there is no graded-still
+  export on the Mac yet (see "Graded still export"), so none is drawn.
+- **iPadOS.** Regular width takes the same `HStack`; the item view is gated to
+  macOS (`gridEditHandler` / `paneEditHandler` return nil) because the iOS
+  editors carry cover chrome (`preferredColorScheme(.dark)`, the disc back
+  button) a column cannot host. Same argument applies there; design once.
+- **Smaller:** the inspector keeps its scroll position across a filmstrip
+  move (a Lightroom habit; may want a reset to top); the header repeats the
+  project's name that the window title also carries; a tab round-trip
+  rebuilds the editor (the video restarts) — the tab's view is rebuilt on
+  every switch, as before; the `WindowGroup(for:)` editor scenes remain and
+  still serve the Projects tab's hero Edit pill.
+
+---
+
 ### Gallery redesign — SVG design files
 
 **Raised:** 2026-09-06 · **macOS DONE 2026-09-07** · **Size:** small (what is

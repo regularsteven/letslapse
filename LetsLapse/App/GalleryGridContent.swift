@@ -23,6 +23,10 @@ struct GalleryGridContent: View {
     /// view and clears the request.
     @Binding var scrollTarget: UUID?
     var onOpen: (UUID) -> Void    // double-click or "Open" action
+    /// The tile menu's Edit, when the host has a place of its own for the
+    /// editor (the Gallery's item view on the Mac); nil opens the editor the
+    /// way the menu always did — a window on the Mac, a cover on iOS.
+    var onEdit: ((UUID) -> Void)? = nil
 
     // Shared zoom-level key — pinch on either grid keeps them in sync.
     @AppStorage("gallery.columnCount") private var storedColumnCount = 3
@@ -214,6 +218,7 @@ struct GalleryGridContent: View {
             // The editor itself — the same door as the preview panel's Edit
             // button (EditorLaunch.swift); this used to start the New clip
             // flow instead.
+            if let onEdit { onEdit(capture.id); return }
             guard let request = model.stageEditor(for: capture) else { return }
             #if os(macOS)
             request.open(with: openWindow)
