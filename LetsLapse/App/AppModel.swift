@@ -1269,6 +1269,7 @@ final class AppModel: ObservableObject {
         // Minted on the first launch of every install and never changed;
         // read here so it exists before any record could name it (W2).
         LLog("device id \(DeviceIdentity.id.uuidString)")
+        acquireLibraryLock()
         loadLibrary()
         // Phase 4: folders with no record — a killed install, a project
         // written straight into the folder — join the library from their
@@ -1278,6 +1279,8 @@ final class AppModel: ObservableObject {
         persister.onFailure = { [weak self] error in
             self?.errorMessage = error.localizedDescription
         }
+        persister.onManifestWritten = { [weak self] date in self?.noteManifestWritten(at: date) }
+        manifestSeenModifiedAt = (try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         assetStore.onChange = { [weak self] _ in self?.metadataRevision += 1 }
         assetStore.index = persister.index
         assetStore.shouldPause = { [weak self] in
@@ -8568,6 +8571,17 @@ final class AppModel: ObservableObject {
     }
     @Published private(set) var libraryLoadFailure: LibraryLoadFailure?
 
+    /// Set when another instance holds `Projects/.lock` (Phase 4, macOS):
+    /// the library is shown but every write is refused until relaunch.
+    struct LibraryReadOnly: Equatable {
+        var holder: LibraryLock.Holder
+    }
+    @Published private(set) var libraryReadOnly: LibraryReadOnly?
+    private var lockHeartbeat: Timer?
+    /// `library.json`'s modification date as this instance last wrote or
+    /// read it — what the foreground check compares against.
+    private var manifestSeenModifiedAt: Date?
+
     /// Synchronous: the manifest is on disk when this returns, and the size
     /// and existence caches are dropped first. Every path that adds,
     /// converts, rotates or deletes a project's files ends here — it is
@@ -10232,6 +10246,60 @@ final class AppModel: ObservableObject {
     /// or out of the process, so quitting right after a gesture can't lose it.
     func flushLibraryPersists() {
         persister.flush()
+    }
+
+    // MARK: - The library lock (Phase 4, macOS)
+
+    /// Takes `Projects/.lock`, or opens read-only when a live instance holds
+    /// it. macOS only: iOS runs one instance of the app.
+    private func acquireLibraryLock() {
+        #if os(macOS)
+        switch LibraryLock.acquire(projectsRoot: projectsRootURL) {
+        case .acquired:
+            lockHeartbeat = Timer.scheduledTimer(withTimeInterval: LibraryLock.heartbeatInterval, repeats: true) { [projectsRootURL] _ in
+                LibraryLock.heartbeat(projectsRoot: projectsRootURL)
+            }
+            LLog("library lock: taken (pid \(ProcessInfo.processInfo.processIdentifier))")
+        case .heldBy(let holder):
+            let why = "Another LetsLapse (pid \(holder.pid), \(holder.build)) has this library open; this one is read-only."
+            libraryReadOnly = LibraryReadOnly(holder: holder)
+            persister.refuseWrites = why
+            LLog("library lock: held by pid \(holder.pid) on \(holder.host) since \(FrameTimestamps.string(from: holder.takenAt)) — read-only")
+        }
+        #endif
+    }
+
+    /// Lets the lock go — at termination, after the last persist.
+    func releaseLibraryLock() {
+        #if os(macOS)
+        lockHeartbeat?.invalidate()
+        lockHeartbeat = nil
+        guard libraryReadOnly == nil else { return }
+        LibraryLock.release(projectsRoot: projectsRootURL)
+        #endif
+    }
+
+    /// On return to the foreground: has `library.json` changed under this
+    /// instance? With the lock in place it should never have, so a change
+    /// is worth a sentence — another tool, a hand edit, or a stale-lock
+    /// takeover — rather than a silent overwrite by the next persist.
+    func checkManifestUnchangedSinceLastSeen() {
+        guard libraryLoadFailure == nil, libraryReadOnly == nil else { return }
+        let onDisk = (try? URL(fileURLWithPath: manifestURL.path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        guard let seen = manifestSeenModifiedAt, let onDisk else {
+            manifestSeenModifiedAt = onDisk
+            return
+        }
+        if abs(onDisk.timeIntervalSince(seen)) > 0.001 {
+            LLog("library: library.json changed on disk since it was last written here (\(FrameTimestamps.string(from: seen)) → \(FrameTimestamps.string(from: onDisk)))")
+            errorMessage = "The project library was changed by something else while LetsLapse was in the background. Relaunch to pick up those changes; saving now would overwrite them."
+            manifestSeenModifiedAt = onDisk
+        }
+    }
+
+    /// The persister tells the model what it wrote, off the main actor.
+    nonisolated func noteManifestWritten(at date: Date?) {
+        Task { @MainActor in self.manifestSeenModifiedAt = date }
     }
 
     /// One of a capture's assets as the viewer shows it, ready to leave the app:

@@ -56,6 +56,10 @@ final class LibraryPersister: @unchecked Sendable {
     /// every slider tick.
     var onFailure: (@MainActor (Error) -> Void)?
 
+    /// Called on the queue after every manifest write with the file's new
+    /// modification date — what the foreground check compares against.
+    var onManifestWritten: (@Sendable (Date?) -> Void)?
+
     /// The per-project document writer (Phase 2). Used only on `queue`.
     private let documents: ProjectDocumentWriter
 
@@ -167,6 +171,7 @@ final class LibraryPersister: @unchecked Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(manifest)
         try data.write(to: url, options: .atomic)
+        onManifestWritten?((try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate)
         // The documents follow the manifest. A document that fails to
         // write is logged by the writer and tried again at the next
         // persist; it does not fail the persist, whose file is the truth.

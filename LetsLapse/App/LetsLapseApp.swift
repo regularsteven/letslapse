@@ -120,8 +120,11 @@ struct LetsLapseApp: App {
             .onAppear {
                 LetsLapseAppDelegate.handler = { model.openArchive(at: $0) }
                 // The last queued manifest write lands before the process
-                // goes (W6).
-                LetsLapseAppDelegate.willTerminate = { model.flushLibraryPersists() }
+                // goes (W6), and the lock goes with it (Phase 4).
+                LetsLapseAppDelegate.willTerminate = {
+                    model.flushLibraryPersists()
+                    model.releaseLibraryLock()
+                }
             }
             #endif
     }
@@ -159,6 +162,9 @@ struct LetsLapseApp: App {
                     // Backgrounded is as far as iOS lets an app see its own
                     // end coming: the queued manifest write lands now (W6).
                     if phase == .background { model.flushLibraryPersists() }
+                    // Back in front: did anything else write the manifest
+                    // meanwhile? (Phase 4)
+                    if phase == .active { model.checkManifestUnchangedSinceLastSeen() }
                 }
         }
         #endif
@@ -300,10 +306,17 @@ struct ContentView: View {
 
             // W7: the library on disk could not be read and was set aside.
             // Over every tab — until relaunch when nothing could be rebuilt,
-            // or as the account of the rebuild (Phase 4) when it could.
+            // or as the account of the rebuild (Phase 4) when it could. The
+            // same banner says when another instance holds the lock.
             if let failure = model.libraryLoadFailure {
                 VStack {
-                    LibraryUnreadableBanner(failure: failure)
+                    LibraryNoticeBanner(failure: failure)
+                    Spacer()
+                }
+                .zIndex(50)
+            } else if let readOnly = model.libraryReadOnly {
+                VStack {
+                    LibraryNoticeBanner(readOnly: readOnly)
                     Spacer()
                 }
                 .zIndex(50)
@@ -1604,12 +1617,31 @@ enum CreateCameraSetting {
 }
 
 
-/// The W7 banner: the manifest could not be decoded, it was set aside, and
-/// nothing is being saved. Named the file, because the file is the only copy
-/// of every edit and the person has to know where it went.
+/// The library banner: one component, three stories. W7's — the manifest
+/// could not be decoded, it was set aside, nothing is being saved (named
+/// the file, because the file is the only copy of every edit); Phase 4's —
+/// the manifest was rebuilt from the project folders and the set-aside file
+/// is kept until the person has checked; and the lock's — another instance
+/// has the library open and this one is read-only.
 /// (SVG mirror owed after sign-off — docs/design/README.md.)
-struct LibraryUnreadableBanner: View {
-    var failure: AppModel.LibraryLoadFailure
+struct LibraryNoticeBanner: View {
+    var title: String
+    var detail: String
+
+    init(failure: AppModel.LibraryLoadFailure) {
+        if let rebuilt = failure.rebuiltFromDocuments {
+            title = "Library rebuilt from \(rebuilt) project folders"
+            detail = "\(failure.reason) The manifest was set aside as \(failure.setAsideName) in the Projects folder and the library was rebuilt from each project's own record\(failure.collectionsRecovered ? "" : " — the collections could not be recovered"). Check that nothing is missing before deleting the set-aside file."
+        } else {
+            title = "Library not loaded — nothing is being saved"
+            detail = "\(failure.reason) The manifest was set aside as \(failure.setAsideName) in the Projects folder; every grade, tag and blend record is still in it. Quit, repair or restore it, and relaunch."
+        }
+    }
+
+    init(readOnly: AppModel.LibraryReadOnly) {
+        title = "Library open read-only"
+        detail = "Another LetsLapse (pid \(readOnly.holder.pid), version \(readOnly.holder.build)) has this library open, so nothing done here will be saved. Quit the other copy and relaunch this one to edit."
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -1617,24 +1649,12 @@ struct LibraryUnreadableBanner: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(LL.amber)
             VStack(alignment: .leading, spacing: 3) {
-                if let rebuilt = failure.rebuiltFromDocuments {
-                    // Phase 4: the rebuild from the project folders worked
-                    // and the library is live; the set-aside file is kept
-                    // until the person has checked nothing is missing.
-                    Text("Library rebuilt from \(rebuilt) project folders")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("\(failure.reason) The manifest was set aside as \(failure.setAsideName) in the Projects folder and the library was rebuilt from each project's own record\(failure.collectionsRecovered ? "" : " — the collections could not be recovered"). Check that nothing is missing before deleting the set-aside file.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("Library not loaded — nothing is being saved")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("\(failure.reason) The manifest was set aside as \(failure.setAsideName) in the Projects folder; every grade, tag and blend record is still in it. Quit, repair or restore it, and relaunch.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(detail)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
