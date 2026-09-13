@@ -18,7 +18,7 @@ struct GalleryGridContent: View {
     var captures: [AppModel.CaptureProject]
     var columnCount: Int
     var timelineMode: Bool
-    @Binding var selectedID: UUID?
+    @Binding var selection: GallerySelection
     var onOpen: (UUID) -> Void    // double-click or "Open" action
 
     // Shared zoom-level key — pinch on either grid keeps them in sync.
@@ -35,8 +35,10 @@ struct GalleryGridContent: View {
             } else if timelineMode {
                 TimelineGalleryGrid(
                     captures: captures,
-                    selectedID: $selectedID,
-                    onOpen: onOpen
+                    selection: $selection,
+                    onTap: { capture, order in tap(capture, order: order) },
+                    onOpen: onOpen,
+                    menu: { capture in tileContextMenu(for: capture) }
                 )
             } else {
                 standardGrid
@@ -58,8 +60,9 @@ struct GalleryGridContent: View {
                 ForEach(captures) { capture in
                     GalleryTile(
                         capture: capture,
-                        isSelected: selectedID == capture.id,
-                        onTap:       { selectedID = capture.id },
+                        isSelected: selection.ids.contains(capture.id),
+                        showsCircle: selection.showsCircles,
+                        onTap:       { tap(capture, order: captures.map(\.id)) },
                         onOpen:      { onOpen(capture.id) }
                     )
                     .contextMenu { tileContextMenu(for: capture) }
@@ -87,6 +90,32 @@ struct GalleryGridContent: View {
             repeating: GridItem(.flexible(), spacing: 12),
             count: max(2, columnCount)
         )
+    }
+
+    // MARK: Selection
+
+    /// A tap on a tile. On the Mac the modifiers decide first — ⌘ toggles the
+    /// tile, ⇧ selects the run from the anchor to it in `order` (the grid's
+    /// own order, so a timeline run follows its day groups). In selection
+    /// mode a tap toggles; otherwise it selects this tile alone, which is
+    /// what raises the preview panel.
+    private func tap(_ capture: AppModel.CaptureProject, order: [UUID]) {
+        #if os(macOS)
+        let flags = NSEvent.modifierFlags
+        if flags.contains(.command) {
+            selection.toggle(capture.id)
+            return
+        }
+        if flags.contains(.shift) {
+            selection.extend(to: capture.id, in: order)
+            return
+        }
+        #endif
+        if selection.isSelecting {
+            selection.toggle(capture.id)
+        } else {
+            selection.select(only: capture.id)
+        }
     }
 
     // MARK: Empty state
@@ -127,6 +156,31 @@ struct GalleryGridContent: View {
 
         Divider()
 
+        // Selection (2026-09-13): Select Multiple puts the empty circle on
+        // every tile — tap, and tap, and tap — and Select All ticks the whole
+        // filtered grid; either way the header becomes the selection row.
+        if selection.isSelecting {
+            Button {
+                selection.clear()
+            } label: {
+                Label("Done Selecting", systemImage: "checkmark.circle")
+            }
+        } else {
+            Button {
+                selection.isSelecting = true
+            } label: {
+                Label("Select Multiple", systemImage: "checkmark.circle")
+            }
+        }
+        Button {
+            selection.selectAll(captures.map(\.id))
+        } label: {
+            Label("Select All", systemImage: "checkmark.circle.fill")
+        }
+        .disabled(selection.ids.count == captures.count)
+
+        Divider()
+
         Button {
             // The editor itself — the same door as the preview panel's Edit
             // button (EditorLaunch.swift); this used to start the New clip
@@ -156,7 +210,7 @@ struct GalleryGridContent: View {
         Button(role: .destructive) {
             do {
                 try model.deleteCapture(capture)
-                if selectedID == capture.id { selectedID = nil }
+                selection.remove(capture.id)
             } catch {}
         } label: {
             Label("Delete\u{2026}", systemImage: "trash")
@@ -168,11 +222,14 @@ struct GalleryGridContent: View {
 
 /// The Gallery's timeline mode: captures grouped by shoot day, with a
 /// month-scrubber rail on the trailing edge.
-private struct TimelineGalleryGrid: View {
+private struct TimelineGalleryGrid<Menu: View>: View {
     @EnvironmentObject var model: AppModel
     var captures: [AppModel.CaptureProject]
-    @Binding var selectedID: UUID?
+    @Binding var selection: GallerySelection
+    /// The tap, with the timeline's own order for a ⇧-click run.
+    var onTap: (AppModel.CaptureProject, [UUID]) -> Void
     var onOpen: (UUID) -> Void
+    @ViewBuilder var menu: (AppModel.CaptureProject) -> Menu
 
     @State private var scrollProxy: ScrollViewProxy?
 
@@ -186,6 +243,9 @@ private struct TimelineGalleryGrid: View {
             (day: day, captures: dict[day]!.sorted { $0.createdAt > $1.createdAt })
         }
     }
+
+    /// The tiles as drawn, top to bottom — what a ⇧-click run walks.
+    private var order: [UUID] { groups.flatMap { $0.captures.map(\.id) } }
 
     // Unique months present, for the scrubber.
     private var months: [Date] {
@@ -208,10 +268,12 @@ private struct TimelineGalleryGrid: View {
                                     ForEach(group.captures) { capture in
                                         GalleryTile(
                                             capture: capture,
-                                            isSelected: selectedID == capture.id,
-                                            onTap:  { selectedID = capture.id },
+                                            isSelected: selection.ids.contains(capture.id),
+                                            showsCircle: selection.showsCircles,
+                                            onTap:  { onTap(capture, order) },
                                             onOpen: { onOpen(capture.id) }
                                         )
+                                        .contextMenu { menu(capture) }
                                     }
                                 }
                             } header: {

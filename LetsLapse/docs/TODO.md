@@ -11,6 +11,47 @@ live inline.
 
 ## Open
 
+### Gallery multi-selection and batch mode — the SVG mirrors, and a hand check of the Mac's modifier clicks
+
+**Raised:** 2026-09-13 (shipped code-first the same day) · **Size:** small ·
+seams: `App/GallerySelection.swift`, `App/GalleryBatchPanel.swift`,
+`GalleryView.selectionHeader`, `GalleryGridContent.tap(_:order:)`,
+`GalleryTile.selectionCircle`
+
+The Gallery selects more than one project now: ⌘-click / ⇧-click / ⌘A on the
+Mac, the tile menu's **Select Multiple** / **Select All** everywhere (a long
+press on iOS, a right-click on the Mac). More than one selected is **batch
+mode** — the header becomes the selection row (Done · "N selected" · Select
+All / Deselect All · on the phone the Edit glyph that raises the batch sheet)
+and the pane becomes `GalleryBatchPanel`: tags (union, solid on all / mixed
+"n/N" on some; add to all, remove from all), presets (the editor's tiles,
+previewed on the first selected, applied to all, the confirmation counting
+the Edited ones) and the IPTC record ("Mixed" placeholders; a commit writes
+all, a revert reverts all). Verified on the iPhone 17 Pro and iPad Pro 11"
+simulators end to end (Select Multiple → taps → batch sheet → tag added to
+both, Natural on both with a crop and a level kept, rating 4 and a title on
+both, "1 of the 2 … carries manual adjustments" → Replace → Matte on both;
+Select All, Deselect All, Done); the Mac's batch header, ticks and panel from
+`LL_SELECT=all` over a scratch library.
+
+Owed, in order:
+
+1. **Steven's verification on his Mac** of the three modifier paths —
+   ⌘-click toggling, ⇧-click selecting the run from the anchor, ⌘A selecting
+   the filtered grid (and stepping aside while the search field has focus).
+   They are plain `NSEvent.modifierFlags` reads inside the tile's tap and a
+   local key monitor scoped to the Gallery's window; none could be driven
+   from here (two same-bundle instances, and the screen-control approval
+   was not answered).
+2. **The SVG mirrors, after that** (Steven, 2026-09-13: code first, then the
+   design files): the selection header on `macOS/gallery.svg`'s canvas and
+   `iOS/gallery.portrait.svg`'s, the tiles' circles and ticks, the tile menu
+   with its two new entries, and the batch panel — Mac pane and iPhone sheet
+   — with a mixed tag row, the Mixed pill and a Mixed field. INDEX rows for
+   the Gallery mirrors are ⚠️ until then.
+3. Batch **delete** and batch **New clip** were not asked for and are not
+   there; the tile menu's Open / Edit / Delete still act on the one tile.
+
 ### Post-crop vignette centring — the still and blend paths centre the vignette on the whole frame
 
 **Raised:** 2026-09-12 (editor-controls redesign, stage D2) · known

@@ -439,6 +439,13 @@ struct TagChipFlowLayout: Layout {
         }
         total.width = max(total.width, rowWidth)
         total.height += rowHeight
+        // Claim the whole proposed width, not the widest row: reporting the
+        // row's width has the parent place the flow in a frame a fraction
+        // narrower than the width the rows were wrapped against, and a row
+        // that just fitted here wraps again in `placeSubviews` — the Gallery
+        // batch panel's "+ Add tag" chip landed on top of the PRESETS row
+        // that way (2026-09-13). One width for both passes, one wrap.
+        if width.isFinite { total.width = width }
         return total
     }
 

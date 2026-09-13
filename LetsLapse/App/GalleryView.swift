@@ -27,10 +27,17 @@ struct GalleryView: View {
     @State private var query       = SceneQuery.empty
     @State private var filter      = CaptureFilter.all
     @State private var shapeSelection = GalleryView.initialShapeSelection  // sidebar Shapes rows
-    @State private var selectedID: UUID?          // single-click → preview panel
+    /// One tile → the preview panel; more → batch mode (GallerySelection).
+    @State private var selection = GallerySelection()
     @State private var showSidebarSheet  = false  // iPhone/compact only
     @State private var showPreviewSheet  = false  // iPhone/compact only
+    @State private var showBatchSheet    = false  // iPhone/compact only
     @State private var deleteFailure: String?
+    #if os(macOS)
+    /// ⌘A — see `installSelectAllShortcut`.
+    @State private var selectAllMonitor: Any?
+    @State private var hostWindow: NSWindow?
+    #endif
 
     @Environment(\.horizontalSizeClass) private var hSizeClass
     #if os(iOS)
@@ -76,18 +83,28 @@ struct GalleryView: View {
         ProjectSort(rawValue: sortKeyRaw) ?? .capture
     }
 
-    /// `LL_SELECT=latest|<capture-uuid>` — selects that tile on appear, which
-    /// raises the preview panel (the iPhone's sheet), for screenshots: the
-    /// panel is otherwise only reachable by a click no headless run can make.
-    /// `latest` is the first tile in the current sort. Pair with
-    /// `LL_TAB=gallery`; `LL_PANEL=presets` opens the panel's Presets row.
+    /// `LL_SELECT=latest|all|multiple|<capture-uuid>[,…]` — selects on appear,
+    /// for screenshots: the preview panel is otherwise only reachable by a
+    /// click no headless run can make. `latest` is the first tile in the
+    /// current sort; `all` selects every visible tile (batch mode, as ⌘A
+    /// does); `multiple` enters selection mode with nothing selected (the
+    /// tile menu's Select Multiple); a UUID selects that tile, and a comma
+    /// list of them a batch. Pair with `LL_TAB=gallery`; `LL_PANEL=presets`
+    /// opens the panel's Presets row.
     private func consumeSelectHook() {
         #if DEBUG
-        guard selectedID == nil,
+        guard selection.isEmpty, !selection.isSelecting,
               let raw = ProcessInfo.processInfo.environment["LL_SELECT"] else { return }
-        let target = raw == "latest" ? sortedCaptures.first?.id : UUID(uuidString: raw)
-        guard let target, model.libraryCaptures.contains(where: { $0.id == target }) else { return }
-        selectedID = target
+        let visible = sortedCaptures.map(\.id)
+        for token in raw.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) {
+            switch token {
+            case "all": selection.selectAll(visible)
+            case "multiple": selection.isSelecting = true
+            case "latest": if let id = visible.first { selection.toggle(id) }
+            default:
+                if let id = UUID(uuidString: token), visible.contains(id) { selection.toggle(id) }
+            }
+        }
         #endif
     }
 
@@ -122,6 +139,16 @@ struct GalleryView: View {
             // The Shapes rows read each project's `shapes.json`; re-check on every visit.
             .onAppear   { model.refreshShapeSummaries() }
             .onAppear   { consumeSelectHook() }
+            // A filter or search that hides a selected tile drops it from the
+            // selection, so "N selected" only ever counts what is on screen.
+            .onChange(of: sortedCaptures.map(\.id)) { _, visible in
+                selection.keepOnly(visible)
+            }
+            #if os(macOS)
+            .background(WindowReader(window: $hostWindow))
+            .onAppear { installSelectAllShortcut() }
+            .onDisappear { removeSelectAllShortcut() }
+            #endif
         }
         // iPhone/compact: sidebar sheet
         .sheet(isPresented: $showSidebarSheet) {
@@ -140,9 +167,20 @@ struct GalleryView: View {
                 }
             }
         }
+        // iPhone/compact: the batch panel, raised by the selection row's Edit
+        .sheet(isPresented: $showBatchSheet) {
+            NavigationStack {
+                GalleryBatchPanel(captures: batchCaptures)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { showBatchSheet = false }
+                        }
+                    }
+            }
+        }
         // iPhone/compact: preview sheet
         .sheet(isPresented: $showPreviewSheet) {
-            if let id = selectedID,
+            if let id = selection.single,
                let capture = model.libraryCaptures.first(where: { $0.id == id }) {
                 NavigationStack {
                     GalleryPreviewPanel(
@@ -187,13 +225,19 @@ struct GalleryView: View {
                         captures:     sortedCaptures,
                         columnCount:  columnCount,
                         timelineMode: timelineMode,
-                        selectedID:   $selectedID,
+                        selection:    $selection,
                         onOpen: { path.append($0) }
                     )
                 }
 
-                if let id = selectedID,
-                   let capture = model.libraryCaptures.first(where: { $0.id == id }) {
+                // The pane: the batch panel over more than one project, the
+                // preview panel over exactly one, nothing over none.
+                if selection.isBatch {
+                    Divider()
+                    GalleryBatchPanel(captures: batchCaptures)
+                        .frame(width: 300)
+                } else if let id = selection.single,
+                          let capture = model.libraryCaptures.first(where: { $0.id == id }) {
                     Divider()
                     GalleryPreviewPanel(
                         capture: capture,
@@ -213,15 +257,27 @@ struct GalleryView: View {
                     captures:     sortedCaptures,
                     columnCount:  columnCount,
                     timelineMode: timelineMode,
-                    selectedID:   $selectedID,
+                    selection:    $selection,
                     onOpen: { path.append($0) }
                 )
             }
-            // On compact devices, single-click opens the preview sheet.
-            .onChange(of: selectedID) { id in
-                if id != nil { showPreviewSheet = true }
+            // On compact devices a plain tap opens the preview sheet; in
+            // selection mode taps toggle and the sheet stays down. Closing
+            // the sheet clears the selection, so the same tile can be tapped
+            // straight back open.
+            .onChange(of: selection) { _, next in
+                if !next.isSelecting, !next.isBatch, next.single != nil { showPreviewSheet = true }
+            }
+            .onChange(of: showPreviewSheet) { _, shown in
+                if !shown, !selection.isSelecting, !selection.isBatch { selection.deselectAll() }
             }
         }
+    }
+
+    /// The selected projects in the grid's order — what the batch panel
+    /// edits and what its preset tiles are previewed on (the first).
+    private var batchCaptures: [AppModel.CaptureProject] {
+        sortedCaptures.filter { selection.ids.contains($0.id) }
     }
 
     // MARK: Header
@@ -234,11 +290,69 @@ struct GalleryView: View {
     /// grid included. iPhone portrait gets the compact row instead.
     @ViewBuilder
     private var galleryHeader: some View {
-        if isPhonePortrait {
+        if selection.showsSelectionHeader {
+            selectionHeader
+        } else if isPhonePortrait {
             compactHeader
         } else {
             fullHeader
         }
+    }
+
+    // MARK: Selection header
+
+    /// The row that stands in for the header while the Gallery is selecting
+    /// (2026-09-13): Done leading, "N selected" as the title, Select All /
+    /// Deselect All trailing — and on the phone, where there is no pane, the
+    /// Edit button that raises the batch sheet. Search, sort, zoom and
+    /// Timeline are not here on purpose: a selection is a set of tiles in
+    /// one order, and re-sorting or re-filtering under it would change what
+    /// "N selected" means.
+    private var selectionHeader: some View {
+        let all = sortedCaptures.map(\.id)
+        let allSelected = !all.isEmpty && selection.ids.count == all.count
+        return HStack(spacing: 10) {
+            Button("Done") {
+                withAnimation(.easeInOut(duration: 0.2)) { selection.clear() }
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(LL.accent)
+
+            Spacer(minLength: 0)
+
+            Text(selection.ids.isEmpty ? "Select projects" : "\(selection.ids.count) selected")
+                .font(.system(size: isPhonePortrait ? 17 : 20, weight: .bold))
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            Button(allSelected ? "Deselect All" : "Select All") {
+                if allSelected { selection.deselectAll() } else { selection.selectAll(all) }
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(LL.accent)
+            .disabled(all.isEmpty)
+
+            if !isWide {
+                Button {
+                    showBatchSheet = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(selection.isBatch ? LL.accent : .secondary)
+                        .frame(width: 32, height: 32)
+                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .disabled(!selection.isBatch)
+                .accessibilityLabel("Edit selected projects")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, isPhonePortrait ? 12 : 10)
+        .frame(minHeight: isPhonePortrait ? 0 : 52)
     }
 
     /// iPhone portrait: the tab's large title, with the three controls that
@@ -444,11 +558,40 @@ struct GalleryView: View {
     private func delete(_ capture: AppModel.CaptureProject) {
         do {
             try withAnimation { try model.deleteCapture(capture) }
-            if selectedID == capture.id { selectedID = nil }
+            selection.remove(capture.id)
         } catch {
             deleteFailure = error.localizedDescription
         }
     }
+
+    #if os(macOS)
+    /// ⌘A selects every tile the sidebar and the search field leave visible.
+    /// A local key monitor rather than a `keyboardShortcut` button, because
+    /// that would take ⌘A away from a focused text field (the search field,
+    /// a metadata row); this steps aside while the first responder is text,
+    /// and answers only in the window the Gallery is in — an editor window's
+    /// ⌘A is not this one.
+    private func installSelectAllShortcut() {
+        guard selectAllMonitor == nil else { return }
+        selectAllMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                  event.charactersIgnoringModifiers == "a",
+                  let window = event.window,
+                  !(window.firstResponder is NSTextView) else { return event }
+            let handled = MainActor.assumeIsolated { () -> Bool in
+                guard window === hostWindow else { return false }
+                selection.selectAll(sortedCaptures.map(\.id))
+                return true
+            }
+            return handled ? nil : event
+        }
+    }
+
+    private func removeSelectAllShortcut() {
+        if let selectAllMonitor { NSEvent.removeMonitor(selectAllMonitor) }
+        selectAllMonitor = nil
+    }
+    #endif
 
     private func consumeDetailRequest(_ requested: UUID?) {
         guard let requested else { return }
@@ -461,3 +604,21 @@ struct GalleryView: View {
         }
     }
 }
+
+#if os(macOS)
+/// Hands the NSWindow a SwiftUI view ends up in to its owner — the ⌘A monitor
+/// needs to know which window's events are its own.
+private struct WindowReader: NSViewRepresentable {
+    @Binding var window: NSWindow?
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { window = view.window }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        if window !== view.window { DispatchQueue.main.async { window = view.window } }
+    }
+}
+#endif
