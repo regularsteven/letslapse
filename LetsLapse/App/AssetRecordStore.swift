@@ -40,7 +40,22 @@ final class AssetRecordStore: @unchecked Sendable {
     /// transfer, or a device that is hot or on low power.
     var shouldPause: @Sendable () -> Bool = { false }
 
+    /// The library's index (Phase 3): a project's asset rows are re-read
+    /// from its files after every write here — on `writeQueue`, behind the
+    /// write, never on the caller's thread.
+    var index: LibraryIndex?
+
     init() {}
+
+    /// Re-indexes a project's assets from its files. The folder's name is
+    /// the project id.
+    private func reindex(projectFolder folder: URL) {
+        guard let index, let id = UUID(uuidString: folder.lastPathComponent) else { return }
+        writeQueue.async {
+            do { try index.reindexAssets(projectID: id, inProjectFolder: folder) }
+            catch { LLog("index: could not re-index assets of \(id.uuidString.prefix(8)): \(error)") }
+        }
+    }
 
     // MARK: - Reading
 
@@ -98,6 +113,7 @@ final class AssetRecordStore: @unchecked Sendable {
         lock.lock()
         recordCache[folder.path] = records
         lock.unlock()
+        reindex(projectFolder: folder)
     }
 
     /// Changes the project-level record and rewrites `metadata.json`
@@ -111,6 +127,7 @@ final class AssetRecordStore: @unchecked Sendable {
         lock.lock()
         projectCache[folder.path] = .some(metadata)
         lock.unlock()
+        reindex(projectFolder: folder)
     }
 
     /// Rewrites `assets.ndjson` with the given set — the install path's
@@ -122,6 +139,7 @@ final class AssetRecordStore: @unchecked Sendable {
         lock.lock()
         recordCache[folder.path] = records
         lock.unlock()
+        reindex(projectFolder: folder)
     }
 
     /// One line per name again, when the file has grown past its names.
@@ -263,6 +281,9 @@ final class AssetRecordStore: @unchecked Sendable {
             }
             if recorded > 0 || projectImported != nil {
                 LLog("assets: \(folder.lastPathComponent.prefix(8)) recorded \(recorded) of \(pending.count) pending (\(names.count) assets)")
+                // Once per job, not per line: a 5,000-frame walk re-reads
+                // its record file once at the end.
+                if recorded > 0 { reindex(projectFolder: folder) }
             }
             let outcome = Outcome(folder: folder, recorded: recorded, projectImported: projectImported, projectSource: projectSource)
             Task { @MainActor in

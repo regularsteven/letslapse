@@ -59,8 +59,33 @@ final class LibraryPersister: @unchecked Sendable {
     /// The per-project document writer (Phase 2). Used only on `queue`.
     private let documents: ProjectDocumentWriter
 
-    init(projectsRoot: URL) {
-        documents = ProjectDocumentWriter(projectsRoot: projectsRoot)
+    /// The library's SQLite index (Phase 3) — a cache the documents keep
+    /// current; nil only when the database could not be opened even after
+    /// being thrown away, in which case the app runs without one.
+    let index: LibraryIndex?
+
+    init(projectsRoot: URL, indexURL: URL) {
+        index = Self.openIndex(at: indexURL)
+        documents = ProjectDocumentWriter(projectsRoot: projectsRoot, index: index)
+    }
+
+    /// Opens the index, discarding a database that will not open — it is a
+    /// cache, and the launch pass rebuilds it from the files.
+    private static func openIndex(at url: URL) -> LibraryIndex? {
+        do {
+            return try LibraryIndex(at: url)
+        } catch {
+            LLog("index: could not open \(url.lastPathComponent) (\(error)) — starting a fresh one")
+            for suffix in ["", "-wal", "-shm"] {
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: url.path + suffix))
+            }
+            do {
+                return try LibraryIndex(at: url)
+            } catch {
+                LLog("index: could not create \(url.lastPathComponent): \(error) — running without an index")
+                return nil
+            }
+        }
     }
 
     /// The reason every write is refused, or nil when writes are allowed.
@@ -119,6 +144,11 @@ final class LibraryPersister: @unchecked Sendable {
             let outcome = documents.reconcile(manifest)
             LLog(String(format: "project documents: reconciled %d written · %d current · %d without a folder · %d failed in %.2f s",
                         outcome.written, outcome.unchanged, outcome.homeless, outcome.failed, Date().timeIntervalSince(started)))
+            if index != nil {
+                LLog(outcome.indexRebuilt
+                     ? "index: rebuilt from the files — \(outcome.indexed) projects"
+                     : "index: \(outcome.indexed) projects re-indexed · \(outcome.assetsReindexed) asset files re-indexed")
+            }
         }
     }
 

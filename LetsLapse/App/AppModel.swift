@@ -1275,6 +1275,7 @@ final class AppModel: ObservableObject {
             self?.errorMessage = error.localizedDescription
         }
         assetStore.onChange = { [weak self] _ in self?.metadataRevision += 1 }
+        assetStore.index = persister.index
         assetStore.shouldPause = { [weak self] in
             let process = ProcessInfo.processInfo
             if process.thermalState == .serious || process.thermalState == .critical { return true }
@@ -8388,7 +8389,15 @@ final class AppModel: ObservableObject {
     /// versioned on the main actor and written by one serial queue that
     /// drops anything older than what is already on disk. See
     /// `LibraryPersister`.
-    let persister = LibraryPersister(projectsRoot: StorageRoot.current.appendingPathComponent("Projects", isDirectory: true))
+    let persister = LibraryPersister(
+        projectsRoot: StorageRoot.current.appendingPathComponent("Projects", isDirectory: true),
+        indexURL: LibraryIndex.url(inRoot: StorageRoot.current))
+
+    /// The library's index (Phase 3): paged lists, tag counts and full-text
+    /// search over every project and asset record, kept current by the
+    /// persister and the asset-record store. A cache — nil when it could
+    /// not be opened.
+    var libraryIndex: LibraryIndex? { persister.index }
 
     /// Set when the manifest on disk could not be decoded (Phase 1 W7): the
     /// file was moved aside under `setAsideName`, the library is empty in

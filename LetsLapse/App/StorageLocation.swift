@@ -1,4 +1,5 @@
 import Foundation
+import LetsLapseKit
 #if os(macOS)
 import AppKit
 #endif
@@ -35,6 +36,9 @@ enum StorageRoot {
     static let libraryItemNames = [
         "Projects", "Collections", "Thumbnails", "SceneMasks", "CaptureLogs", "Logs",
         "Incoming",
+        // The SQLite index (`LibraryIndex`): a cache, but a move that leaves
+        // it behind costs a rebuild on the next launch, so it comes along.
+        LibraryIndex.folderName,
         // Shape-mation videos and their index (`ShapemationStore`).
         "Shapemations",
         "blend-profiles.json", "custom_presets.json", "light_ladders.json",
