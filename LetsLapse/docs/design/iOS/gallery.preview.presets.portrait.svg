@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Gallery · preview sheet with PRESETS open · portrait</title>
+  <desc>Mirrors App/GalleryView.swift (compact branch — the .sheet(isPresented: $showPreviewSheet) block, which wraps App/GalleryPreviewPanel.swift in a NavigationStack with a "Close" cancellationAction) with App/MetadataPanelSections.swift, as shipped 2026-09-13 (data model Milestone 1), code first, mirrored from the running iPhone 16 Pro simulator after Steven's sign-off. THE SHEET a single tap on a Gallery tile raises on an iPhone (on iPad and Mac the same GalleryPreviewPanel is the fixed 300pt pane — macOS/gallery.svg and gallery.metadata.svg). It rises over the dimmed Gallery — the parent's top edge peeks 10pt above it — with a 10pt corner radius, LL.cardBackground (the panel's own background; its ScrollView's is hidden), and "Close" 17pt regular in LL.accent leading 16 (baseline 106). The project is _WEX3518, the Sony ARW + Lightroom .xmp sidecar of the Milestone 1 test set, imported through Create ▸ Import photos (the import copies; the original is never touched). PANEL, top to bottom, in the sheet's 365pt column (14pt each side): the 150pt thumbnail at cornerRadius 10 (tap it for ProjectMediaPreviewSheet), 22pt under the bar; the title (16pt bold: the file name) over the 12pt secondary date · size line (31. 8. 2026 · 18,9 MB); the action grid — Open alone on top, filled LL.accent, then one row of equal buttons Edit · Text · Shapes (57pt each, rx 9, a 16pt medium glyph over an 11pt medium label, 8pt gaps; no New clip — a Photo capture is one asset); a full-bleed Divider 16pt under; then, 12pt down and 14pt apart, the record groups: no scope switch for a photo (an interval project draws components/metadata-scope.* here), INFO (components/metadata-info.photo.phone.svg — camera, lens, exposure, captured in the file's own zone, GPS with the Open in Maps link, size with the format, software) and METADATA (components/metadata-fields.file.phone.svg — the IPTC Core record with its origins: from file for what the sidecar carried, edited here + revert on Title, nothing on the empty rows; UIKit's .roundedBorder fields are 33pt here against the Mac's 22, and Copyright status is an accent .menu label rather than a popup button). The screen edge catches the sheet after Title; everything below is reached by scrolling and is drawn under the clip: the rest of the group, then Keywords — the seven dc:subject keywords from the sidecar in the shared tag editor (components/tag-field.imported.phone.svg) under a label the panel draws, marked from file — then Storage alone among the metaRows and the Rename · Share · Delete… footer (three equal buttons; Finder is macOS-only). Every value shown here is in Projects/&lt;id&gt;/assets.ndjson (this asset's line: bytes, SHA-256, the imported layer, the edited layer with per-field editedAt/editedBy) and metadata.json (the project-level record); edits write the edited layer only. STATES NOT DRAWN: an interval project's sheet (the scope switch and a per-frame INFO — metadata-scope.frame.narrow.svg draws the stepper), the "Reading the files…" copy INFO shows before the reader lands, a revert, the tag picker sheet (project-tags.portrait.svg). MEASURED from the iPhone 16 Pro simulator (402×874 pt): the sheet's top edge at 70 there, 69 on this canvas; thumbnail 83pt under it; a 3-button row at (365−16)/3 = 116.3pt each. **2026-09-13, later the same day — TAGS up, PRESETS in (design-first, code owed):** the same change as the Mac panel (macOS/gallery.svg's desc has the reasoning and the data-model note: tags ARE keywords, one list, one editor, always the whole project's, the Keywords row gone from METADATA). Under the action grid's divider, 12 pt down: the TAGS block — LLSectionHeader 'TAGS' with 'from file' trailing (the sidecar's seven keywords, tag-field.imported.phone.svg, 115 tall at this width), the field 21 pt under the block top — then 14 pt on, the PRESETS disclosure row: 25 pt, the header, the PresetStatePill trailing ('Original' in grey: this photo has nothing applied) and chevron.right, collapsed by default, the whole row the button. Open, it is the editor's Presets group as the iPhone draws it — the horizontal strip of 76 pt PresetTile(.phone)s, bleeding under the panel's sides — in gallery.preview.presets.portrait.svg. INFO and METADATA move down by 189 pt; the metaRows and the footer by 41.5 net. Implemented and verified the same day (Debug builds: the Mac over a scratch library via -storage.libraryRootPath, the iPhone 17 Pro and iPad Pro 11" M5 simulators; hooks LL_TAB=gallery LL_SELECT=latest|&lt;uuid&gt; and LL_PANEL=presets). **THIS FILE: the PRESETS group OPEN.** The chevron points down and the strip follows 10 pt under the row: five 76 pt tiles (radius 12) 10 apart from x = 14 — Natural · Cinema · Matte · Vivid · Original, the simulator library holding no saved presets, the last tile clipped by the screen edge and the strip scrolling — each this photo through that preset alone, the caption 11 pt semibold 5 pt under. On this light sheet the placeholder is #E9E9EB and the captions #6D6D72 (the editor's #111 / #8E8E93 belong to its dark sheet), and Original — the applied state — takes the 2.5 pt LL.accent ring and an accent caption, amber being for dark surfaces only. INFO follows 14 pt under the captions (+293 pt from the collapsed file's position). A tap applies through AppModel.applyPreset / applyCustomPreset (the project's rotation, crop and owned white kept), behind the shared confirmation when the project is Edited.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
+    <clipPath id="hero"><rect x="14" y="152" width="365" height="150" rx="10"/></clipPath>
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <symbol id="hero-thumb" viewBox="0 0 365 150" preserveAspectRatio="xMidYMid slice">
+      <rect width="365" height="150" fill="url(#dusk)"/>
+      <path d="M0 96 h365 v54 h-365 z" fill="#3B4450" opacity="0.85"/>
+      <path d="M0 90 l46-9 40 6 51-13 46 8 60-11 51 10 71-7 v16 h-365 z" fill="#2A3140"/>
+      <rect x="30" y="112" width="228" height="5" rx="2.5" fill="#E7B478" opacity="0.45"/>
+      <rect x="76" y="128" width="182" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
+    </symbol>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar over the shrunken Gallery tab behind the sheet -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge (the Gallery tab scaled back), 10pt above the sheet -->
+      <rect x="17" y="59" width="359" height="30" rx="10" fill="#D5D5D9"/>
+
+      <!-- ===== THE SHEET: NavigationStack { GalleryPreviewPanel }, "Close" leading ===== -->
+      <g id="preview-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="69" width="393" height="783" fill="#FFFFFF"/>
+        <text x="16" y="106" font-size="17" fill="#C36A00">Close</text>
+
+        <!-- thumbnail: ProjectThumbnailView, 150pt, rx 10, 14pt in, 22pt under the bar -->
+        <g clip-path="url(#hero)">
+          <rect x="14" y="152" width="365" height="150" fill="url(#dusk)"/>
+          <path d="M14 248 h365 v54 h-365 z" fill="#3B4450" opacity="0.85"/>
+          <path d="M14 242 l46-9 40 6 51-13 46 8 60-11 51 10 71-7 v16 h-365 z" fill="#2A3140"/>
+          <rect x="44" y="264" width="228" height="5" rx="2.5" fill="#E7B478" opacity="0.45"/>
+          <rect x="90" y="280" width="182" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
+        </g>
+
+        <text x="14" y="325.5" font-size="16" class="b" fill="#000">_WEX3518</text>
+        <text x="14" y="347" font-size="12" class="sec">31. 8. 2026</text>
+        <text x="80" y="347" font-size="12" fill="#000" fill-opacity="0.3">·</text>
+        <text x="89" y="347" font-size="12" class="sec">18,9 MB</text>
+
+        <!-- action grid: Open alone, filled; then Edit · Text · Shapes at (365−16)/3 -->
+        <g id="actions">
+          <rect x="14" y="367" width="365" height="57" rx="9" fill="#C36A00"/>
+          <g fill="none" stroke="#FFFFFF" stroke-width="1.8" data-symbol="arrow.up.forward.square">
+            <rect x="188.5" y="379" width="16" height="16" rx="3.4"/><path d="M193.5 390 l6-6 M196 384 h3.5 v3.5" stroke-linecap="round"/>
+          </g>
+          <text x="196.5" y="414" font-size="11" class="m" text-anchor="middle" fill="#FFFFFF">Open</text>
+
+          <rect x="14" y="432" width="116.3" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+          <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="pencil">
+            <path d="M65 457 l1-4.5 10.5-10.5 3.5 3.5 -10.5 10.5 z" stroke-linejoin="round"/>
+          </g>
+          <text x="72.2" y="479" font-size="11" class="m" text-anchor="middle" fill="#000">Edit</text>
+
+          <rect x="138.3" y="432" width="116.3" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+          <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="textformat">
+            <path d="M186.5 456 l6-13 6 13 M188.5 452 h8 M200.5 456 h6" stroke-linecap="round"/>
+          </g>
+          <text x="196.5" y="479" font-size="11" class="m" text-anchor="middle" fill="#000">Text</text>
+
+          <rect x="262.7" y="432" width="116.3" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+          <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="circle.square">
+            <rect x="312.8" y="443" width="16" height="16" rx="2.5"/><circle cx="320.8" cy="451" r="4.5"/>
+          </g>
+          <text x="320.8" y="479" font-size="11" class="m" text-anchor="middle" fill="#000">Shapes</text>
+        </g>
+
+        <line x1="0" y1="505.5" x2="393" y2="505.5" stroke="#000" stroke-opacity="0.10"/>
+
+        <!-- TAGS (2026-09-13, design-first): the project's keyword list — the same list the
+             sidebar filters and search read (sceneTags) and the record's dc:subject keywords
+             (Part 2 §4.5: tags ARE keywords) — promoted back out of the METADATA group to its
+             own block directly under the action grid, where the 2026-09-08 design had it. One
+             editor, always the whole project's: the scope switch below does not reach it, and
+             METADATA no longer draws a Keywords row (per-frame keywords a file carried are kept
+             and exported, not edited here — Steven, 2026-09-13). The origin marker and its
+             revert come with it (10 pt at the header's trailing edge, as on every METADATA
+             row). Header = LLSectionHeader (13 pt semibold secondary, kerning 0.5, 4 pt in),
+             the field 21 pt under the block top. Edit components/tag-field.*, not this markup. -->
+        <g id="tags" data-field="keywords">
+          <text x="18" y="530" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+          <text x="379" y="530" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+          <image href="../components/tag-field.imported.phone.svg" x="14" y="538.5" width="365" height="115"/>
+        </g>
+        <!-- PRESETS (2026-09-13, design-first): a disclosure row, collapsed by default — the
+             header (LLSectionHeader), then trailing the PresetStatePill (the applied preset in
+             LL.accent with white text; Original / Edited on primary 8 % in secondary) and a
+             12 pt chevron.right (chevron.down while open). The whole 25 pt row is the button;
+             the state is per panel life, not persisted. Open, the group is the editor's own
+             Presets grid — see gallery.presets.svg / gallery.preview.presets.portrait.svg. -->
+        <g id="presets" data-state="expanded">
+          <text x="18" y="684.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
+          <rect x="290" y="667.5" width="72" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
+          <text x="326" y="684.5" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Original</text>
+          <path d="M368 677.75 l4.5 4.5 4.5-4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+        </g>
+        <!-- The editor's Presets group as the iPhone draws it (PhotoAdjustmentsPanel
+             presetsContent .phone → PresetTile .phone): a horizontal strip of 76 pt tiles,
+             radius 12, 10 apart from x = 14, scrolling and bleeding edge to edge under the
+             panel's 14 pt sides, each with its name 11 pt semibold 5 pt under. On this LIGHT
+             surface the placeholder is #E9E9EB and the captions secondary (#6D6D72) — the
+             editor's #111 / #8E8E93 are its dark sheet's — and the applied preset takes the
+             2.5 pt LL.accent ring and an accent caption (amber is for dark surfaces only).
+             Order and rendering as on the Mac: PhotoPreset.strip then the saved presets (none
+             in the simulator library, so the strip ends at Original, clipped by the screen
+             edge), this project's hero through each preset alone, a tap applying through
+             AppModel.applyPreset / applyCustomPreset (rotation, crop and owned white kept)
+             behind the PresetApplyRequest confirmation when the project is Edited. -->
+        <g id="preset-strip">
+          <clipPath id="ptile-0"><rect x="14" y="702.5" width="76" height="76" rx="12"/></clipPath>
+          <g clip-path="url(#ptile-0)">
+            <rect x="14" y="702.5" width="76" height="76" fill="#E9E9EB"/>
+            <use href="#hero-thumb" x="14" y="702.5" width="76" height="76"/>
+          </g>
+          <text x="52" y="794.5" font-size="11" class="sb" text-anchor="middle" fill="#6D6D72">Natural</text>
+          <clipPath id="ptile-1"><rect x="100" y="702.5" width="76" height="76" rx="12"/></clipPath>
+          <g clip-path="url(#ptile-1)">
+            <rect x="100" y="702.5" width="76" height="76" fill="#E9E9EB"/>
+            <use href="#hero-thumb" x="100" y="702.5" width="76" height="76"/>
+            <rect x="100" y="702.5" width="76" height="76" fill="#7A5A2E" fill-opacity="0.28"/>
+          </g>
+          <text x="138" y="794.5" font-size="11" class="sb" text-anchor="middle" fill="#6D6D72">Cinema</text>
+          <clipPath id="ptile-2"><rect x="186" y="702.5" width="76" height="76" rx="12"/></clipPath>
+          <g clip-path="url(#ptile-2)">
+            <rect x="186" y="702.5" width="76" height="76" fill="#E9E9EB"/>
+            <use href="#hero-thumb" x="186" y="702.5" width="76" height="76"/>
+            <rect x="186" y="702.5" width="76" height="76" fill="#FFFFFF" fill-opacity="0.14"/>
+          </g>
+          <text x="224" y="794.5" font-size="11" class="sb" text-anchor="middle" fill="#6D6D72">Matte</text>
+          <clipPath id="ptile-3"><rect x="272" y="702.5" width="76" height="76" rx="12"/></clipPath>
+          <g clip-path="url(#ptile-3)">
+            <rect x="272" y="702.5" width="76" height="76" fill="#E9E9EB"/>
+            <use href="#hero-thumb" x="272" y="702.5" width="76" height="76"/>
+            <rect x="272" y="702.5" width="76" height="76" fill="#F4B23A" fill-opacity="0.12"/>
+          </g>
+          <text x="310" y="794.5" font-size="11" class="sb" text-anchor="middle" fill="#6D6D72">Vivid</text>
+          <clipPath id="ptile-4"><rect x="358" y="702.5" width="76" height="76" rx="12"/></clipPath>
+          <g clip-path="url(#ptile-4)">
+            <rect x="358" y="702.5" width="76" height="76" fill="#E9E9EB"/>
+            <use href="#hero-thumb" x="358" y="702.5" width="76" height="76"/>
+          </g>
+          <rect x="359.25" y="703.75" width="73.5" height="73.5" rx="10.75" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+          <text x="396" y="794.5" font-size="11" class="sb" text-anchor="middle" fill="#C36A00">Original</text>
+        </g>
+
+
+        <!-- INFO + METADATA (2026-09-13, data model Milestone 1; under TAGS + PRESETS since the same day): the shared components in
+             their phone width (365pt), 12pt under the divider, 14pt apart — see
+             components/README.md and edit the component files, not this markup. A Photo
+             project is one asset, so no scope switch. -->
+        <image href="../components/metadata-info.photo.phone.svg" x="14" y="810.5" width="365" height="206"/>
+        <image href="../components/metadata-fields.file.phone.svg" x="14" y="1030.5" width="365" height="1443"/>
+
+        <!-- below the screen edge — specified, reached by scrolling -->
+                <g id="meta">
+          <text x="14" y="2396.5" font-size="12" class="sb" fill="#6D6D72">Storage</text>
+          <text x="96" y="2396.5" font-size="12" class="sec">18,9 MB</text>
+        </g>
+        <line x1="0" y1="2409" x2="393" y2="2409" stroke="#000" stroke-opacity="0.10"/>
+        <g id="footer">
+          <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line">
+            <path d="M70 2430.5 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M67 2435.5 h16" stroke-linecap="round"/>
+          </g>
+          <text x="74.8" y="2449.5" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
+          <line x1="135.7" y1="2433.5" x2="135.7" y2="2453.5" stroke="#000" stroke-opacity="0.10"/>
+          <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="square.and.arrow.up">
+            <path d="M196.5 2429.5 v-8 M193 2424.5 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M190.5 2427.5 v8 h12 v-8"/>
+          </g>
+          <text x="196.5" y="2449.5" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
+          <line x1="257.3" y1="2433.5" x2="257.3" y2="2453.5" stroke="#000" stroke-opacity="0.10"/>
+          <g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash">
+            <path d="M310.7 2424.5 h15 M312.7 2424.5 v11 h11 v-11 M316.2 2422.5 h4"/>
+          </g>
+          <text x="318.2" y="2449.5" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Gallery · preview sheet, PRESETS open · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">the editor's Presets strip inside the preview sheet — a preset on a project without opening the editor</text>
+</svg>

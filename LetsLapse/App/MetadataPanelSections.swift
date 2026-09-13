@@ -7,9 +7,12 @@ import LetsLapseKit
 // the file said. Metadata is the IPTC Core set a person edits, in the order
 // the brief lists them, each row saying whether its value came from the file
 // or was edited here, with a revert. An interval project edits the
-// project-level record by default and can scope to one frame.
-// (docs/data-model-scale-and-metadata-2026-09-12.md §7; SVG mirrors to follow
-// sign-off — see docs/design/macOS/INDEX.md.)
+// project-level record by default and can scope to one frame. Keywords are
+// NOT a row here any more (2026-09-13): tags ARE keywords, and the tag editor
+// is the panel's own TAGS block above both groups, always the whole
+// project's — see `GalleryPreviewPanel.tagsSection`.
+// (docs/data-model-scale-and-metadata-2026-09-12.md §7; mirrors in
+// docs/design/macOS/gallery*.svg and iOS/gallery.preview*.svg.)
 
 /// The scope switch and frame chooser an interval project gets above both
 /// groups; a Photo or video project is one asset and shows nothing here.
@@ -187,7 +190,9 @@ struct MetadataInfoSection: View {
 }
 
 /// Editable: the IPTC Core fields in the brief's order, then the creator
-/// contact block, the location block, and keywords (the tag editor).
+/// contact block and the location block. Keywords — the tag editor — sit
+/// above INFO as the TAGS block, project-wide; a frame's own keywords are
+/// kept and exported but not edited here (Steven, 2026-09-13).
 struct MetadataEditSection: View {
     @EnvironmentObject var model: AppModel
     var capture: AppModel.CaptureProject
@@ -218,8 +223,6 @@ struct MetadataEditSection: View {
                      .locationCountry, .locationCountryCode], id: \.self) { field in
                 textRow(field, resolved)
             }
-
-            keywordsRow(resolved)
         }
     }
 
@@ -297,16 +300,6 @@ struct MetadataEditSection: View {
         }
     }
 
-    private func keywordsRow(_ resolved: AppModel.ResolvedMetadata) -> some View {
-        MetadataRowFrame(field: .keywords, origin: resolved.origin(.keywords),
-                         revert: { model.revertMetadata(.keywords, on: capture, scope: scope) }) {
-            TagField(
-                tags: Binding(
-                    get: { resolved.value.keywords ?? [] },
-                    set: { model.setMetadata(.list($0), for: .keywords, on: capture, scope: scope) }),
-                libraryTags: model.libraryTags)
-        }
-    }
 }
 
 /// A row's chrome: the label, the "from file / edited here" marker with its
@@ -325,30 +318,44 @@ struct MetadataRowFrame<Content: View>: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                switch origin {
-                case .edited?:
-                    Text("edited here")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(LL.accent)
-                    Button(action: revert) {
-                        Image(systemName: "arrow.uturn.backward")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(LL.accent)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Revert to the file's value")
-                    .accessibilityLabel("Revert \(field.label)")
-                case .imported?:
-                    Text("from file")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.tertiary)
-                case nil:
-                    EmptyView()
-                }
+                MetadataOriginMarker(origin: origin, fieldLabel: field.label, revert: revert)
             }
             content()
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// The "from file / edited here" marker at the trailing edge of a row's
+/// label line, with the revert beside it when there is something to revert
+/// to. Shared by every METADATA row and, since 2026-09-13, the TAGS block's
+/// header line.
+struct MetadataOriginMarker: View {
+    var origin: AppModel.MetadataOrigin?
+    var fieldLabel: String
+    var revert: () -> Void
+
+    var body: some View {
+        switch origin {
+        case .edited?:
+            Text("edited here")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(LL.accent)
+            Button(action: revert) {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+            }
+            .buttonStyle(.plain)
+            .help("Revert to the file's value")
+            .accessibilityLabel("Revert \(fieldLabel)")
+        case .imported?:
+            Text("from file")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
+        case nil:
+            EmptyView()
+        }
     }
 }
 

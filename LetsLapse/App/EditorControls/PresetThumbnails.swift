@@ -34,6 +34,8 @@ struct EditorPresetThumbnail: View {
     var isSelected: Bool
     var accent: Color
     var style: PresetTileStyle
+    /// See `PresetTile.isOnDark` — false for the Gallery panel's light card.
+    var isOnDark = true
     var action: () -> Void
 
     /// 160 px — every tile shares one size so `PhotoGrader`'s three-deep decode
@@ -55,6 +57,7 @@ struct EditorPresetThumbnail: View {
             isSelected: isSelected,
             accent: accent,
             style: style,
+            isOnDark: isOnDark,
             action: action)
         .task(id: key) {
             guard let key, let frame, cache.image(for: key) == nil else { return }

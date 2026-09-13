@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Gallery · preview sheet on an imported photo (INFO + METADATA from the file) · portrait</title>
-  <desc>Mirrors App/GalleryView.swift (compact branch — the .sheet(isPresented: $showPreviewSheet) block, which wraps App/GalleryPreviewPanel.swift in a NavigationStack with a "Close" cancellationAction) with App/MetadataPanelSections.swift, as shipped 2026-09-13 (data model Milestone 1), code first, mirrored from the running iPhone 16 Pro simulator after Steven's sign-off. THE SHEET a single tap on a Gallery tile raises on an iPhone (on iPad and Mac the same GalleryPreviewPanel is the fixed 300pt pane — macOS/gallery.svg and gallery.metadata.svg). It rises over the dimmed Gallery — the parent's top edge peeks 10pt above it — with a 10pt corner radius, LL.cardBackground (the panel's own background; its ScrollView's is hidden), and "Close" 17pt regular in LL.accent leading 16 (baseline 106). The project is _WEX3518, the Sony ARW + Lightroom .xmp sidecar of the Milestone 1 test set, imported through Create ▸ Import photos (the import copies; the original is never touched). PANEL, top to bottom, in the sheet's 365pt column (14pt each side): the 150pt thumbnail at cornerRadius 10 (tap it for ProjectMediaPreviewSheet), 22pt under the bar; the title (16pt bold: the file name) over the 12pt secondary date · size line (31. 8. 2026 · 18,9 MB); the action grid — Open alone on top, filled LL.accent, then one row of equal buttons Edit · Text · Shapes (57pt each, rx 9, a 16pt medium glyph over an 11pt medium label, 8pt gaps; no New clip — a Photo capture is one asset); a full-bleed Divider 16pt under; then, 12pt down and 14pt apart, the record groups: no scope switch for a photo (an interval project draws components/metadata-scope.* here), INFO (components/metadata-info.photo.phone.svg — camera, lens, exposure, captured in the file's own zone, GPS with the Open in Maps link, size with the format, software) and METADATA (components/metadata-fields.file.phone.svg — the IPTC Core record with its origins: from file for what the sidecar carried, edited here + revert on Title, nothing on the empty rows; UIKit's .roundedBorder fields are 33pt here against the Mac's 22, and Copyright status is an accent .menu label rather than a popup button). The screen edge catches the sheet after Title; everything below is reached by scrolling and is drawn under the clip: the rest of the group, then Keywords — the seven dc:subject keywords from the sidecar in the shared tag editor (components/tag-field.imported.phone.svg) under a label the panel draws, marked from file — then Storage alone among the metaRows and the Rename · Share · Delete… footer (three equal buttons; Finder is macOS-only). Every value shown here is in Projects/&lt;id&gt;/assets.ndjson (this asset's line: bytes, SHA-256, the imported layer, the edited layer with per-field editedAt/editedBy) and metadata.json (the project-level record); edits write the edited layer only. STATES NOT DRAWN: an interval project's sheet (the scope switch and a per-frame INFO — metadata-scope.frame.narrow.svg draws the stepper), the "Reading the files…" copy INFO shows before the reader lands, a revert, the tag picker sheet (project-tags.portrait.svg). MEASURED from the iPhone 16 Pro simulator (402×874 pt): the sheet's top edge at 70 there, 69 on this canvas; thumbnail 83pt under it; a 3-button row at (365−16)/3 = 116.3pt each.</desc>
+  <desc>Mirrors App/GalleryView.swift (compact branch — the .sheet(isPresented: $showPreviewSheet) block, which wraps App/GalleryPreviewPanel.swift in a NavigationStack with a "Close" cancellationAction) with App/MetadataPanelSections.swift, as shipped 2026-09-13 (data model Milestone 1), code first, mirrored from the running iPhone 16 Pro simulator after Steven's sign-off. THE SHEET a single tap on a Gallery tile raises on an iPhone (on iPad and Mac the same GalleryPreviewPanel is the fixed 300pt pane — macOS/gallery.svg and gallery.metadata.svg). It rises over the dimmed Gallery — the parent's top edge peeks 10pt above it — with a 10pt corner radius, LL.cardBackground (the panel's own background; its ScrollView's is hidden), and "Close" 17pt regular in LL.accent leading 16 (baseline 106). The project is _WEX3518, the Sony ARW + Lightroom .xmp sidecar of the Milestone 1 test set, imported through Create ▸ Import photos (the import copies; the original is never touched). PANEL, top to bottom, in the sheet's 365pt column (14pt each side): the 150pt thumbnail at cornerRadius 10 (tap it for ProjectMediaPreviewSheet), 22pt under the bar; the title (16pt bold: the file name) over the 12pt secondary date · size line (31. 8. 2026 · 18,9 MB); the action grid — Open alone on top, filled LL.accent, then one row of equal buttons Edit · Text · Shapes (57pt each, rx 9, a 16pt medium glyph over an 11pt medium label, 8pt gaps; no New clip — a Photo capture is one asset); a full-bleed Divider 16pt under; then, 12pt down and 14pt apart, the record groups: no scope switch for a photo (an interval project draws components/metadata-scope.* here), INFO (components/metadata-info.photo.phone.svg — camera, lens, exposure, captured in the file's own zone, GPS with the Open in Maps link, size with the format, software) and METADATA (components/metadata-fields.file.phone.svg — the IPTC Core record with its origins: from file for what the sidecar carried, edited here + revert on Title, nothing on the empty rows; UIKit's .roundedBorder fields are 33pt here against the Mac's 22, and Copyright status is an accent .menu label rather than a popup button). The screen edge catches the sheet after Title; everything below is reached by scrolling and is drawn under the clip: the rest of the group, then Keywords — the seven dc:subject keywords from the sidecar in the shared tag editor (components/tag-field.imported.phone.svg) under a label the panel draws, marked from file — then Storage alone among the metaRows and the Rename · Share · Delete… footer (three equal buttons; Finder is macOS-only). Every value shown here is in Projects/&lt;id&gt;/assets.ndjson (this asset's line: bytes, SHA-256, the imported layer, the edited layer with per-field editedAt/editedBy) and metadata.json (the project-level record); edits write the edited layer only. STATES NOT DRAWN: an interval project's sheet (the scope switch and a per-frame INFO — metadata-scope.frame.narrow.svg draws the stepper), the "Reading the files…" copy INFO shows before the reader lands, a revert, the tag picker sheet (project-tags.portrait.svg). MEASURED from the iPhone 16 Pro simulator (402×874 pt): the sheet's top edge at 70 there, 69 on this canvas; thumbnail 83pt under it; a 3-button row at (365−16)/3 = 116.3pt each. **2026-09-13, later the same day — TAGS up, PRESETS in (design-first, code owed):** the same change as the Mac panel (macOS/gallery.svg's desc has the reasoning and the data-model note: tags ARE keywords, one list, one editor, always the whole project's, the Keywords row gone from METADATA). Under the action grid's divider, 12 pt down: the TAGS block — LLSectionHeader 'TAGS' with 'from file' trailing (the sidecar's seven keywords, tag-field.imported.phone.svg, 115 tall at this width), the field 21 pt under the block top — then 14 pt on, the PRESETS disclosure row: 25 pt, the header, the PresetStatePill trailing ('Original' in grey: this photo has nothing applied) and chevron.right, collapsed by default, the whole row the button. Open, it is the editor's Presets group as the iPhone draws it — the horizontal strip of 76 pt PresetTile(.phone)s, bleeding under the panel's sides — in gallery.preview.presets.portrait.svg. INFO and METADATA move down by 189 pt; the metaRows and the footer by 41.5 net. Implemented and verified the same day (Debug builds: the Mac over a scratch library via -storage.libraryRootPath, the iPhone 17 Pro and iPad Pro 11" M5 simulators; hooks LL_TAB=gallery LL_SELECT=latest|&lt;uuid&gt; and LL_PANEL=presets).</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
@@ -75,40 +75,64 @@
 
         <line x1="0" y1="505.5" x2="393" y2="505.5" stroke="#000" stroke-opacity="0.10"/>
 
-        <!-- INFO + METADATA (2026-09-13, data model Milestone 1): the shared components in
+        <!-- TAGS (2026-09-13, design-first): the project's keyword list — the same list the
+             sidebar filters and search read (sceneTags) and the record's dc:subject keywords
+             (Part 2 §4.5: tags ARE keywords) — promoted back out of the METADATA group to its
+             own block directly under the action grid, where the 2026-09-08 design had it. One
+             editor, always the whole project's: the scope switch below does not reach it, and
+             METADATA no longer draws a Keywords row (per-frame keywords a file carried are kept
+             and exported, not edited here — Steven, 2026-09-13). The origin marker and its
+             revert come with it (10 pt at the header's trailing edge, as on every METADATA
+             row). Header = LLSectionHeader (13 pt semibold secondary, kerning 0.5, 4 pt in),
+             the field 21 pt under the block top. Edit components/tag-field.*, not this markup. -->
+        <g id="tags" data-field="keywords">
+          <text x="18" y="530" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+          <text x="379" y="530" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+          <image href="../components/tag-field.imported.phone.svg" x="14" y="538.5" width="365" height="115"/>
+        </g>
+        <!-- PRESETS (2026-09-13, design-first): a disclosure row, collapsed by default — the
+             header (LLSectionHeader), then trailing the PresetStatePill (the applied preset in
+             LL.accent with white text; Original / Edited on primary 8 % in secondary) and a
+             12 pt chevron.right (chevron.down while open). The whole 25 pt row is the button;
+             the state is per panel life, not persisted. Open, the group is the editor's own
+             Presets grid — see gallery.presets.svg / gallery.preview.presets.portrait.svg. -->
+        <g id="presets" data-state="collapsed">
+          <text x="18" y="684.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
+          <rect x="290" y="667.5" width="72" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
+          <text x="326" y="684.5" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Original</text>
+          <path d="M370 675.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+        </g>
+
+
+        <!-- INFO + METADATA (2026-09-13, data model Milestone 1; under TAGS + PRESETS since the same day): the shared components in
              their phone width (365pt), 12pt under the divider, 14pt apart — see
              components/README.md and edit the component files, not this markup. A Photo
              project is one asset, so no scope switch. -->
-        <image href="../components/metadata-info.photo.phone.svg" x="14" y="517.5" width="365" height="206"/>
-        <image href="../components/metadata-fields.file.phone.svg" x="14" y="737.5" width="365" height="1443"/>
+        <image href="../components/metadata-info.photo.phone.svg" x="14" y="706.5" width="365" height="206"/>
+        <image href="../components/metadata-fields.file.phone.svg" x="14" y="926.5" width="365" height="1443"/>
 
         <!-- below the screen edge — specified, reached by scrolling -->
-        <g id="keywords-row" data-field="keywords">
-          <text x="14" y="2204" font-size="12" class="sb" fill="#6D6D72">Keywords</text>
-          <text x="379" y="2204" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-          <image href="../components/tag-field.imported.phone.svg" x="14" y="2211" width="365" height="115"/>
+                <g id="meta">
+          <text x="14" y="2396.5" font-size="12" class="sb" fill="#6D6D72">Storage</text>
+          <text x="96" y="2396.5" font-size="12" class="sec">18,9 MB</text>
         </g>
-        <g id="meta">
-          <text x="14" y="2355" font-size="12" class="sb" fill="#6D6D72">Storage</text>
-          <text x="96" y="2355" font-size="12" class="sec">18,9 MB</text>
-        </g>
-        <line x1="0" y1="2367.5" x2="393" y2="2367.5" stroke="#000" stroke-opacity="0.10"/>
+        <line x1="0" y1="2409" x2="393" y2="2409" stroke="#000" stroke-opacity="0.10"/>
         <g id="footer">
           <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line">
-            <path d="M70 2389 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M67 2394 h16" stroke-linecap="round"/>
+            <path d="M70 2430.5 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M67 2435.5 h16" stroke-linecap="round"/>
           </g>
-          <text x="74.8" y="2408" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
-          <line x1="135.7" y1="2392" x2="135.7" y2="2412" stroke="#000" stroke-opacity="0.10"/>
+          <text x="74.8" y="2449.5" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
+          <line x1="135.7" y1="2433.5" x2="135.7" y2="2453.5" stroke="#000" stroke-opacity="0.10"/>
           <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="square.and.arrow.up">
-            <path d="M196.5 2388 v-8 M193 2383 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M190.5 2386 v8 h12 v-8"/>
+            <path d="M196.5 2429.5 v-8 M193 2424.5 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M190.5 2427.5 v8 h12 v-8"/>
           </g>
-          <text x="196.5" y="2408" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
-          <line x1="257.3" y1="2392" x2="257.3" y2="2412" stroke="#000" stroke-opacity="0.10"/>
+          <text x="196.5" y="2449.5" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
+          <line x1="257.3" y1="2433.5" x2="257.3" y2="2453.5" stroke="#000" stroke-opacity="0.10"/>
           <g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash">
-            <path d="M310.7 2383 h15 M312.7 2383 v11 h11 v-11 M316.2 2381 h4"/>
+            <path d="M310.7 2424.5 h15 M312.7 2424.5 v11 h11 v-11 M316.2 2422.5 h4"/>
           </g>
-          <text x="318.2" y="2408" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
+          <text x="318.2" y="2449.5" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
         </g>
       </g>
 

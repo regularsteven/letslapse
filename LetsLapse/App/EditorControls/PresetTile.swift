@@ -30,11 +30,17 @@ struct PresetTile: View {
     /// `LL.amber` on the dark editors, `LL.accent` on the Mac.
     var accent: Color
     var style: PresetTileStyle
+    /// True on the editors' dark sheets, which the phone and pad styles were
+    /// drawn for; false where the same strip sits on a light card — the
+    /// Gallery panel's Presets group (2026-09-13) — so the placeholder and the
+    /// captions take the light palette instead. The Mac grid is light either
+    /// way: its name is drawn over the picture.
+    var isOnDark = true
     var action: () -> Void
 
     private var cornerRadius: CGFloat { style == .macGrid ? 10 : 12 }
     private var placeholder: Color {
-        style == .macGrid ? LL.controlFill : Color(white: 0x11 / 255.0)
+        style == .macGrid || !isOnDark ? LL.controlFill : Color(white: 0x11 / 255.0)
     }
 
     var body: some View {
@@ -90,7 +96,7 @@ struct PresetTile: View {
     private var caption: some View {
         Text(name)
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(isSelected ? accent : EditorPalette.secondaryOnDark)
+            .foregroundStyle(isSelected ? accent : (isOnDark ? EditorPalette.secondaryOnDark : Color.secondary))
             .lineLimit(1)
             .truncationMode(.tail)
             .frame(maxWidth: .infinity)

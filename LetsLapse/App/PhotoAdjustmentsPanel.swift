@@ -52,6 +52,62 @@ struct EditorPresetsContext {
     var lightroomCard: AnyView?
 }
 
+extension EditorPresetsContext {
+    /// Every preset as a tile — the five built-ins in strip order, then the
+    /// saved presets, each with Delete on its context menu where the owner
+    /// allows it — for the caller to lay out: the editor's strip, grid or
+    /// card, and since 2026-09-13 the Gallery panel's Presets group, which
+    /// is the same tiles on a light card (`isOnDark: false`). Shared so the
+    /// two surfaces cannot drift: what a tile shows (the preset ALONE on the
+    /// frame) and which one is ringed are decided here, once.
+    @ViewBuilder func tiles(style: PresetTileStyle, accent: Color, isOnDark: Bool = true) -> some View {
+        ForEach(PhotoPreset.strip) { preset in
+            EditorPresetThumbnail(
+                name: preset.displayName,
+                grade: PhotoGrade(preset: preset, adjustments: .neutral),
+                frame: frame,
+                cache: cache,
+                isSelected: isBuiltInRinged(preset),
+                accent: accent,
+                style: style,
+                isOnDark: isOnDark
+            ) {
+                onSelect(.builtIn(preset))
+            }
+        }
+        ForEach(customPresets) { custom in
+            EditorPresetThumbnail(
+                name: custom.name,
+                grade: PhotoGrade(preset: custom.basePreset, adjustments: custom.adjustments),
+                frame: frame,
+                cache: cache,
+                isSelected: presetState.isNamed(custom.id),
+                accent: accent,
+                style: style,
+                isOnDark: isOnDark
+            ) {
+                onSelect(.custom(custom))
+            }
+            .contextMenu {
+                if let onDelete {
+                    Button("Delete preset", role: .destructive) { onDelete(custom) }
+                }
+            }
+        }
+    }
+
+    /// Which built-in tile carries the ring. Original's ring means "no
+    /// preset" and follows `isOriginal` alone. Any other built-in is ringed
+    /// while it is the named state, and also while the state is Edited and
+    /// it is the base the edits sit on — the state pill already says Edited,
+    /// so the ring is free to say which look was edited.
+    private func isBuiltInRinged(_ preset: PhotoPreset) -> Bool {
+        if preset == .original { return presetState.isOriginal }
+        if presetState.isNamed(preset.presetID) { return true }
+        return presetState.isEdited && basePreset == preset
+    }
+}
+
 /// The manual grade's controls — one `EditorGroup` at a time.
 ///
 /// Shared by both editors — `PhotoViewerView` (photo and interval captures)
@@ -463,51 +519,13 @@ struct PhotoAdjustmentsPanel: View {
         }
     }
 
+    /// The tiles themselves live on the context (`EditorPresetsContext.tiles`)
+    /// since 2026-09-13, so the Gallery panel's Presets group draws the very
+    /// same set; this is the editor's dark-sheet call.
     @ViewBuilder private func presetTiles(
         _ presets: EditorPresetsContext, tileStyle: PresetTileStyle
     ) -> some View {
-        ForEach(PhotoPreset.strip) { preset in
-            EditorPresetThumbnail(
-                name: preset.displayName,
-                grade: PhotoGrade(preset: preset, adjustments: .neutral),
-                frame: presets.frame,
-                cache: presets.cache,
-                isSelected: Self.isBuiltInRinged(preset, in: presets),
-                accent: accent,
-                style: tileStyle
-            ) {
-                presets.onSelect(.builtIn(preset))
-            }
-        }
-        ForEach(presets.customPresets) { custom in
-            EditorPresetThumbnail(
-                name: custom.name,
-                grade: PhotoGrade(preset: custom.basePreset, adjustments: custom.adjustments),
-                frame: presets.frame,
-                cache: presets.cache,
-                isSelected: presets.presetState.isNamed(custom.id),
-                accent: accent,
-                style: tileStyle
-            ) {
-                presets.onSelect(.custom(custom))
-            }
-            .contextMenu {
-                if let onDelete = presets.onDelete {
-                    Button("Delete preset", role: .destructive) { onDelete(custom) }
-                }
-            }
-        }
-    }
-
-    /// Which built-in tile carries the ring. Original's ring means "no
-    /// preset" and follows `isOriginal` alone. Any other built-in is ringed
-    /// while it is the named state, and also while the state is Edited and
-    /// it is the base the edits sit on — the state pill already says Edited,
-    /// so the ring is free to say which look was edited.
-    private static func isBuiltInRinged(_ preset: PhotoPreset, in presets: EditorPresetsContext) -> Bool {
-        if preset == .original { return presets.presetState.isOriginal }
-        if presets.presetState.isNamed(preset.presetID) { return true }
-        return presets.presetState.isEdited && presets.basePreset == preset
+        presets.tiles(style: tileStyle, accent: accent)
     }
 
     /// Under the tiles: the owner's Lightroom card, then ONE way to keep the

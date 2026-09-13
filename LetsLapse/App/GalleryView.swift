@@ -76,6 +76,21 @@ struct GalleryView: View {
         ProjectSort(rawValue: sortKeyRaw) ?? .capture
     }
 
+    /// `LL_SELECT=latest|<capture-uuid>` — selects that tile on appear, which
+    /// raises the preview panel (the iPhone's sheet), for screenshots: the
+    /// panel is otherwise only reachable by a click no headless run can make.
+    /// `latest` is the first tile in the current sort. Pair with
+    /// `LL_TAB=gallery`; `LL_PANEL=presets` opens the panel's Presets row.
+    private func consumeSelectHook() {
+        #if DEBUG
+        guard selectedID == nil,
+              let raw = ProcessInfo.processInfo.environment["LL_SELECT"] else { return }
+        let target = raw == "latest" ? sortedCaptures.first?.id : UUID(uuidString: raw)
+        guard let target, model.libraryCaptures.contains(where: { $0.id == target }) else { return }
+        selectedID = target
+        #endif
+    }
+
     // MARK: Body
 
     var body: some View {
@@ -106,6 +121,7 @@ struct GalleryView: View {
             .onReceive(model.$requestedProjectDetailID) { consumeDetailRequest($0) }
             // The Shapes rows read each project's `shapes.json`; re-check on every visit.
             .onAppear   { model.refreshShapeSummaries() }
+            .onAppear   { consumeSelectHook() }
         }
         // iPhone/compact: sidebar sheet
         .sheet(isPresented: $showSidebarSheet) {

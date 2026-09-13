@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1320 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Gallery · preview panel on an imported photo (INFO + METADATA from the file) · 1280×800</title>
-  <desc>Mirrors App/GalleryView.swift (macOS branch) + App/GallerySidebar.swift + App/GalleryGridContent.swift + App/GalleryTile.swift + App/GalleryPreviewPanel.swift with App/MetadataPanelSections.swift — the same window as gallery.svg (see its desc for the three-pane layout, the 1280×800 choice, the grid and tab-bar measurements; the sidebar and grid are drawn identically here) with a PHOTO project selected: _WEX3518, the Sony ARW + Lightroom .xmp sidecar of the Milestone 1 test set, imported through Create ▸ Import photos (the import copies; the original is never touched). What changes is the preview panel. Title is the file name, the date line the capture date and file size (31. 8. 2026 · 18,9 MB). The action grid is Open, then Edit · Text · Shapes — no New clip: a Photo capture is one asset. No scope switch for the same reason. INFO (components/metadata-info.photo.narrow.svg) is everything the file said: camera, lens, exposure, captured (in the file's own zone), GPS with the Open in Maps link, size with the format, software. METADATA (components/metadata-fields.file.narrow.svg) is the IPTC Core record with its origins: from file for what the sidecar carried (Caption, Creator, Copyright, Rating 5 — the sidecar wins over the ARW's own 0 — Sublocation, State, Country, Country code), edited here with the revert arrow on Title, which a person retyped in this panel, and no marker on the empty rows. Keywords is the group's last row: the seven dc:subject keywords from the sidecar (components/tag-field.imported.narrow.svg), marked from file; they also seed the project's searchable tags. Below: Storage alone among the metaRows (no AI elements, no field notes yet), the divider and the Rename · Share · Finder · Delete… footer, both ~1.5k pt down and reached by scrolling; no BLENDED CLIPS section, since a Photo project has none. The record itself lives in Projects/&lt;id&gt;/assets.ndjson (one line per asset: bytes, SHA-256, the imported layer, the edited layer with per-field editedAt/editedBy) and metadata.json (the project-level record); edits write the edited layer only. Verified against the running Mac Debug build on a scratch library, 2026-09-13.</desc>
+  <desc>Mirrors App/GalleryView.swift (macOS branch) + App/GallerySidebar.swift + App/GalleryGridContent.swift + App/GalleryTile.swift + App/GalleryPreviewPanel.swift with App/MetadataPanelSections.swift — the same window as gallery.svg (see its desc for the three-pane layout, the 1280×800 choice, the grid and tab-bar measurements; the sidebar and grid are drawn identically here) with a PHOTO project selected: _WEX3518, the Sony ARW + Lightroom .xmp sidecar of the Milestone 1 test set, imported through Create ▸ Import photos (the import copies; the original is never touched). What changes is the preview panel. Title is the file name, the date line the capture date and file size (31. 8. 2026 · 18,9 MB). The action grid is Open, then Edit · Text · Shapes — no New clip: a Photo capture is one asset. No scope switch for the same reason. INFO (components/metadata-info.photo.narrow.svg) is everything the file said: camera, lens, exposure, captured (in the file's own zone), GPS with the Open in Maps link, size with the format, software. METADATA (components/metadata-fields.file.narrow.svg) is the IPTC Core record with its origins: from file for what the sidecar carried (Caption, Creator, Copyright, Rating 5 — the sidecar wins over the ARW's own 0 — Sublocation, State, Country, Country code), edited here with the revert arrow on Title, which a person retyped in this panel, and no marker on the empty rows. Keywords is the group's last row: the seven dc:subject keywords from the sidecar (components/tag-field.imported.narrow.svg), marked from file; they also seed the project's searchable tags. Below: Storage alone among the metaRows (no AI elements, no field notes yet), the divider and the Rename · Share · Finder · Delete… footer, both ~1.5k pt down and reached by scrolling; no BLENDED CLIPS section, since a Photo project has none. The record itself lives in Projects/&lt;id&gt;/assets.ndjson (one line per asset: bytes, SHA-256, the imported layer, the edited layer with per-field editedAt/editedBy) and metadata.json (the project-level record); edits write the edited layer only. Verified against the running Mac Debug build on a scratch library, 2026-09-13. **2026-09-13, later the same day — TAGS up, PRESETS in (design-first, code owed):** Steven's ruling: tags are the highest-priority metadata a person manages and belong above INFO on every platform, directly under the Open / Edit / Text / Shapes buttons. So the TAGS block comes back out of METADATA to where the 2026-09-08 design had it, and a collapsible PRESETS row follows it. ONE list, ONE editor: tags ARE keywords (Part 2 §4.5 — the manifest's sceneTags that the sidebar, search and the picker read, kept in step with the record's dc:subject that an export writes), so METADATA no longer draws a Keywords row in either scope; the block is always the whole project's, and per-frame keywords a file carried stay stored and exported but are not edited here (settled with Steven 2026-09-13). The origin marker and its revert move with it (10 pt at the header's trailing edge). PRESETS is a 25 pt disclosure row — LLSectionHeader 'PRESETS', then trailing the PresetStatePill (the applied preset's name in LL.accent with white text; Original / Edited on primary 8 % in secondary) and a 12 pt chevron.right — the whole row the button, collapsed by default, its state per panel life. Open (chevron.down), it is the editor's own Presets group verbatim — PhotoAdjustmentsPanel's .rail layout: PresetTile .macGrid in three columns of 85.33×72 at 8 pt, each tile THIS project's hero (AppModel.presetPreviewFrame) rendered through that preset alone at 160 px via PresetThumbnailCache, the applied one ringed — drawn in gallery.presets.svg; a tap applies through AppModel.applyPreset / applyCustomPreset, which keep the project's own rotation, crop and owned white (a preset never carries geometry), after the PresetApplyRequest confirmation when the project is Edited or keyframed. No Save as Preset row, no Lightroom card: nothing is being graded here. A Scanner capture, which presetPreviewFrame excludes, shows no PRESETS row. GEOMETRY: the TAGS block is 21 pt of header plus the field, the PRESETS row 25, the record groups 14 apart as before — so INFO / the scope switch move down by 230 pt, and everything from the metaRows down by 41.5 net (the Keywords row's 229.5 gone, 271 added). The iPad panel follows this file as it always has (same 272 pt column, the Mac's 3-column grid). Implemented and verified the same day (Debug builds: the Mac over a scratch library via -storage.libraryRootPath, the iPhone 17 Pro and iPad Pro 11" M5 simulators; hooks LL_TAB=gallery LL_SELECT=latest|&lt;uuid&gt; and LL_PANEL=presets). Drawn here on Original — an imported photo with nothing applied, the pill in grey — and the sidecar's seven keywords in the TAGS block, 'from file' (tag-field.imported.narrow.svg, 156 tall, which is why INFO moves 230 here against 189 in gallery.svg).</desc>
 
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1280" height="800" rx="11"/></clipPath>
@@ -366,7 +366,36 @@
 
       <line x1="1000" y1="424.5" x2="1300" y2="424.5" stroke="#000" stroke-opacity="0.10"/>
 
-      <!-- INFO + METADATA (2026-09-13, data model Milestone 1): a Photo project is one asset,
+      <!-- TAGS (2026-09-13, design-first): the project's keyword list — the same list the
+           sidebar filters and search read (sceneTags) and the record's dc:subject keywords
+           (Part 2 §4.5: tags ARE keywords) — promoted back out of the METADATA group to its
+           own block directly under the action grid, where the 2026-09-08 design had it. One
+           editor, always the whole project's: the scope switch below does not reach it, and
+           METADATA no longer draws a Keywords row (per-frame keywords a file carried are kept
+           and exported, not edited here — Steven, 2026-09-13). The origin marker and its
+           revert come with it (10 pt at the header's trailing edge, as on every METADATA
+           row). Header = LLSectionHeader (13 pt semibold secondary, kerning 0.5, 4 pt in),
+           the field 21 pt under the block top. Edit components/tag-field.*, not this markup. -->
+      <g id="tags" data-field="keywords">
+        <text x="1018" y="449.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+        <text x="1286" y="449.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+        <image href="../components/tag-field.imported.narrow.svg" x="1014" y="458" width="272" height="156"/>
+      </g>
+      <!-- PRESETS (2026-09-13, design-first): a disclosure row, collapsed by default — the
+           header (LLSectionHeader), then trailing the PresetStatePill (the applied preset in
+           LL.accent with white text; Original / Edited on primary 8 % in secondary) and a
+           12 pt chevron.right (chevron.down while open). The whole 25 pt row is the button;
+           the state is per panel life, not persisted. Open, the group is the editor's own
+           Presets grid — see gallery.presets.svg / gallery.preview.presets.portrait.svg. -->
+      <g id="presets" data-state="collapsed">
+        <text x="1018" y="645" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
+        <rect x="1197" y="628" width="72" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
+        <text x="1233" y="645" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Original</text>
+        <path d="M1277 636 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+      </g>
+
+
+      <!-- INFO + METADATA (2026-09-13, data model Milestone 1; moved under TAGS + PRESETS the same day): a Photo project is one asset,
            so no scope switch — the panel edits its one record. INFO is what the file said
            (metadata-info.photo.narrow.svg); METADATA the IPTC Core record with its origins
            (metadata-fields.file.narrow.svg: from file, edited here + revert on Title, nothing on
@@ -375,48 +404,43 @@
            (tag-field.imported.narrow.svg). Edit the component files, not this markup — see
            components/README.md. The window edge catches the panel after Copyright; the
            rest is reached by scrolling. -->
-      <image href="../components/metadata-info.photo.narrow.svg" x="1014" y="437" width="272" height="250"/>
-      <image href="../components/metadata-fields.file.narrow.svg" x="1014" y="701" width="272" height="1218"/>
-      <g id="keywords-row" data-field="keywords">
-        <text x="1014" y="1942.5" font-size="12" class="sb" fill="#6D6D72">Keywords</text>
-        <text x="1286" y="1942.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-        <image href="../components/tag-field.imported.narrow.svg" x="1014" y="1949.5" width="272" height="156"/>
-      </g>
-
+      <image href="../components/metadata-info.photo.narrow.svg" x="1014" y="667" width="272" height="250"/>
+      <image href="../components/metadata-fields.file.narrow.svg" x="1014" y="931" width="272" height="1218"/>
+      
       <!-- metaRows on a 72pt label column — 12pt under the record groups; Storage is the
            only one this project has (no AI elements, no field notes) -->
       <g id="meta">
-        <text x="1014" y="2134.5" font-size="12" class="sb" fill="#6D6D72">Storage</text>
-        <text x="1096" y="2134.5" font-size="12" fill="#6D6D72">18,9 MB</text>
+        <text x="1014" y="2176" font-size="12" class="sb" fill="#6D6D72">Storage</text>
+        <text x="1096" y="2176" font-size="12" fill="#6D6D72">18,9 MB</text>
       </g>
 
-      <line x1="1000" y1="2147" x2="1300" y2="2147" stroke="#000" stroke-opacity="0.10"/>
+      <line x1="1000" y1="2188.5" x2="1300" y2="2188.5" stroke="#000" stroke-opacity="0.10"/>
 
       <!-- footer: four equal buttons, 20pt dividers, Delete tinted red -->
       <g id="footer">
         <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line">
-          <path d="M1043 2168.5 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M1040 2173.5 h16" stroke-linecap="round"/>
+          <path d="M1043 2210 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M1040 2215 h16" stroke-linecap="round"/>
         </g>
-        <text x="1047.6" y="2187.5" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
-        <line x1="1081.75" y1="2171.5" x2="1081.75" y2="2191.5" stroke="#000" stroke-opacity="0.10"/>
+        <text x="1047.6" y="2229" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
+        <line x1="1081.75" y1="2213" x2="1081.75" y2="2233" stroke="#000" stroke-opacity="0.10"/>
 
         <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="square.and.arrow.up">
-          <path d="M1110 2167.5 v-8 M1106.5 2162.5 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M1104 2165.5 v8 h12 v-8"/>
+          <path d="M1110 2209 v-8 M1106.5 2204 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M1104 2207 v8 h12 v-8"/>
         </g>
-        <text x="1115.9" y="2187.5" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
-        <line x1="1150" y1="2171.5" x2="1150" y2="2191.5" stroke="#000" stroke-opacity="0.10"/>
+        <text x="1115.9" y="2229" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
+        <line x1="1150" y1="2213" x2="1150" y2="2233" stroke="#000" stroke-opacity="0.10"/>
 
         <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="folder">
-          <path d="M1176 2160.5 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/>
+          <path d="M1176 2202 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/>
         </g>
-        <text x="1184.1" y="2187.5" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text>
-        <line x1="1218.25" y1="2171.5" x2="1218.25" y2="2191.5" stroke="#000" stroke-opacity="0.10"/>
+        <text x="1184.1" y="2229" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text>
+        <line x1="1218.25" y1="2213" x2="1218.25" y2="2233" stroke="#000" stroke-opacity="0.10"/>
 
         <g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash">
-          <path d="M1245 2162.5 h15 M1247 2162.5 v11 h11 v-11 M1250.5 2160.5 h4"/>
+          <path d="M1245 2204 h15 M1247 2204 v11 h11 v-11 M1250.5 2202 h4"/>
         </g>
-        <text x="1252.4" y="2187.5" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
+        <text x="1252.4" y="2229" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
       </g>
       <!-- no BLENDED CLIPS section: a Photo project has no blends -->
     </g>

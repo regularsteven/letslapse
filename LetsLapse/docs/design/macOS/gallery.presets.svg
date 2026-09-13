@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1320 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>macOS · Gallery · tag picker popover · 1280×800</title>
-  <desc>gallery.svg with the tag picker open — the macOS door onto the shared tag editor, and the counterpart of iOS's project-tags.portrait.svg. The preview panel's TAGS block (components/tag-field.applied.narrow.svg) carries a dashed "+ Add tag" chip at 1119,541; clicking it raises a 361pt popover holding components/tag-suggestions.default.svg — a field that both filters and creates, then SUGGESTED (SceneMetadata.orderedTaxonomy in prompt order, minus what is applied) and YOUR TAGS (the custom tags this library already holds). It opens UPWARD, over the hero and action grid, because the chip sits low enough in a 300pt panel that a downward popover would run off the window bottom; AppKit picks that edge for itself, and this file draws the edge it will pick here. A POPOVER, not the sheet iOS uses: the panel is already a detail surface beside the thing being edited, and a modal sheet over a single-click selection would be heavier than the edit. It is otherwise the same component and the same rules — click a suggestion and it moves up into the field, click an xmark and it moves back down, and nothing is ever listed in both halves. Writes are immediate; there is no Apply here and none is wanted, since every change is one click to reverse. The typed state is iOS's project-tags.adding.portrait.svg, whose Create row and "No existing tag matches" line render identically in this popover (components/tag-suggestions.filtered.svg) — no separate Mac file. Everything behind the popover is gallery.svg unchanged; see there for the panel, the grid, the header-width arithmetic and the 119pt the TAGS block costs the panel. NOT YET IN CODE — design-first, 2026-09-08. SIDEBAR, 2026-09-11: a fourth section, SHAPES (Ellipse · Rectangle · Square · No Shapes), sits under COLLECTIONS — GallerySidebar.shapesSection over AppModel.shapeSummaries, one row per ShapeFilter; drawn at rest here (no row lit). **2026-09-13:** the TAGS block became the METADATA group's Keywords row (see gallery.svg's desc); the picker is the same popover, now raised from the Keywords row's "+ Add tag", and this file draws the panel scrolled 1320.5pt so that row is where TAGS used to be. The IN-CODE popover exists since 2026-09-08 (App/TagEditor.swift, .tagPicker on the Mac). **2026-09-13, later:** the TAGS block is its own block under the action grid again — tags promoted above INFO, the Keywords row gone from METADATA (see gallery.svg's desc) — so the panel is drawn UNSCROLLED: the field sits at 1014,458 and the '+ Add tag' chip at 1119,540, 1 pt above where it was on 2026-09-08. The popover is the same, still opening upward over the hero and the action grid (hung below the chip it would end at 849, past the window's 820), its arrow tip on the chip's top edge.</desc>
+  <title>macOS · Gallery · preview panel with PRESETS open · 1280×800</title>
+  <desc>Mirrors App/GalleryView.swift (macOS/regular-width branch) + App/GallerySidebar.swift + App/GalleryGridContent.swift (standardGrid) + App/GalleryTile.swift + App/GalleryPreviewPanel.swift, as shipped in 394e48e (2026-09-07). THE THREE-PANE LAYOUT: GalleryView.isWide is hard-coded true on macOS, so the Mac always takes the HStack(spacing: 0) branch — GallerySidebar at a fixed 200pt, hairline Divider, then a VStack of galleryHeader / Divider / GalleryGridContent, and — only while a tile is selected — a second Divider and GalleryPreviewPanel at a fixed 300pt. Both side panels are fixed width, so resizing the window grows the grid alone. WINDOW SIZE, and why this file is drawn at 1280×800 rather than the 760×680 default: galleryHeader (fullHeader since 2026-09-08 — iPhone portrait takes a separate compactHeader, see ../iOS/gallery.portrait.svg) is one HStack(spacing: 10) of eight children where only the search field gives, 190 down to 120pt, before the row overflows — the 32pt sidebar button, the 20pt bold "Gallery" title, a 190pt SceneSearchField, the sort menu + direction button (116pt), the 112pt zoom cluster and the ~89pt Timeline toggle, inside .padding(.horizontal, 16). Its intrinsic width is about 691pt. The centre column is the window minus 201pt of sidebar and 301pt of preview panel, so the header fits only when the WINDOW is about 1193pt wide or more; at the 760×680 default it has 259pt to work in and overflows by roughly 430pt, and with the preview closed it still overflows by about 130pt because gallery.showSidebar defaults to TRUE. In other words the shipped default window cannot draw its own header — see gallery.default-window notes in INDEX.md. 1280×800 is the smallest round size at which the shipped layout renders as designed, and it is what this file specifies; the guided-builder files set the precedent for drawing a Mac screen at the size its layout works at and stating what the default does instead. MEASURED HERE: sidebar 200 (x 20–220); centre column 778 (x 221–999); preview 300 (x 1000–1300). Header band 52pt tall (y 48–100), its children laid out left-to-right at 237 / 313.5-spacer / 323.5 title / 436-spacer / 446 search / 646 sort / 772 zoom / 894 Timeline, ending flush at 983. The sort capsule offers four axes, shared verbatim with Projects (`ProjectSort`, one enum, two lists): Capture · Added · Edit · Size, drawn here on its Capture default. **Added** (2026-09-07) is `CaptureProject.addedAt` — when the project arrived in THIS library, which is a different question from when it was shot: every import path deliberately keeps the shoot's own date, so a clip shot last August files under last August however recently it turned up, and Added is what finds it again. Stamped at registration, re-stamped by hand where an existing record is copied rather than built (an archive import, a DNG-archive clone), and backfilled once for an existing library from each project folder's creation date. The triangle flips the direction and takes its accessibility label from the axis ("Most recently added first" / "Longest in the library first"). Neither the sort nor the direction touches TIMELINE MODE, which groups by shoot day by definition — see gallery.timeline.svg. Grid: .padding(.horizontal, 14) and .padding(.vertical, 14) inside the ScrollView, LazyVGrid of columnCount flexible columns at spacing 12 — at the drawn columnCount of 3 that is a 750pt content width and 242×181.5pt tiles, drawn 4:3 by GalleryTile's .aspectRatio(4/3, contentMode: .fit). Column origins 235 / 489 / 743; row origins 115 / 308.5 / 502 / 695.5. TILE: ProjectThumbnailView at cornerRadius 8; a MediaBadge naming the shoot type pinned bottom-leading with 6pt padding (always shown, black at 50% with white 11.5pt semibold text); an amber MediaBadge reading "N clips" pinned top-trailing with the same padding, drawn only where model.blends(for:).count is 2 or more; and, when selected, a 2.5pt LL.accent strokeBorder on the same 8pt radius. Single click selects (which is what raises the preview panel), double click calls onOpen and pushes ProjectDetailView onto the NavigationStack; right-click raises the context menu (Open · New blended clip · Edit · Show in Finder · Delete…, the Finder entry macOS-only), not drawn. PREVIEW PANEL (300pt, LL.cardBackground, its own ScrollView): 150pt thumbnail at cornerRadius 10 inset 14pt and 22pt from the top (click it to raise ProjectMediaPreviewSheet); title 16pt bold over a 12pt secondary date · size line; a 2×2 LazyVGrid of 132pt action buttons at spacing 8 and cornerRadius 9 — Open is filled LL.accent with white content, Edit / Text / New clip sit on primary at 7%; a full-bleed Divider; five metaRows on a 72pt label column (Tags, In frame, Variations, Storage, Field notes — each rendered only when it has a value, so a freshly imported project shows two); a second full-bleed Divider; and a footer of four equal-width buttons split by 20pt dividers (Rename · Share · Finder · Delete…, Finder macOS-only, Delete tinted red). Tags render through SceneTagLine: up to three LL.accent@13% capsules with LL.accentDeep 10.5pt text, then a secondary "+N". TAB BAR: FloatingTabBar is a sibling of the whole three-pane Group inside ContentView's ZStack(alignment: .bottom), so it floats over sidebar, grid and preview alike, centred on the WINDOW rather than on the grid — 358pt at five 66pt seats, 12pt clear of the bottom edge. BOTTOM CLEARANCE IS DOUBLE-COUNTED, drawn as shipped: ContentView already applies .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 58) } to the tab Group, and all three of the Gallery's scroll views then append their own Color.clear.frame(height: 82) — so the last grid row, the sidebar's Collections row and the preview footer all stop 140pt above the window edge instead of 58pt. TWO MAC-SPECIFIC MISMATCHES ALSO DRAWN AS SHIPPED: the window title reads "Gallery" (GalleryView sets .navigationTitle on the macOS branch, which retitles Window("LetsLapse", id: "main")) while the header repeats the same word 26pt below it; and the zoom Slider is never tinted, so its filled track is system blue and is the one accent-coloured control on the screen that is not LL.accent. STATES NOT DRAWN (desc-only): sidebar collapsed (showSidebar false — the toggle animates the pane out over 0.22s easeInOut and the centre column takes its 201pt, which does NOT fix the header at the default window size); no selection, where the preview panel and its divider are simply absent and the grid takes the 301pt (drawn two-pane in gallery.timeline.svg); the empty state (photo.on.rectangle.angled over "No projects" / "Adjust the filter or search to see your library.", centred in the grid area and shown whenever the filtered set is empty, which on macOS replaces the grid but leaves the header standing); a tag selected in the sidebar, with its "Clear tags" link (drawn in gallery.timeline.svg); the rename alert, the delete confirmationDialog, the export/share sheet and the "Couldn't delete" alert. HOOKS: LL_TAB=gallery brings this tab front; there is no hook for selection, sidebar state, column count or timeline mode — all four are @AppStorage (gallery.showSidebar, gallery.columnCount, gallery.sortKey/sortAscending, gallery.timelineMode) and are set by seeding defaults before launch. NOT YET VERIFIED against the running Mac app: authored from the source in 394e48e on 2026-09-07: measurements here are computed from the Swift layout, not read off a screenshot, and the header-overflow arithmetic in particular is owed a check against a real window. A Release Mac app was running and holds library.json, which has no serialised writer, so a second instance could not be launched safely. **2026-09-07, richer blended-clips list (design-first, code owed):** the preview panel's metaRows lost their one-line "Variations · 3 blended clips" row (Tags, In frame, Storage, Field notes shift up 27pt to close the gap) and gained a full BLENDED CLIPS section at the foot of the panel, below the Rename/Share/Finder/Delete footer (which also shifts up 27pt) — a "BLENDED CLIPS · 3" header over a card of three stacked rows, using the SAME shared component as the iOS project-detail screens (components/blended-clip-row.&lt;state&gt;.narrow.svg — the narrow, 272pt-wide set for this panel's column, versus iOS's 361pt wide set), showing the same three representative rows those screens draw (default, from-codec, true-light) since this demo project's own "3 clips" tile badge and former Variations count agree on three. The window's own #win clip-path trims the bottom ~8pt of the third row — the panel scrolling under the window edge, the same convention the iOS video variant's below-the-fold management card already draws. This was Part 1 of a two-part pass (LetsLapse/docs/design components refactor). **2026-09-07, Part 2 (design-first, this same day, tick-chip revision later the same day):** the filter now sits between the header and the list — components/blend-list-filter.&lt;state&gt;.narrow.svg, four independent tick chips (Blends, Slices, Image, Video, all ticked here) wrapping to two rows at this width — pushing the card down 83pt and clipping more of the third row against the window edge (see the blended-clips-list comment just above). An earlier two-facet segmented-control draft was replaced same-day (Steven: ticking all four already means "All", so no separate All segment is needed — see components/README.md). Neither Part is wired to real filtering in App/GalleryPreviewPanel.swift yet. **2026-09-08, editable tags (design-first, code owed):** the preview panel's read-only "Tags" metaRow — three tiny SceneTagLine capsules and a "+N" — is gone, replaced by the shared, editable tag field promoted OUT of the 72pt-label grid into its own full-width TAGS block under the action-grid divider (components/tag-field.applied.narrow.svg, 272pt, three rows at this width because the project carries five tags and one of them is "Sky &amp; weather"). Every applied tag drops on its own xmark and the dashed "+ Add tag" chip raises the picker popover — gallery.tags.svg. THE PANEL GETS 119pt LONGER, which is the trade this change costs: In frame / Storage / Field notes, the second divider and the whole Rename/Share/Finder/Delete footer all move down by that much, and BLENDED CLIPS (Parts 1 and 2 above) is pushed to where the window's own #win clip-path catches it just after the filter chips. It is still drawn and still specified — reached by scrolling, which is what the panel does — but this file no longer shows the clips card. Three ways out if that is the wrong trade, none taken here because the choice is Steven's: draw the window taller (the file already sizes itself to its layout once, for the header), cap the panel's field at two rows with a "+N more" overflow, or move BLENDED CLIPS above the tags. The SIDEBAR grows a fifth tag row for the same reason — "Rooftops", a hand-typed tag, which App/SceneSearch.swift's availableTags would silently drop today because it filters the library's tags through the closed taxonomy. SIDEBAR, 2026-09-11: a fourth section, SHAPES (Ellipse · Rectangle · Square · No Shapes), sits under COLLECTIONS — GallerySidebar.shapesSection over AppModel.shapeSummaries, one row per ShapeFilter; drawn at rest here (no row lit). **2026-09-13, INFO + METADATA (data model Milestone 1 — code first, mirrored after Steven's sign-off the same day):** the TAGS block is gone. Between the action-grid divider and the metaRows the panel now stacks three shared components 14pt apart (GalleryPreviewPanel.recordSections, 12pt under the divider): the Whole project / This frame scope switch an interval project gets (components/metadata-scope.*), the read-only INFO group (components/metadata-info.* — for this iPhone JPEG shoot only Size is true of every frame, so one row; This frame shows the frame's own camera, exposure, captured time and GPS, and metadata-scope.frame.narrow.svg draws the stepper that state adds) and the editable METADATA group (components/metadata-fields.* — the IPTC Core record in the brief's order, each row marked "from file" / "edited here" + revert / nothing, empty here because the shoot's files carry no IPTC). Its last row is Keywords — tags ARE keywords — the same tag editor as before under a label the panel draws, marked "edited here" because these five came from this app's own tagging (the manifest's sceneTags, which the panel reads until the first edit writes them into the project record). The action grid is also redrawn as shipped since 2026-09-11: Open alone and filled, then Edit · Text · Shapes · New clip in one row. THE PANEL GETS ~1.3k pt LONGER: the metaRows, the second divider, the footer and BLENDED CLIPS all move down by 1322.5pt and are reached by scrolling — every y from the metaRows down is the 2026-09-08 value plus that. Verified against the running Mac Debug build on a scratch library 2026-09-13 (screenshots in the session); a Photo project with file metadata is drawn in gallery.metadata.svg. **THIS FILE (2026-09-13, design-first, code owed): the PRESETS group OPEN** on the same interval project gallery.svg draws, with Cinema applied — see that file's desc for the TAGS + PRESETS change. The row's chevron points down and the editor's Presets grid follows 10 pt under it: PresetTile .macGrid, nine tiles (PhotoPreset.strip — Natural · Cinema · Matte · Vivid · Original — then the four saved presets the editor mirror photo-viewer.presets.svg names: Fade · Mono · Warm · Cool), 85.33×72, radius 10, 8 apart both ways, the name 11 pt semibold white with a shadow bottom-left, Cinema ringed 2.5 pt LL.accent inside its edge and named in the pill. Every tile is THIS project's hero frame rendered through that preset ALONE — the tap's honest preview, exactly as in the editor. The scope switch, INFO and METADATA follow 14 pt under the last row (+431 pt from their gallery.svg positions), the metaRows and everything after them +41.5 as in gallery.svg. The panel is drawn SCROLLED 60 pt so the third row of tiles sits inside the window; unscrolled, its bottom 34 pt run under the window edge at 820 and the panel scrolls to it. A tap on a tile applies straight away from Original or a named state; from Edited (or with keyframes) it raises the shared 'Replace your edits with Cinema?' confirmation first. Implemented and verified the same day (Debug builds: the Mac over a scratch library via -storage.libraryRootPath, the iPhone 17 Pro and iPad Pro 11" M5 simulators; hooks LL_TAB=gallery LL_SELECT=latest|&lt;uuid&gt; and LL_PANEL=presets).</desc>
 
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1280" height="800" rx="11"/></clipPath>
@@ -18,6 +18,7 @@
     <clipPath id="t10"><rect x="235" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
     <clipPath id="t11"><rect x="489" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
     <clipPath id="t12"><rect x="743" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="panel"><rect x="1000" y="108" width="300" height="772"/></clipPath>
     <clipPath id="hero"><rect x="1014" y="70" width="272" height="150" rx="10"/></clipPath>
 
     <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
@@ -44,6 +45,13 @@
     <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
       <feDropShadow dx="0" dy="8" stdDeviation="7.5" flood-color="#000" flood-opacity="0.14"/>
     </filter>
+    <symbol id="hero-thumb" viewBox="0 0 272 150" preserveAspectRatio="xMidYMid slice">
+      <rect width="272" height="150" fill="url(#dusk)"/>
+      <path d="M0 96 h272 v54 h-272 z" fill="#3B4450" opacity="0.85"/>
+      <path d="M0 90 l34-9 30 6 38-13 34 8 45-11 38 10 53-7 v16 h-272 z" fill="#2A3140"/>
+      <rect x="22" y="112" width="170" height="5" rx="2.5" fill="#E7B478" opacity="0.45"/>
+      <rect x="56" y="128" width="136" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
+    </symbol>
   </defs>
 
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
@@ -320,6 +328,9 @@
     <line x1="999.5" y1="48" x2="999.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
     <g id="preview">
       <rect x="1000" y="48" width="300" height="772" fill="#FFFFFF"/>
+      <!-- The panel is SCROLLED 60 pt so the whole Presets grid is inside the
+           window: its third row would otherwise run under the bottom edge at 820. -->
+      <g clip-path="url(#panel)" transform="translate(0,-60)">
 
       <g clip-path="url(#hero)">
         <rect x="1014" y="70" width="272" height="150" fill="url(#dusk)"/>
@@ -397,11 +408,101 @@
            12 pt chevron.right (chevron.down while open). The whole 25 pt row is the button;
            the state is per panel life, not persisted. Open, the group is the editor's own
            Presets grid — see gallery.presets.svg / gallery.preview.presets.portrait.svg. -->
-      <g id="presets" data-state="collapsed">
+      <g id="presets" data-state="expanded">
         <text x="1018" y="604" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
         <rect x="1202" y="587" width="67" height="25" rx="12.5" fill="#C36A00"/>
         <text x="1235.5" y="604" font-size="12.5" class="sb" text-anchor="middle" fill="#FFFFFF">Cinema</text>
-        <path d="M1277 595 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+        <path d="M1275 597.25 l4.5 4.5 4.5-4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+      </g>
+      <!-- The editor's Presets group (PhotoAdjustmentsPanel presetsContent .rail →
+           EditorPresetThumbnail / PresetTile .macGrid), 10 pt under the row: a 3-column grid of
+           85.33×72 tiles, radius 10, 8 apart, the name 11 pt semibold white with a shadow
+           bottom-left (7 / 5 in), #E9E9EB behind a tile still rendering; a 2.5 pt accent ring
+           inside the edge on the APPLIED preset (Original rings only while isOriginal; the
+           base preset rings while Edited, as in the editor). Each tile is THIS project's
+           hero frame (AppModel.presetPreviewFrame(preferring:)) rendered through that preset
+           ALONE at 160 px, cached by preset + frame (PresetThumbnailCache) — the tap's honest
+           preview. Order: PhotoPreset.strip (Natural · Cinema · Matte · Vivid · Original)
+           then CustomPresetStore's saved presets (four here, the editor mirror's set);
+           right-click a saved one for Delete preset. A tap applies through
+           AppModel.applyPreset / applyCustomPreset — which keep the project's own rotation,
+           crop and owned white, a preset never carrying geometry — after the shared
+           PresetApplyRequest confirmation when the project is Edited (or keyframed: "Replace
+           your edits with Cinema?"). No footer: nothing is being graded here, so no Save as
+           Preset row and no Lightroom card — those stay the editor's. -->
+      <g id="preset-grid">
+        <clipPath id="ptile-0"><rect x="1014" y="622" width="85.33" height="72" rx="10"/></clipPath>
+        <g clip-path="url(#ptile-0)">
+          <rect x="1014" y="622" width="85.33" height="72" fill="#E9E9EB"/>
+          <use href="#hero-thumb" x="1014" y="622" width="85.33" height="72"/>
+        </g>
+        <text x="1021" y="688" font-size="11" class="sb" fill="#000" fill-opacity="0.6">Natural</text>
+        <text x="1021" y="687" font-size="11" class="sb" fill="#FFFFFF">Natural</text>
+        <clipPath id="ptile-1"><rect x="1107.33" y="622" width="85.33" height="72" rx="10"/></clipPath>
+        <g clip-path="url(#ptile-1)">
+          <rect x="1107.33" y="622" width="85.33" height="72" fill="#E9E9EB"/>
+          <use href="#hero-thumb" x="1107.33" y="622" width="85.33" height="72"/>
+          <rect x="1107.33" y="622" width="85.33" height="72" fill="#2A1A0A" fill-opacity="0.28"/>
+        </g>
+        <rect x="1108.58" y="623.25" width="82.83" height="69.5" rx="8.75" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+        <text x="1114.33" y="688" font-size="11" class="sb" fill="#000" fill-opacity="0.6">Cinema</text>
+        <text x="1114.33" y="687" font-size="11" class="sb" fill="#FFFFFF">Cinema</text>
+        <clipPath id="ptile-2"><rect x="1200.67" y="622" width="85.33" height="72" rx="10"/></clipPath>
+        <g clip-path="url(#ptile-2)">
+          <rect x="1200.67" y="622" width="85.33" height="72" fill="#E9E9EB"/>
+          <use href="#hero-thumb" x="1200.67" y="622" width="85.33" height="72"/>
+          <rect x="1200.67" y="622" width="85.33" height="72" fill="#FFFFFF" fill-opacity="0.22"/>
+        </g>
+        <text x="1207.67" y="688" font-size="11" class="sb" fill="#000" fill-opacity="0.6">Matte</text>
+        <text x="1207.67" y="687" font-size="11" class="sb" fill="#FFFFFF">Matte</text>
+        <clipPath id="ptile-3"><rect x="1014" y="702" width="85.33" height="72" rx="10"/></clipPath>
+        <g clip-path="url(#ptile-3)">
+          <rect x="1014" y="702" width="85.33" height="72" fill="#E9E9EB"/>
+          <use href="#hero-thumb" x="1014" y="702" width="85.33" height="72"/>
+          <rect x="1014" y="702" width="85.33" height="72" fill="#FF8A00" fill-opacity="0.15"/>
+        </g>
+        <text x="1021" y="768" font-size="11" class="sb" fill="#000" fill-opacity="0.6">Vivid</text>
+        <text x="1021" y="767" font-size="11" class="sb" fill="#FFFFFF">Vivid</text>
+        <clipPath id="ptile-4"><rect x="1107.33" y="702" width="85.33" height="72" rx="10"/></clipPath>
+        <g clip-path="url(#ptile-4)">
+          <rect x="1107.33" y="702" width="85.33" height="72" fill="#E9E9EB"/>
+          <use href="#hero-thumb" x="1107.33" y="702" width="85.33" height="72"/>
+          <rect x="1107.33" y="702" width="85.33" height="72" fill="#000000" fill-opacity="0.06"/>
+        </g>
+        <text x="1114.33" y="768" font-size="11" class="sb" fill="#000" fill-opacity="0.6">Original</text>
+        <text x="1114.33" y="767" font-size="11" class="sb" fill="#FFFFFF">Original</text>
+        <clipPath id="ptile-5"><rect x="1200.67" y="702" width="85.33" height="72" rx="10"/></clipPath>
+        <g clip-path="url(#ptile-5)">
+          <rect x="1200.67" y="702" width="85.33" height="72" fill="#E9E9EB"/>
+          <use href="#hero-thumb" x="1200.67" y="702" width="85.33" height="72"/>
+          <rect x="1200.67" y="702" width="85.33" height="72" fill="#FFFFFF" fill-opacity="0.32"/>
+        </g>
+        <text x="1207.67" y="768" font-size="11" class="sb" fill="#000" fill-opacity="0.6">Fade</text>
+        <text x="1207.67" y="767" font-size="11" class="sb" fill="#FFFFFF">Fade</text>
+        <clipPath id="ptile-6"><rect x="1014" y="782" width="85.33" height="72" rx="10"/></clipPath>
+        <g clip-path="url(#ptile-6)">
+          <rect x="1014" y="782" width="85.33" height="72" fill="#E9E9EB"/>
+          <use href="#hero-thumb" x="1014" y="782" width="85.33" height="72"/>
+          <rect x="1014" y="782" width="85.33" height="72" fill="#8A8A8E" fill-opacity="0.85"/>
+        </g>
+        <text x="1021" y="848" font-size="11" class="sb" fill="#000" fill-opacity="0.6">Mono</text>
+        <text x="1021" y="847" font-size="11" class="sb" fill="#FFFFFF">Mono</text>
+        <clipPath id="ptile-7"><rect x="1107.33" y="782" width="85.33" height="72" rx="10"/></clipPath>
+        <g clip-path="url(#ptile-7)">
+          <rect x="1107.33" y="782" width="85.33" height="72" fill="#E9E9EB"/>
+          <use href="#hero-thumb" x="1107.33" y="782" width="85.33" height="72"/>
+          <rect x="1107.33" y="782" width="85.33" height="72" fill="#F4B23A" fill-opacity="0.3"/>
+        </g>
+        <text x="1114.33" y="848" font-size="11" class="sb" fill="#000" fill-opacity="0.6">Warm</text>
+        <text x="1114.33" y="847" font-size="11" class="sb" fill="#FFFFFF">Warm</text>
+        <clipPath id="ptile-8"><rect x="1200.67" y="782" width="85.33" height="72" rx="10"/></clipPath>
+        <g clip-path="url(#ptile-8)">
+          <rect x="1200.67" y="782" width="85.33" height="72" fill="#E9E9EB"/>
+          <use href="#hero-thumb" x="1200.67" y="782" width="85.33" height="72"/>
+          <rect x="1200.67" y="782" width="85.33" height="72" fill="#3F7BD9" fill-opacity="0.28"/>
+        </g>
+        <text x="1207.67" y="848" font-size="11" class="sb" fill="#000" fill-opacity="0.6">Cool</text>
+        <text x="1207.67" y="847" font-size="11" class="sb" fill="#FFFFFF">Cool</text>
       </g>
 
 
@@ -420,9 +521,9 @@
            component files, not this markup; see components/README.md. The group is 1218pt
            tall, so from Copyright URL down the panel scrolls under the window edge —
            specified, reached by scrolling, as the BLENDED CLIPS list already was. -->
-      <image href="../components/metadata-scope.project.narrow.svg" x="1014" y="626" width="272" height="22"/>
-      <image href="../components/metadata-info.interval.narrow.svg" x="1014" y="662" width="272" height="44"/>
-      <image href="../components/metadata-fields.empty.narrow.svg" x="1014" y="720" width="272" height="1218"/>
+      <image href="../components/metadata-scope.project.narrow.svg" x="1014" y="868" width="272" height="22"/>
+      <image href="../components/metadata-info.interval.narrow.svg" x="1014" y="904" width="272" height="44"/>
+      <image href="../components/metadata-fields.empty.narrow.svg" x="1014" y="962" width="272" height="1218"/>
       
       <!-- metaRows on a 72pt label column — 12pt under the record groups (metadataSection's padding.top); every y below is the 2026-09-08 value + 1364 -->
       <g id="meta">
@@ -490,19 +591,8 @@
         <line x1="1098" y1="2332" x2="1272" y2="2332" stroke="#000" stroke-opacity="0.08"/>
         <image href="../components/blended-clip-row.true-light.narrow.svg" x="1014" y="2332" width="272" height="62"/>
       </g>
-    </g>
-
-    <!-- ================= TAG PICKER POPOVER (over the panel and the grid) =================
-         Anchored to the "+ Add tag" chip of components/tag-field.applied.narrow.svg, which that
-         file places at (105,82) in its own box — the TAGS block's field is at 1014,458 (unscrolled), so the
-         chip is at 1119,540 on this canvas. Opens upward: a 276pt popover hung below a chip at y 573 would end at 849, past
-         the window's own bottom edge at 820. Content is components/tag-suggestions.default.svg
-         inset 16pt; edit that file, not this markup. -->
-    <g id="tag-picker-popover">
-      <rect x="931" y="254" width="361" height="276" rx="12" fill="#FFFFFF" filter="url(#soft)"/>
-      <path d="M1157 529 h16 l-8 11 z" fill="#FFFFFF"/>
-      <image href="../components/tag-suggestions.default.svg" x="947" y="270" width="329" height="244"/>
-    </g>
+      </g>
+</g>
 
     <!-- ================= FLOATING TAB BAR (over all three panes) ================= -->
     <g id="tab-bar">
@@ -533,6 +623,6 @@
   </g>
 
   <rect x="20" y="20" width="1280" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
-  <text x="660" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · tag picker popover · 1280×800 pt window</text>
-  <text x="660" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">the shared tag editor on the Mac — the panel's TAGS field plus its picker popover, raised from “+ Add tag”</text>
+  <text x="660" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · preview panel, PRESETS open · 1280×800 pt window</text>
+  <text x="660" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">the editor's Presets grid inside the Gallery panel — a preset on a project without opening the editor; rotation and crop stay</text>
 </svg>

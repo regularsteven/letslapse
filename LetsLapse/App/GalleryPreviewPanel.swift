@@ -8,16 +8,27 @@ import SwiftUI
 /// - Thumbnail (150pt height)
 /// - Title, date, size
 /// - Actions: Open, then Edit / Text / Shapes / New clip (see `actionGrid`)
+/// - Tags: the project's keywords in the shared tag editor (`TagField`) —
+///   first, above everything the files said, because they are the metadata
+///   a person actually manages (Steven, 2026-09-13)
+/// - Presets: a collapsed row that opens into the editor's own Presets
+///   grid, so a look goes on a project without opening the editor
 /// - Info: what the files said — camera, lens, exposure, captured, GPS, size
-/// - Metadata: the editable IPTC Core record, keywords (the shared tag
-///   editor, `TagField`) last; an interval project scopes it to the whole
-///   shoot or one frame (`MetadataPanelSections.swift`)
+/// - Metadata: the editable IPTC Core record; an interval project scopes
+///   Info and Metadata to the whole shoot or one frame
+///   (`MetadataPanelSections.swift`)
 /// - Metadata rows: In frame, Storage, Field notes
 /// - Footer: Rename, Share, Show in Finder, Delete…
 struct GalleryPreviewPanel: View {
     @EnvironmentObject var model: AppModel
+    @ObservedObject private var presetStore = CustomPresetStore.shared
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
+    #else
+    /// Compact is the iPhone's sheet, where the Presets group is the
+    /// editor's horizontal strip; regular is the iPad's pane, which takes
+    /// the Mac's grid (its column is the Mac's 272 pt).
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
     var capture: AppModel.CaptureProject
     /// Open: the project screen. Owned by the host because it is the host's
@@ -45,6 +56,26 @@ struct GalleryPreviewPanel: View {
     @State private var blendFilter = BlendListFilter()
     /// Whole project by default; an interval project can scope to one frame.
     @State private var metadataScope: AppModel.MetadataScope = .project
+    /// The Presets row: collapsed by default, and left as the person set it
+    /// for the panel's life — not persisted, and not reset by a selection
+    /// change on the Mac, where the panel stays up across them.
+    @State private var presetsExpanded = Self.presetsInitiallyExpanded
+    /// A preset tile tap held back for confirmation, because applying it
+    /// from Edited would throw the project's manual adjustments away.
+    @State private var pendingPresetApply: PresetApplyRequest?
+    /// The Presets tiles' renders, kept for the panel's life so re-opening
+    /// the row shows pictures at once.
+    @StateObject private var presetThumbnails = PresetThumbnailCache()
+
+    /// `LL_PANEL=presets` — the Presets row open from the start, for
+    /// screenshots of the expanded group; pair with `LL_SELECT`.
+    private static var presetsInitiallyExpanded: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["LL_PANEL"] == "presets"
+        #else
+        return false
+        #endif
+    }
 
     private var blends: [AppModel.BlendProject] {
         model.blends(for: capture)
@@ -75,8 +106,15 @@ struct GalleryPreviewPanel: View {
                 Divider()
                     .padding(.top, 16)
 
-                recordSections
-                    .padding(.horizontal, 14)
+                VStack(alignment: .leading, spacing: 14) {
+                    tagsSection
+                    if !capture.isScannerCapture {
+                        presetsSection
+                    }
+                    recordSections
+                }
+                .padding(.top, 12)
+                .padding(.horizontal, 14)
 
                 metadataSection
                     .padding(.horizontal, 14)
@@ -131,6 +169,15 @@ struct GalleryPreviewPanel: View {
                 if !name.isEmpty { model.renameProject(capture, to: name) }
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .alert(item: $pendingPresetApply) { request in
+            Alert(
+                title: Text(request.confirmationTitle),
+                message: Text(request.confirmationMessage),
+                primaryButton: .destructive(Text(request.confirmationButton)) {
+                    applyPreset(request)
+                },
+                secondaryButton: .cancel())
         }
     }
 
@@ -255,22 +302,161 @@ struct GalleryPreviewPanel: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: Tags
+
+    /// The project's keywords in the shared tag editor, first under the
+    /// action grid. Tags ARE keywords (Part 2 §4.5): one list, kept in the
+    /// manifest's `sceneTags` — what the sidebar, search and the picker read
+    /// — and in the record's `dc:subject`, which an export writes; a change
+    /// here lands in both with no Apply step. Always the whole project's:
+    /// the scope switch below does not reach it, and METADATA has no
+    /// Keywords row (a frame's own keywords are kept and exported, not
+    /// edited here — Steven, 2026-09-13). The origin marker and its revert
+    /// sit on the header line, as on every METADATA row.
+    private var tagsSection: some View {
+        let _ = model.metadataRevision
+        let origin = model.resolvedMetadata(for: capture, scope: .project).origin(.keywords)
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                LLSectionHeader("Tags")
+                MetadataOriginMarker(origin: origin, fieldLabel: "Tags") {
+                    model.revertMetadata(.keywords, on: capture, scope: .project)
+                }
+            }
+            TagField(
+                tags: Binding(
+                    get: { model.resolvedKeywords(for: capture) },
+                    set: { model.setMetadata(.list($0), for: .keywords, on: capture, scope: .project) }),
+                libraryTags: model.libraryTags)
+        }
+    }
+
+    // MARK: Presets
+
+    /// A disclosure row — the header, the state pill trailing, a chevron —
+    /// that opens into the editor's Presets group: the same tiles
+    /// (`EditorPresetsContext.tiles`), the same render cache, this project's
+    /// hero through every preset alone, so a look can go on a project
+    /// without opening the editor. A tap applies through the model's
+    /// `applyPreset` / `applyCustomPreset`, which keep the project's own
+    /// rotation, crop and owned white — a preset never carries geometry —
+    /// after the shared confirmation when the project is Edited. No Save as
+    /// Preset row and no Lightroom card here: nothing is being graded.
+    private var presetsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { presetsExpanded.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    LLSectionHeader("Presets")
+                    PresetStatePill(state: model.presetState(for: capture))
+                    Image(systemName: presetsExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Presets")
+            .accessibilityValue(presetsExpanded ? "expanded" : "collapsed")
+
+            if presetsExpanded {
+                presetTiles
+            }
+        }
+    }
+
+    /// The tiles as the editor lays them out on each surface: the Mac rail's
+    /// 3-column grid, the iPhone sheet's horizontal strip (on this light
+    /// card rather than the editor's dark one), the iPad taking the Mac's
+    /// grid since its column is the Mac's.
+    @ViewBuilder private var presetTiles: some View {
+        #if os(macOS)
+        presetGrid
+        #else
+        if horizontalSizeClass == .compact {
+            presetStrip
+        } else {
+            presetGrid
+        }
+        #endif
+    }
+
+    private var presetGrid: some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
+            spacing: 8
+        ) {
+            presetsContext.tiles(style: .macGrid, accent: LL.accent)
+        }
+    }
+
+    private var presetStrip: some View {
+        // Bleeds edge to edge under the panel's 14 pt sides, the tiles inset
+        // back by 14 — the editor sheet's own device at its 16.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                presetsContext.tiles(style: .phone, accent: LL.accent, isOnDark: false)
+            }
+            .padding(.horizontal, 14)
+        }
+        .padding(.horizontal, -14)
+    }
+
+    /// The frame is this project's own — `presetPreviewFrame` falls back to
+    /// the newest edited project for an id it cannot find, which a Scanner
+    /// capture (excluded there, and given no Presets row here) would hit.
+    private var presetsContext: EditorPresetsContext {
+        let frame = model.presetPreviewFrame(preferring: capture.id)
+        return EditorPresetsContext(
+            frame: frame?.captureID == capture.id ? frame : nil,
+            presetState: model.presetState(for: capture),
+            basePreset: PhotoPreset.resolve(capture.selectedPreset),
+            customPresets: presetStore.presets,
+            cache: presetThumbnails,
+            onSelect: { requestPreset($0) },
+            onDelete: { presetStore.delete($0) },
+            onSaveAsPreset: {})
+    }
+
+    /// A tile tap. From Edited it is destructive — manual adjustments the
+    /// person made deliberately would be thrown away, and with no playhead
+    /// to aim at a keyframed grade is flattened — so it confirms first; from
+    /// anywhere else it applies straight away. The same rule as the project
+    /// screen's chip strip.
+    private func requestPreset(_ target: PresetApplyRequest.Target) {
+        let request = PresetApplyRequest(
+            target: target,
+            discardsMoments: model.gradeTimeline(for: capture).keyframes.count)
+        guard model.presetState(for: capture).isEdited else {
+            applyPreset(request)
+            return
+        }
+        pendingPresetApply = request
+    }
+
+    private func applyPreset(_ request: PresetApplyRequest) {
+        switch request.target {
+        case .builtIn(let preset):
+            model.applyPreset(preset, for: capture)
+        case .custom(let preset):
+            model.applyCustomPreset(preset, for: capture)
+        }
+    }
+
     // MARK: Info + Metadata
 
     /// The asset record, in two groups: Info (read-only, from the files) and
-    /// Metadata (editable, IPTC Core). The tag editor that used to be its own
-    /// TAGS block is the Metadata group's Keywords row now — tags ARE
-    /// keywords (Part 2 §4.5) — still the shared `TagField`, still writing
-    /// through with no Apply step. An interval project gets the scope switch
-    /// above both, so a five-star frame in a 5,000-frame set can be rated
-    /// without rating the shoot.
+    /// Metadata (editable, IPTC Core), under TAGS and PRESETS. An interval
+    /// project gets the scope switch above both, so a five-star frame in a
+    /// 5,000-frame set can be rated without rating the shoot.
     private var recordSections: some View {
         VStack(alignment: .leading, spacing: 14) {
             MetadataScopeControl(capture: capture, scope: $metadataScope)
             MetadataInfoSection(capture: capture, scope: metadataScope)
             MetadataEditSection(capture: capture, scope: metadataScope)
         }
-        .padding(.top, 12)
     }
 
     // MARK: Metadata rows

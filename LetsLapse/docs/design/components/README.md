@@ -266,12 +266,20 @@ group's last row — is *not* inside `metadata-fields`: the screen draws its two
 `tag-field.<state>.<width>` 4 pt under it. That is also what keeps the tag editor one component:
 the panel's Keywords row IS the tag editor, since tags became keywords in this pass.
 
+**2026-09-13, later the same day (design-first, implemented the same day):** the Keywords row is gone again. Tags are the
+highest-priority metadata a person manages (Steven), so the tag editor is its own TAGS block directly under the
+action grid, ABOVE INFO — the origin marker and revert on its header line — and METADATA ends at Country code in
+both scopes. Still one component, still one list (tags ARE keywords; the block is always the whole project's —
+per-frame keywords a file carried stay stored and exported, not edited here). A collapsible PRESETS row follows
+TAGS, then the scope switch, INFO and METADATA — `macOS/gallery.svg`, `gallery.metadata.svg`, `gallery.tags.svg`,
+`gallery.presets.svg` and `iOS/gallery.preview*.portrait.svg` draw the order; `metadata-fields.*` is unchanged.
+
 | Piece | What it is | Where it goes |
 |---|---|---|
 | `metadata-scope` | Whole project / This frame, a 22 pt segmented picker on `LL.controlFill`; the `frame` state adds the stepper (‹ · file name over "n of N" · ›, 28 pt square buttons, the back chevron dimmed on the first frame) | first, and only for an interval project — a Photo or video project is one asset and shows nothing here |
 | `metadata-info` | the read-only group: `LLSectionHeader` INFO, then a 72 pt label column and the value, 25 pt per single-line row, 14.5 pt per extra line. Rows exist only when the resolved record has them; GPS carries the Open in Maps link | under the scope switch (or the divider) |
-| `metadata-fields` | the editable group: `LLSectionHeader` METADATA, then Title, Caption, Creator, Copyright, Rating, Copyright status, Copyright URL, Usage terms, the Creator contact block (Address … Website) and the Location block (Sublocation … Country code), rows 10 pt apart | under INFO; the screen adds the Keywords row after it |
-| `tag-field.imported` | the tag editor with the seven keywords a file carried | the Keywords row of a project whose keywords came from its files |
+| `metadata-fields` | the editable group: `LLSectionHeader` METADATA, then Title, Caption, Creator, Copyright, Rating, Copyright status, Copyright URL, Usage terms, the Creator contact block (Address … Website) and the Location block (Sublocation … Country code), rows 10 pt apart | under INFO; nothing after it since 2026-09-13's later pass (the Keywords row moved up to the TAGS block) |
+| `tag-field.imported` | the tag editor with the seven keywords a file carried | the TAGS block of a project whose keywords came from its files (until 2026-09-13's later pass, METADATA's Keywords row) |
 
 **Origins, per row.** Every METADATA row says where its value came from, 10 pt medium at the
 trailing edge of the label line: **from file** (black at 30%) when the value is the file's own —
