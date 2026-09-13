@@ -1485,13 +1485,23 @@ struct PhotoViewerView: View {
     /// rather than under it.
     private func phoneEditorBody(in container: CGSize) -> some View {
         // While the Crop panel is open the picture is fitted into the room
-        // ABOVE the foot rather than centred behind it: a tall picture's
-        // bottom handles would otherwise lie under the sheet's material,
-        // where the sheet takes the touch. The zoom controls then need no
-        // lift of their own — the pane already ends at the foot.
-        let cropRoom = openGroup == .crop ? phoneFootHeight : 0
+        // BELOW the chrome row and ABOVE the foot rather than centred behind
+        // both: a tall picture's bottom handles would otherwise lie under
+        // the sheet's material, where the sheet takes the touch, and its top
+        // handles under the back button and the tab pill, which take it
+        // first. The pane is the picture's fitted room, so a corner handle's
+        // 36 pt reach (18 pt past the corner) needs the margins to be wider
+        // than that: `cropMargin` at the sides and under the chrome, and the
+        // same again above the foot. The zoom controls then need no lift of
+        // their own — the pane already ends at the foot.
+        let cropping = openGroup == .crop
+        let cropRoom = cropping ? phoneFootHeight + Self.phoneCropMargin : 0
+        let cropTop = cropping ? Self.touchChromeHeight + Self.phoneCropMargin : 0
+        let cropSide = cropping ? Self.phoneCropMargin : 0
         return ZStack(alignment: .bottom) {
-            imagePane(footInset: phoneFootHeight - cropRoom, topInset: Self.touchChromeHeight)
+            imagePane(footInset: cropping ? 0 : phoneFootHeight, topInset: Self.touchChromeHeight)
+                .padding(.top, cropTop)
+                .padding(.horizontal, cropSide)
                 .padding(.bottom, cropRoom)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .top) { touchChrome(showsBadge: false) }
@@ -1610,6 +1620,10 @@ struct PhotoViewerView: View {
     /// The touch chrome row's reach: 12 pt of padding, the 36 pt back disc
     /// and tab pill, 12 pt more.
     private static let touchChromeHeight: CGFloat = 60
+    /// The phone's margin around the fitted picture while Crop is open — a
+    /// corner handle reaches 18 pt past its corner, so 24 pt keeps every
+    /// handle whole and a finger's width clear of the chrome and the sheet.
+    private static let phoneCropMargin: CGFloat = 24
 
     /// 5a: full height for a tall picture, full width for a wide one, at the
     /// top-left. While the Crop panel is open the picture is fitted inside a
@@ -1797,9 +1811,11 @@ struct PhotoViewerView: View {
     }
 
     /// The Editor page's rail (3b / 6c), top to bottom: the tab pill, the
-    /// six main buttons, the open group's card, the masks, "Reset
-    /// adjustments", and the save offer where there is no exit to make it
-    /// on. All of it scrolls.
+    /// six main buttons, the open group's card, the masks and "Reset
+    /// adjustments". All of it scrolls. The inline save offer is NOT here:
+    /// it lives in one place only, inside the Presets card under the tiles
+    /// (`presetsContext.saveOffer`), so an Edited grade does not grow a
+    /// prompt at the foot of every other group.
     @ViewBuilder private var railEditorStack: some View {
         railTabBar
         EditorGroupBar(
@@ -1819,10 +1835,6 @@ struct PhotoViewerView: View {
             .disabled(!canResetEverything)
             .opacity(canResetEverything ? 1 : 0.4)
         #endif
-        // The Presets panel hosts the offer itself while it is open.
-        if presetState.isEdited, !ownsExit, !declinedPresetSave, openGroup != .presets {
-            presetSaveOffer
-        }
         if let error = presetStore.lastError {
             Text(error)
                 .font(.footnote)
@@ -3646,6 +3658,7 @@ struct PhotoViewerView: View {
                     source: .still(displayedURL), isChosen: true)
             },
             presetState: presetState,
+            basePreset: preset,
             customPresets: presetStore.presets,
             cache: presetThumbnails,
             onSelect: { request($0) },
@@ -4845,10 +4858,11 @@ struct PhotoViewerView: View {
     /// shadblacks|wb|vibsat|mixer|texclar|vignette|dehaze|sharpen|noise` as
     /// the chip. The old names still answer — `wb` → color:wb,
     /// `mixer[:axis]` → color:mixer, `rotation` → crop, `all` → light — so
-    /// the existing design recipes keep working. The band suffix is parsed
-    /// and dropped: the panel holds its mixer band privately and offers no
-    /// way in. On every layout this is "open the panel"; there is nothing to
-    /// scroll to any more.
+    /// the existing design recipes keep working. The band suffix — a band's
+    /// Lightroom name, `orange` or `aqua` — lands in `hookBand`, which the
+    /// panel takes as its `initialBand` so the mixer opens on that band. On
+    /// every layout this is "open the panel"; there is nothing to scroll to
+    /// any more.
     private func applySectionsHook() {
         guard let hook = ProcessInfo.processInfo.environment["LL_SECTIONS"] else { return }
         let parts = hook.split(separator: ":").map { String($0).lowercased() }

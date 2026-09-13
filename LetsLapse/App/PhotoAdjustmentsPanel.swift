@@ -30,6 +30,12 @@ struct EditorPresetsContext {
     /// when the owner has none to render on; the tiles then show placeholders.
     var frame: PresetPreviewFrame?
     var presetState: PresetState
+    /// The built-in the project's grade stands on — `PhotoGrade.preset`.
+    /// While the state is Edited the pill says so and the base's tile keeps
+    /// its ring, so "Natural (ringed) · Edited" reads as the board draws it;
+    /// a named state rings the named tile instead, and Original is never
+    /// ringed while Edited (an edited Original is just edits).
+    var basePreset: PhotoPreset
     var customPresets: [CustomPreset]
     /// The owner owns one `@StateObject` and hands it in, so renders survive
     /// the phone panel being torn down between opens.
@@ -466,9 +472,7 @@ struct PhotoAdjustmentsPanel: View {
                 grade: PhotoGrade(preset: preset, adjustments: .neutral),
                 frame: presets.frame,
                 cache: presets.cache,
-                isSelected: preset == .original
-                    ? presets.presetState.isOriginal
-                    : presets.presetState.isNamed(preset.presetID),
+                isSelected: Self.isBuiltInRinged(preset, in: presets),
                 accent: accent,
                 style: tileStyle
             ) {
@@ -495,18 +499,34 @@ struct PhotoAdjustmentsPanel: View {
         }
     }
 
-    /// Under the tiles: the owner's Lightroom card and save offer when it
-    /// has them, then the way to keep the edits in hand.
+    /// Which built-in tile carries the ring. Original's ring means "no
+    /// preset" and follows `isOriginal` alone. Any other built-in is ringed
+    /// while it is the named state, and also while the state is Edited and
+    /// it is the base the edits sit on — the state pill already says Edited,
+    /// so the ring is free to say which look was edited.
+    private static func isBuiltInRinged(_ preset: PhotoPreset, in presets: EditorPresetsContext) -> Bool {
+        if preset == .original { return presets.presetState.isOriginal }
+        if presets.presetState.isNamed(preset.presetID) { return true }
+        return presets.presetState.isEdited && presets.basePreset == preset
+    }
+
+    /// Under the tiles: the owner's Lightroom card, then ONE way to keep the
+    /// edits in hand — the owner's inline offer when it is making one (the
+    /// offer carries its own Save as Preset button), otherwise the plain
+    /// row. This is the only place the offer appears.
     @ViewBuilder private func presetsFooter(_ presets: EditorPresetsContext) -> some View {
         if let card = presets.lightroomCard { card }
-        if let offer = presets.saveOffer { offer }
-        Button(action: presets.onSaveAsPreset) {
-            Label("Save as Preset", systemImage: "square.and.arrow.down")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(accent)
+        if let offer = presets.saveOffer {
+            offer
+        } else {
+            Button(action: presets.onSaveAsPreset) {
+                Label("Save as Preset", systemImage: "square.and.arrow.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(accent)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Tool groups
@@ -835,24 +855,39 @@ struct PhotoAdjustmentsPanel: View {
 
     // MARK: - Readouts
 
-    /// Slider values read as -100…100, which is the vocabulary people know
-    /// from every other editor, rather than the -1…1 the engine takes.
+    /// `String(format:)` prints a hyphen-minus for a negative number; the
+    /// boards — and `RotationSlider.readout` — print a real minus sign,
+    /// U+2212, which sits at the plus sign's height and width so "−12" and
+    /// "+12" line up under a pad. Every readout the panel formats passes
+    /// through here, so no formatter can drift back to the hyphen.
+    static func minusSigned(_ formatted: String) -> String {
+        formatted.replacingOccurrences(of: "-", with: "−")
+    }
+
+    /// Slider values read as −100…100, which is the vocabulary people know
+    /// from every other editor, rather than the −1…1 the engine takes.
     static func defaultReadout(_ value: Float) -> String {
         // Rounded before the sign test, like the board's `S()`: a value a
         // hair off zero reads "0", not "+0".
         let rounded = (value * 100).rounded()
-        return rounded == 0 ? "0" : String(format: "%+.0f", rounded)
+        return rounded == 0 ? "0" : minusSigned(String(format: "%+.0f", rounded))
     }
 
     /// For a control centred mid-travel or with no negative side, where a
     /// signed readout would print "+50" for a slider that is doing nothing.
     /// 0…100, unsigned.
     static func unsignedReadout(_ value: Float) -> String {
-        String(format: "%.0f", value * 100)
+        minusSigned(String(format: "%.0f", value * 100))
     }
 
     static func exposureReadout(_ value: Float) -> String {
-        abs(value) < 0.005 ? "0" : String(format: "%+.2f", value)
+        abs(value) < 0.005 ? "0" : minusSigned(String(format: "%+.2f", value))
+    }
+
+    /// Tint's readout: the converter's ±150 axis as a whole number, signed.
+    static func tintReadout(_ value: Float) -> String {
+        let rounded = value.rounded()
+        return rounded == 0 ? "0" : minusSigned(String(format: "%+.0f", rounded))
     }
 
     // MARK: - White balance
@@ -1068,7 +1103,7 @@ struct PhotoAdjustmentsPanel: View {
             label: "Tint", field: .whiteTint,
             range: range, neutral: min(max(frameTint, range.lowerBound), range.upperBound),
             isNeutral: { !adjustments.ownsWhite },
-            readout: { $0.rounded() == 0 ? "0" : String(format: "%+.0f", $0.rounded()) },
+            readout: Self.tintReadout,
             get: { adjustments.ownsWhite ? adjustments.whiteTint : frameTint },
             set: { values, tint in
                 if !values.ownsWhite { values.whiteMired = frameMired }
@@ -1210,6 +1245,11 @@ struct PhotoAdjustmentsPanel: View {
     }
 
     /// Original · 1:1 · 4:5 · 16:9 · 9:16 · Custom, every chip the same width.
+    /// Six chips is a tight fit at the Mac card's 274 pt of content: each
+    /// chip gets ~42 pt, so the labels are 10.5 pt, may shrink to 0.8, and
+    /// keep 2 pt of side padding so "Original" and "Custom" never touch
+    /// their chip's edge. The dark editors have 361 pt for the same row and
+    /// no such squeeze.
     private var aspectChips: some View {
         HStack(spacing: isLight ? 4 : 5) {
             ForEach(FrameCrop.Aspect.allCases, id: \.self) { aspect in
@@ -1235,7 +1275,9 @@ struct PhotoAdjustmentsPanel: View {
             Text(aspect.label)
                 .font(.system(size: isLight ? 10.5 : 11.5, weight: .semibold))
                 .lineLimit(1)
+                .minimumScaleFactor(isLight ? 0.8 : 1)
                 .foregroundStyle(ink)
+                .padding(.horizontal, isLight ? 2 : 0)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, isLight ? 5 : 7)
                 .background(shape.fill(fill))
@@ -1410,7 +1452,8 @@ private struct PhotoAdjustmentsPanelPreview: View {
             accent: style == .dark ? LL.amber : LL.accent,
             keyframedFields: [.exposure, .highlights, .whiteMired],
             presets: EditorPresetsContext(
-                frame: nil, presetState: .original, customPresets: [], cache: cache,
+                frame: nil, presetState: .original, basePreset: .original,
+                customPresets: [], cache: cache,
                 onSelect: { _ in }, onDelete: nil, onSaveAsPreset: {},
                 saveOffer: nil, lightroomCard: nil),
             autoWhite: { nil })

@@ -87,7 +87,247 @@ built from UNCROPPED frames. The full render (clip + poster from the clip)
 slices the cropped clip and is right. Fix: cut `grade.crop` on each master
 frame as the provider hands it over (`FrameCrop.apply(_:to: CGImage)` after
 the overlay bake — the same order `stackPhotos` uses), and let the ladder
-sizes follow the cropped frame.
+sizes follow the cropped frame. Since 2026-09-13 the poster's summary says
+" · crop not applied (poster fast path)" so the drop is not silent.
+
+### Editor controls redesign — review leftovers (design fidelity, low)
+
+**Raised:** 2026-09-13 (the six-lens review's fix stage; everything high /
+medium and every correctness low was fixed; extended 2026-09-13 with what
+the screenshot and mirror stages found) · **Size:** small each · owner:
+`App/PhotoAdjustmentsPanel.swift`, `App/EditorControls/*`,
+`App/PhotoViewerView.swift`, `App/Overlay/MasksCard.swift`,
+`App/SettingsView.swift`
+
+Taste items and design calls the review and the screenshot pass listed
+that were not trivially safe to change, kept here rather than lost:
+
+- **Sliders mode uses the native `Slider`** for every row but Temp / Tint
+  (boards 6e / 3b draw a 4 pt track with an accent fill and a 26 / 20 pt
+  knob for all of them). `GradientTrackSlider` wants a plain-track mode and
+  every `sliderRow` routed through it — a11y (the native slider is what
+  VoiceOver knows) decides whether the native one stays anywhere.
+- **Touch chrome sits inside the safe area** (`.padding(.vertical, 12)`):
+  the iPhone back disc / tab pill land at safe-top + 12 ≈ 71 pt against the
+  board's 60; the iPad floating layout's at 36 against 16, and its foot row
+  36 pt off the bottom against 16. Either let `floatingEditorBody` ignore
+  the safe area (the board is edge-to-edge) or record the delta in the
+  mirrors when they are redrawn.
+- **Tool chip labels shrink** (`minimumScaleFactor(0.75)`) before they
+  truncate; the board ellipsises at a fixed 11.5 / 11 pt.
+- **Elements on no board:** the `PresetStatePill` in the panel title row,
+  the "Save as Preset" footer + Lightroom card + save offer under the tiles,
+  and the Crop hint's third string ("Original · the whole picture" where
+  the board reads "Locked to Original · …"). Keep and add to the mirrors,
+  or fold the save affordance into ✓ / long-press. The screenshot pass
+  (stage G) added the **⤢ expand button** on the picture's edge — right,
+  mid-height on the iPhone; bottom-right of the Mac pane — which no board
+  shows either.
+- **Presets ring while Edited.** `PresetState` is Original / named /
+  Edited, so once a value moves NO tile carries the accent ring, while
+  board 5a / 3b ring the named preset regardless of edits (and have no
+  Edited pill). Decide which; the mirrors draw the app and their INDEX rows
+  say ⚠️.
+- **Readouts print an ASCII hyphen** (`%+.2f` / `%+.0f`) where the boards
+  use a true minus (U+2212). A one-line format change, but it touches every
+  readout, the pad readouts and the slider rows alike.
+- **Mac panel header keeps a "Reset" text button** beside the state pill,
+  Revert and Done (boards 3b / 6c draw Revert / Done only); at 330 pt that
+  is what once wrapped the Presets title, since fixed by hiding it on the
+  Presets card. The WB illuminant menu is the native macOS pop-up (white,
+  black chevron) rather than the board's accent chevron square.
+- **iPad Crop margins.** The floating layout centres the picture inside 48
+  pt sides / 68 pt top / 144 pt foot while Crop is open (chrome- and
+  foot-clear, deliberate, so every handle can be grabbed); board 5a says
+  48 all round. The boards or the code move; the mirror draws the app.
+- **Touch chrome offsets, restated from the screens:** the boards seat the
+  back disc and tab pill at top 60 / 16; the app at 71 / 74 on the phone
+  (12 pt under the safe area). Same job as the safe-area bullet above.
+- **The iPhone-landscape rail's chips truncate** — "Exp ·…", "High ·…",
+  "Shad ·…" — at the ~276–288 pt of card content a 16 Pro's rail offers
+  (drawn as shipped, ⚠️ in the iOS INDEX). Drop the icon, drop the diamond,
+  or shorten the labels on the phone rail. While there: the rail measured
+  315 pt with 288 pt of content against `railWidth(in:)`'s
+  `min(340, 0.42 × width)` and 16 pt padding — a 2–3 pt gap; check which
+  safe width the function is handed.
+- **Settings › Advanced › Layout vs board 6d.** The rows are separate
+  `Form` sections with footers (the neighbouring rows' idiom, kept by the
+  review's call) where 6d draws one grouped LAYOUT card with dividers on
+  an "Advanced" page; the toggles are accent-tinted where 6d's are green;
+  the row reads "Enable Scans menu", the board "Enable Scans Menu". Settle
+  the idiom once, for the whole Advanced page.
+- **The marquee badge reads "VIDEO · 13 s"** through
+  `EditorMarqueeBadge.durationLabel` ("2 h 14 min" / "14 min 3 s" / "45 s")
+  where the video brief wrote a literal m:ss; a parameter on the badge if
+  m:ss is wanted.
+- **The WB pad's Y axis is non-linear in Kelvin** (presented = −mired), so
+  at the as-shot 6500 K the knob sits about 80 % of the way up and the
+  crosshair is not where an untouched white rests. Per spec §2; worth a
+  look once the pads have been used for real.
+- **`presetStore.lastError` has a home only in the rail stack** (Mac,
+  iPhone landscape); the phone sheet and the iPad floating card show a
+  failed preset save nowhere (the old panel showed it under "Save as
+  Preset").
+- **The Mac Masks card's compact rows** deviate from the brief's literal
+  "dim the group's other tools": every touched tool is lit and ONE lead
+  tool per silent section dimmed (≤ 7 icons — dimming all seven reachable
+  tools is 130 pt and does not fit beside the name at 330 pt); row spacing
+  8 vs the board's 10; the shared `MaskTile` ring 2.5 pt vs the board's 2;
+  no add tile in the compact list (a second grade is added from Manage ›).
+- **The SVG mirrors** were drawn 2026-09-13 (stages F / G) for iPhone, iPad
+  landscape and the Mac; what is still undrawn — iPad portrait's rail
+  layout, the Mac video editor, the iPhone Masks page — is listed under
+  *Design mirrors for the tabbed editor rail* below.
+
+### Editor controls redesign — code fixes owed after the screenshot pass
+
+**Raised:** 2026-09-13 (stage G's captures of the shipped build on the
+iPhone 16 Pro / iPad Pro 11" simulators and the Mac, and the mirror stages
+that drew them as shipped) · **Size:** small each, one medium · owner:
+`App/PhotoViewerView.swift`, `App/VideoEditorView.swift`,
+`App/PhotoAdjustmentsPanel.swift`, `App/EditorControls/*`,
+`App/Overlay/MasksCard.swift`
+
+Each of these is a screenshot with a wrong thing in it, not a taste call:
+
+- **iPhone Crop: the top corner handles are unreachable.** Opening the
+  panel fits the picture into the room above the foot (the 2026-09-13 fix
+  for the BOTTOM handles), but that room starts at the safe-area top, so a
+  tall picture's top handles land under the back disc and the tab pill,
+  which take the touch. `phoneEditorBody`'s crop room should start under
+  the chrome row (safe top + `touchChromeHeight`, 60), the way
+  `floatingPictureFrame` already does on the iPad. The mirror
+  (`iOS/project-photo.viewer.crop.portrait.svg`) draws the corrected fit —
+  a 282×376 picture at (55.5, 119) — so re-verify `iphone-crop.png`
+  against it after the fix.
+- **Mac Crop card: the six aspect chips overflow the card.** At the 330 pt
+  rail's 274 pt of content, Original · 1:1 · 4:5 · 16:9 · 9:16 · Custom do
+  not fit: "Original" and "Custom" lose their side padding and Custom is
+  flush with the card's edge (`mac-crop-rail-crop.png`). Board 3b sets the
+  chips at 10.5 pt with 5 / 0 padding and a hairline border, inside the
+  card; `photo-viewer.crop.svg` draws them there.
+- **Mac Presets card shows two save affordances at once** — the "Save these
+  edits as a preset?" prompt card (`saveOffer`) AND the "Save as Preset"
+  row — and the same prompt card is also appended under "Reset
+  adjustments" in every OTHER group's card while the state is Edited
+  (`mac-presets.png`, `mac-light.png`; boards 3b / 6c have neither).
+  `photo-viewer.presets.svg` draws one row. One affordance, in one place.
+- **Detail › Noise pad: the knob is clipped at neutral.** Both of the Noise
+  pad's fields are unsigned with neutral 0, so the crosshair sits in the
+  bottom-left corner and the 30 pt knob is three-quarters outside the
+  pad's clip, with no crosshair visible (`iphone-detail-noise.png`). Sharpen
+  has the same geometry. Inset the knob's travel by its radius, or draw
+  the knob above the clip — `XYPad` decides for every pad at once.
+- **The Mac masked-grade editor still draws the old sections.** The
+  compact rows are redesigned, but `MasksCard.expandedPanel` (the card a
+  row opens into) is the pre-redesign White Balance / Light / Color /
+  Effects slider stack (`mac-masks-row.png`; `photo-viewer.mask-grade.svg`
+  draws it as shipped, row ⚠️). Regroup it into the groups / tools / pads
+  — `MaskGrade.sections` already maps its fields onto `EditorTool`s for
+  the row icons — or route it through `PhotoAdjustmentsPanel` with a
+  masked-grade `EditorPresetsContext` of nil, which is what the panel's
+  doc comment anticipates. Medium: a masked grade has no timeline, its
+  White Balance is the legacy `temperature` / `tint` offset pair (not an
+  owned white), its Exposure travels ±2 EV rather than ±5, and it holds
+  nine fields where the panel's groups hold twenty-odd — the sections
+  would be Light (Exp · Con, Highlights · Shadows), Color (WB, Saturation)
+  and Effects (Clarity, Dehaze) with the rest absent, not dimmed.
+- **Video editor: no crop frame over the player.** The Crop group's aspect
+  chips and Angle slider work on a movie, but nothing draws the crop over
+  the player — `VideoGrader.composition(cropped:)` defaults to FALSE for
+  exactly that reason, the player shows the whole movie and the hint under
+  the chips ends "· shown on export" (`cropNote`). The job is
+  `CropFrameOverlay` over the player (the viewer's `cropBinding` +
+  `cropEditing` arbitration, `imagePane`'s gesture masks), centring the
+  player inside the iPad floating layout's 48 pt inset while Crop is open
+  as the viewer does, and then dropping the note. Until then a cropped
+  movie is only ever seen cropped in the motion preview and the export.
+- **The Mac video editor auto-plays on open** — the transport showed the
+  pause glyph as soon as `LL_EDITOR=video` landed (`mac-video-light.png`).
+  Decide whether the editor should open playing; the photo editor's
+  timeline opens parked.
+- **Hook fidelity for the mirrors** (`PhotoViewerView.applyKeyframeHook`,
+  `applySectionsHook`; the same two in `VideoEditorView`):
+  `LL_KEYFRAMES=sunset` parks the playhead at 30 % unsnapped, while the
+  iPad keyframed mirror is drawn in the boards' snapped state (52 %,
+  1:09:41) — a value for the snapped state would make that screenshot match
+  one-to-one; the hook also keyframes `shadows` and `vibrance`, so all
+  three Light chips carry diamonds where the boards mark Exposure,
+  Highlights and Temp only. `LL_EDITOR=latest` and `LL_VIEWER=1` may not
+  resolve to the same "largest interval shoot" (the iPhone landscape
+  capture opened a different project from the portrait runs). And
+  `applySectionsHook`'s doc comment still says the band suffix is "parsed
+  and dropped" — it has been honoured (`initialBand`) since the review's
+  fix stage.
+- **A preset tap still drops the owned white.** `applyPresetValues` now
+  re-attaches the crop and the rotation (review fix, 2026-09-13) but not
+  `whiteMired` / `whiteTint` — pre-existing, outside the review's
+  findings, and worth the same treatment: a preset is a look, a white is a
+  correction.
+- **Smaller, from the stage reports.** The Mixer pad and its band slider
+  fire no `onFieldEditing` (band values are not `PhotoAdjustmentField`s),
+  so a mixer edit is persisted only by the editors' 2 s safety net and
+  never floats the loupe — as the old mixer rows behaved; a band-level
+  editing callback would close it. `gradeToken` keeps the crop, so at 1:1 a
+  crop drag re-keys the detail patch and the loupe although both render
+  uncropped — drop the crop from the token if the extra full-resolution
+  renders show. `PhotoAdjustmentsPanel.isNeutral` is asked for every group
+  on every body pass (`nonNeutralGroups`) — cheap today; memoise the group
+  bar's dots first if the Presets tiles' re-render on scrub ever hurts.
+
+Already listed above as their own jobs, and part of the same redesign:
+*Post-crop vignette centring*, *Crop through the Adjust screen* (the
+`AdjustPreviewLevel` crop twin and the reframe composed with the crop) and
+*Time-slice poster fast path ignores the project crop*.
+
+### Editor controls redesign — device verification owed
+
+**Raised:** 2026-09-13 (stages B–D and the review's fix stage could only
+compile, screenshot or drive by MCP taps, which are too slow to form a
+double-tap) · **Size:** one session on an iPhone and an iPad, plus a Mac
+run · owner: the `/run-letslapse` skill on a physical device
+
+Everything here compiles and was seen on the simulators; none of it has
+felt a finger:
+
+- **Gestures.** `XYPad`, `GradientTrackSlider` and `CropFrameOverlay` attach
+  their drags as `.highPriorityGesture` (so the `.page` `TabView` of a
+  multi-frame project no longer steals a horizontal move) with the reset as
+  a trailing `.simultaneousGesture(TapGesture(count: 2))`. Confirm on a
+  device that the double-tap still resets both fields, that a crop
+  corner / body drag and the crop pinch work with the pane's own pan and
+  magnify standing down (`cropEditing`, and the magnify mask while Crop is
+  open), and that paging between frames still works with a pad on screen.
+- **A movie on the touch layouts.** The phone (2a / 6a) and iPad floating
+  (5a / 6b) layouts of `VideoEditorView` were code-mirrored from the photo
+  editor and never seen with a movie: `LL_EDITOR=video` stops at the
+  project detail on iOS. Two things to look at: AVKit's bottom-anchored
+  transport sits under the phone's foot stack (the strip's play / scrub is
+  the transport there — if it reads wrong, inset the player by the foot
+  height the way the viewer's `EditorFootHeightKey` does), and a portrait
+  movie runs under the foot exactly as a tall photo does.
+- **A cropped mixed-resolution ramp shoot through export.** The review's
+  canvas-box change (`runsCanvasPass` / `cropCanvas` nil when a project
+  crop exists and no canvas was chosen; `SegmentNormalization.canvas`
+  optional) compiles and follows the cropper's existing nil-canvas body,
+  but no cropped ramp shoot was rendered end to end.
+- **The mirrors' own captures.** `iPadOS/project-photo.viewer.landscape.svg`
+  is drawn from `floatingPictureFrame`'s rule, not a screenshot — the iPad
+  session had no PHOTO capture (`LL_EDITOR=<uuid> LL_SECTIONS=light:expcon`
+  on one); the iOS `project-photo.viewer.portrait.svg` /
+  `.landscape.svg` are derived from interval captures minus the card and
+  strip — a `LL_VIEWER=1` run over a photo project confirms them;
+  `macOS/photo-viewer.mixer.svg` was drawn from the card idiom without a
+  Mixer capture (`LL_EDITOR=latest LL_KEYFRAMES=sunset LL_MIXER=demo
+  LL_SECTIONS=color:mixer:orange`). The Mac captures are 1× (the window sat
+  on a non-retina display at 1440×1125 pt; light appearance forced per
+  process with `-NSRequiresAquaSystemAppearance YES`) — re-capture on the
+  retina display at the 1000×720 default if pixel-exact comparison is
+  wanted. iPad simulator rotation: Cmd-L did nothing and the
+  brightness-strip heuristic misdetects the dark editor; the recipe that
+  worked is the Simulator's Device ▸ Rotate Left menu click, the window
+  size as the check (1052×807 = landscape) and `sips -r 90` on the native
+  buffer.
 
 ### Server as the source of truth — sync-ready records (Part 3 of the data-model audit)
 
@@ -607,14 +847,26 @@ sign was inverted, and Lightroom's mask geometry is in the sensor frame).
    cannot draw (no segmenter outside the app); they are marked † in the
    ledger. Either teach `lapse` to load the CoreML segmenter or let it take a
    mask PNG per file.
-3. **The crop rect.** The straighten angle now imports as the level; the rect
-   does not, because there is no crop control on a photo project. Nine of
-   twenty files are cropped.
+3. **The crop rect.** The straighten angle imports as the level; the rect
+   still does not — the import says so ("the crop rect itself is not
+   carried; the level's inscribed crop stands in"). Since 2026-09-12 there IS
+   a crop control (`PhotoAdjustments.crop`, a `FrameCrop` in the levelled
+   frame's unit square, the Edit screen's Crop group), so the mapping is now
+   just `CropLeft` / `CropTop` / `CropRight` / `CropBottom` into that
+   rectangle — with one thing to establish first on a straightened AND
+   cropped sidecar from the corpus: whether Lightroom's rect is expressed in
+   the frame before or after `CropAngle`, since ours lives in the levelled
+   frame. Nine of twenty files are cropped.
 4. **HSL is not keyframe-blended** (held from the earlier keyframe) and the
    post-engine passes skip the pixel-peep loupe (a patch-local airlight
    estimate would not match the frame's). Both are documented in the code.
-5. **Post-crop vignette (8/20) and grain (2/20)** — the next unbuilt controls
-   by usage.
+5. ~~**Post-crop vignette (8/20)**~~ and **grain (2/20)**. The vignette is
+   built (2026-09-12: signed intensity, a midpoint, `PostCropVignetteAmount`
+   imported sign-flipped with `PostCropVignetteMidpoint`; feather, roundness
+   and style are reported as unsupported) — but the still and blend paths
+   centre it on the whole frame rather than the crop, which is the
+   *Post-crop vignette centring* entry above. Grain remains the next unbuilt
+   control by usage.
 
 ---
 
@@ -777,7 +1029,15 @@ iPad as on the Mac — and the macOS mirrors are drawn
   same reason, so a phone can add and grade a mask but cannot comfortably draw
   one. Two files are owed once that is settled — the Masks tab and the Editor
   tab's Masks card. iOS has never had a Masks mirror at all, so there is no
-  stale file to fix, only new ones to draw.
+  stale file to fix, only new ones to draw. **Since the 2026-09-13 editor
+  redesign the card's home on the touch layouts is a stopgap:** boards 2a /
+  5a have no Masks card on the Editor page, but the Masks tab's "Grade this
+  in Editor" still lands on the Editor tab with a grade expanded, so the
+  viewer shows `touchMasksCard` in the panel's slot only while a grade is
+  expanded and no group is open (a scrollable dark sheet ≤ 50 % of the
+  height on the phone, 400 pt wide bottom-right on the iPad). The Mac rail
+  keeps the card, now as compact rows carrying the tool icons of the fields
+  each grade moves. The real touch home is part of the same decision.
 - **Verify on a device.** Everything here was checked on the Mac. The handles
   are a pointer-sized target (14pt drawn, 22pt hit area) and want a real finger
   on them; the masked-grade composite adds one Core Image pass per enabled
@@ -1611,18 +1871,40 @@ hard cases, no Apple builtin, a real port).
 **Wrinkle:** drag on the preview is already taken by text placement, so this
 needs an explicit mode. Fine on the Mac, more intrusive on iPhone.
 
-### Design mirrors for the tabbed editor rail — iOS remainder
+### Design mirrors for the tabbed editor rail — the remainder after the editor redesign
 
-**Raised:** 2026-08-31, out of the text-overlay spike · **Narrowed:** 2026-08-31 — macOS drawn (30b5836), then rebuilt for Text Features
+**Raised:** 2026-08-31, out of the text-overlay spike · **Narrowed:**
+2026-08-31 — macOS drawn (30b5836), then rebuilt for Text Features ·
+**Narrowed again:** 2026-09-13 — the Editor tab redrawn on every platform
+with the editor-controls redesign
 
 The macOS Edit window's specs are current: `macOS/photo-viewer.svg` /
 `.text.svg` / `.frames.svg` / `.masks.svg`, all four carrying the four-tab
 rail, verified against the running app and ✅ in the macOS INDEX
 (centre-snap guides, the More… popover, model-missing and mask-file-missing
-states desc-only — draw them if they matter for sign-off). Still owed: the
-six iOS viewer SVGs (`project-photo.viewer.*.svg` family) are stale against
-the tab bar and the stacked layout's Text/Frames/Masks pages have never been
-drawn; mirror once the iOS pass happens.
+states desc-only — draw them if they matter for sign-off). The iOS
+`project-photo.viewer.*.svg` family was redrawn 2026-09-13 from the
+redesign's boards and the running app (portrait, buttons, keyframes,
+keyframes-empty, pads-off, color.wb, crop, presets, landscape and
+keyframes.landscape; `expanded` retired), and iPadOS gained its first four
+Editor-tab files (`project-photo.viewer.{landscape,keyframes,presets,crop}
+.landscape.svg`). Still owed, one file each:
+
+- **iPad portrait** — the DARK RAIL layout (settled 2026-09-13 over spec
+  decision 9, which said the phone sheet; the iPadOS INDEX row is 🟡
+  Planned). A bespoke portrait file once the rail layout is signed off on a
+  device; until then the iOS side-rail files are the nearest drawing.
+- **The Mac video editor** — no file exists; the macOS INDEX's keyframes
+  row says the video editor reuses the same rail and panel with the VIDEO
+  badge top-left of the pane and no Auto button / no Masks card
+  (`mac-video-light.png`). Draw it as its own file rather than a note.
+- **The iPhone Masks page** — the Masks tab and the Editor tab's Masks
+  card on iOS have never been drawn (🟡 in the iOS INDEX); see *Masks as
+  adjustment layers — iOS design pass* for the design decision that has to
+  come first, and note the touch layouts' Masks card is a STOPGAP
+  (`touchMasksCard`, below the picture while a grade is expanded and no
+  group is open) that the boards do not show at all.
+- The stacked layout's **Frames** page, never drawn on iOS.
 
 ### iOS tab host still folds tabs 5+ into UIKit's invisible "More" controller
 
@@ -2412,9 +2694,11 @@ and a travelling level carries them per moment). Owed:
   decodes without the grade, so a levelled project's card still shows the
   raw tilt; the hero (`ProjectMedia`), grid and fullscreen sheet ARE levelled.
   Decide whether the card should pay for a grade render.
-- **iOS viewer SVGs** (`project-photo.viewer.*`) are marked ⚠️ Stale: they
-  predate the sectioned panel and now also lack the Rotation card. Restage
-  from the running app (LL_VIEWER=1 + LL_SECTIONS=rotation).
+- ~~**iOS viewer SVGs** (`project-photo.viewer.*`) are marked ⚠️ Stale~~ —
+  redrawn 2026-09-13 with the editor redesign, where the ±10° control is the
+  **Angle** slider inside the Crop group (`iOS/project-photo.viewer.crop
+  .portrait.svg`, `iPadOS/…crop.landscape.svg`, `macOS/photo-viewer.crop
+  .svg`; `LL_SECTIONS=crop`, the old `rotation` still answers).
 - **Ken Burns collection export / time slicing** consume finished blend
   clips, so they inherit the level for free — but a collection built from
   a clip rendered BEFORE the project was levelled keeps the old geometry.

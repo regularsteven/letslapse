@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Interval grading viewer · Presets · portrait</title>
+  <desc>Mirrors App/PhotoAdjustmentsPanel.swift's Presets group (`presetsContent` .phone, `presetTiles`, `presetsFooter`) with App/EditorControls/PresetTile.swift (.phone), PresetThumbnails.swift (`PresetThumbnailCache`, `EditorPresetThumbnail`) and App/PresetState.swift's `PresetStatePill`, inside App/PhotoViewerView.swift's `phoneEditorBody` (`presetsContext`, `request(_:)`, `isNamingPreset`). New 2026-09-13 for the editor controls redesign (board 2a's Presets panel, spec §9). The preset chip strip that used to head the control stack is now the Presets group's own sheet. LAYOUT (2a / 6a, `phoneEditorBody`): the picture fills the safe area (59 top / 34 bottom on this canvas) and is fitted into it — a 3:4 portrait shoot spans the width and centres vertically, 176…700 — and everything else floats over it. `touchChrome`: the 36 pt back disc at (16, 71) and the `EditorTabPill` top-right (right 16, top 74: 12 pt of vertical padding under the safe area, the 30 pt pill centred on the 36 pt disc) — the boards draw both at top 60, the app sits them 11 pt lower. The pill is rgba(28,28,30,.85) over material, radius 18, 12 pt semibold, the selected tab amber with black text, the rest amber on ink; Frames appears only on a shoot with more than one frame. The foot (`phoneFoot`) is bottom-anchored on the safe area: the timeline card where `hasTimeline`, then EITHER the six main buttons (`EditorGroupBar(.phone)`) OR the open group's sheet (`PhotoAdjustmentsPanel(layout: .phone)`) — one or the other, the sheet needs the buttons' room. The sheet: 22 pt top corners, rgba(28,28,30,.86) over material running under the home indicator, padded 12 top / 16 sides / 0 bottom, 10 pt between rows, shadow up; header = title 15 pt semibold white · 6 pt dot (accent when the group holds a value or a travelling field, clear otherwise so the row never reflows) · spacer · ✕ 32 pt white 10 % (reverts to the snapshot `openPanel(for:)` took) · ✓ 32 pt amber (keeps and closes). Long-press the title for Reset &lt;group&gt; / Reset all adjustments. The 1:1 toggle (`zoomControls`, 32 pt black 45 %) sits bottom-trailing of the picture pane 12 pt in, lifted above the foot by its measured height; it exists only while `hasPixelsToReveal`, so a small source shows none. The readouts print the app's own formats (`%+.2f`, `%+.0f`, unsigned 0…100, Kelvin) with a real minus sign, U+2212, like the boards (`PhotoAdjustmentsPanel.minusSigned`, 2026-09-13). THIS CANVAS: the header reads 'Presets', then the state pill (`PresetStatePill`: 'Edited' in 12.5 pt semibold secondary on primary 8 %; a named preset would be amber with black text, 'Original' grey), then the dot — lit, because the project is not on Original. The strip: 76 pt tiles (radius 12, #111 placeholder until the render lands) 10 pt apart from x = 16, scrolling horizontally and bleeding edge to edge under the sheet's sides — Natural · Cinema · Matte · Vivid · Original (`PhotoPreset.strip`) then every saved preset (`CustomPresetStore`, long-press → Delete preset) — each with its name 11 pt semibold #8E8E93 5 pt under. Every tile shows the frame under the playhead rendered through that preset ALONE (a built-in at neutral adjustments, a saved preset as the whole grade it is, the geometry in hand left out) at 160 px on the grading lane, cached by preset + adjustments + frame, refreshed on open and on gesture end, never per tick — the tap's honest preview, since tapping a built-in REPLACES the edits (settled 2026-09-13; spec §9 first asked for 'this preset + my edits'). The applied preset takes a 2.5 pt amber ring inside its edge and an amber caption — and so does the BASE preset while the state is Edited (settled 2026-09-13, board 2a's rule: `EditorPresetsContext.basePreset`, ringed when `presetState.isEdited` and the tile is that preset; Original rings only while `isOriginal`), so here Natural is ringed under the 'Edited' pill. Under the strip `presetsFooter`: the owner's Lightroom import card where a sidecar exists, then EITHER the owner's inline 'Save these edits as a preset?' offer OR 'Save as Preset' (square.and.arrow.down + 13 pt semibold amber, leading), never both (2026-09-13); on the phone the editor owns its exit, so the offer is the exit-time overlay and the row is what shows here — the board draws none of these (⚠️). A tile tap goes through `request(_:)`, which may confirm first; Original clears the timeline with everything else. Staged by LL_EDITOR=latest LL_VIEWER=1 LL_KEYFRAMES=sunset LL_SECTIONS=presets (the sim library has no saved presets, so the strip ends at Original, clipped by the screen edge).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="panel-shadow" x="-10%" y="-20%" width="120%" height="140%"><feDropShadow dx="0" dy="-8" stdDeviation="12" flood-color="#000" flood-opacity="0.45"/></filter>
+    <filter id="knob-shadow" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.5"/></filter>
+    <filter id="word-shadow" x="-20%" y="-40%" width="140%" height="180%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.6"/></filter>
+    
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000000"/>
+    <g transform="translate(24,24)">
+      <!-- the picture: the frame under the playhead (30 %), 3:4, fitted to the safe area -->
+<defs><linearGradient id="skyr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5F7CAA"/><stop offset="1" stop-color="#E7C39C"/></linearGradient><clipPath id="framer"><rect x="0" y="176" width="393" height="524"/></clipPath></defs>
+<g id="picturer" clip-path="url(#framer)">
+<rect x="0" y="176" width="393" height="524" fill="url(#skyr)"/>
+<circle cx="259.4" cy="364.6" r="24.4" fill="#FFCE7E" opacity="0.95"/>
+<path d="M0 500.9 L39.3 500.9 L39.3 469.4 L55 469.4 L55 438 L62.9 406.6 L70.7 438 L70.7 479.9 L117.9 479.9 L117.9 448.5 L133.6 448.5 L133.6 490.4 L172.9 490.4 L172.9 422.3 L180.8 396.1 L188.6 422.3 L188.6 464.2 L204.4 464.2 L204.4 490.4 L247.6 490.4 L247.6 453.7 L259.4 453.7 L259.4 427.5 L267.2 406.6 L275.1 427.5 L275.1 474.7 L314.4 474.7 L314.4 495.6 L353.7 495.6 L353.7 464.2 L369.4 464.2 L369.4 500.9 L393 500.9 L393 595.2 L0 595.2 Z" fill="#30394E"/>
+<path d="M0 595.2 L0 521.8 L86.5 521.8 L86.5 500.9 L94.3 490.4 L102.2 500.9 L102.2 521.8 L157.2 521.8 L157.2 542.8 L283 542.8 L283 511.4 L338 511.4 L338 595.2 Z" fill="#3E4258"/>
+<rect x="11.8" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="32.2" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="52.7" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="73.1" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="93.5" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="114" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="134.4" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="172.9" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="194.5" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="216.2" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="237.8" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="259.4" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="0" y="595.2" width="393" height="104.8" fill="#4A5878"/>
+<rect x="11.8" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="32.2" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="52.7" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="73.1" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="93.5" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="114" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="134.4" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="0" y="595.2" width="393" height="104.8" fill="#000" opacity="0.18"/>
+</g>
+<g id="touch-chrome"><!-- touchChrome: back disc leading, tab pill trailing, 16/12 padding under the safe area -->
+<g id="back-button"><!-- the 36 pt disc the fullscreen player uses too (`backButton`) -->
+  <circle cx="34" cy="89" r="18" fill="#000" opacity="0.4"/>
+  <path d="M37 83 L31 89 L37 95" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+</g>
+<g id="tab-pill"><!-- EditorTabPill top-right over the picture: rgba(28,28,30,.85) over material, amber on ink -->
+<rect x="124.7" y="74" width="252.3" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+<rect x="127.7" y="77" width="58.8" height="24" rx="12" fill="#FFB340"/>
+<text x="157.1" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+<text x="213.4" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+<text x="274.9" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Frames</text>
+<text x="342.8" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Masks</text>
+</g>
+</g>
+<g id="pixel-zoom"><!-- `zoomControls`: the 1:1 toggle, bottom-trailing of the picture pane, 12 pt in, lifted above the foot; shown only while `hasPixelsToReveal` -->
+  <circle cx="365" cy="507" r="16" fill="#000" opacity="0.45"/>
+  <path d="M360 502 l-1 0 0 1 M360 502 l4 4 M370 512 l1 0 0 -1 M370 512 l-4 -4 M360 502 h3.5 M360 502 v3.5 M370 512 h-3.5 M370 512 v-3.5" fill="none" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.up.left.and.arrow.down.right"/>
+</g>
+<g id="timeline-card"><!-- phoneTimelineCard: the INTERVAL badge over the strip, over the picture's foot -->
+<rect x="12" y="535" width="369" height="101" rx="16" fill="#1E1E22" opacity="0.78"/>
+<g id="marquee-badge"><!-- EditorMarqueeBadge: kind · length · frame count -->
+<rect x="24" y="545" width="213.4" height="20" rx="10" fill="#000" opacity="0.5"/>
+<text x="35" y="559" font-size="11" class="sb" fill="#FFF">INTERVAL · 2 h 14 min · 58 frames</text>
+</g>
+<g id="timeline-strip"><!-- GradeTimelineView(full metrics) -->
+<circle cx="39" cy="600" r="15" fill="#1C1C1E"/>
+<path d="M35.5 593.5 L45 600 L35.5 606.5 Z" fill="#FFB340" data-symbol="play.fill"/>
+<rect x="66" y="598.5" width="227" height="3" rx="1.5" fill="#FFF" opacity="0.18"/>
+<rect x="132.6" y="589" width="3" height="22" rx="1.5" fill="#FFF"/>
+<circle cx="88.7" cy="600" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+<circle cx="184" cy="600" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+<circle cx="261.2" cy="600" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+<rect x="107.6" y="577.5" width="53" height="16" rx="8" fill="#2B2B2E" opacity="0.9"/>
+<text x="134.1" y="589" text-anchor="middle" font-size="10" class="sb" fill="#FFF">0:40:12</text>
+<text x="66" y="627" font-size="10.5" fill="#8E8E93">0:00:00</text>
+<text x="293" y="627" text-anchor="end" font-size="10.5" fill="#8E8E93">2:14:00</text>
+<!-- one-frame steps ‹ › after the track, centred on the strip's full height (transport + labels) -->
+<circle cx="316" cy="607.5" r="15" fill="#1C1C1E"/>
+<path d="M319.2 601.5 L312.8 607.5 L319.2 613.5" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+<circle cx="354" cy="607.5" r="15" fill="#1C1C1E"/>
+<path d="M350.8 601.5 L357.2 607.5 L350.8 613.5" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+</g>
+</g>
+<g id="group-panel"><!-- PhotoAdjustmentsPanel(layout: .phone): the open group's sheet over the picture's foot -->
+<path d="M0 852 L0 666 Q0 644 22 644 L371 644 Q393 644 393 666 L393 852 Z" fill="#1C1C1E" opacity="0.96" filter="url(#panel-shadow)"/>
+<g id="panel-header"><!-- title row: long-press the title for Reset Presets / Reset all adjustments -->
+<text x="16" y="677.3" font-size="15" class="sb" fill="#FFF">Presets</text>
+<rect x="81.4" y="659.5" width="59.3" height="25" rx="12.5" fill="#FFF" opacity="0.08"/>
+<text x="111.1" y="676.5" text-anchor="middle" font-size="12.5" class="sb" fill="#8E8E93">Edited</text>
+<circle cx="149.8" cy="672" r="3" fill="#FFB340"/>
+<!-- ✕ reverts to the snapshot taken when the panel opened; ✓ keeps and closes -->
+<circle cx="323" cy="672" r="16" fill="#FFF" opacity="0.1"/>
+<path d="M318.5 667.5 l9 9 M327.5 667.5 l-9 9" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" data-symbol="xmark"/>
+<circle cx="361" cy="672" r="16" fill="#FFB340"/>
+<path d="M355.5 672.5 l3.5 3.5 l7.5 -7.5" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+</g>
+<g id="preset-strip"><!-- presetsContent(.phone): a horizontal strip of 76 pt PresetTile(.phone)s, 10 pt apart, bleeding under the sheet's 16 pt sides; each tile is the frame under the playhead rendered through that preset ALONE, the caption 11 pt semibold #8E8E93 (accent, with a 2.5 pt accent ring, for the applied preset) -->
+<defs><clipPath id="tile0"><rect x="16" y="698" width="76" height="76" rx="12"/></clipPath></defs>
+<g clip-path="url(#tile0)">
+<rect x="16" y="698" width="76" height="76" fill="#111"/>
+<g transform="translate(16,685.3) scale(0.2)"><use href="#picturer"/></g>
+</g>
+<!-- the base preset keeps its ring while Edited (2026-09-13): 2.5 pt amber inside the edge, amber caption -->
+<rect x="17.25" y="699.25" width="73.5" height="73.5" rx="10.75" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+<text x="54" y="787.5" text-anchor="middle" font-size="11" class="sb" fill="#FFB340">Natural</text>
+<defs><clipPath id="tile1"><rect x="102" y="698" width="76" height="76" rx="12"/></clipPath></defs>
+<g clip-path="url(#tile1)">
+<rect x="102" y="698" width="76" height="76" fill="#111"/>
+<g transform="translate(102,685.3) scale(0.2)"><use href="#picturer"/></g>
+<rect x="102" y="698" width="76" height="76" fill="#7A5A2E" opacity="0.28"/>
+</g>
+<text x="140" y="787.5" text-anchor="middle" font-size="11" class="sb" fill="#8E8E93">Cinema</text>
+<defs><clipPath id="tile2"><rect x="188" y="698" width="76" height="76" rx="12"/></clipPath></defs>
+<g clip-path="url(#tile2)">
+<rect x="188" y="698" width="76" height="76" fill="#111"/>
+<g transform="translate(188,685.3) scale(0.2)"><use href="#picturer"/></g>
+<rect x="188" y="698" width="76" height="76" fill="#FFF" opacity="0.14"/>
+</g>
+<text x="226" y="787.5" text-anchor="middle" font-size="11" class="sb" fill="#8E8E93">Matte</text>
+<defs><clipPath id="tile3"><rect x="274" y="698" width="76" height="76" rx="12"/></clipPath></defs>
+<g clip-path="url(#tile3)">
+<rect x="274" y="698" width="76" height="76" fill="#111"/>
+<g transform="translate(274,685.3) scale(0.2)"><use href="#picturer"/></g>
+<rect x="274" y="698" width="76" height="76" fill="#F4B23A" opacity="0.12"/>
+</g>
+<text x="312" y="787.5" text-anchor="middle" font-size="11" class="sb" fill="#8E8E93">Vivid</text>
+<defs><clipPath id="tile4"><rect x="360" y="698" width="76" height="76" rx="12"/></clipPath></defs>
+<g clip-path="url(#tile4)">
+<rect x="360" y="698" width="76" height="76" fill="#111"/>
+<g transform="translate(360,685.3) scale(0.2)"><use href="#picturer"/></g>
+</g>
+<text x="398" y="787.5" text-anchor="middle" font-size="11" class="sb" fill="#8E8E93">Original</text>
+</g>
+<g id="save-as-preset"><!-- presetsFooter: the owner's Lightroom card when it has one, then EITHER the owner's save offer OR Save as Preset (13 pt semibold accent) — never both; on the phone the offer is the exit-time overlay, so the row shows -->
+<g transform="translate(16,801)" data-symbol="square.and.arrow.down"><path d="M7 0v9M3.5 5.5L7 9l3.5-3.5M1.5 6.5v6h11v-6" fill="none" stroke="#FFB340" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="36" y="814" font-size="13" class="sb" fill="#FFB340">Save as Preset</text>
+</g>
+</g>
+      <!-- hardware -->
+      <g id="hardware">
+        <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#1A1A1A" stroke-width="1"/>
+        <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
+      </g>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Interval grading viewer · Presets · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors PhotoAdjustmentsPanel(.phone) Presets — Edited pill, 76 pt tile strip with the base preset ringed, Save as Preset · LL_KEYFRAMES=sunset LL_SECTIONS=presets</text>
+</svg>

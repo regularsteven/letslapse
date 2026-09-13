@@ -1,98 +1,146 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Interval grading viewer · keyframed · portrait</title>
-  <desc>Mirrors App/PhotoViewerView.swift with App/GradeTimelineView.swift between the media and the controls, and App/PhotoAdjustmentsPanel.swift showing keyframed-slider treatment A. The strip is drawn ONLY for a capture with length to grade across — an interval shoot with more than one frame (`hasTimeline`). A Photo-mode capture is one still, has no second moment to grade, and gets exactly the screen project-photo.viewer.portrait.svg draws. Staged by LL_KEYFRAMES=sunset over LL_VIEWER=1, which writes the three moments this file shows. STRIP GEOMETRY (GradeTimelineView's metrics table): 30pt play control, 12pt gap, then the track — a 3pt rail at 18% primary, an 11pt amber moment with a 2pt #C36A00 ring, a 3×22pt playhead in primary UNDER the moments (so a moment the playhead stands on reads as one mark), and the travelling elapsed-time bubble held between 7% and 93% of the track so it never hangs off the end. FRAME STEPS: two 30pt controls in the strip's own idiom (#1C1C1E disc, accent chevron.left/chevron.right) sit after the track, 8pt apart, and take their width out of the track rather than out of the margins — the play control, the track and the steps are one row of transport. Each moves the playhead exactly ONE frame index and re-renders the still the way a finished scrub does; a 0…1 scrubber puts frame 2 of a 250-frame shoot four thousandths along the track, which no thumb can hit. A step that would fall off either end is disabled and its chevron drops to secondary at 45%. They exist only where the strip does (`hasTimeline`) — a Photo-mode capture has no second frame to step to. Head and tail labels are elapsed CAPTURE time, from the frames.timestamps sidecar; the format is chosen from the whole span, so a 2 h 14 min shoot reads h:mm:ss at both ends rather than 0:00 beside 2:14:00. Total strip height is fixed at 45pt (30 + 2 + 13), so the media above it never moves when a moment is added, selected or long-pressed. HIDE BAD FRAMES (staged here, drawn below the fold): this shoot has 2 of its 60 frames nominated bad and hidden, which is why the marquee reads 58 — but the control that does it is deliberately NOT in this part of the screen. Presets, sliders and keyframes are the work; the bad-frame pair — the ⚠ "Mark frame as bad" row and a "Hide bad frames" switch directly under it — sits LAST in the scrolling control stack, past Save as Preset, where somebody who never nominates a frame never meets it. Nothing about nomination appears between the picture and the sliders, and the strip's height is unchanged by any of it (still a fixed 45pt). The switch is a card row in the same idiom as the ⚠ row above it: 15pt title, a 12pt secondary caption that counts what is happening ("2 marked frames are off the timeline and out of this project's counts" / "…stay on the timeline, ticked in orange"), #FFB340 tint, .checkbox style on macOS. Drawn ONLY when there are nominations (`hasNominatedFrames`), and ON by default: a frame marked bad and still in the way is not what the nomination was for. THE AXIS FOLLOWS THE STRIP, NOT THE DISK: hidden frames are not in the scrubber's array at all — the playhead cannot stand on one and the ‹ › steps walk past them — and the clock is rebased onto the first frame the strip actually holds, so hiding the opening two frames of a 4:09 shoot leaves a strip reading 0:00 → 4:07 rather than 0:02 → 4:09. Frames hidden out of the MIDDLE, which is the case drawn here, take no time off either end: the shoot still spans 2:14:00, the strip just steps over those moments, so both end labels stand. A shoot with no per-frame clock scales its recorded duration by the share of frames still on the strip, on the same even-spacing assumption that axis is already built on. With hiding on the strip draws NO bad-frame ticks — there is no position left to mark. Off, the frames come back and the ticks with them: 2×6pt #FF9F0A dashes on a 6pt row under the track, one per nomination, at the frame's own fraction of the track (specified, never yet drawn). `hasNominatedFrames` is measured against the UNFILTERED shoot, so a run where every frame has been nominated keeps the switch after the strip itself has gone — otherwise hiding would be a one-way door with nothing left on screen to undo it. The ⚠ row is untouched by all of this: with hiding on it can only ever say "Mark frame as bad", because a nominated frame is not a frame this screen can reach. STATES NOT DRAWN HERE, all from the same component: SNAPPED — tapping a moment lands the playhead exactly on it and the dot swells to 15pt, swapping its ring for white inside a 1.5pt #C36A00 halo; that is the only “selected” state the screen has, and while it holds, the sliders edit THAT moment rather than making a new one. LONG-PRESS — 550ms on a moment raises a #2B2B2E bubble with “Delete Keyframe” in #FF6B5E and a caret pointing at it; a press that starts on a moment never scrubs, so the moment being aimed at cannot slide out from under the finger. SPARSE vs DENSE — keyframe density is the only speed control there is (ease-in-out is fixed, and there is no curve editor anywhere): a pair an hour apart is a sunset drifting, a pair a few frames apart is a tram going past. PANEL: a property that travels carries the amber diamond (7pt, rotated 45°, #FFB340 on a #C36A00 hairline) beside its label and an accent readout — the readout is then a value at THIS moment, not a value for the clip, which is worth saying even when the number happens to be neutral. Contrast has no diamond here because no moment moves it. A section holding a travelling property is never neutral, so its header keeps its accent dot and its Reset. MODEL: the moments are positions in the SOURCE, 0…1 (GradeTimeline) — never in the output, so the speed and warp layers move no keyframe. Between two moments the grade is their smoothstep blend; outside them the nearest one holds. The project's stored PhotoAdjustments stop grading anything and become a mirror of the opening moment, so the card, the thumbnail and a single-still export keep showing the look the clip opens on. A keyframed grade is always Edited: one preset cannot stand for a look that changes, and a chip tapped here writes its values at the playhead rather than flattening the shoot back to one look (Original is the exception — it clears the timeline with everything else). WHITE BALANCE, 2026-09-06 (supersedes the 2026-09-05 note): Temp and Tint are ABSOLUTE and keyframed like every other field — a keyframe stores the white itself, two keyframes transition between two whites whatever the camera did, no offsets and no anchor to pick. Full spec in macOS/photo-viewer.svg. Drawn values still owed a re-measure. WHITE BALANCE, 2026-09-05: the White Bal. dropdown now sets what Temp and Tint are measured FROM rather than setting a slider value — As Shot (each frame on its own reading, the historic behaviour) · Match This Frame · Smooth Auto WB · Sunny/Cloudy/Fluorescent/Tungsten, which now PIN their Kelvin. Picking any anchor zeroes both sliders, the section dot and Reset respond to a pinned anchor as well as to a moved slider, and Reset unpins. Temp is unchanged in form but is now anchored on the raw converter's own reading and re-read per frame as the playhead moves (it used to be solved from DNG tags a camera-original raw does not carry, and answered 6500 K for every frame of an ARW shoot). Tint moves onto the converter's ±150 axis from the old recipe-×100 scale and no longer reads “As Shot”. Full rationale in macOS/photo-viewer.svg. Any Temp/Tint VALUES drawn here are in the old units and are owed a re-measure against the running app. </desc>
+  <desc>Mirrors App/PhotoViewerView.swift (`phoneEditorBody`, `phoneTimelineCard`, `touchChrome`) with App/GradeTimelineView.swift in the card and App/PhotoAdjustmentsPanel.swift (layout .phone) below it, showing keyframed treatment 1e-A on the new controls (App/EditorControls/EditorToolChips.swift, XYPad.swift `PadReadouts` + `KeyframeDiamond`). Redrawn 2026-09-13 for the editor controls redesign — board 6a exactly: the strip has moved from between the media and a scrolling slider stack into a card over the picture's foot, directly above the sheet, and the Light sheet replaces the White Balance / Light cards. The strip is drawn ONLY for a capture with length to grade across (`hasTimeline`); a Photo capture gets project-photo.viewer.portrait.svg. LAYOUT (2a / 6a, `phoneEditorBody`): the picture fills the safe area (59 top / 34 bottom on this canvas) and is fitted into it — a 3:4 portrait shoot spans the width and centres vertically, 176…700 — and everything else floats over it. `touchChrome`: the 36 pt back disc at (16, 71) and the `EditorTabPill` top-right (right 16, top 74: 12 pt of vertical padding under the safe area, the 30 pt pill centred on the 36 pt disc) — the boards draw both at top 60, the app sits them 11 pt lower. The pill is rgba(28,28,30,.85) over material, radius 18, 12 pt semibold, the selected tab amber with black text, the rest amber on ink; Frames appears only on a shoot with more than one frame. The foot (`phoneFoot`) is bottom-anchored on the safe area: the timeline card where `hasTimeline`, then EITHER the six main buttons (`EditorGroupBar(.phone)`) OR the open group's sheet (`PhotoAdjustmentsPanel(layout: .phone)`) — one or the other, the sheet needs the buttons' room. The sheet: 22 pt top corners, rgba(28,28,30,.86) over material running under the home indicator, padded 12 top / 16 sides / 0 bottom, 10 pt between rows, shadow up; header = title 15 pt semibold white · 6 pt dot (accent when the group holds a value or a travelling field, clear otherwise so the row never reflows) · spacer · ✕ 32 pt white 10 % (reverts to the snapshot `openPanel(for:)` took) · ✓ 32 pt amber (keeps and closes). Long-press the title for Reset &lt;group&gt; / Reset all adjustments. The 1:1 toggle (`zoomControls`, 32 pt black 45 %) sits bottom-trailing of the picture pane 12 pt in, lifted above the foot by its measured height; it exists only while `hasPixelsToReveal`, so a small source shows none. The readouts print the app's own formats (`%+.2f`, `%+.0f`, unsigned 0…100, Kelvin) with an ASCII hyphen-minus where the boards typeset U+2212. THE CARD (6a, `phoneTimelineCard`): margins 12 / 12 / 8 below, padding 10 / 12 / 6, radius 16, black 60 % over material — the `EditorMarqueeBadge` (INTERVAL · 2 h 14 min · 58 frames: 20 pt, black 50 %, 11 pt semibold) then, 20 pt under it, the strip on its full metrics, unchanged from the earlier placement: 30 pt play control (#1C1C1E disc, amber play.fill), 12 pt gap, a 3 pt rail at white 18 %, 11 pt amber moments with a 2 pt #C36A00 ring at 10 / 52 / 86 %, a 3×22 white playhead at 30 % UNDER the moments, the elapsed bubble (16 pt, #2B2B2E 90 %, 10 pt semibold '0:40:12') held between 7 % and 93 % of the track, its foot over the playhead's head; h:mm:ss at both ends in 10.5 pt #8E8E93 (the format is chosen from the whole span); and the two 30 pt one-frame steps ‹ › 8 pt apart after the track, taking their width out of it — centred on the strip's whole 45 pt (30 + 2 + 13), 7.5 pt below the play disc. Nothing on the card is clipped: the bubble and a moment's delete affordance float above its top edge. STATES NOT DRAWN, all from the same component: SNAPPED — tapping a moment lands the playhead on it and the dot swells to 15 pt, white inside a 1.5 pt #C36A00 halo, and the pads then edit THAT moment; LONG-PRESS — 550 ms on a moment raises a #2B2B2E bubble with 'Delete Keyframe' in #FF6B5E; a step that would fall off an end is disabled and drops its chevron to #8E8E93 at 45 % (see the first-run file). THE PANEL (1e-A on the new controls): a tool chip carries the 7 pt diamond (amber on a #C36A00 hairline, rotated 45°) after its label when EITHER of its fields travels — Exp · Con for exposure, High · Wh for highlights; a readout whose field travels carries the diamond between label and value and prints in the accent — Exposure ◆ -0.09 is the value at THIS moment (the smoothstep between the moments at 10 % and 52 %), not a value for the clip; Contrast has no diamond because no moment moves it. A group holding a travelling field is never neutral, so the title keeps its dot and the main button its dot. Double-tap the pad → `onResetField` for both fields (each property comes OUT of the moment); ✕ restores the whole snapshot — preset, adjustments, TIMELINE, preset state and white-balance source — through the same binding. MODEL, unchanged: moments are positions in the SOURCE, 0…1 (GradeTimeline); between two the grade is their smoothstep blend, outside them the nearest holds; the stored PhotoAdjustments mirror the opening moment; a keyframed grade is always Edited; Temp and Tint are ABSOLUTE and keyframed like every other field (2026-09-06). Staged by LL_EDITOR=latest LL_VIEWER=1 LL_KEYFRAMES=sunset LL_SECTIONS=light:expcon. The hook writes exposure, highlights, shadows, vibrance and an owned white at 10 / 52 / 86 % (6100 K → 7600 K → 5400 K), so a screenshot also shows a diamond on Shad · Bl and, in Color, on WB and Vib · Sat — staging data, not layout; this file keeps board 6a's two. The reference shoot read 6 min 4 s · 183 frames with a 1:50 bubble; the boards' 2 h 14 min · 58 frames and 0:40:12 / 2:14:00 are kept.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="panel-shadow" x="-10%" y="-20%" width="120%" height="140%"><feDropShadow dx="0" dy="-8" stdDeviation="12" flood-color="#000" flood-opacity="0.45"/></filter>
+    <filter id="knob-shadow" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.5"/></filter>
+    <filter id="word-shadow" x="-20%" y="-40%" width="140%" height="180%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.6"/></filter>
+    
+  </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
   <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
-  <defs><clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath></defs>
   <g clip-path="url(#screen)">
     <rect x="24" y="24" width="393" height="852" fill="#000000"/>
-    <defs>
-      <linearGradient id="skykf" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#6280AC"/><stop offset="1" stop-color="#E6C19E"/>
-      </linearGradient>
-      <clipPath id="framekf"><rect x="24" y="83" width="393" height="295"/></clipPath>
-    </defs>
-    <g clip-path="url(#framekf)">
-      <rect x="24" y="83" width="393" height="295" fill="url(#skykf)"/>
-      <circle cx="267.7" cy="228.1" r="26.6" fill="#FFCE7E" opacity="0.95"/>
-      <path d="M24 378 L24 295.4 L79.0 295.4 L79.0 265.9 L110.5 265.9 L110.5 301.3 L157.6 301.3 L157.6 257.1 L196.9 257.1 L196.9 307.2 L259.8 307.2 L259.8 271.8 L314.8 271.8 L314.8 298.4 L417.0 298.4 L417 378 Z" fill="#30394E"/>
+    <g transform="translate(24,24)">
+      <!-- the picture: the frame under the playhead (30 %), 3:4, fitted to the safe area -->
+<defs><linearGradient id="skyk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5F7CAA"/><stop offset="1" stop-color="#E7C39C"/></linearGradient><clipPath id="framek"><rect x="0" y="176" width="393" height="524"/></clipPath></defs>
+<g id="picturek" clip-path="url(#framek)">
+<rect x="0" y="176" width="393" height="524" fill="url(#skyk)"/>
+<circle cx="259.4" cy="364.6" r="24.4" fill="#FFCE7E" opacity="0.95"/>
+<path d="M0 500.9 L39.3 500.9 L39.3 469.4 L55 469.4 L55 438 L62.9 406.6 L70.7 438 L70.7 479.9 L117.9 479.9 L117.9 448.5 L133.6 448.5 L133.6 490.4 L172.9 490.4 L172.9 422.3 L180.8 396.1 L188.6 422.3 L188.6 464.2 L204.4 464.2 L204.4 490.4 L247.6 490.4 L247.6 453.7 L259.4 453.7 L259.4 427.5 L267.2 406.6 L275.1 427.5 L275.1 474.7 L314.4 474.7 L314.4 495.6 L353.7 495.6 L353.7 464.2 L369.4 464.2 L369.4 500.9 L393 500.9 L393 595.2 L0 595.2 Z" fill="#30394E"/>
+<path d="M0 595.2 L0 521.8 L86.5 521.8 L86.5 500.9 L94.3 490.4 L102.2 500.9 L102.2 521.8 L157.2 521.8 L157.2 542.8 L283 542.8 L283 511.4 L338 511.4 L338 595.2 Z" fill="#3E4258"/>
+<rect x="11.8" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="32.2" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="52.7" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="73.1" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="93.5" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="114" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="134.4" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="172.9" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="194.5" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="216.2" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="237.8" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="259.4" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="0" y="595.2" width="393" height="104.8" fill="#4A5878"/>
+<rect x="11.8" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="32.2" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="52.7" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="73.1" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="93.5" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="114" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="134.4" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="0" y="595.2" width="393" height="104.8" fill="#000" opacity="0.18"/>
+</g>
+<g id="touch-chrome"><!-- touchChrome: back disc leading, tab pill trailing, 16/12 padding under the safe area -->
+<g id="back-button"><!-- the 36 pt disc the fullscreen player uses too (`backButton`) -->
+  <circle cx="34" cy="89" r="18" fill="#000" opacity="0.4"/>
+  <path d="M37 83 L31 89 L37 95" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+</g>
+<g id="tab-pill"><!-- EditorTabPill top-right over the picture: rgba(28,28,30,.85) over material, amber on ink -->
+<rect x="124.7" y="74" width="252.3" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+<rect x="127.7" y="77" width="58.8" height="24" rx="12" fill="#FFB340"/>
+<text x="157.1" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+<text x="213.4" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+<text x="274.9" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Frames</text>
+<text x="342.8" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Masks</text>
+</g>
+</g>
+<g id="pixel-zoom"><!-- `zoomControls`: the 1:1 toggle, bottom-trailing of the picture pane, 12 pt in, lifted above the foot; shown only while `hasPixelsToReveal` -->
+  <circle cx="365" cy="388" r="16" fill="#000" opacity="0.45"/>
+  <path d="M360 383 l-1 0 0 1 M360 383 l4 4 M370 393 l1 0 0 -1 M370 393 l-4 -4 M360 383 h3.5 M360 383 v3.5 M370 393 h-3.5 M370 393 v-3.5" fill="none" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.up.left.and.arrow.down.right"/>
+</g>
+<g id="timeline-card"><!-- phoneTimelineCard: the INTERVAL badge over the strip, over the picture's foot -->
+<rect x="12" y="416" width="369" height="101" rx="16" fill="#1E1E22" opacity="0.78"/>
+<g id="marquee-badge"><!-- EditorMarqueeBadge: kind · length · frame count -->
+<rect x="24" y="426" width="213.4" height="20" rx="10" fill="#000" opacity="0.5"/>
+<text x="35" y="440" font-size="11" class="sb" fill="#FFF">INTERVAL · 2 h 14 min · 58 frames</text>
+</g>
+<g id="timeline-strip"><!-- GradeTimelineView(full metrics) -->
+<circle cx="39" cy="481" r="15" fill="#1C1C1E"/>
+<path d="M35.5 474.5 L45 481 L35.5 487.5 Z" fill="#FFB340" data-symbol="play.fill"/>
+<rect x="66" y="479.5" width="227" height="3" rx="1.5" fill="#FFF" opacity="0.18"/>
+<rect x="132.6" y="470" width="3" height="22" rx="1.5" fill="#FFF"/>
+<circle cx="88.7" cy="481" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+<circle cx="184" cy="481" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+<circle cx="261.2" cy="481" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+<rect x="107.6" y="458.5" width="53" height="16" rx="8" fill="#2B2B2E" opacity="0.9"/>
+<text x="134.1" y="470" text-anchor="middle" font-size="10" class="sb" fill="#FFF">0:40:12</text>
+<text x="66" y="508" font-size="10.5" fill="#8E8E93">0:00:00</text>
+<text x="293" y="508" text-anchor="end" font-size="10.5" fill="#8E8E93">2:14:00</text>
+<!-- one-frame steps ‹ › after the track, centred on the strip's full height (transport + labels) -->
+<circle cx="316" cy="488.5" r="15" fill="#1C1C1E"/>
+<path d="M319.2 482.5 L312.8 488.5 L319.2 494.5" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+<circle cx="354" cy="488.5" r="15" fill="#1C1C1E"/>
+<path d="M350.8 482.5 L357.2 488.5 L350.8 494.5" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+</g>
+</g>
+<g id="group-panel"><!-- PhotoAdjustmentsPanel(layout: .phone): the open group's sheet over the picture's foot -->
+<path d="M0 852 L0 547 Q0 525 22 525 L371 525 Q393 525 393 547 L393 852 Z" fill="#1C1C1E" opacity="0.96" filter="url(#panel-shadow)"/>
+<g id="panel-header"><!-- title row: long-press the title for Reset Light / Reset all adjustments -->
+<text x="16" y="558.3" font-size="15" class="sb" fill="#FFF">Light</text>
+<circle cx="64.1" cy="553" r="3" fill="#FFB340"/>
+<!-- ✕ reverts to the snapshot taken when the panel opened; ✓ keeps and closes -->
+<circle cx="323" cy="553" r="16" fill="#FFF" opacity="0.1"/>
+<path d="M318.5 548.5 l9 9 M327.5 548.5 l-9 9" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" data-symbol="xmark"/>
+<circle cx="361" cy="553" r="16" fill="#FFB340"/>
+<path d="M355.5 553.5 l3.5 3.5 l7.5 -7.5" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+</g>
+<g id="tool-chips"><!-- EditorToolChips: one chip per tool, the selected one's pad below -->
+<rect x="16" y="579" width="116.3" height="34" rx="12" fill="#FFB340" opacity="0.16"/>
+<rect x="16.8" y="579.8" width="114.8" height="32.5" rx="11.2" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+<g transform="translate(26.6,586) scale(0.8)" data-symbol="EditorToolIcon.expcon"><defs><linearGradient id="ecg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#FFF"/></linearGradient></defs><circle cx="12" cy="12" r="9.5" fill="url(#ecg)"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#FFF" stroke-opacity="0.7" stroke-width="1"/><path d="M16.5 6v4M14.5 8h4" stroke="#000" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 16h4" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/></g>
+<text x="52.6" y="600.2" font-size="11.5" class="sb" fill="#FFB340">Exp · Con</text>
+<rect x="114.7" y="592.5" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 118.2 596)" data-symbol="diamond.fill"/>
+<rect x="138.3" y="579" width="116.3" height="34" rx="12" fill="#FFF" opacity="0.08"/>
+<g transform="translate(149,586) scale(0.8)" data-symbol="EditorToolIcon.highwhites"><circle cx="10" cy="13.5" r="8" fill="#D8D8DC"/><path d="M19 3.5v6M16 6.5h6" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/></g>
+<text x="175" y="600.2" font-size="11.5" class="sb" fill="#FFF">High · Wh</text>
+<rect x="237" y="592.5" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 240.5 596)" data-symbol="diamond.fill"/>
+<rect x="260.7" y="579" width="116.3" height="34" rx="12" fill="#FFF" opacity="0.08"/>
+<g transform="translate(279.9,586) scale(0.8)" data-symbol="EditorToolIcon.shadblacks"><circle cx="10" cy="13.5" r="8" fill="#3A3A3E" stroke="#9A9A9E" stroke-width="1"/><path d="M16 6.5h6" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/></g>
+<text x="305.9" y="600.2" font-size="11.5" class="sb" fill="#FFF">Shad · Bl</text>
+</g>
+<g id="xy-pad"><!-- XYPad(expCon): x = Flat → Punchy, y = Darker → Brighter -->
+<defs><clipPath id="padexpCon"><rect x="16" y="623" width="361" height="170" rx="14"/></clipPath><linearGradient id="bgec" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#101012"/><stop offset="0.5" stop-color="#6A6A6E"/><stop offset="1" stop-color="#E2E2E6"/></linearGradient></defs>
+<g clip-path="url(#padexpCon)">
+<rect x="16" y="623" width="361" height="170" fill="#1C1C1E"/>
+<rect x="16" y="623" width="361" height="170" fill="url(#bgec)"/>
+<path d="M16 708.5 H377 M196.5 623 V793" stroke="#FFF" stroke-opacity="0.35" stroke-width="1"/>
+<g filter="url(#knob-shadow)"><circle cx="196.5" cy="709.5" r="15" fill="#FFF"/></g>
+<circle cx="196.5" cy="709.5" r="12" fill="#FFB340"/>
+</g>
+<text x="196.5" y="638" text-anchor="middle" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Brighter</text>
+<text x="196.5" y="783.5" text-anchor="middle" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Darker</text>
+<text x="26" y="711.7" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Flat</text>
+<text x="367" y="711.7" text-anchor="end" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Punchy</text>
+</g>
+<g id="pad-readouts"><!-- PadReadouts under the pad: Y field first, X field trailing -->
+<text x="20" y="814" font-size="12.5" class="sb" fill="#8E8E93">Exposure</text>
+<rect x="84.6" y="806" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 88.1 809.5)" data-symbol="diamond.fill"/>
+<text x="95.6" y="814" font-size="12.5" class="sb" fill="#FFB340">-0.09</text>
+<text x="373" y="814" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">0</text>
+<text x="361.3" y="814" text-anchor="end" font-size="12.5" class="sb" fill="#8E8E93">Contrast</text>
+</g>
+</g>
+      <!-- hardware -->
+      <g id="hardware">
+        <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#1A1A1A" stroke-width="1"/>
+        <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
+      </g>
     </g>
-    <circle cx="58" cy="113" r="18" fill="#000" opacity="0.4"/>
-    <path d="M61 107 L55 113 L61 119" fill="none"
-      stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="36" y="348" width="236" height="20" rx="10" fill="#000" opacity="0.5"/>
-    <text x="47" y="361.5" font-size="11" class="sb" fill="#FFF">INTERVAL · 2 h 14 min · 58 frames</text>
-    <circle cx="55.0" cy="405.0" r="15.0" fill="#1C1C1E"/>
-    <path d="M51.5 398.5 L61.0 405.0 L51.5 411.5 Z" fill="#FFB340"/>
-    <rect x="82" y="403.5" width="243.0" height="3" rx="1.5" fill="#FFFFFF" opacity="0.18"/>
-    <rect x="153.4" y="394.0" width="3" height="22" rx="1.5" fill="#FFFFFF"/>
-    <circle cx="106.3" cy="405.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
-    <circle cx="208.4" cy="405.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
-    <circle cx="290.9" cy="405.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
-    <rect x="125.5" y="374.0" width="58.8" height="16" rx="8" fill="#2B2B2E" opacity="0.9"/>
-    <text x="154.9" y="385.5" text-anchor="middle" font-size="10" class="sb" fill="#FFF">0:40:12</text>
-    <text x="82.0" y="432.0" font-size="10.5" fill="#8E8E93">0:00:00</text>
-    <text x="325.0" y="432.0" text-anchor="end" font-size="10.5" fill="#8E8E93">2:14:00</text>
-    <!-- one-frame steps: the strip's 0…1 travel cannot be aimed at a single
-         frame of a long shoot, so ‹ › move the playhead exactly one index -->
-    <circle cx="348.0" cy="405.0" r="15.0" fill="#1C1C1E"/>
-    <path d="M351.2 399.0 L344.8 405.0 L351.2 411.0" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="386.0" cy="405.0" r="15.0" fill="#1C1C1E"/>
-    <path d="M382.8 399.0 L389.2 405.0 L382.8 411.0" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="202.5" y="448.5" width="36" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
-    <text x="40" y="491" font-size="13" class="sb" fill="#8E8E93">Preset</text>
-    <rect x="92" y="479" width="68" height="23" rx="11.5" fill="#FFFFFF" opacity="0.08"/>
-    <text x="126.0" y="494.5" text-anchor="middle" font-size="12.5" class="sb" fill="#8E8E93">Edited</text>
-    <rect x="40.0" y="517" width="86.6" height="33" rx="16.5" fill="#1C1C1E"/>
-    <text x="83.3" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Natural</text>
-    <rect x="134.6" y="517" width="78.2" height="33" rx="16.5" fill="#1C1C1E"/>
-    <text x="173.7" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Cinema</text>
-    <rect x="220.8" y="517" width="69.8" height="33" rx="16.5" fill="#1C1C1E"/>
-    <text x="255.7" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Matte</text>
-    <rect x="298.7" y="517" width="69.8" height="33" rx="16.5" fill="#1C1C1E"/>
-    <text x="333.6" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Vivid</text>
-    <rect x="376.5" y="517" width="95.0" height="33" rx="16.5" fill="#1C1C1E"/>
-    <text x="424.0" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Original</text>
-    <rect x="40" y="564" width="361" height="46" rx="12" fill="#1C1C1E"/>
-    <text x="52" y="592" font-size="13.5" class="sb" fill="#8E8E93">White Balance</text>
-    <circle cx="158.8" cy="587.5" r="3" fill="#FFB340"/>
-    <text x="367.0" y="592" text-anchor="end" font-size="12" class="sb" fill="#FFB340">Reset</text>
-    <path d="M378.0 585.0 L383.0 590.0 L378.0 595.0" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="40" y="620" width="361" height="214" rx="12" fill="#1C1C1E"/>
-    <text x="52" y="646" font-size="13.5" class="sb" fill="#8E8E93">Light</text>
-    <circle cx="98.0" cy="641.5" r="3" fill="#FFB340"/>
-    <text x="367.0" y="646" text-anchor="end" font-size="12" class="sb" fill="#FFB340">Reset</text>
-    <path d="M376.0 640.0 L381.0 645.0 L386.0 640.0" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="52" y="676" font-size="13.5" fill="#8E8E93">Exposure</text>
-    <rect x="121.9" y="668.0" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 125.4 671.5)"/>
-    <text x="389.0" y="676" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">-0.09</text>
-    <rect x="52" y="696" width="337.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
-    <rect x="52" y="696" width="165.5" height="4" rx="2" fill="#FFB340"/>
-    <circle cx="217.7" cy="698" r="13" fill="#FFF"/>
-    <text x="52" y="720" font-size="13.5" fill="#8E8E93">Contrast</text>
-    <text x="389.0" y="720" text-anchor="end" font-size="12.5" class="sb" fill="#8E8E93">0</text>
-    <rect x="52" y="740" width="337.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
-    <rect x="52" y="740" width="168.5" height="4" rx="2" fill="#FFB340"/>
-    <circle cx="220.5" cy="742" r="13" fill="#FFF"/>
-    <text x="52" y="764" font-size="13.5" fill="#8E8E93">Highlights</text>
-    <rect x="137.0" y="756.0" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 140.5 759.5)"/>
-    <text x="389.0" y="764" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">-27</text>
-    <rect x="52" y="784" width="337.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
-    <rect x="52" y="784" width="123.0" height="4" rx="2" fill="#FFB340"/>
-    <circle cx="178.5" cy="786" r="13" fill="#FFF"/>
-    <text x="52" y="808" font-size="13.5" fill="#8E8E93">Shadows</text>
-    <rect x="114.3" y="800.0" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 117.8 803.5)"/>
-    <text x="389.0" y="808" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">+14</text>
-    <rect x="52" y="828" width="337.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
-    <rect x="52" y="828" width="192.1" height="4" rx="2" fill="#FFB340"/>
-    <circle cx="242.3" cy="830" r="13" fill="#FFF"/>
-  </g>
-  <g transform="translate(24,24)">
-    <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
-    <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Interval grading viewer · keyframed · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift + App/GradeTimelineView.swift — three moments, playhead between the first two, 2 of 60 frames marked bad and hidden · LL_KEYFRAMES=sunset</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors PhotoViewerView + GradeTimelineView + PhotoAdjustmentsPanel(.phone) — card + Light sheet · LL_KEYFRAMES=sunset LL_SECTIONS=light:expcon</text>
 </svg>

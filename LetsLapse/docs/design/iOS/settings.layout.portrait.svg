@@ -1,14 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Settings · Layout · portrait</title>
-  <desc>Mirrors LayoutSettingsView in App/SettingsView.swift, pushed from Settings ▸ Advanced ▸ Layout (SettingsDestination.layout, the first row of the Advanced card). A Form of single-row sections with explanatory footers — the same shape as Performance and Manage resolutions, and like them it is pushed inside the Settings tab, so the floating tab bar stays over it.
+  <desc>Mirrors LayoutSettingsView in App/SettingsView.swift, pushed from Settings ▸ Advanced ▸ Layout (SettingsDestination.layout, the first row of the Advanced card) over App/LayoutSettings.swift. A Form of single-row sections with explanatory footers — the same shape as Performance and Manage resolutions, and like them it is pushed inside the Settings tab, so the floating tab bar stays over it. Redrawn 2026-09-13 for the editor controls redesign (board 6d, spec §6): the section gains a THIRD row, and the nav bar is drawn as the app now renders it — an inline title with the standard "‹ Back" in the accent at the leading edge, not the doubled round back control the older pushed-screen mirrors recorded.
 
-Drawn in the DEFAULT state of a library that has never scanned anything: Enable Scans menu ON, Display count in Projects OFF, and therefore a FIVE-tab bar. That pairing is the point of the screen — "on" does not mean "showing". The Scans tab appears once the library actually holds a scan (the setting AND AppModel.hasScanSessions), and it also stays put while you are standing on it, so deleting your last scan empties the screen you are looking at rather than pulling it out from under you.
+Drawn in the DEFAULT state of a library that has never scanned anything: Enable Scans menu ON, Display count in Projects OFF, Use Pads in Editor ON, and therefore a FIVE-tab bar. That pairing is the point of the first row — "on" does not mean "showing". The Scans tab appears once the library actually holds a scan (the setting AND AppModel.hasScanSessions), and it also stays put while you are standing on it, so deleting your last scan empties the screen you are looking at rather than pulling it out from under you. The first footer says which half of that rule is currently in force: setting on + no scans yet (drawn here) — "The Scans tab appears in the tab bar as soon as you have a scan. Turn this off to list scans in Projects instead, behind their own filter."; setting on + scans exist — "The Scans tab is in the tab bar. Turn this off to…"; setting off — "Scans are listed in Projects instead, behind their own filter between Photos and Interval." Turning the switch off while standing on the Scans tab moves the selection to Projects, which is where its contents have just gone. Display count in Projects is off by default: the counts are useful when auditing a library and noise the rest of the time.
 
-The first footer says which half of that rule is currently in force, because "on but not showing" is otherwise indistinguishable from a bug. Its three states: setting on + no scans yet (drawn here) — "The Scans tab appears in the tab bar as soon as you have a scan. Turn this off to list scans in Projects instead, behind their own filter."; setting on + scans exist — "The Scans tab is in the tab bar. Turn this off to…"; setting off — "Scans are listed in Projects instead, behind their own filter between Photos and Interval." Turning the switch off while standing on the Scans tab moves the selection to Projects, which is where its contents have just gone.
+USE PADS IN EDITOR (new): `LayoutSettings.editorPadsKey` = "layout.editorPads", @AppStorage, default ON, read by PhotoAdjustmentsPanel on iPhone, iPad and Mac. The row carries its own 11.5 pt secondary subtitle in the label's VStack ("Paired adjustments share an XY pad. Off shows plain sliders."), which makes it a 71 pt card against the 44 pt of its neighbours, and the section's footer is the promise: "Applies to the Editor on iPhone, iPad and Mac. Grouping, presets and the timeline are unchanged either way." OFF renders every pad in every group as its two sliders, Y field first — project-photo.viewer.pads-off.portrait.svg. `LL_PADS=off` forces that rendering for a screenshot without touching this switch.
 
-Display count in Projects is off by default: the counts are useful when auditing a library and noise the rest of the time. Both switches take the app tint (LL.accent) rather than the green of Advanced's "Allow remote access", which sets its own. Their effect on the list is drawn in projects.scans-filter.portrait.svg.
-
-Known artifact, shared with every pushed Settings screen (Performance, Diagnostics, Blend learning) and not introduced here: the round back control is drawn TWICE, once above the title row and once beside it. It is mirrored as it renders.</desc>
+GEOMETRY as rendered (iOS 18 grouped Form, measured 2026-09-13 on the iPhone 16 Pro simulator and shifted onto this canvas): cards 20 pt in from either edge, radius ~11, rows 44 pt with the 17 pt label 16 pt in and the 51×31 toggle 18 pt from the card's trailing edge; footers 12.5 pt secondary at x = 36, 14 pt line pitch, the next card 35 pt under a footer's last line. All three switches take the app tint (LL.accent) rather than the green of Advanced's "Allow remote access", which sets its own — and rather than the green board 6d draws (⚠️ noted in INDEX.md, with the board's title case "Enable Scans Menu" against the app's "Enable Scans menu", and the board's LAYOUT header on an "Advanced" page against the app's pushed "Layout" page of separate cards with footers — the page's own idiom). Their effect on the list is drawn in projects.scans-filter.portrait.svg. Staged by LL_TAB=settings LL_PUSH=layout.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -28,37 +26,46 @@ Known artifact, shared with every pushed Settings screen (Performance, Diagnosti
         <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
       </g>
 
-      <!-- nav: inline title, with the doubled round back control the pushed
-           Settings screens all render (see desc) -->
+      <!-- nav: inline title, the standard back control in the accent -->
       <g id="nav-bar">
-        <circle cx="38" cy="83" r="21" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
-        <path d="M43 76 l-8 7 8 7" stroke="#000" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="38" cy="138" r="21" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
-        <path d="M43 131 l-8 7 8 7" stroke="#000" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <text x="196.5" y="144" font-size="17" class="sb" fill="#000" text-anchor="middle">Layout</text>
+        <path d="M17 66 l-7 9.5 7 9.5" stroke="#C36A00" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.backward"/>
+        <text x="30" y="81" font-size="17" fill="#C36A00">Back</text>
+        <text x="196.5" y="81" font-size="17" class="sb" fill="#000" text-anchor="middle">Layout</text>
       </g>
 
-      <!-- section 1: the Scans tab -->
+      <!-- section 1: the Scans tab (ON) -->
       <g id="scans-row">
-        <rect x="16" y="205" width="361" height="56" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="239" font-size="16" fill="#000">Enable Scans menu</text>
-        <rect x="316" y="217.5" width="51" height="31" rx="15.5" fill="#C36A00"/>
-        <circle cx="351.5" cy="233" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <rect x="20" y="132" width="353" height="44" rx="11" fill="#FFF" filter="url(#soft)"/>
+        <text x="36" y="160" font-size="17" fill="#000">Enable Scans menu</text>
+        <rect x="304" y="138.5" width="51" height="31" rx="15.5" fill="#C36A00"/>
+        <circle cx="339.5" cy="154" r="13.5" fill="#FFF" filter="url(#soft)"/>
       </g>
-      <text x="32" y="284" font-size="12.5" fill="#6D6D72">The Scans tab appears in the tab bar as soon as you have a</text>
-      <text x="32" y="301" font-size="12.5" fill="#6D6D72">scan. Turn this off to list scans in Projects instead, behind</text>
-      <text x="32" y="318" font-size="12.5" fill="#6D6D72">their own filter.</text>
+      <text x="36" y="193" font-size="12.5" fill="#6D6D72">The Scans tab appears in the tab bar as soon as you</text>
+      <text x="36" y="207" font-size="12.5" fill="#6D6D72">have a scan. Turn this off to list scans in Projects</text>
+      <text x="36" y="221" font-size="12.5" fill="#6D6D72">instead, behind their own filter.</text>
 
-      <!-- section 2: counts in the Projects filter bar -->
+      <!-- section 2: counts in the Projects filter bar (OFF) -->
       <g id="counts-row">
-        <rect x="16" y="344" width="361" height="56" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="378" font-size="16" fill="#000">Display count in Projects</text>
-        <rect x="316" y="356.5" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
-        <circle cx="331.5" cy="372" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <rect x="20" y="254" width="353" height="44" rx="11" fill="#FFF" filter="url(#soft)"/>
+        <text x="36" y="282" font-size="17" fill="#000">Display count in Projects</text>
+        <rect x="304" y="260.5" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
+        <circle cx="319.5" cy="276" r="13.5" fill="#FFF" filter="url(#soft)"/>
       </g>
-      <text x="32" y="423" font-size="12.5" fill="#6D6D72">Spells out how many projects each filter holds — “All 292”,</text>
-      <text x="32" y="440" font-size="12.5" fill="#6D6D72">“Photos 18”. The counts follow the search, so they always</text>
-      <text x="32" y="457" font-size="12.5" fill="#6D6D72">match what tapping a filter shows.</text>
+      <text x="36" y="315" font-size="12.5" fill="#6D6D72">Spells out how many projects each filter holds — “All</text>
+      <text x="36" y="329" font-size="12.5" fill="#6D6D72">292”, “Photos 18”. The counts follow the search, so they</text>
+      <text x="36" y="343" font-size="12.5" fill="#6D6D72">always match what tapping a filter shows.</text>
+
+      <!-- section 3: Use Pads in Editor (ON) — board 6d; the row carries its own subtitle -->
+      <g id="pads-row">
+        <rect x="20" y="376" width="353" height="71" rx="11" fill="#FFF" filter="url(#soft)"/>
+        <text x="36" y="403" font-size="17" fill="#000">Use Pads in Editor</text>
+        <text x="36" y="419" font-size="11.5" fill="#6D6D72">Paired adjustments share an XY pad. Off shows</text>
+        <text x="36" y="433" font-size="11.5" fill="#6D6D72">plain sliders.</text>
+        <rect x="304" y="396" width="51" height="31" rx="15.5" fill="#C36A00"/>
+        <circle cx="339.5" cy="411.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+      </g>
+      <text x="36" y="464" font-size="12.5" fill="#6D6D72">Applies to the Editor on iPhone, iPad and Mac. Grouping,</text>
+      <text x="36" y="478" font-size="12.5" fill="#6D6D72">presets and the timeline are unchanged either way.</text>
 
       <!-- floating tab bar (Settings selected) — five tabs, because the
            library in this mock holds no scans -->
@@ -95,5 +102,5 @@ Known artifact, shared with every pushed Settings screen (Performance, Diagnosti
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Settings · Layout · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LayoutSettingsView in App/SettingsView.swift — the two Layout switches, in their defaults</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LayoutSettingsView in App/SettingsView.swift — the three Layout switches in their defaults, Use Pads in Editor new · LL_TAB=settings LL_PUSH=layout</text>
 </svg>

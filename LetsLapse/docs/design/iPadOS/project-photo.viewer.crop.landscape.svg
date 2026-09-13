@@ -1,0 +1,225 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1228 908" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iPadOS · Interval grading viewer · Crop · landscape</title>
+  <desc>Mirrors the iPad LANDSCAPE editor (a regular-width window wider than tall): App/PhotoViewerView.swift `floatingEditorBody(in:)` — `floatingPictureFrame(in:)` anchors the picture top-left at the size its aspect gives it inside the safe area (a tall picture fills the height, a wide one the width); `touchChrome(showsBadge:)` puts the 36 pt back disc (and, on an interval shoot, the INTERVAL chip — App/EditorControls/EditorMarqueeBadge.swift) top-left and App/EditorControls/EditorTabPill.swift top-right, both 12 pt under the status bar; `floatingFootRow` seats App/EditorControls/EditorGroupBar.swift (`.padPill`, six 58 pt cells) bottom-right and, with a timeline, the compact App/GradeTimelineView.swift strip in a 66 pt capsule bottom-left, both 16 pt off the safe area's foot; `floatingPanel(in:)` floats App/PhotoAdjustmentsPanel.swift (`layout: .floating`, `style: .dark`) as a 400 pt card at right 16 / bottom 96 — above the buttons — draggable by its header (grab bar + title row, `floatingHeaderDragged`, clamped on screen by `clampedFloatingOffset`, the seat kept across groups for the session) and pinned top 62 / bottom 96 when the group is Presets. Pinch, double-tap and trackpad zoom release the picture from its anchor (≤ 1.03× snaps home; a '2.5× · tap to fit' pill then follows the back disc) — desc-only here. iPad PORTRAIT is NOT this layout and not the phone's either: it takes the dark rail (`railBody`, settled 2026-09-13 over spec decision 9), undrawn. Tokens: ground #000, chrome rgba(28,28,30,.85–.86) over .ultraThinMaterial, amber #FFB340 for every highlight, #8E8E93 secondary, diamond #FFB340 with a #C36A00 ring. Geometry measured on an iPad Pro 11-inch (M4) simulator (1210×834 pt) on 2026-09-13 and carried to this 1180×820 canvas: left- and top-anchored positions transfer, trailing ones sit 30 pt further left and foot ones 14 pt higher here; the simulator's safe area is 24 top / 25 bottom, this canvas assumes 24 / 20. THIS FILE is the Crop group: while it is open `floatingPictureFrame` fits the picture inside a margin and CENTRES it instead of anchoring it — 48 pt at the sides, `touchChromeHeight` + 8 = 68 pt at the top and `floatingFootHeight` + 48 = 144 pt at the foot, so a corner handle never lands under the chrome row or the buttons pill — and `openPanel` resets the zoom first. The room is 1084×564 here; this 16:9 picture is height-limited to 1002.7×564 at (88.7, 92) — a 3:4 picture would be 423×564 at (378.5, 92). DEVIATION FROM BOARD 5a, drawn as the app ships it: the board centres with 48 pt on every side (a 1084×724 room); the app keeps the top and foot clear of its own chrome, which on the 2026-09-13 screenshot (screens/ipad-crop.png) measured 96 pt sides / 68 pt above the picture / 144 pt below inside the safe area. App/EditorControls/CropFrameOverlay.swift over the picture with the panel open: a 55 % black scrim outside the crop, a 1 pt white 90 % frame, rule-of-thirds hairlines at white 35 %, and 3 pt white L-brackets with 18 pt arms centred on the corners (36 pt hit areas) — at Original the crop IS the picture, so the frame lies on the picture's edge, the scrim covers nothing and the brackets' outer half is clipped by the pane: they read as a 1.5 pt thickening along 18 pt of each corner, which is what the screenshot shows. Drag the body to move, a corner to resize (locked ratios stay locked), pinch to scale; panel closed with a crop set: an 85 % scrim and the frame alone. The card (same seat, right 16 / bottom 96, 239 pt tall): header 'Crop' with no dot (nothing cropped, no angle); the aspect chips Original · 1:1 · 4:5 · 16:9 · 9:16 · Custom — six equal 57 pt chips 5 apart, 28 pt, radius 12, 11.5 pt semibold, the selected one amber with black text, the rest white 8 % with white text; the hint 'Original · the whole picture' (11 pt, white 50 %; 'Locked to 16:9 · drag to move, pinch or drag a corner to scale' / 'Free crop · drag corners, drag to move, pinch to scale' for the others — the Original wording is the app's, the board says 'Locked to Original · …'); the shared App/RotationSlider.swift (.stacked): 'Angle' 13.5 pt secondary, readout 0° 12.5 pt semibold secondary at neutral, the native Slider tinted amber with its 26 pt white knob centred; and the three-line caption 'Levels the picture and crops in so no corner shows black. Baked into blended and guided clips; set it at more than one moment and it eases between them.' at 11 pt tertiary. Buttons pill: Crop open. Staged by LL_EDITOR=latest LL_VIEWER=1 LL_KEYFRAMES=sunset LL_SECTIONS=crop on an iPad Pro 11-inch simulator (the interval project, so the strip and INTERVAL chip are drawn too).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="1180" height="820" rx="18"/></clipPath>
+    <linearGradient id="skycr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FA3B8"/>
+      <stop offset="0.45" stop-color="#E8B98C"/>
+      <stop offset="1" stop-color="#F6DFB2"/>
+    </linearGradient>
+    <linearGradient id="rivercr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9A45E"/>
+      <stop offset="1" stop-color="#5C666E"/>
+    </linearGradient>
+    <clipPath id="photocr"><rect x="88.6" y="92" width="1002.7" height="564"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <rect x="18" y="18" width="1192" height="832" rx="24" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="1180" height="820" fill="#000000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar: the editor is a fullScreenCover, so the 24 pt bar stays
+           and every layout rule below runs from the safe area (y = 24) -->
+      <g id="status-bar" fill="#FFFFFF">
+        <text x="16" y="17" font-size="12.5" class="sb">21:25</text>
+        <text x="56" y="17" font-size="12.5" class="sb">Sun 13 Sep</text>
+        <path d="M1080 12 a8 8 0 0 1 12 0 M1083 15 a4.5 4.5 0 0 1 6 0 M1085.5 17.5 l0.5 0.5 0.5 -0.5" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <text x="1138" y="17" text-anchor="end" font-size="12.5" class="sb">100 %</text>
+        <g><rect x="1144" y="7" width="23" height="11" rx="3.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.45"/><rect x="1168" y="10.5" width="2" height="4" rx="1" fill-opacity="0.45"/><rect x="1146" y="9" width="19" height="7" rx="2"/></g>
+      </g>
+
+      <!-- the picture, CENTRED for Crop: 16:9 fitted in the 1084×564 room → 1002.7×564 at (88.6, 92) (clip #photocr) -->
+      <g id="picture" clip-path="url(#photocr)">
+        <rect x="88.6" y="92" width="1002.7" height="564" fill="url(#skycr)"/>
+        <ellipse cx="359.3" cy="171.0" rx="170.5" ry="19.7" fill="#7E93A9" opacity="0.35"/>
+        <ellipse cx="790.5" cy="148.4" rx="200.5" ry="16.9" fill="#8A9DB1" opacity="0.3"/>
+        <ellipse cx="610.0" cy="238.6" rx="240.6" ry="16.9" fill="#EACBA0" opacity="0.45"/>
+        <ellipse cx="289.1" cy="295.0" rx="180.5" ry="12.4" fill="#F2D9AE" opacity="0.5"/>
+        <circle cx="670.2" cy="317.6" r="40.1" fill="#FFCE7E" opacity="0.95"/>
+        <!-- skyline band, then the bridge deck at the river head -->
+        <path d="M88.6 407.8 L88.6 393.7 L128.7 393.7 L128.7 388.1 L188.9 388.1 L188.9 395.4 L289.1 395.4 L289.1 389.8 L389.4 389.8 L389.4 396.6 L489.7 396.6 L489.7 386.4 L559.9 380.8 L630.1 377.4 L710.3 380.8 L750.4 388.7 L810.5 385.3 L810.5 392.0 L890.8 392.0 L890.8 384.2 L960.9 384.2 L960.9 390.9 L1091.3 390.9 L1091.3 407.8 Z" fill="#5D5346"/>
+        <rect x="88.6" y="407.8" width="1002.7" height="9.0" fill="#8C7B5F"/>
+        <rect x="88.6" y="416.9" width="1002.7" height="6.8" fill="#6E6152"/>
+        <g fill="#524A40">
+          <rect x="439.5" y="423.6" width="15.0" height="13.5"/><rect x="539.8" y="423.6" width="15.0" height="13.5"/>
+          <rect x="640.1" y="423.6" width="15.0" height="13.5"/><rect x="740.4" y="423.6" width="15.0" height="13.5"/>
+        </g>
+        <!-- river with the sunset's reflection -->
+        <rect x="88.6" y="423.6" width="1002.7" height="232.4" fill="url(#rivercr)"/>
+        <rect x="239.0" y="441.7" width="401.1" height="6.8" rx="3" fill="#EBC27E" opacity="0.5"/>
+        <rect x="198.9" y="464.2" width="501.4" height="6.8" rx="3" fill="#E0B26B" opacity="0.4"/>
+        <rect x="269.1" y="486.8" width="361.0" height="6.8" rx="3" fill="#D2A45F" opacity="0.3"/>
+        <!-- quay diagonal, crowd, railing — the right embankment -->
+        <path d="M559.9 588.3 L1091.3 486.8 L1091.3 656 L419.5 656 Z" fill="#8A7A55"/>
+        <path d="M820.6 656 L1091.3 520.6 L1091.3 656 Z" fill="#3F4438"/>
+        <g fill="#221F1C">
+          <circle cx="640.1" cy="605.2" r="4"/><circle cx="690.2" cy="596.8" r="4"/><circle cx="745.4" cy="587.2" r="4"/>
+          <circle cx="800.5" cy="577.0" r="4"/><circle cx="600.0" cy="619.3" r="4"/><circle cx="860.7" cy="565.8" r="4"/>
+        </g>
+      </g>
+
+      <!-- CropFrameOverlay, panel open, crop = Original (the whole picture): the
+           55 % scrim covers nothing, the 1 pt frame lies on the picture's edge,
+           thirds inside, and the 3 pt L-brackets are half-clipped by the pane -->
+      <g id="crop-frame">
+        <rect x="89.1" y="92.5" width="1001.7" height="563" fill="none" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1"/>
+        <path d="M422.8 92 V656 M757.1 92 V656 M88.6 280.0 H1091.3 M88.6 468.0 H1091.3" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="1"/>
+        <g clip-path="url(#photocr)" fill="none" stroke="#FFFFFF" stroke-width="3">
+          <path d="M88.6 110 V92 H106.6"/>
+          <path d="M1073.3 92 H1091.3 V110"/>
+          <path d="M88.6 638 V656 H106.6"/>
+          <path d="M1073.3 656 H1091.3 V638"/>
+        </g>
+      </g>
+
+      <!-- back: the 36 pt disc at (16, safe-top + 12) — `touchChrome`, padding 12 -->
+      <g id="back-button" data-symbol="chevron.left">
+        <circle cx="34" cy="54" r="18" fill="#000" opacity="0.4"/>
+        <path d="M37 47 L31 54 L37 61" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- EditorMarqueeBadge: 20 pt, black 50 %, 11 pt semibold, 8 pt after the back disc.
+           Drawn only when `hasTimeline` — a photo gets the back disc alone -->
+      <g id="marquee-badge">
+        <rect x="60" y="44" width="173" height="20" rx="10" fill="#000" opacity="0.5"/>
+        <text x="71" y="58" font-size="11" class="sb" fill="#FFF">INTERVAL · 2 h 14 min · 58 frames</text>
+      </g>
+
+      <!-- EditorTabPill: right 16 / safe-top + 16 (the row's 12 pt padding
+           centres the 30 pt pill on the 36 pt back disc); rgba(28,28,30,.85)
+           over blur, radius 18 → a capsule at this height -->
+      <g id="tab-pill">
+        <rect x="916" y="40" width="248" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+        <rect x="919" y="43" width="59" height="24" rx="12" fill="#FFB340"/>
+        <text x="948.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+        <text x="1004.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+        <text x="1064.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Frames</text>
+        <text x="1130.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Masks</text>
+      </g>
+
+      <!-- 6b timeline: the strip on its COMPACT metrics (26 pt discs, 3 pt rail,
+           11 pt moments, 3×20 playhead, 10 pt end labels) inside a 66 pt
+           capsule, padding 0 16, rgba(28,28,30,.85) + blur — `floatingFootRow`.
+           The 41 pt strip (26 track row + 2 + 13 labels) is centred in the
+           capsule, so the track row sits 7.5 pt above the capsule's middle and
+           the frame-step discs — HStack-centred on the strip — sit ON it -->
+      <g id="strip">
+        <rect x="16" y="718" width="750" height="66" rx="26" fill="#1C1C1E" opacity="0.85"/>
+        <!-- play: 26 pt disc — LL.cardBackground, which the dark cover resolves to #1C1C1E — with an 11 pt amber play.fill -->
+        <circle cx="45" cy="743.5" r="13" fill="#1C1C1E"/>
+        <path d="M41.5 738.0 L50.5 743.5 L41.5 749.0 Z" fill="#FFB340" data-symbol="play.fill"/>
+        <!-- track x 70→686 (616 pt), 3 pt at white 18 % -->
+        <rect x="70" y="742.0" width="616" height="3" rx="1.5" fill="#FFFFFF" opacity="0.18"/>
+        <!-- playhead 3×20, drawn UNDER the moments -->
+        <rect x="388.8" y="733.5" width="3" height="20" rx="1.5" fill="#FFFFFF"/>
+        <!-- moments at 10 / 52 / 86 % (LL_KEYFRAMES=sunset): r 4.5 amber with a 2 pt #C36A00 ring -->
+        <circle cx="131.6" cy="743.5" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+        <!-- the playhead is STANDING on the second moment: it swells to 15 pt,
+             swaps its ring for a white one and gains a 1.5 pt accent halo -->
+        <circle cx="390.3" cy="743.5" r="7.5" fill="#FFB340"/>
+        <circle cx="390.3" cy="743.5" r="6.5" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <circle cx="390.3" cy="743.5" r="8.25" fill="none" stroke="#C36A00" stroke-width="1.5"/>
+        <circle cx="599.8" cy="743.5" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+        <!-- elapsed bubble, 15 pt, #2B2B2E at 90 %, its top 8 pt above the strip's -->
+        <rect x="364.3" y="722.5" width="52" height="15" rx="7.5" fill="#2B2B2E" opacity="0.9"/>
+        <text x="390.3" y="733.5" text-anchor="middle" font-size="10" class="sb mono" fill="#FFF">1:09:41</text>
+        <text x="70" y="769.0" font-size="10" class="mono" fill="#8E8E93">0:00:00</text>
+        <text x="686" y="769.0" text-anchor="end" font-size="10" class="mono" fill="#8E8E93">2:14:00</text>
+        <!-- one-frame steps ‹ ›, 26 pt, 6 pt after the track and 6 apart -->
+        <g data-symbol="chevron.left">
+          <circle cx="705" cy="751" r="13" fill="#1C1C1E"/>
+          <path d="M707.5 746 L702.5 751 L707.5 756" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+        <g data-symbol="chevron.right">
+          <circle cx="737" cy="751" r="13" fill="#1C1C1E"/>
+          <path d="M734.5 746 L739.5 751 L734.5 756" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </g>
+
+      <!-- EditorGroupBar(.padPill): right 16 / 16 above the safe area; padding 6,
+           six 58 pt cells 4 apart, radius 26 over rgba(28,28,30,.85) + blur.
+           A cell: icon 20 · label 10 pt semibold · 4 pt dot (lit = the group
+           holds a non-neutral value or a field that travels); the open group
+           sits on amber 14 % in amber, the rest #8E8E93 -->
+      <g id="main-buttons">
+        <rect x="784" y="718" width="380" height="66" rx="26" fill="#1C1C1E" opacity="0.85"/>
+        <g data-symbol="photo.stack"><g transform="translate(809,731) scale(0.8333)" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="7" width="14" height="12" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5"/></g></g>
+        <text x="819" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Presets</text>
+        <circle cx="819" cy="771" r="2" fill="#FFB340"/>
+        <g data-symbol="sun.max"><g transform="translate(871,731) scale(0.8333)" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g></g>
+        <text x="881" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Light</text>
+        <circle cx="881" cy="771" r="2" fill="#FFB340"/>
+        <g data-symbol="circle.lefthalf.filled"><g transform="translate(933,731) scale(0.8333)" fill="none" stroke="#8E8E93" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="#8E8E93"/></g></g>
+        <text x="943" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Color</text>
+        <circle cx="943" cy="771" r="2" fill="#FFB340"/>
+        <g data-symbol="sparkles"><g transform="translate(995,731) scale(0.8333)" fill="#8E8E93"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></g></g>
+        <text x="1005" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Effects</text>
+        <g data-symbol="triangle"><g transform="translate(1057,731) scale(0.8333)" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linejoin="round"><path d="M12 4l9 16H3z"/></g></g>
+        <text x="1067" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Detail</text>
+        <rect x="1100" y="724" width="58" height="54" rx="20" fill="#FFB340" opacity="0.14"/>
+        <g data-symbol="crop.rotate"><g transform="translate(1119,731) scale(0.8333)" fill="none" stroke="#FFB340" stroke-width="1.8" stroke-linecap="round"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/></g></g>
+        <text x="1129" y="764" text-anchor="middle" font-size="10" class="sb" fill="#FFB340">Crop</text>
+      </g>
+
+      <!-- the floating card for Crop — no chips, no pad: aspect chips, hint, Angle, caption -->
+      <g id="panel">
+        <rect x="764" y="467" width="400" height="237" rx="22" fill="#1C1C1E" opacity="0.86"/>
+        <!-- header — the drag handle on this layout: grab bar + title row -->
+        <g id="panel-header">
+          <rect x="946" y="475" width="36" height="5" rx="2.5" fill="#FFFFFF" opacity="0.3"/>
+          <text x="780" y="507" font-size="15" class="sb" fill="#FFF">Crop</text>
+          <g data-symbol="xmark">
+            <circle cx="1110" cy="502" r="16" fill="#FFFFFF" opacity="0.1"/>
+            <path d="M1106 498 l8 8 M1114 498 l-8 8" stroke="#FFF" stroke-width="2" stroke-linecap="round"/>
+          </g>
+          <g data-symbol="checkmark">
+            <circle cx="1132" cy="502" r="16" fill="#FFB340"/>
+            <path d="M1126.5 502 l3.5 3.5 l7.5 -7.5" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+        </g>
+        <!-- aspect chips (aspectChips): six × 57.2 pt, 5 apart, 28 pt, radius 12 -->
+        <g id="aspect-chips">
+          <rect x="780.0" y="528" width="57.2" height="28" rx="12" fill="#FFB340"/>
+          <text x="808.6" y="546" text-anchor="middle" font-size="11.5" class="sb" fill="#000">Original</text>
+          <rect x="842.2" y="528" width="57.2" height="28" rx="12" fill="#FFFFFF" opacity="0.08"/>
+          <text x="870.8" y="546" text-anchor="middle" font-size="11.5" class="sb" fill="#FFF">1:1</text>
+          <rect x="904.3" y="528" width="57.2" height="28" rx="12" fill="#FFFFFF" opacity="0.08"/>
+          <text x="932.9" y="546" text-anchor="middle" font-size="11.5" class="sb" fill="#FFF">4:5</text>
+          <rect x="966.5" y="528" width="57.2" height="28" rx="12" fill="#FFFFFF" opacity="0.08"/>
+          <text x="995.1" y="546" text-anchor="middle" font-size="11.5" class="sb" fill="#FFF">16:9</text>
+          <rect x="1028.7" y="528" width="57.2" height="28" rx="12" fill="#FFFFFF" opacity="0.08"/>
+          <text x="1057.3" y="546" text-anchor="middle" font-size="11.5" class="sb" fill="#FFF">9:16</text>
+          <rect x="1090.8" y="528" width="57.2" height="28" rx="12" fill="#FFFFFF" opacity="0.08"/>
+          <text x="1119.4" y="546" text-anchor="middle" font-size="11.5" class="sb" fill="#FFF">Custom</text>
+        </g>
+        <!-- the crop hint, 11 pt white 50 % -->
+        <text id="crop-hint" x="780" y="577" font-size="11" fill="#FFFFFF" fill-opacity="0.5">Original · the whole picture</text>
+        <!-- Angle: RotationSlider(.stacked) — label 13.5 secondary, readout 12.5 semibold
+             (secondary at 0°), the native Slider tinted amber: 4 pt track, fill to the knob, 26 pt white knob -->
+        <g id="angle">
+          <text x="780" y="603" font-size="13.5" fill="#8E8E93">Angle</text>
+          <text x="1148" y="603" text-anchor="end" font-size="12.5" class="sb mono" fill="#8E8E93">0°</text>
+          <rect x="780" y="621" width="368" height="4" rx="2" fill="#FFFFFF" opacity="0.16"/>
+          <rect x="780" y="621" width="184.0" height="4" rx="2" fill="#FFB340"/>
+          <circle cx="964.0" cy="623" r="13" fill="#FFFFFF"/>
+        </g>
+        <!-- the Angle caption, 11 pt tertiary, three lines at this width (SF Pro
+             breaks after "Baked into" / "and it"; the fallback stack a word earlier) -->
+        <g id="angle-caption" font-size="11" fill="#FFFFFF" fill-opacity="0.35">
+          <text x="780" y="659">Levels the picture and crops in so no corner shows black. Baked</text>
+          <text x="780" y="672">into blended and guided clips; set it at more than one moment</text>
+          <text x="780" y="685">and it eases between them.</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="485" y="806" width="210" height="5" rx="2.5" fill="#FFFFFF" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="614" y="874" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iPadOS · Interval grading viewer · Crop · landscape · 1180×820 pt</text>
+  <text x="614" y="892" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift floatingPictureFrame (centred: 48 / 68 / 144) + CropFrameOverlay + PhotoAdjustmentsPanel cropContent — LL_EDITOR=latest LL_SECTIONS=crop</text>
+</svg>

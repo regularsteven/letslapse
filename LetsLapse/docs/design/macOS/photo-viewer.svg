@@ -1,8 +1,10 @@
 <svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>macOS · Photo viewer / grading editor · Editor tab · 1000×700</title>
-  <desc>Mirrors App/PhotoViewerView.swift — the grading editor in its own resizable window (PhotoEditorWindowRequest scene in LetsLapseApp; default 1000×700 drawn here, min 720×480; the window chrome owns title and close, so there is no in-content back button or Done bar — ownsExit is false and the "Save as preset?" offer renders inline in the rail instead of intercepting an exit). One view serves photo AND interval captures; everything timeline-shaped in this drawing exists because the staged project is an interval shoot (hasTimeline = frames.count &gt; 1). LAYOUT: wide branch (width ≥ 500): HStack of a media column and a FIXED 340pt control rail (railWidth, macOS branch) separated by a hairline divider at x=660; resizing the window grows the photo, never the controls. Media column: imagePane (black ground, picture fitted at true aspect and centred — a 4:3 source in the 660×618 pane draws 660×495 with black bands above and below; MediaPaneMetrics.frame keeps the picture's own edges available for overlays) with the pixel-peep zoom controls bottom-trailing (only the expand-to-1:1 button at fit scale — the scale badge appears once zoomed; double-click toggles 1:1, pinch zooms, drag pans once zoomed), then the timeline strip on the media's side of the layout (GradeTimelineView, compact metrics: 26pt play control and track row, 12pt gap, hairline 3pt rail, 11pt keyframe dots swelling to 15pt with a white ring when the playhead stands on one, travelling 0:00 bubble in #2B2B2E@90% chrome, h:mm:ss end labels) flanked by prev/next single-frame step buttons (chevron.left/right in 26pt card circles — a 0…1 scrubber cannot land on frame 2 of 601, so the steps exist; left is disabled at the head). Track runs x=56…578 in media-column points; the three keyframe dots drawn sit at positions 0.281 / 0.733 / 0.998 of the source — the staged project's real grade timeline. RAIL (Editor tab of the RailTabBar added 2026-08-31 — [Editor | Text | Frames] capsule segments, LL.accent fill on the selected segment, white label on macOS; Frames exists only where frames do, i.e. interval shoots, measured against the UNFILTERED shoot so hiding every nominated frame cannot take the tab away): the tab bar is PINNED above the rail's own ScrollView (controlRail), so it never scrolls with the controls. Below it, scrolled to top: stateRow ("Preset" label + PresetStatePill — "Edited" here, the one state no chip stands for), the horizontal preset chip strip (Natural · Cinema · Matte · Vivid · … scrolls horizontally; active chip fills accent), then PhotoAdjustmentsPanel with alwaysExpanded=true — every section open inside one card, no accordions: White Balance (White Bal. dropdown + Temp/Tint), Light (Exposure/Contrast/Highlights/Shadows/Whites/Blacks), Color (Vibrance/Saturation), Color Mixer (added 2026-09-08 — Lightroom&#8217;s HSL panel: a Hue | Saturation | Luminance segmented picker over eight swatched band rows, one axis at a time; drawn in photo-viewer.mixer.svg), Effects (Texture/Clarity/Dehaze — Dehaze added 2026-09-08 — /Vignette), Detail (Sharpen + Masking, Noise Reduction + Detail, Color Noise ×2), and — added 2026-09-02, last, below the fold — Rotation: one row, "Angle", the shared RotationSlider (App/RotationSlider.swift) in its stacked shape (label over a full-width track, ±10° resting at centre, readout "0°" in secondary / "+4.9°" in primary, double-click the label to zero) and a tertiary one-line footnote ("Levels the picture and crops in so no corner shows black. Baked into blended and guided clips."). Rotation is geometry but rides inside PhotoAdjustments so the grade timeline can KEYFRAME it: set at one moment it levels the whole clip; set at a second moment it eases between them with the same smoothstep the colours use, the row carries the amber ◆ and an accent readout like any travelling field, and a double-click resets it at the playhead through the timeline. It is never part of a saved preset (stripped at save and compare time) and never moves the Original/Edited pill — a levelled Original stays Original; its section dot + Reset follow the angle alone, and "Reset adjustments" zeroes it along with the grade. The picture in the pane is drawn LEVELLED — rotated about its centre and cropped in to the largest same-aspect rectangle (FrameRotation.inscribedScale), so no corner is ever black and the frame keeps its size; the 1:1 detail patch and loupe are levelled to match. — the card scrolls; this drawing shows down to the Color header, exactly what a 700pt window holds. Section headers carry an accent dot when the section holds non-neutral values and a Reset link; a field written into the grade timeline carries the amber ◆ (diamond.fill, LL.amber) after its label — Temp, Exposure, Highlights, Shadows here — and slider values render in accent when non-neutral. Below the fold (not drawn, in scroll order): remaining sections, the inline "Save these edits as a preset?" offer when Edited, the Save as Preset button. Since 2026-09-08 LL_SECTIONS=&lt;section&gt; on this wide layout scrolls the rail to that section at launch (the Mac has no cards to open), which is how the below-the-fold state files are captured. Values drawn are the staged project's real grade at the playhead (Custom WB 12298K/−14, Exposure +1.02, Highlights −83, Shadows +58, Whites +14, Blacks −16). WHITE BALANCE, 2026-09-06 (supersedes the 2026-09-05 note): Temp and Tint are ABSOLUTE and live in the keyframes like every other field. A keyframe stores the white itself (mired, shown as Kelvin; tint on the converter&#8217;s ±150 axis); two keyframes transition between two whites whatever the camera did in between, scrub and export alike. Nothing is an offset any more and there is no anchor to pick: the sliders rest on the frame&#8217;s own as-shot until moved, the first move owns the white, and the other keyframes are seeded with the white they were already rendering at so a transition always runs between two real whites. Dropdown: As Shot (release, and smoothing off) · Match This Frame (own this frame&#8217;s as-shot) · Smooth Auto WB (project-level: the corrected as-shot curve a frame renders at until a keyframe owns its white) · Sunny/Cloudy/Fluorescent/Tungsten (own that Kelvin). Closed label: the owned white by name or as &#8220;5635 K&#8221;, else As Shot / Smoothed. The white is a correction of the capture, not a look — like the level it renders under Original, survives a preset apply, is stripped from a saved preset and never turns a named preset Edited. Grades saved when Temp was an offset migrate on first open to the whites they DISPLAYED (Vltava_ARW: +52.3/−32.2 mired → 10328 K/+60 and 2991 K/+5). Drawn Temp/Tint VALUES here are still owed a re-measure against the running app. WHITE BALANCE, 2026-09-05: the dropdown now sets what the sliders are measured FROM, not a slider value. Entries: As Shot (each frame anchored on its own as-shot reading — the historic behaviour, and right for a still or a locked-WB run) · divider · Match This Frame (pins the frame under the playhead&#8217;s own white on the whole shoot) · Smooth Auto WB (measures every frame, removes the camera&#8217;s re-decisions and spreads its plateaus, then declares the corrected curve frame by frame) · divider · Sunny / Cloudy / Fluorescent / Tungsten, which now PIN their Kelvin rather than nudging toward it. The closed label reads As Shot, Smoothed, the illuminant&#8217;s name, a bare &#8220;5635 K&#8221;, or Custom once a slider has been moved off the anchor. Why it changed: Temp is a mired OFFSET, and over a sequence the thing it was measured from — each frame&#8217;s own as-shot — moves, so the same slider value rendered a different white either side of a camera&#8217;s auto-WB step and no keyframe pair could close it. Pinning the anchor makes the offsets absolute. Picking any anchor zeroes both sliders (the picked white IS the answer, not a starting point), and the section&#8217;s dot + Reset now respond to a pinned anchor as well as to a moved slider — Reset unpins. The Temp readout is unchanged in form but is now anchored on the raw converter&#8217;s own reading (CIRAWFilter.neutralTemperature) instead of a DNG-tag solve that a camera-original raw does not carry and that answered 6500 K for every frame of an ARW shoot; it is re-read as the playhead moves, per frame. It is APPLE&#8217;s Kelvin, not Adobe&#8217;s — the same file reads a little differently in Lightroom. The Tint readout moves onto the converter&#8217;s ±150 green–magenta axis (the axis Adobe&#8217;s Tint also uses) from the old recipe-×100 scale, so its drawn value here is in the OLD units and is owed a re-measure against the running app. STATES NOT DRAWN (desc-only): stacked layout below 500pt width (media pinned over scrolling controls — iOS's shape, reachable by shrinking the window); keyframe long-press Delete bubble; playhead-on-dot swell; drag-resize media handle (wide layout has none — the rail is fixed); bad-frame tick row under the strip (nominations exist here but Hide bad frames is on, so no tick has a place to stand). Hooks: LL_EDITOR=&lt;capture-uuid&gt; opens this window on a specific project (latest = largest interval shoot; video = the newest movie project, in the video editor); LL_SECTIONS=rotation opens the stacked layout on the Rotation card; LL_KEYFRAMES=sunset|empty stages the strip; LL_VIEWER=expanded is the stacked layout's handle-up state. Verified against the running Mac app 2026-08-31 (River Sunset to Dusk, 601 visible frames, Retina window capture measured to the point); Rotation section verified 2026-09-02 on a 1× display (header 13.5 semibold, Angle row on the 48pt pitch, footnote 11pt tertiary, Reset appearing with the dot at +4.9°).</desc>
+  <title>macOS · Photo viewer / grading editor · Editor tab · Light › High · Wh · 1000×700</title>
+  <desc>Mirrors App/PhotoViewerView.swift — the grading editor in its own resizable window (PhotoEditorWindowRequest scene in LetsLapseApp; default 1000×700 drawn here, min 720×480; the window chrome owns title and close, so there is no in-content back button or Done bar). REBUILT 2026-09-13 around the editor-controls redesign (Claude Design handoff “LetsLapse Editor slider organization”, boards 3b · 6c; spec sections 1–5, 9, 10): the seven-section always-open panel is gone; the grade is five GROUPS + Presets (App/EditorControls/EditorGroup.swift — Light: Exp · Con / High · Wh / Shad · Bl; Color: WB / Vib · Sat / Mixer; Effects: Tex · Clar / Vignette / Dehaze; Detail: Sharpen / Noise; Crop: aspect chips + Angle), each opened from a main button into ONE card of tool chips over an XY PAD (App/EditorControls/XYPad.swift) with two readouts, and closed by Revert (restores the snapshot taken when the panel opened) or Done (keeps). THIS FILE is board 3b on a PHOTO capture: no timeline, so the media pane takes the whole 669×672 column (the 4:3 picture fitted to the width, 669×502, centred), no INTERVAL badge, no strip, and the tab pill has three segments (Frames exists only for interval shoots). Open: Light › High · Wh — Highlights −27 on the pad's Y axis (Lift up / Recover down), Whites on X (Whites − / Whites +), the highWhites gradient #3A3A3E → #C8C8CC bottom to top; the readouts read “Highlights −27” in black (moved) and “Whites 0” in #6D6D72 (neutral); the Light dot is lit on the main button and in the card header, so Reset shows. RAIL (3b / 6c): a FIXED 330 pt rail (railWidth, macOS) right of a hairline Divider — resizing the window grows the picture, never the controls. On the Editor page the whole rail scrolls, tab pill included: padding 14 top / 16 sides / 20 bottom, 12 between items. Top to bottom: (1) RailTabBar as a white capsule (padding 3, equal segments 2 apart, 13 pt semibold, the selected segment LL.accent with a white label) — Editor · Text · Frames · Masks, Frames only where frames do (availableRailTabs); (2) EditorGroupBar .macCard — a white card padded 6 holding six 46 pt cells spread edge to edge: 18 pt SF Symbol (photo.stack, sun.max, circle.lefthalf.filled, sparkles, triangle, crop.rotate), 9.5 pt semibold label, a 4 pt dot lit when the group holds a value or a travelling field, idle ink #6D6D72, the OPEN group on LL.accent 12 % with accent ink; a tap opens that group's panel and snapshots the grade, a tap on the open group leaves it open — closing is the panel's Revert / Done; (3) the open group's PhotoAdjustmentsPanel as a white radius-12 card padded 12 with 10 between rows: the header (title 13.5 semibold #6D6D72, the 6 pt dot when non-neutral, then Reset in accent text while non-neutral, the Revert pill #E9E9EB and the Done pill LL.accent, both 12 pt semibold, 23 tall, radius 7 — Done keeps the values and drops the snapshot, Revert restores it, both close), then the group's content; (4) MasksCard on its compact rows; (5) “Reset adjustments” 13 pt semibold accent, 4 in from the rail's content edge — and nothing after it: the inline “Save these edits as a preset?” offer (the window chrome owns the exit, so the offer cannot intercept one; not on the boards) lives in the Presets card's footer alone since 2026-09-13, where it takes the place of the “Save as Preset” row while the state is Edited and the offer has not been declined (`presetsFooter`: either the owner's offer or the row, never both); the rail foot that used to repeat it is gone. Group card 62 tall at y=110; the panel card starts at y=184. TOOL CHIPS (EditorToolChips .light): one row, every chip the same width across the 274 pt card content, 6 apart, 30 tall, radius 9 — 18 pt EditorToolIcon (the handoff's icon set, drawn in SwiftUI), 11 pt semibold label (Exp · Con, High · Wh, Shad · Bl / WB, Vib · Sat, Mixer / Tex · Clar, Vignette, Dehaze / Sharpen, Noise), idle fill #F2F2F7 with #1C1C1E ink, the selected chip LL.accent 12 % with a 1.5 pt accent border and accent label; the label shrinks to 75 % before it truncates. The selection persists per group for the session. PAD (spec §2, XYPad .light): 274×170, radius 10, the crosshair at BOTH axes' neutral (black 25 %), a 24 pt LL.accent knob with a 2.5 pt white ring, the axis words 10 pt semibold white with a shadow inset 6 top / bottom and 8 at the sides; a drag writes both fields through the one binding in one write per tick, a double-click resets both (through the timeline where there is one); Tab focuses the pad and the arrow keys step it. Under it PadReadouts, 11.5 pt semibold: label #6D6D72, value black once moved, #6D6D72 at neutral, ACCENT when the field travels — with the 7 pt diamond (LL.amber, 1 pt LL.accent border, rotated 45°) after a travelling field's label and on a tool chip when either of its fields travels (treatment 1e-A). Settings › Advanced › Layout › “Use Pads in Editor” off (or LL_PADS=off) replaces every pad with its two slider rows, Y field first. MASKS CARD (MasksCard, compactRows — the Mac's default): “Masks · 1 applied · Manage ›” over one row per grade: a 44×36 tile, the name 13.5 semibold, “Radial · enabled” 11 pt, then the TOOL ICONS of the tools the grade moves at full ink (WB, Exp · Con here) plus one dimmed (35 %) lead icon for every section it leaves alone (Vib · Sat for Color, Tex · Clar for Effects), and a chevron; a click expands the grade under the rows (photo-viewer.mask-grade.svg), Manage › switches the rail to the Masks tab. STATES NOT DRAWN (desc-only): the group card with nothing open (the panel card is simply absent — photo-viewer.mask-grade.svg draws it); the header's Reset absent while the group is neutral; a dark-appearance window (the inks are semantic — LL.cardBackground, .primary / .secondary — so the same layout reads right there); the rail's overlay scroller while the content outruns 672 pt; the pads-off variant (every pad becomes its two slider rows, Y field first — LL_PADS=off); the stacked layout below 500 pt. DEVIATIONS FROM BOARD 3b, drawn as shipped: the header carries a Reset text button between the dot and Revert (spec §3 keeps the Mac's header Reset); the inline “Save these edits as a preset?” card no longer follows “Reset adjustments” (removed 2026-09-13 — it had doubled the Presets card's own offer; the board draws no offer), so the rail ends at Reset adjustments. Hooks: LL_EDITOR=&lt;photo-uuid&gt; LL_SECTIONS=light:highwhites; LL_MASKGRADE=first seeds two masks (a photo can carry a grade too). Geometry verified 2026-09-13 against the running Debug build (1× capture, light appearance forced per process) on the interval bench shoot — the same rail; the photo pane here is the layout with hasTimeline false.</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
+    <!-- The picture's own edges, in the flat drawing's original 660×495
+         coordinates (see g#picture's transform). -->
     <clipPath id="photo"><rect x="20" y="110" width="660" height="495"/></clipPath>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#8FA3B8"/>
@@ -13,6 +15,9 @@
       <stop offset="0" stop-color="#D9A45E"/>
       <stop offset="1" stop-color="#5C666E"/>
     </linearGradient>
+    <linearGradient id="pad-highwhites" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#3A3A3E"/><stop offset="1" stop-color="#C8C8CC"/>
+    </linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
 
@@ -22,27 +27,23 @@
     <g id="titlebar">
       <rect x="20" y="20" width="1000" height="28" fill="#F6F6F8"/>
       <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
-      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
+      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Photo 11. 9. at 19:41</text>
     </g>
 
-    <!-- Media column: black pane, 4:3 picture fitted and centred, zoom
-         control bottom-trailing. The picture is a flat approximation of the
-         staged frame: sunset sky, the overlay text, then skyline / bridge /
-         river / quay — the skyline is drawn AFTER the text on purpose, so
-         the drawing occludes the descenders the way the composite does. -->
+    <!-- Media column: black pane, the 4:3 picture fitted to the pane's WIDTH
+         (669 pt → 669×502) and centred vertically. The picture is the flat
+         approximation the earlier files drew at 660×495: sunset sky, then
+         skyline / bridge / river / quay, kept in its original coordinates
+         and scaled up by 669/660 so nothing needed re-measuring. -->
     <g id="media">
-      <rect x="20" y="48" width="660" height="618" fill="#000000"/>
-      <g clip-path="url(#photo)">
+      <rect x="20" y="48" width="669" height="672" fill="#000000"/>
+      <g id="picture" transform="translate(20,133) scale(1.013636) translate(-20,-110)" clip-path="url(#photo)">
         <rect x="20" y="110" width="660" height="495" fill="url(#sky)"/>
         <ellipse cx="200" cy="180" rx="160" ry="24" fill="#7E93A9" opacity="0.35"/>
         <ellipse cx="480" cy="150" rx="190" ry="22" fill="#8A9DB1" opacity="0.3"/>
         <ellipse cx="360" cy="240" rx="230" ry="22" fill="#EACBA0" opacity="0.45"/>
         <ellipse cx="150" cy="300" rx="170" ry="16" fill="#F2D9AE" opacity="0.5"/>
-        <!-- The project's text overlay at its resting layout (Text tab owns
-             editing it; it is baked into the preview on every tab). -->
-        <text x="345" y="360" font-size="96" class="b" text-anchor="middle" fill="#FFFFFF">LetsLapse</text>
-        <!-- Skyline band drawn AFTER the text — only the baseline bottoms and
-             descenders sink behind the rooftops, the way the composite cuts. -->
+        <!-- Skyline band. -->
         <path d="M20 380 L20 356 L60 356 L60 350 L118 350 L118 358 L175 358 L175 352 L240 352 L240 360 L300 360 L300 350 L332 344 L385 340 L448 344 L470 352 L520 349 L520 356 L575 356 L575 347 L620 347 L620 355 L680 355 L680 380 Z" fill="#5D5346"/>
         <!-- Bridge deck with piers at the river head. -->
         <rect x="20" y="380" width="660" height="8" fill="#8C7B5F"/>
@@ -64,148 +65,130 @@
           <circle cx="492" cy="528" r="4"/><circle cx="352" cy="576" r="4"/><circle cx="530" cy="516" r="4"/>
         </g>
       </g>
-      <text x="653" y="652" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
+      <!-- The 1:1 zoom control (zoomControls) bottom-trailing of the pane. -->
+      <text x="652" y="699" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
     </g>
 
-    <!-- Timeline strip: play · track with playhead + keyframes · frame steps. -->
-    <g id="strip">
-      <circle cx="51.5" cy="688" r="13" fill="#FFFFFF"/>
-      <path d="M48 682 L58 688 L48 694 Z" fill="#C36A00" data-symbol="play.fill"/>
-      <rect x="76" y="686.5" width="522" height="3" rx="1.5" fill="#000000" fill-opacity="0.18"/>
-      <rect x="74.5" y="678" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
-      <circle cx="222.7" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <circle cx="458.6" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <circle cx="596.9" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <rect x="90" y="666" width="45" height="15" rx="7.5" fill="#2B2B2E" fill-opacity="0.9"/>
-      <text x="112.5" y="677" font-size="10" class="sb mono" text-anchor="middle" fill="#FFFFFF">0:00</text>
-      <text x="76" y="712" font-size="10" class="mono" fill="#6D6D72">0:00</text>
-      <text x="598" y="712" font-size="10" class="mono" text-anchor="end" fill="#6D6D72">55:13</text>
-      <circle cx="617" cy="688" r="13" fill="#FFFFFF"/>
-      <text x="617" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#B5B5BA" data-symbol="chevron.left">‹</text>
-      <circle cx="649" cy="688" r="13" fill="#FFFFFF"/>
-      <text x="649" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00" data-symbol="chevron.right">›</text>
-    </g>
+    <line x1="690" y1="48" x2="690" y2="720" stroke="#000" stroke-opacity="0.1"/>
 
-    <line x1="680" y1="48" x2="680" y2="720" stroke="#000" stroke-opacity="0.1"/>
-
-    <!-- Control rail · Editor tab. Tab bar pinned above the scroll. -->
+    <!-- Control rail · Editor tab (3b). Everything scrolls, the tab pill included. -->
     <g id="rail">
+      <!-- RailTabBar: white capsule, padding 3, 3 equal segments 2 apart;
+           the selected one fills LL.accent with a white label. Frames exists
+           only where frames do (an interval shoot). -->
       <g id="railtabs">
-        <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
-        <rect x="699" y="63" width="74" height="30" rx="15" fill="#C36A00"/>
-        <text x="736" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
-        <text x="812" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
-        <text x="888" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
-        <text x="964" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
+        <rect x="706" y="62" width="298" height="36" rx="18" fill="#FFFFFF"/>
+        <rect x="709.0" y="65" width="96.0" height="30" rx="15" fill="#C36A00"/>
+        <text x="757.0" y="85" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
+        <text x="855.0" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
+        <text x="953.0" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
       </g>
 
-      <g id="staterow">
-        <text x="696" y="122" font-size="13" class="sb" fill="#6D6D72">Preset</text>
-        <rect x="748" y="106" width="58" height="24" rx="12" fill="#6D6D72" fill-opacity="0.16"/>
-        <text x="777" y="122" font-size="13" class="sb" text-anchor="middle" fill="#3A3A3C">Edited</text>
+      <!-- EditorGroupBar (.macCard): a white card, padding 6, six 46 pt cells
+           spread edge to edge (2 pt gaps): 18 pt SF Symbol, 9.5 pt semibold
+           label, a 4 pt dot lit when the group holds a value; the open
+           group's cell fills LL.accent 12 % with accent ink. Idle ink #6D6D72. -->
+      <g id="groupbar">
+        <rect x="706" y="110" width="298" height="62" rx="12" fill="#FFFFFF"/>
+        <g transform="translate(726,122) scale(0.75)" data-symbol="photo.stack"><rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/></g>
+        <text x="735" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Presets</text>
+        <rect x="760" y="116" width="46" height="50" rx="12" fill="#C36A00" fill-opacity="0.12"/>
+        <g transform="translate(774,122) scale(0.75)" data-symbol="sun.max"><circle cx="12" cy="12" r="4" fill="none" stroke="#C36A00" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round"/></g>
+        <text x="783" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#C36A00">Light</text>
+        <circle cx="783" cy="162" r="2" fill="#C36A00"/>
+        <g transform="translate(822,122) scale(0.75)" data-symbol="circle.lefthalf.filled"><circle cx="12" cy="12" r="9" fill="none" stroke="#6D6D72" stroke-width="1.8"/><path d="M12 3a9 9 0 0 0 0 18z" fill="#6D6D72"/></g>
+        <text x="831" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Color</text>
+        <g transform="translate(870,122) scale(0.75)" data-symbol="sparkles"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" fill="#6D6D72"/></g>
+        <text x="879" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Effects</text>
+        <circle cx="879" cy="162" r="2" fill="#C36A00"/>
+        <g transform="translate(918,122) scale(0.75)" data-symbol="triangle"><path d="M12 4l9 16H3z" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/></g>
+        <text x="927" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Detail</text>
+        <g transform="translate(966,122) scale(0.75)" data-symbol="crop.rotate"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round"/></g>
+        <text x="975" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Crop</text>
       </g>
 
-      <g id="presetstrip">
-        <rect x="696" y="144" width="76" height="33" rx="16.5" fill="#FFFFFF"/>
-        <text x="734" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Natural</text>
-        <rect x="780" y="144" width="76" height="33" rx="16.5" fill="#FFFFFF"/>
-        <text x="818" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Cinema</text>
-        <rect x="864" y="144" width="66" height="33" rx="16.5" fill="#FFFFFF"/>
-        <text x="897" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Matte</text>
-        <rect x="938" y="144" width="66" height="33" rx="16.5" fill="#FFFFFF"/>
-        <text x="971" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Vivid</text>
+      <!-- PhotoAdjustmentsPanel, group Light, layout .rail, style .light: header,
+           tool chips, the High · Wh pad, its readouts. -->
+      <g id="panel-light">
+        <rect x="706" y="184" width="298" height="292" rx="12" fill="#FFFFFF"/>
+        <text x="718" y="212" font-size="13.5" class="sb" fill="#6D6D72">Light</text>
+        <circle cx="764.3" cy="207.5" r="3" fill="#C36A00"/>
+        <rect x="936" y="196" width="56" height="23" rx="7" fill="#C36A00"/>
+        <text x="964" y="212" font-size="12" class="sb" text-anchor="middle" fill="#FFFFFF">Done</text>
+        <rect x="872" y="196" width="58" height="23" rx="7" fill="#E9E9EB"/>
+        <text x="901" y="212" font-size="12" class="sb" text-anchor="middle" fill="#000">Revert</text>
+        <text x="866" y="212" font-size="12" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
+        <g id="chips">
+          <rect x="718.0" y="229" width="87.3" height="30" rx="9" fill="#F2F2F7"/>
+          <g transform="translate(722.6,235) scale(0.7500)" data-symbol="EditorToolIcon.expCon"><defs><linearGradient id="ec1" x1="0" x2="1"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient></defs><circle cx="12" cy="12" r="9.5" fill="url(#ec1)" stroke="#1C1C1E" stroke-opacity=".45"/><path d="M16.5 6v4M14.5 8h4" stroke="#000" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 16h4" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
+          <text x="745.6" y="248" font-size="11" class="sb" fill="#1C1C1E" textLength="55.1" lengthAdjust="spacingAndGlyphs">Exp · Con</text>
+          <rect x="811.3" y="229" width="87.3" height="30" rx="9" fill="#C36A00" fill-opacity="0.12"/>
+          <rect x="812.1" y="229.75" width="85.8" height="28.5" rx="8.25" fill="none" stroke="#C36A00" stroke-width="1.5"/>
+          <g transform="translate(816.3,235) scale(0.7500)" data-symbol="EditorToolIcon.highWhites"><circle cx="10" cy="13.5" r="8" fill="#D8D8DC"/><path d="M19 3.5v6M16 6.5h6" stroke="#1C1C1E" stroke-width="1.8" stroke-linecap="round"/></g>
+          <text x="839.3" y="248" font-size="11" class="sb" fill="#C36A00" textLength="54.4" lengthAdjust="spacingAndGlyphs">High · Wh</text>
+          <rect x="904.7" y="229" width="87.3" height="30" rx="9" fill="#F2F2F7"/>
+          <g transform="translate(911.0,235) scale(0.7500)" data-symbol="EditorToolIcon.shadBlacks"><circle cx="10" cy="13.5" r="8" fill="#3A3A3E" stroke="#9A9A9E"/><path d="M16 6.5h6" stroke="#1C1C1E" stroke-width="1.8" stroke-linecap="round"/></g>
+          <text x="934.0" y="248" font-size="11" class="sb" fill="#1C1C1E" textLength="51.7" lengthAdjust="spacingAndGlyphs">Shad · Bl</text>
+        </g>
+        <g id="pad-highwhites-g">
+          <clipPath id="pad-highwhites-g-clip"><rect x="718" y="269" width="274" height="170" rx="10"/></clipPath>
+          <g clip-path="url(#pad-highwhites-g-clip)">
+            <rect x="718" y="269" width="274" height="170" fill="url(#pad-highwhites)"/>
+            <line x1="718" y1="354.5" x2="992" y2="354.5" stroke="#000" stroke-opacity="0.25"/>
+            <line x1="855.5" y1="269" x2="855.5" y2="439" stroke="#000" stroke-opacity="0.25"/>
+          </g>
+          <text x="855.0" y="283" font-size="10" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.55" transform="translate(0,1)">Lift</text>
+          <text x="855.0" y="283" font-size="10" class="sb" text-anchor="middle" fill="#FFFFFF">Lift</text>
+          <text x="855.0" y="435" font-size="10" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.55" transform="translate(0,1)">Recover</text>
+          <text x="855.0" y="435" font-size="10" class="sb" text-anchor="middle" fill="#FFFFFF">Recover</text>
+          <text x="726" y="357.5" font-size="10" class="sb" text-anchor="start" fill="#000" fill-opacity="0.55" transform="translate(0,1)">Whites −</text>
+          <text x="726" y="357.5" font-size="10" class="sb" text-anchor="start" fill="#FFFFFF">Whites −</text>
+          <text x="984" y="357.5" font-size="10" class="sb" text-anchor="end" fill="#000" fill-opacity="0.55" transform="translate(0,1)">Whites +</text>
+          <text x="984" y="357.5" font-size="10" class="sb" text-anchor="end" fill="#FFFFFF">Whites +</text>
+          <circle cx="855.0" cy="376.9" r="12.5" fill="#000" fill-opacity="0.18"/>
+          <circle cx="855.0" cy="376.9" r="12" fill="#C36A00"/>
+          <circle cx="855.0" cy="376.9" r="10.75" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+        </g>
+        <g id="readouts">
+          <text x="720" y="460" font-size="11.5" class="sb" fill="#6D6D72">Highlights</text>
+          <text x="785.0" y="460" font-size="11.5" class="sb mono" fill="#000">−27</text>
+          <text x="990" y="460" font-size="11.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
+          <text x="978.5" y="460" font-size="11.5" class="sb" text-anchor="end" fill="#6D6D72">Whites</text>
+        </g>
       </g>
 
-      <!-- PhotoAdjustmentsPanel, alwaysExpanded — one card, scrolled to top.
-           ◆ = field written into the grade timeline (LL.amber diamond.fill);
-           the accent dot beside a section = non-neutral values inside it. -->
-      <g id="sliderpanel">
-        <rect x="696" y="192" width="308" height="528" rx="12" fill="#FFFFFF"/>
-
-        <text x="712" y="226" font-size="15" class="b" fill="#000">White Balance</text>
-        <circle cx="816" cy="221" r="3.5" fill="#C36A00"/>
-        <text x="988" y="226" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
-
-        <text x="712" y="256" font-size="14" fill="#000">White Bal.</text>
-        <rect x="784" y="240" width="204" height="24" rx="6" fill="#FFFFFF" stroke="#000" stroke-opacity="0.18"/>
-        <text x="794" y="257" font-size="13" fill="#000">Custom</text>
-        <rect x="966" y="243" width="18" height="18" rx="5" fill="#C36A00"/>
-        <text x="975" y="256" font-size="10" class="sb" text-anchor="middle" fill="#FFF" data-symbol="chevron.up.chevron.down">⌄</text>
-
-        <g id="row-temp">
-          <text x="712" y="288" font-size="14" fill="#000">Temp</text>
-          <path d="M756 281 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
-          <text x="988" y="288" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">12298 K</text>
-          <rect x="712" y="300" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-          <rect x="712" y="300" width="185" height="4" rx="2" fill="#C36A00"/>
-          <circle cx="897" cy="302" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+      <!-- MasksCard, compact rows (3b, rail item 4): "1 applied", one row —
+           tile, name, kind · enabled, the grade's tool icons, chevron. -->
+      <g id="maskscard">
+        <rect x="706" y="488" width="298" height="86" rx="12" fill="#FFFFFF"/>
+        <text x="718" y="513" font-size="13.5" class="sb" fill="#6D6D72">Masks</text>
+        <text x="767" y="513" font-size="11.5" fill="#6D6D72">1 applied</text>
+        <text x="992" y="513" font-size="12.5" class="sb" text-anchor="end" fill="#C36A00">Manage ›</text>
+        <g class="mask-row">
+          <rect x="718" y="526" width="44" height="36" rx="6" fill="#1C1C1E"/>
+          <ellipse cx="751" cy="537" rx="9" ry="6" transform="rotate(-12 751 537)" fill="#FFFFFF" opacity="0.92"/>
+          <ellipse cx="751" cy="537" rx="13" ry="8.5" transform="rotate(-12 751 537)" fill="#FFFFFF" opacity="0.35"/>
+          <text x="770" y="541" font-size="13.5" class="sb" fill="#000">Oval</text>
+          <text x="770" y="556" font-size="11" fill="#6D6D72">Radial · enabled</text>
+          <g transform="translate(904,536) scale(0.6667)" data-symbol="EditorToolIcon.whiteBalance"><path d="M12 2.5a9.5 9.5 0 0 0 0 19z" fill="#3F7BD9"/><path d="M12 2.5a9.5 9.5 0 0 1 0 19z" fill="#F4B23A"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#1C1C1E" stroke-opacity=".7"/><path d="M12 3v18" stroke="#1C1C1E" stroke-width="1.2"/></g>
+          <g transform="translate(923,536) scale(0.6667)" data-symbol="EditorToolIcon.expCon"><defs><linearGradient id="ec5" x1="0" x2="1"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient></defs><circle cx="12" cy="12" r="9.5" fill="url(#ec5)" stroke="#1C1C1E" stroke-opacity=".45"/><path d="M16.5 6v4M14.5 8h4" stroke="#000" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 16h4" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
+          <g transform="translate(942,536) scale(0.6667)" data-symbol="EditorToolIcon.vibSat" opacity="0.35"><defs><linearGradient id="vs6" x1="0" x2="1"><stop offset="0" stop-color="#8E8E93"/><stop offset=".45" stop-color="#8E8E93"/><stop offset=".55" stop-color="#e04848"/><stop offset=".75" stop-color="#58c058"/><stop offset="1" stop-color="#4868e0"/></linearGradient></defs><path d="M12 2.5c3.5 5 7 8.5 7 12.5a7 7 0 0 1-14 0c0-4 3.5-7.5 7-12.5z" fill="url(#vs6)" stroke="#1C1C1E" stroke-opacity=".6"/></g>
+          <g transform="translate(961,536) scale(0.6667)" data-symbol="EditorToolIcon.texClar" opacity="0.35"><circle cx="12" cy="12" r="9" fill="none" stroke="#1C1C1E" stroke-width="1.5"/><path d="M6 15l4-9 3 6 2-3 3 6" fill="none" stroke="#1C1C1E" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></g>
+          <path d="M986 539 L990 544 L986 549" fill="none" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
         </g>
-        <g id="row-tint">
-          <text x="712" y="336" font-size="14" fill="#000">Tint</text>
-          <text x="988" y="336" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">-14</text>
-          <rect x="712" y="348" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-          <rect x="712" y="348" width="112" height="4" rx="2" fill="#C36A00"/>
-          <circle cx="824" cy="350" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        </g>
-
-        <text x="712" y="384" font-size="15" class="b" fill="#000">Light</text>
-        <circle cx="756" cy="379" r="3.5" fill="#C36A00"/>
-        <text x="988" y="384" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
-
-        <g id="row-exposure">
-          <text x="712" y="412" font-size="14" fill="#000">Exposure</text>
-          <path d="M782 405 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
-          <text x="988" y="412" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">+1.02</text>
-          <rect x="712" y="424" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-          <rect x="712" y="424" width="160" height="4" rx="2" fill="#C36A00"/>
-          <circle cx="872" cy="426" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        </g>
-        <g id="row-contrast">
-          <text x="712" y="460" font-size="14" fill="#000">Contrast</text>
-          <text x="988" y="460" font-size="14" class="mono" text-anchor="end" fill="#6D6D72">0</text>
-          <rect x="712" y="472" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-          <rect x="712" y="472" width="138" height="4" rx="2" fill="#C36A00"/>
-          <circle cx="850" cy="474" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        </g>
-        <g id="row-highlights">
-          <text x="712" y="508" font-size="14" fill="#000">Highlights</text>
-          <path d="M788 501 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
-          <text x="988" y="508" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">-83</text>
-          <rect x="712" y="520" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-          <rect x="712" y="520" width="24" height="4" rx="2" fill="#C36A00"/>
-          <circle cx="736" cy="522" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        </g>
-        <g id="row-shadows">
-          <text x="712" y="556" font-size="14" fill="#000">Shadows</text>
-          <path d="M781 549 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
-          <text x="988" y="556" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">+58</text>
-          <rect x="712" y="568" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-          <rect x="712" y="568" width="218" height="4" rx="2" fill="#C36A00"/>
-          <circle cx="930" cy="570" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        </g>
-        <g id="row-whites">
-          <text x="712" y="604" font-size="14" fill="#000">Whites</text>
-          <text x="988" y="604" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">+14</text>
-          <rect x="712" y="616" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-          <rect x="712" y="616" width="158" height="4" rx="2" fill="#C36A00"/>
-          <circle cx="870" cy="618" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        </g>
-        <g id="row-blacks">
-          <text x="712" y="652" font-size="14" fill="#000">Blacks</text>
-          <text x="988" y="652" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">-16</text>
-          <rect x="712" y="664" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-          <rect x="712" y="664" width="116" height="4" rx="2" fill="#C36A00"/>
-          <circle cx="828" cy="666" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        </g>
-
-        <text x="712" y="700" font-size="15" class="b" fill="#000">Color</text>
-        <circle cx="753" cy="695" r="3.5" fill="#C36A00"/>
-        <text x="988" y="700" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
       </g>
+
+      <!-- "Reset adjustments" — the whole grade, every moment, the level and
+           the crop; dimmed to 40 % when there is nothing to reset. -->
+      <text x="710" y="599" font-size="13" class="sb" fill="#C36A00" id="reset-adjustments">Reset adjustments</text>
+
+      <!-- No preset offer after Reset adjustments any more (2026-09-13): the
+           "Save these edits as a preset?" card is the Presets group's own
+           footer (photo-viewer.presets.svg), not a rail-foot repeat. -->
     </g>
   </g>
 
   <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
-  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Editor tab · 1000×700 pt window</text>
-  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (editorTab + RailTabBar + GradeTimelineView + PhotoAdjustmentsPanel) — Text and Frames rail pages in photo-viewer.text.svg / photo-viewer.frames.svg</text>
+  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Editor tab · Light › High · Wh · 1000×700 pt window</text>
+  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (railEditorStack) + App/PhotoAdjustmentsPanel.swift (.rail) + App/EditorControls/* — board 3b · LL_SECTIONS=light:highwhites</text>
 </svg>

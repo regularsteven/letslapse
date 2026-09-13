@@ -1,0 +1,224 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1228 908" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iPadOS · Interval grading viewer · keyframed · Light › High · Wh · landscape</title>
+  <desc>Mirrors the iPad LANDSCAPE editor (a regular-width window wider than tall): App/PhotoViewerView.swift `floatingEditorBody(in:)` — `floatingPictureFrame(in:)` anchors the picture top-left at the size its aspect gives it inside the safe area (a tall picture fills the height, a wide one the width); `touchChrome(showsBadge:)` puts the 36 pt back disc (and, on an interval shoot, the INTERVAL chip — App/EditorControls/EditorMarqueeBadge.swift) top-left and App/EditorControls/EditorTabPill.swift top-right, both 12 pt under the status bar; `floatingFootRow` seats App/EditorControls/EditorGroupBar.swift (`.padPill`, six 58 pt cells) bottom-right and, with a timeline, the compact App/GradeTimelineView.swift strip in a 66 pt capsule bottom-left, both 16 pt off the safe area's foot; `floatingPanel(in:)` floats App/PhotoAdjustmentsPanel.swift (`layout: .floating`, `style: .dark`) as a 400 pt card at right 16 / bottom 96 — above the buttons — draggable by its header (grab bar + title row, `floatingHeaderDragged`, clamped on screen by `clampedFloatingOffset`, the seat kept across groups for the session) and pinned top 62 / bottom 96 when the group is Presets. Pinch, double-tap and trackpad zoom release the picture from its anchor (≤ 1.03× snaps home; a '2.5× · tap to fit' pill then follows the back disc) — desc-only here. iPad PORTRAIT is NOT this layout and not the phone's either: it takes the dark rail (`railBody`, settled 2026-09-13 over spec decision 9), undrawn. Tokens: ground #000, chrome rgba(28,28,30,.85–.86) over .ultraThinMaterial, amber #FFB340 for every highlight, #8E8E93 secondary, diamond #FFB340 with a #C36A00 ring. Geometry measured on an iPad Pro 11-inch (M4) simulator (1210×834 pt) on 2026-09-13 and carried to this 1180×820 canvas: left- and top-anchored positions transfer, trailing ones sit 30 pt further left and foot ones 14 pt higher here; the simulator's safe area is 24 top / 25 bottom, this canvas assumes 24 / 20. THIS FILE is board 6b: an INTERVAL shoot with a grade timeline (`hasTimeline`). A 16:9 picture fills the 1180 pt width at 663.75 pt tall from the safe area's top; the INTERVAL · 2 h 14 min · 58 frames chip follows the back disc. The strip — GradeTimelineView(compact: true) plus the two frame-step discs — sits in the 66 pt capsule from x 16 to 18 pt short of the buttons pill; three moments at 10 / 52 / 86 % (LL_KEYFRAMES=sunset), 0:00:00 / 2:14:00 under the track. DRAWN WITH THE PLAYHEAD SNAPPED ON THE SECOND MOMENT (52 %, bubble 1:09:41): the moment swells to 15 pt with a white ring and a 1.5 pt accent halo — treatment 1e-A's 'editing this moment' state — and the pad reads that moment's values. NOTE the hook itself parks the playhead at 30 %, between the first two moments and unsnapped, which is how the 2026-09-13 screenshot (screens/ipad-light-highwhites.png) reads: bubble 0:14 on a 43 s shoot and Highlights −27; everything else in that capture matches this drawing. Light › High · Wh open: all three chips carry the diamond because the hook's scenario moves exposure, highlights AND shadows (the board only keyframes exposure, highlights and Temp); the pad is #3A3A3E → #C8C8CC bottom to top with Lift / Recover / Whites − / Whites +, the knob 35 % of the half-height below the crosshair; readouts Highlights ◆ −35 (amber, keyframed) and Whites 0 (amber — the dark editors' value colour, keyframed or not). Readouts print the app's existing formats — an ASCII hyphen-minus, as every mirror in this repository draws — where the boards typeset U+2212. Buttons pill: Light open (amber 14 %), dots on Presets (Natural, edited), Light and Color (the owned white). Same card geometry as the photo file. Staged by LL_EDITOR=latest LL_VIEWER=1 LL_KEYFRAMES=sunset LL_SECTIONS=light:highwhites on an iPad Pro 11-inch simulator (the largest interval shoot in the library; the capture session seeded a 36-frame 16:9 project with LL_IMPORT_STILLS). The video editor (App/VideoEditorView.swift) draws this same layout over the movie's own clock — undrawn.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="1180" height="820" rx="18"/></clipPath>
+    <linearGradient id="sky6b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FA3B8"/>
+      <stop offset="0.45" stop-color="#E8B98C"/>
+      <stop offset="1" stop-color="#F6DFB2"/>
+    </linearGradient>
+    <linearGradient id="river6b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9A45E"/>
+      <stop offset="1" stop-color="#5C666E"/>
+    </linearGradient>
+    <clipPath id="photo6b"><rect x="0" y="24" width="1180" height="663.75"/></clipPath>
+    <linearGradient id="ecsweep" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="padExpCon" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#101012"/><stop offset="0.5" stop-color="#6A6A6E"/><stop offset="1" stop-color="#E2E2E6"/>
+    </linearGradient>
+    <linearGradient id="padHighWhites" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#3A3A3E"/><stop offset="1" stop-color="#C8C8CC"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <rect x="18" y="18" width="1192" height="832" rx="24" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="1180" height="820" fill="#000000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar: the editor is a fullScreenCover, so the 24 pt bar stays
+           and every layout rule below runs from the safe area (y = 24) -->
+      <g id="status-bar" fill="#FFFFFF">
+        <text x="16" y="17" font-size="12.5" class="sb">21:25</text>
+        <text x="56" y="17" font-size="12.5" class="sb">Sun 13 Sep</text>
+        <path d="M1080 12 a8 8 0 0 1 12 0 M1083 15 a4.5 4.5 0 0 1 6 0 M1085.5 17.5 l0.5 0.5 0.5 -0.5" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <text x="1138" y="17" text-anchor="end" font-size="12.5" class="sb">100 %</text>
+        <g><rect x="1144" y="7" width="23" height="11" rx="3.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.45"/><rect x="1168" y="10.5" width="2" height="4" rx="1" fill-opacity="0.45"/><rect x="1146" y="9" width="19" height="7" rx="2"/></g>
+      </g>
+
+      <!-- the picture: 16:9, width-limited → 1180×663.75 at the safe area's top-left (clip #photo6b); the card covers its foot -->
+      <g id="picture" clip-path="url(#photo6b)">
+        <rect x="0" y="24" width="1180" height="663.75" fill="url(#sky6b)"/>
+        <ellipse cx="318.6" cy="116.9" rx="200.6" ry="23.2" fill="#7E93A9" opacity="0.35"/>
+        <ellipse cx="826.0" cy="90.4" rx="236.0" ry="19.9" fill="#8A9DB1" opacity="0.3"/>
+        <ellipse cx="613.6" cy="196.6" rx="283.2" ry="19.9" fill="#EACBA0" opacity="0.45"/>
+        <ellipse cx="236.0" cy="262.9" rx="212.4" ry="14.6" fill="#F2D9AE" opacity="0.5"/>
+        <circle cx="684.4" cy="289.5" r="47.2" fill="#FFCE7E" opacity="0.95"/>
+        <!-- skyline band, then the bridge deck at the river head -->
+        <path d="M0 395.7 L0.0 379.1 L47.2 379.1 L47.2 372.5 L118.0 372.5 L118.0 381.1 L236.0 381.1 L236.0 374.5 L354.0 374.5 L354.0 382.4 L472.0 382.4 L472.0 370.5 L554.6 363.8 L637.2 359.9 L731.6 363.8 L778.8 373.1 L849.6 369.2 L849.6 377.1 L944.0 377.1 L944.0 367.8 L1026.6 367.8 L1026.6 375.8 L1180.0 375.8 L1180 395.7 Z" fill="#5D5346"/>
+        <rect x="0" y="395.7" width="1180" height="10.6" fill="#8C7B5F"/>
+        <rect x="0" y="406.3" width="1180" height="8.0" fill="#6E6152"/>
+        <g fill="#524A40">
+          <rect x="413.0" y="414.3" width="17.7" height="15.9"/><rect x="531.0" y="414.3" width="17.7" height="15.9"/>
+          <rect x="649.0" y="414.3" width="17.7" height="15.9"/><rect x="767.0" y="414.3" width="17.7" height="15.9"/>
+        </g>
+        <!-- river with the sunset's reflection -->
+        <rect x="0" y="414.3" width="1180" height="273.5" fill="url(#river6b)"/>
+        <rect x="177.0" y="435.5" width="472.0" height="8.0" rx="3" fill="#EBC27E" opacity="0.5"/>
+        <rect x="129.8" y="462.1" width="590.0" height="8.0" rx="3" fill="#E0B26B" opacity="0.4"/>
+        <rect x="212.4" y="488.6" width="424.8" height="8.0" rx="3" fill="#D2A45F" opacity="0.3"/>
+        <!-- quay diagonal, crowd, railing — the right embankment -->
+        <path d="M554.6 608.1 L1180 488.6 L1180 687.8 L389.4 687.8 Z" fill="#8A7A55"/>
+        <path d="M861.4 687.8 L1180 528.5 L1180 687.8 Z" fill="#3F4438"/>
+        <g fill="#221F1C">
+          <circle cx="649.0" cy="628.0" r="4"/><circle cx="708.0" cy="618.1" r="4"/><circle cx="772.9" cy="606.8" r="4"/>
+          <circle cx="837.8" cy="594.8" r="4"/><circle cx="601.8" cy="644.6" r="4"/><circle cx="908.6" cy="581.5" r="4"/>
+        </g>
+      </g>
+
+      <!-- back: the 36 pt disc at (16, safe-top + 12) — `touchChrome`, padding 12 -->
+      <g id="back-button" data-symbol="chevron.left">
+        <circle cx="34" cy="54" r="18" fill="#000" opacity="0.4"/>
+        <path d="M37 47 L31 54 L37 61" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- EditorMarqueeBadge: 20 pt, black 50 %, 11 pt semibold, 8 pt after the back disc.
+           Drawn only when `hasTimeline` — a photo gets the back disc alone -->
+      <g id="marquee-badge">
+        <rect x="60" y="44" width="173" height="20" rx="10" fill="#000" opacity="0.5"/>
+        <text x="71" y="58" font-size="11" class="sb" fill="#FFF">INTERVAL · 2 h 14 min · 58 frames</text>
+      </g>
+
+      <!-- EditorTabPill: right 16 / safe-top + 16 (the row's 12 pt padding
+           centres the 30 pt pill on the 36 pt back disc); rgba(28,28,30,.85)
+           over blur, radius 18 → a capsule at this height -->
+      <g id="tab-pill">
+        <rect x="916" y="40" width="248" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+        <rect x="919" y="43" width="59" height="24" rx="12" fill="#FFB340"/>
+        <text x="948.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+        <text x="1004.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+        <text x="1064.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Frames</text>
+        <text x="1130.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Masks</text>
+      </g>
+
+      <!-- 6b timeline: the strip on its COMPACT metrics (26 pt discs, 3 pt rail,
+           11 pt moments, 3×20 playhead, 10 pt end labels) inside a 66 pt
+           capsule, padding 0 16, rgba(28,28,30,.85) + blur — `floatingFootRow`.
+           The 41 pt strip (26 track row + 2 + 13 labels) is centred in the
+           capsule, so the track row sits 7.5 pt above the capsule's middle and
+           the frame-step discs — HStack-centred on the strip — sit ON it -->
+      <g id="strip">
+        <rect x="16" y="718" width="750" height="66" rx="26" fill="#1C1C1E" opacity="0.85"/>
+        <!-- play: 26 pt disc — LL.cardBackground, which the dark cover resolves to #1C1C1E — with an 11 pt amber play.fill -->
+        <circle cx="45" cy="743.5" r="13" fill="#1C1C1E"/>
+        <path d="M41.5 738.0 L50.5 743.5 L41.5 749.0 Z" fill="#FFB340" data-symbol="play.fill"/>
+        <!-- track x 70→686 (616 pt), 3 pt at white 18 % -->
+        <rect x="70" y="742.0" width="616" height="3" rx="1.5" fill="#FFFFFF" opacity="0.18"/>
+        <!-- playhead 3×20, drawn UNDER the moments -->
+        <rect x="388.8" y="733.5" width="3" height="20" rx="1.5" fill="#FFFFFF"/>
+        <!-- moments at 10 / 52 / 86 % (LL_KEYFRAMES=sunset): r 4.5 amber with a 2 pt #C36A00 ring -->
+        <circle cx="131.6" cy="743.5" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+        <!-- the playhead is STANDING on the second moment: it swells to 15 pt,
+             swaps its ring for a white one and gains a 1.5 pt accent halo -->
+        <circle cx="390.3" cy="743.5" r="7.5" fill="#FFB340"/>
+        <circle cx="390.3" cy="743.5" r="6.5" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <circle cx="390.3" cy="743.5" r="8.25" fill="none" stroke="#C36A00" stroke-width="1.5"/>
+        <circle cx="599.8" cy="743.5" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+        <!-- elapsed bubble, 15 pt, #2B2B2E at 90 %, its top 8 pt above the strip's -->
+        <rect x="364.3" y="722.5" width="52" height="15" rx="7.5" fill="#2B2B2E" opacity="0.9"/>
+        <text x="390.3" y="733.5" text-anchor="middle" font-size="10" class="sb mono" fill="#FFF">1:09:41</text>
+        <text x="70" y="769.0" font-size="10" class="mono" fill="#8E8E93">0:00:00</text>
+        <text x="686" y="769.0" text-anchor="end" font-size="10" class="mono" fill="#8E8E93">2:14:00</text>
+        <!-- one-frame steps ‹ ›, 26 pt, 6 pt after the track and 6 apart -->
+        <g data-symbol="chevron.left">
+          <circle cx="705" cy="751" r="13" fill="#1C1C1E"/>
+          <path d="M707.5 746 L702.5 751 L707.5 756" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+        <g data-symbol="chevron.right">
+          <circle cx="737" cy="751" r="13" fill="#1C1C1E"/>
+          <path d="M734.5 746 L739.5 751 L734.5 756" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </g>
+
+      <!-- EditorGroupBar(.padPill): right 16 / 16 above the safe area; padding 6,
+           six 58 pt cells 4 apart, radius 26 over rgba(28,28,30,.85) + blur.
+           A cell: icon 20 · label 10 pt semibold · 4 pt dot (lit = the group
+           holds a non-neutral value or a field that travels); the open group
+           sits on amber 14 % in amber, the rest #8E8E93 -->
+      <g id="main-buttons">
+        <rect x="784" y="718" width="380" height="66" rx="26" fill="#1C1C1E" opacity="0.85"/>
+        <g data-symbol="photo.stack"><g transform="translate(809,731) scale(0.8333)" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="7" width="14" height="12" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5"/></g></g>
+        <text x="819" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Presets</text>
+        <circle cx="819" cy="771" r="2" fill="#FFB340"/>
+        <rect x="852" y="724" width="58" height="54" rx="20" fill="#FFB340" opacity="0.14"/>
+        <g data-symbol="sun.max"><g transform="translate(871,731) scale(0.8333)" fill="none" stroke="#FFB340" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g></g>
+        <text x="881" y="764" text-anchor="middle" font-size="10" class="sb" fill="#FFB340">Light</text>
+        <circle cx="881" cy="771" r="2" fill="#FFB340"/>
+        <g data-symbol="circle.lefthalf.filled"><g transform="translate(933,731) scale(0.8333)" fill="none" stroke="#8E8E93" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="#8E8E93"/></g></g>
+        <text x="943" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Color</text>
+        <circle cx="943" cy="771" r="2" fill="#FFB340"/>
+        <g data-symbol="sparkles"><g transform="translate(995,731) scale(0.8333)" fill="#8E8E93"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></g></g>
+        <text x="1005" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Effects</text>
+        <g data-symbol="triangle"><g transform="translate(1057,731) scale(0.8333)" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linejoin="round"><path d="M12 4l9 16H3z"/></g></g>
+        <text x="1067" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Detail</text>
+        <g data-symbol="crop.rotate"><g transform="translate(1119,731) scale(0.8333)" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linecap="round"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/></g></g>
+        <text x="1129" y="764" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Crop</text>
+      </g>
+
+      <!-- the floating card at its default seat (right 16 / bottom 96) — `floatingContainer`; drag the header to move it -->
+      <g id="panel">
+        <rect x="764" y="378" width="400" height="326" rx="22" fill="#1C1C1E" opacity="0.86"/>
+        <!-- header — the drag handle on this layout: grab bar + title row -->
+        <g id="panel-header">
+          <rect x="946" y="386" width="36" height="5" rx="2.5" fill="#FFFFFF" opacity="0.3"/>
+          <text x="780" y="418" font-size="15" class="sb" fill="#FFF">Light</text>
+          <circle cx="829" cy="413" r="3" fill="#FFB340"/>
+          <g data-symbol="xmark">
+            <circle cx="1110" cy="413" r="16" fill="#FFFFFF" opacity="0.1"/>
+            <path d="M1106 409 l8 8 M1114 409 l-8 8" stroke="#FFF" stroke-width="2" stroke-linecap="round"/>
+          </g>
+          <g data-symbol="checkmark">
+            <circle cx="1132" cy="413" r="16" fill="#FFB340"/>
+            <path d="M1126.5 413 l3.5 3.5 l7.5 -7.5" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+        </g>
+        <!-- tool chips (EditorToolChips) — 3 × 118.7 pt -->
+        <g id="tool-chips">
+          <rect x="780.0" y="439" width="118.7" height="34" rx="12" fill="#FFFFFF" opacity="0.08"/>
+          <g data-symbol="custom · EditorToolIcon .tool(.expCon)"><g transform="translate(790.8,446) scale(0.8333)"><circle cx="12" cy="12" r="9.5" fill="url(#ecsweep)" stroke="#FFF" stroke-opacity="0.7" stroke-width="1"/><path d="M16.5 6v4M14.5 8h4" stroke="#000" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 16h4" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/></g></g>
+          <text x="816.8" y="460" font-size="11.5" class="sb" fill="#FFF">Exp · Con</text>
+          <path d="M884.3 452.5 l3.5 3.5 l-3.5 3.5 l-3.5 -3.5 Z" fill="#FFB340" stroke="#C36A00" stroke-width="1" data-symbol="diamond.fill"/>
+          <rect x="904.7" y="439" width="118.7" height="34" rx="12" fill="#FFB340" opacity="0.16"/>
+          <rect x="905.45" y="439.75" width="117.2" height="32.5" rx="11.25" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <g data-symbol="custom · EditorToolIcon .tool(.highWhites)"><g transform="translate(915.5,446) scale(0.8333)"><circle cx="10" cy="13.5" r="8" fill="#D8D8DC"/><path d="M19 3.5v6M16 6.5h6" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/></g></g>
+          <text x="941.5" y="460" font-size="11.5" class="sb" fill="#FFB340">High · Wh</text>
+          <path d="M1009.0 452.5 l3.5 3.5 l-3.5 3.5 l-3.5 -3.5 Z" fill="#FFB340" stroke="#C36A00" stroke-width="1" data-symbol="diamond.fill"/>
+          <rect x="1029.3" y="439" width="118.7" height="34" rx="12" fill="#FFFFFF" opacity="0.08"/>
+          <g data-symbol="custom · EditorToolIcon .tool(.shadBlacks)"><g transform="translate(1042.6,446) scale(0.8333)"><circle cx="10" cy="13.5" r="8" fill="#3A3A3E" stroke="#9A9A9E" stroke-width="1"/><path d="M16 6.5h6" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/></g></g>
+          <text x="1068.6" y="460" font-size="11.5" class="sb" fill="#FFF">Shad · Bl</text>
+          <path d="M1131.1 452.5 l3.5 3.5 l-3.5 3.5 l-3.5 -3.5 Z" fill="#FFB340" stroke="#C36A00" stroke-width="1" data-symbol="diamond.fill"/>
+        </g>
+        <!-- High · Wh pad: Y = highlights (−35 here → 35 % of the half-height below the crosshair), X = whites (0) -->
+        <g id="pad">
+          <rect x="780" y="483" width="368" height="180" rx="14" fill="url(#padHighWhites)"/>
+          <path d="M780 573.5 H1148 M964.5 483 V663" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="1"/>
+          <g font-size="10.5" class="sb" fill="#FFFFFF" fill-opacity="0.85">
+            <text x="964.0" y="500" text-anchor="middle">Lift</text>
+            <text x="964.0" y="653" text-anchor="middle">Recover</text>
+            <text x="790" y="577">Whites −</text>
+            <text x="1138" y="577" text-anchor="end">Whites +</text>
+          </g>
+          <circle cx="964.0" cy="604.5" r="13.5" fill="#FFB340" stroke="#FFFFFF" stroke-width="3"/>
+        </g>
+        <!-- readouts under the pad (PadReadouts) -->
+        <g id="pad-readouts" font-size="12.5" class="sb mono">
+          <text x="784" y="684.5" fill="#8E8E93">Highlights</text>
+          <path d="M857.5 677.0 l3.5 3.5 l-3.5 3.5 l-3.5 -3.5 Z" fill="#FFB340" stroke="#C36A00" stroke-width="1" data-symbol="diamond.fill"/>
+          <text x="865" y="684.5" fill="#FFB340">-35</text>
+          <text x="1144" y="684.5" text-anchor="end" fill="#FFB340">0</text>
+          <text x="1132.5" y="684.5" text-anchor="end" fill="#8E8E93">Whites</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="485" y="806" width="210" height="5" rx="2.5" fill="#FFFFFF" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="614" y="874" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iPadOS · Interval grading viewer · keyframed · Light › High · Wh · landscape · 1180×820 pt</text>
+  <text x="614" y="892" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift floatingEditorBody + GradeTimelineView (compact) + PhotoAdjustmentsPanel (.floating) — board 6b · LL_KEYFRAMES=sunset LL_SECTIONS=light:highwhites</text>
+</svg>

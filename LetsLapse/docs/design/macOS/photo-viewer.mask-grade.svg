@@ -1,21 +1,22 @@
 <svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>macOS · Photo viewer / grading editor · Editor tab · Masks card expanded · 1000×700</title>
-  <desc>Mirrors App/PhotoViewerView.swift (editorTab → masksCard) hosting App/Overlay/MasksCard.swift — NEW 2026-09-07 from the Claude Design handoff &quot;Masks as Adjustment Layers&quot; (turn 3). This is the other half of a mask: the MASKS TAB owns its shape (photo-viewer.masks.svg), and THIS CARD owns its GRADE. WHERE IT SITS: between the preset chips and the whole-picture panel — a preset is the look, a masked grade is a correction inside it, and the panel below is the frame as a whole. CLOSED BY DEFAULT: with nothing applied the card is ONE ROW — &quot;Masks&quot; and a ＋ Add menu, nothing else. With grades it carries the count (&quot;2 applied&quot;), a &quot;Manage ›&quot; link to the Masks tab, and a wrapping strip of 48×36 tiles plus a dashed ＋ tile. Every tile carries a hairline: an inverted grade draws WHITE where it selects, and a mask reaching its own edge would otherwise dissolve into the white card (found on the Mac, 2026-09-07). Badges: AUTO top-left for Sky/Land, ⊘ bottom-left for an inverted version, and a 55% #F2F2F7 wash over a grade switched off. The open one takes a 2.5pt accent ring. ADD MENU (native Menu, so it is a real menu on both platforms): groups INTELLIGENT · AUTO, CUSTOM and SHAPES, each mask listed TWICE — &quot;Name&quot; and &quot;Name · inverted&quot;, a custom mask using its own inverted name. A version already in the card reads &quot;✓ added&quot; and RE-OPENS the grade it has rather than making a second one: MaskGrade is unique on (mask, inverted), and saying so in the menu is what stops a click looking like it failed. Then a divider and New Linear mask… / New Radial mask… / Manage masks…, which jump to the Masks tab with the tool armed. EXPANDED GRADE (click a tile; click it again or ✕ to collapse): the mask&#8217;s name at 15/700 with its kind beneath (&quot;Radial&quot;, &quot;Sky · AUTO&quot;, &quot;Linear · inverted&quot;), Reset while non-neutral, a 20pt ✕; then Enabled and Show mask with Remove trailing; then the SAME sections and rows as PhotoAdjustmentsPanel — White Balance (Temp, Tint), Light (Exposure, Contrast, Highlights, Shadows), Color (Saturation), Effects (Clarity, Dehaze — Dehaze joined the card 2026-09-08: Lightroom&#8217;s LocalDehaze imports into a mask, and a value the card cannot show cannot be reset either). WHY THAT SUBSET: a local adjustment is a correction of a region, not a look — the capture-referred controls (Sharpen, Noise Reduction, the owned white) belong to the frame as a whole, and Rotation is geometry. TWO RANGES DIFFER FROM THE WHOLE-PICTURE PANEL, deliberately: Exposure travels ±2 EV, not ±5 (a local lift beyond a couple of stops is a different photograph); and TEMP IS A RELATIVE WARMTH — a mired offset from whatever white the whole-picture grade landed on, not a white of its own, since a region cannot sensibly declare a second illuminant. It travels ±25 mired, about ±1000 K at daylight, and reads in Kelvin (&quot;+452 K&quot;); the field&#8217;s full ±150 reads +2687 K a third of the way along and is unusable for the nudge this control is. While a grade is open the panel below gains the eyebrow WHOLE PICTURE (11/600, +0.5 tracking, #6D6D72) so scope is never ambiguous, and the expanded mask&#8217;s handles appear on the picture — it can be nudged without leaving the sliders, because a handle takes a drag before the armed-slider gesture does. DRAG ↕ TO ADJUST: clicking a slider LABEL arms it (label turns accent/600 and takes an amber DRAG ↕ chip); a vertical drag on the picture then sets that value at Δ = −Δy / 220pt × range, with a HUD pill naming the scope and the value. Esc releases; a double-click on the label resets the field. Wide layouts only — on a phone the picture is the smaller half of a stacked layout and the gesture would fight scrolling, so the labels do not arm there. RENDER ORDER, and it is the whole point: whole-picture grade → each enabled MaskGrade in list order (masked by its shape, inverted where flagged) → text overlays. Nothing is baked; a MaskGrade is parameters, resolved at render time. Preview and export run the SAME stage (SceneAwareCompositor.composited), which is what makes what the editor shows what the export bakes. STAGED HERE by LL_MASKGRADE=first: a radial &quot;Sun&quot; graded +452 K / +0.35 EV and open, and a linear &quot;Quay lift&quot; applied INVERTED. STATES NOT DRAWN (desc-only): the empty one-row card; the Add menu open; a disabled grade&#8217;s wash; the armed-label DRAG ↕ chip and its HUD pill; the WHOLE PICTURE eyebrow and the panel under it, which sit below the fold at 700pt once a grade is expanded. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_MASKGRADE=first|shapes|empty. Verified against the running Mac app 2026-09-07.</desc>
+  <title>macOS · Photo viewer / grading editor · Editor tab · Masks card · 1000×700</title>
+  <desc>Mirrors App/PhotoViewerView.swift — the grading editor in its own resizable window (PhotoEditorWindowRequest scene in LetsLapseApp; default 1000×700 drawn here, min 720×480; the window chrome owns title and close, so there is no in-content back button or Done bar). REBUILT 2026-09-13 around the editor-controls redesign (Claude Design handoff “LetsLapse Editor slider organization”, boards 3b · 6c; spec sections 1–5, 9, 10): the seven-section always-open panel is gone; the grade is five GROUPS + Presets (App/EditorControls/EditorGroup.swift — Light: Exp · Con / High · Wh / Shad · Bl; Color: WB / Vib · Sat / Mixer; Effects: Tex · Clar / Vignette / Dehaze; Detail: Sharpen / Noise; Crop: aspect chips + Angle), each opened from a main button into ONE card of tool chips over an XY PAD (App/EditorControls/XYPad.swift) with two readouts, and closed by Revert (restores the snapshot taken when the panel opened) or Done (keeps). THIS FILE: the MASKS CARD on the redesigned rail with NO group open — the rail is tab pill, main buttons (none highlighted; the Light and Color dots lit by the staged grade), the Masks card, “Reset adjustments” and the preset offer. MasksCard (App/Overlay/MasksCard.swift) with compactRows, the Mac's default since the redesign (board 3b, rail item 4): the header “Masks · 2 applied · Manage ›” (13.5 semibold / 11.5 / 12.5 semibold accent), then ONE ROW PER GRADE in list order, 8 apart: a 44×36 MaskTile (an inverted grade draws WHITE where it selects, carries ⊘ bottom-left and a hairline; the open grade a 2 pt accent ring; a disabled grade a 55 % wash), the mask's name 13.5 semibold (inverted names carry “ · inverted” and truncate), “Radial · enabled” 11 pt, then the grade as TOOL ICONS — every tool it moves at full ink and, for each section it leaves alone, that section's first tool at 35 % (Sun: WB + Exp · Con lit, Vib · Sat and Tex · Clar dim; Quay lift: High · Wh + Vib · Sat lit, WB and Tex · Clar dim) — 16 pt, 3 apart, then a chevron. The row's parts are 8 apart rather than the board's 10 so the longest built-in caption fits beside four icons. No add tile on this layout: a second grade is added from the Masks tab (Manage ›, which selects this mask there). Click a row to expand its grade under the rows; click again or ✕ to collapse. THE EXPANDED GRADE, drawn as shipped and STALE BY DESIGN: under a divider, the mask's name 15 bold with its kind beneath, Reset while non-neutral, a 20 pt ✕; Enabled and Show mask with Remove trailing; then the OLD sectioned slider rows — White Balance (Temp, Tint), Light (Exposure, Contrast, Highlights, Shadows), Color (Saturation), Effects (Clarity, Dehaze) — on native macOS sliders (grey track, 20 pt white knob, no accent fill), the 2026-09-07 card's rows, not the redesign's groups and pads; regrouping the masked grade into the same tools / pads as the whole-picture panel is OWED (INDEX.md). The two ranges that differ on purpose stand: Exposure ±2 EV and Temp a RELATIVE ±25 mired read out in Kelvin (“+452 K”), a region cannot declare a second illuminant. The picture carries the open mask's handles (MaskShapeOverlay: 1.2 pt outline, dashed inner feather ellipse, four 11 pt cardinal handles turning with the ellipse, the rotation knob on a 26 pt stalk — clipped by the picture's edge here). Render order is the point: whole-picture grade → each enabled MaskGrade in list order → text overlays; preview and export run the same stage. TIMELINE (6c): with the Editor tab up on an interval shoot the strip leaves the rail and takes a 54 pt row under the media pane — padding 6 top / 16 sides, GradeTimelineView on its COMPACT metrics (26 pt play disc, 12 pt gap, 3 pt rail at primary 18 %, 11 pt moments with the 2 pt #C36A00 ring, 3×20 playhead in #1C1C1E drawn UNDER the moments, the elapsed bubble 8 pt above the row, 10 pt h:mm:ss end labels 2 pt under the track row) and the two 26 pt frame steps 6 apart at the right; on the light surface the discs are #E9E9EB with accent glyphs and the bubble is white with a shadow and black text. Track x=74…609. The INTERVAL badge (EditorMarqueeBadge — kind · length · frame count, 20 pt, black 50 %, 11 pt semibold) sits bottom-left of the pane at (12, 12). Staged by LL_KEYFRAMES=sunset: three owned-white moments at 10 / 52 / 86 % (6100 K / 7600 K / 5400 K with Exposure 0 / −0.20 / −0.50, Highlights −0.20 / −0.35 / −0.10, Shadows +0.10 / +0.18 / +0.30, Vibrance +0.12 / +0.38 / +0.10), the playhead at 30 % — so the keyframed fields are whiteMired, exposure, highlights, shadows and vibrance, and the values under the playhead are the eased blend of the first two moments (6715 K, Exposure −0.09, Highlights −27). The clock strings drawn (0:40:12, 2:14:00, 2 h 14 min · 58 frames) are the board's sample data; the 2026-09-13 captures ran on the bench shoot “Stack 2. 9. at 21:03” (1 h 34 min · 5660 frames, playhead 0:28:18). RAIL (3b / 6c): a FIXED 330 pt rail (railWidth, macOS) right of a hairline Divider — resizing the window grows the picture, never the controls. On the Editor page the whole rail scrolls, tab pill included: padding 14 top / 16 sides / 20 bottom, 12 between items. Top to bottom: (1) RailTabBar as a white capsule (padding 3, equal segments 2 apart, 13 pt semibold, the selected segment LL.accent with a white label) — Editor · Text · Frames · Masks, Frames only where frames do (availableRailTabs); (2) EditorGroupBar .macCard — a white card padded 6 holding six 46 pt cells spread edge to edge: 18 pt SF Symbol (photo.stack, sun.max, circle.lefthalf.filled, sparkles, triangle, crop.rotate), 9.5 pt semibold label, a 4 pt dot lit when the group holds a value or a travelling field, idle ink #6D6D72, the OPEN group on LL.accent 12 % with accent ink; a tap opens that group's panel and snapshots the grade, a tap on the open group leaves it open — closing is the panel's Revert / Done; (3) the open group's PhotoAdjustmentsPanel as a white radius-12 card padded 12 with 10 between rows: the header (title 13.5 semibold #6D6D72, the 6 pt dot when non-neutral, then Reset in accent text while non-neutral, the Revert pill #E9E9EB and the Done pill LL.accent, both 12 pt semibold, 23 tall, radius 7 — Done keeps the values and drops the snapshot, Revert restores it, both close), then the group's content; (4) MasksCard on its compact rows; (5) “Reset adjustments” 13 pt semibold accent, 4 in from the rail's content edge; (6) the inline “Save these edits as a preset?” offer whenever the state is Edited, since the window chrome owns the exit (not on the boards — flagged). Group card 62 tall at y=110; the panel card starts at y=184. STAGED by LL_MASKGRADE=first: a radial “Sun” (+452 K / +0.35 EV) open, and a linear “Quay lift” applied INVERTED (Highlights −35, Saturation +12) — in memory only, the sidecar never learns of them. The card runs under the window's fold from the Light section on (Shadows, Color › Saturation, Effects › Clarity / Dehaze, the card's footnote, and the offer below it are reached by scrolling). STATES NOT DRAWN (desc-only): the collapsed card (rows only); the empty one-row card (photo-viewer.keyframes.svg draws it — “Masks · ＋ Add”); a disabled grade's wash; the armed-label DRAG ↕ chip and its HUD pill (wide layouts arm a slider label for a vertical drag on the picture); the WHOLE PICTURE eyebrow the old panel carried under an open grade — the redesign has no always-open panel under the card, the open group's card sits ABOVE it. Hooks: LL_EDITOR=latest LL_KEYFRAMES=sunset LL_MASKGRADE=first (|shapes|empty). Verified 2026-09-13 against the running Debug build (rows, icons, the expanded header and sections; the capture showed the rail's legacy scroller since the card outruns the window).</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
+    <!-- The picture's own edges, in the flat drawing's original 660×495
+         coordinates (see g#picture's transform). -->
     <clipPath id="photo"><rect x="20" y="110" width="660" height="495"/></clipPath>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#8FA3B8"/>
       <stop offset="0.45" stop-color="#E8B98C"/>
       <stop offset="1" stop-color="#F6DFB2"/>
     </linearGradient>
-    <linearGradient id="quayfade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#1C1C1E"/>
-    </linearGradient>
     <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#D9A45E"/>
       <stop offset="1" stop-color="#5C666E"/>
+    </linearGradient>
+    <linearGradient id="quayfade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#1C1C1E"/>
     </linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
@@ -29,26 +30,20 @@
       <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
     </g>
 
-    <!-- Media column: black pane, 4:3 picture fitted and centred, zoom
-         control bottom-trailing. The picture is a flat approximation of the
-         staged frame: sunset sky, the overlay text, then skyline / bridge /
-         river / quay — the skyline is drawn AFTER the text on purpose, so
-         the drawing occludes the descenders the way the composite does. -->
+    <!-- Media column: black pane, the 4:3 picture fitted to the pane's WIDTH
+         (669 pt → 669×502) and centred vertically. The picture is the flat
+         approximation the earlier files drew at 660×495: sunset sky, then
+         skyline / bridge / river / quay, kept in its original coordinates
+         and scaled up by 669/660 so nothing needed re-measuring. -->
     <g id="media">
-      <rect x="20" y="48" width="660" height="618" fill="#000000"/>
-      <g clip-path="url(#photo)">
+      <rect x="20" y="48" width="669" height="618" fill="#000000"/>
+      <g id="picture" transform="translate(20,106) scale(1.013636) translate(-20,-110)" clip-path="url(#photo)">
         <rect x="20" y="110" width="660" height="495" fill="url(#sky)"/>
         <ellipse cx="200" cy="180" rx="160" ry="24" fill="#7E93A9" opacity="0.35"/>
         <ellipse cx="480" cy="150" rx="190" ry="22" fill="#8A9DB1" opacity="0.3"/>
         <ellipse cx="360" cy="240" rx="230" ry="22" fill="#EACBA0" opacity="0.45"/>
         <ellipse cx="150" cy="300" rx="170" ry="16" fill="#F2D9AE" opacity="0.5"/>
-        <!-- Layer 1 at its resting layout. Its reveal has not started at
-             this playhead, so the composite draws nothing — the chrome below
-             is all that marks where it will land. (Drawn faint here so the
-             spec shows the placement the badge refers to.) -->
-        <text x="345" y="360" font-size="96" class="b" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.16">LetsLapse</text>
-        <!-- Skyline band drawn AFTER the text — only the baseline bottoms and
-             descenders sink behind the rooftops, the way the composite cuts. -->
+        <!-- Skyline band. -->
         <path d="M20 380 L20 356 L60 356 L60 350 L118 350 L118 358 L175 358 L175 352 L240 352 L240 360 L300 360 L300 350 L332 344 L385 340 L448 344 L470 352 L520 349 L520 356 L575 356 L575 347 L620 347 L620 355 L680 355 L680 380 Z" fill="#5D5346"/>
         <!-- Bridge deck with piers at the river head. -->
         <rect x="20" y="380" width="660" height="8" fill="#8C7B5F"/>
@@ -70,191 +65,195 @@
           <circle cx="492" cy="528" r="4"/><circle cx="352" cy="576" r="4"/><circle cx="530" cy="516" r="4"/>
         </g>
       </g>
-      <g clip-path="url(#photo)">
-        <!-- Layer 2: BOX mode, Georgia italic, auto-sized to its box, onion
-             skin ON — so it draws at full strength even though its slide
-             reveal has not run at this playhead. Placed in Land, so the sky
-             would occlude it; nothing here is sky. -->
-        <text x="98" y="512" font-size="34" font-family="Georgia, serif" font-style="italic" fill="#FFFFFF">River Sunset</text>
-        <text x="98" y="548" font-size="34" font-family="Georgia, serif" font-style="italic" fill="#FFFFFF">to Dusk</text>
-        <!-- Layer 4: Courier, wide tracking, centred. Layer 3 is hidden and
-             is deliberately absent. -->
-        <text x="350" y="588" font-size="17" font-family="'Courier New', monospace" letter-spacing="3.2" text-anchor="middle" fill="#FFFFFF">12 Aug 2026 · 55 min</text>
+      <!-- EditorMarqueeBadge (6c): kind · length · frame count, bottom-left
+           of the pane at (12, 12) — 20 pt tall, black 50 %, 11 pt semibold. -->
+      <g id="marquee-badge">
+        <rect x="32" y="634" width="214" height="20" rx="10" fill="#000000" fill-opacity="0.5"/>
+        <text x="43" y="648" font-size="11" class="sb" fill="#FFFFFF">INTERVAL · 2 h 14 min · 58 frames</text>
       </g>
-
-      <!-- The SELECTED mask's handles (MaskShapeOverlay). Radial: a 1.2pt
-           white outline (drag inside to move), a dashed inner ellipse at
-           1 − feather marking where the falloff begins, four 11pt square
-           cardinal handles that turn WITH the ellipse (e/w set radiusX,
-           n/s set radiusY), and a rotation knob on a 26pt stalk beyond the
-           +x cardinal — clipped by the picture's edge here, which is what
-           the app draws when a mask sits near the frame. Below
-           min(rx, ry) = 26pt the cardinals collapse and a caption asks for
-           a zoom (desc-only). Handles take a drag BEFORE the armed-slider
-           gesture, so a mask can be nudged in the middle of grading it. -->
-      <g clip-path="url(#photo)" id="mask-handles">
-        <ellipse cx="548" cy="263.5" rx="124" ry="80" transform="rotate(-12 548 263.5)" fill="none" stroke="#FFFFFF" stroke-width="1.2"/>
-        <ellipse cx="548" cy="263.5" rx="49.6" ry="32" transform="rotate(-12 548 263.5)" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="1" stroke-dasharray="4 4"/>
-        <line x1="669.3" y1="237.7" x2="694.7" y2="232.3" stroke="#FFFFFF" stroke-width="1"/>
-        <g fill="#FFFFFF" stroke="#FFB340" stroke-width="1.5">
-          <rect x="663.8" y="232.2" width="11" height="11" rx="2" transform="rotate(-12 669.3 237.7)"/>
-          <rect x="421.2" y="283.8" width="11" height="11" rx="2" transform="rotate(-12 426.7 289.3)"/>
-          <rect x="525.9" y="179.8" width="11" height="11" rx="2" transform="rotate(-12 531.4 185.3)"/>
-          <rect x="559.1" y="336.2" width="11" height="11" rx="2" transform="rotate(-12 564.6 341.7)"/>
-          <circle cx="694.7" cy="232.3" r="7"/>
-        </g>
-      </g>
-
-      <text x="653" y="652" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
+      <!-- The 1:1 zoom control (zoomControls) bottom-trailing of the pane. -->
+      <text x="652" y="645" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
     </g>
 
-    <!-- Timeline strip: play · track with playhead + keyframes · frame steps. -->
+    <!-- The OPEN mask's handles (MaskShapeOverlay), in the picture's original
+         660×495 coordinates through the same transform as g#picture. -->
+    <g id="mask-handles" transform="translate(20,106) scale(1.013636) translate(-20,-110)" clip-path="url(#photo)">
+      <ellipse cx="548" cy="263.5" rx="124" ry="80" transform="rotate(-12 548 263.5)" fill="none" stroke="#FFFFFF" stroke-width="1.2"/>
+      <ellipse cx="548" cy="263.5" rx="49.6" ry="32" transform="rotate(-12 548 263.5)" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="1" stroke-dasharray="4 4"/>
+      <line x1="669.3" y1="237.7" x2="694.7" y2="232.3" stroke="#FFFFFF" stroke-width="1"/>
+      <g fill="#FFFFFF" stroke="#FFB340" stroke-width="1.5">
+        <rect x="663.8" y="232.2" width="11" height="11" rx="2" transform="rotate(-12 669.3 237.7)"/>
+        <rect x="421.2" y="283.8" width="11" height="11" rx="2" transform="rotate(-12 426.7 289.3)"/>
+        <rect x="525.9" y="179.8" width="11" height="11" rx="2" transform="rotate(-12 531.4 185.3)"/>
+        <rect x="559.1" y="336.2" width="11" height="11" rx="2" transform="rotate(-12 564.6 341.7)"/>
+        <circle cx="694.7" cy="232.3" r="7"/>
+      </g>
+    </g>
+
+    <!-- Timeline strip (6c): play · track with playhead + moments · frame
+         steps, in the 54 pt row under the pane, compact metrics on the
+         light surface — discs #E9E9EB with accent glyphs, the elapsed bubble
+         white with a shadow and black text, the playhead #1C1C1E under the
+         moments. The strip exists only on an interval shoot (hasTimeline). -->
     <g id="strip">
-      <circle cx="51.5" cy="688" r="13" fill="#FFFFFF"/>
-      <path d="M48 682 L58 688 L48 694 Z" fill="#C36A00" data-symbol="play.fill"/>
-      <rect x="76" y="686.5" width="522" height="3" rx="1.5" fill="#000000" fill-opacity="0.18"/>
-      <rect x="74.5" y="678" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
-      <circle cx="222.7" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <circle cx="458.6" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <circle cx="596.9" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <rect x="90" y="666" width="45" height="15" rx="7.5" fill="#2B2B2E" fill-opacity="0.9"/>
-      <text x="112.5" y="677" font-size="10" class="sb mono" text-anchor="middle" fill="#FFFFFF">0:00</text>
-      <text x="76" y="712" font-size="10" class="mono" fill="#6D6D72">0:00</text>
-      <text x="598" y="712" font-size="10" class="mono" text-anchor="end" fill="#6D6D72">55:13</text>
-      <circle cx="617" cy="688" r="13" fill="#FFFFFF"/>
-      <text x="617" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#B5B5BA" data-symbol="chevron.left">‹</text>
-      <circle cx="649" cy="688" r="13" fill="#FFFFFF"/>
-      <text x="649" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00" data-symbol="chevron.right">›</text>
-      <!-- The SELECTED layer's reveal span, read-only. Selecting another
-           layer moves the band; authoring it is Set Start / Set End. -->
-      <rect x="107" y="700" width="68" height="4" rx="2" fill="#C36A00"/>
+      <circle cx="49" cy="685" r="13" fill="#E9E9EB"/>
+      <path d="M45.5 679 L55.5 685 L45.5 691 Z" fill="#C36A00" data-symbol="play.fill"/>
+      <rect x="74" y="683.5" width="535" height="3" rx="1.5" fill="#000000" fill-opacity="0.18"/>
+      <rect x="233.0" y="675" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
+      <circle cx="127.5" cy="685" r="5.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+      <circle cx="352.2" cy="685" r="5.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+      <circle cx="534.1" cy="685" r="5.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+      <rect x="208.5" y="664" width="52" height="15" rx="7.5" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+      <text x="234.5" y="675" font-size="10" class="sb mono" text-anchor="middle" fill="#000">0:40:12</text>
+      <text x="74" y="709" font-size="10" class="mono" fill="#6D6D72">0:00:00</text>
+      <text x="609" y="709" font-size="10" class="mono" text-anchor="end" fill="#6D6D72">2:14:00</text>
+      <!-- one-frame steps: a 0…1 scrubber cannot land on frame 2 of 5660,
+           so ‹ › move the playhead exactly one index (left disabled at the head). -->
+      <circle cx="628" cy="685" r="13" fill="#E9E9EB"/>
+      <path d="M630.5 680.5 L626 685 L630.5 689.5" fill="none" stroke="#C36A00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+      <circle cx="660" cy="685" r="13" fill="#E9E9EB"/>
+      <path d="M657.5 680.5 L662 685 L657.5 689.5" fill="none" stroke="#C36A00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
     </g>
 
-    <line x1="680" y1="48" x2="680" y2="720" stroke="#000" stroke-opacity="0.1"/>
-    <!-- Control rail · Editor tab, with the Masks card expanded (MasksCard). -->
+    <line x1="690" y1="48" x2="690" y2="720" stroke="#000" stroke-opacity="0.1"/>
+
+    <!-- Control rail · Editor tab, nothing open: the Masks card is the first card. -->
     <g id="rail">
+      <!-- RailTabBar: white capsule, padding 3, 4 equal segments 2 apart;
+           the selected one fills LL.accent with a white label. Frames exists
+           only where frames do (an interval shoot). -->
       <g id="railtabs">
-        <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
-        <rect x="699" y="63" width="74" height="30" rx="15" fill="#C36A00"/>
-        <text x="736" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
-        <text x="812" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
-        <text x="888" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
-        <text x="964" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
+        <rect x="706" y="62" width="298" height="36" rx="18" fill="#FFFFFF"/>
+        <rect x="709.0" y="65" width="71.5" height="30" rx="15" fill="#C36A00"/>
+        <text x="744.8" y="85" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
+        <text x="818.2" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
+        <text x="891.8" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
+        <text x="965.2" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
       </g>
 
-      <g id="staterow">
-        <text x="696" y="122" font-size="13" class="sb" fill="#6D6D72">Preset</text>
-        <rect x="748" y="106" width="58" height="24" rx="12" fill="#6D6D72" fill-opacity="0.16"/>
-        <text x="777" y="122" font-size="13" class="sb" text-anchor="middle" fill="#3A3A3C">Edited</text>
+      <!-- EditorGroupBar (.macCard): a white card, padding 6, six 46 pt cells
+           spread edge to edge (2 pt gaps): 18 pt SF Symbol, 9.5 pt semibold
+           label, a 4 pt dot lit when the group holds a value; the open
+           group's cell fills LL.accent 12 % with accent ink. Idle ink #6D6D72. -->
+      <g id="groupbar">
+        <rect x="706" y="110" width="298" height="62" rx="12" fill="#FFFFFF"/>
+        <g transform="translate(726,122) scale(0.75)" data-symbol="photo.stack"><rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/></g>
+        <text x="735" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Presets</text>
+        <g transform="translate(774,122) scale(0.75)" data-symbol="sun.max"><circle cx="12" cy="12" r="4" fill="none" stroke="#6D6D72" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round"/></g>
+        <text x="783" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Light</text>
+        <circle cx="783" cy="162" r="2" fill="#C36A00"/>
+        <g transform="translate(822,122) scale(0.75)" data-symbol="circle.lefthalf.filled"><circle cx="12" cy="12" r="9" fill="none" stroke="#6D6D72" stroke-width="1.8"/><path d="M12 3a9 9 0 0 0 0 18z" fill="#6D6D72"/></g>
+        <text x="831" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Color</text>
+        <circle cx="831" cy="162" r="2" fill="#C36A00"/>
+        <g transform="translate(870,122) scale(0.75)" data-symbol="sparkles"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" fill="#6D6D72"/></g>
+        <text x="879" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Effects</text>
+        <g transform="translate(918,122) scale(0.75)" data-symbol="triangle"><path d="M12 4l9 16H3z" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/></g>
+        <text x="927" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Detail</text>
+        <g transform="translate(966,122) scale(0.75)" data-symbol="crop.rotate"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round"/></g>
+        <text x="975" y="153" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Crop</text>
       </g>
 
-      <g id="presetstrip">
-        <rect x="696" y="144" width="76" height="33" rx="16.5" fill="#FFFFFF"/>
-        <text x="734" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Natural</text>
-        <rect x="780" y="144" width="76" height="33" rx="16.5" fill="#FFFFFF"/>
-        <text x="818" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Cinema</text>
-        <rect x="864" y="144" width="66" height="33" rx="16.5" fill="#FFFFFF"/>
-        <text x="897" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Matte</text>
-        <rect x="938" y="144" width="66" height="33" rx="16.5" fill="#FFFFFF"/>
-        <text x="971" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Vivid</text>
-      </g>
-
-      <!-- The Masks card. Closed it is one row; a tile expands it into that
-           mask's own adjustments, drawn exactly like the panel below. -->
+      <!-- MasksCard, compact rows, the first grade expanded. The card runs under
+           the window's fold; #win clips it. -->
       <g id="maskscard">
-        <rect x="696" y="191" width="308" height="529" rx="12" fill="#FFFFFF"/>
-
-        <text x="712" y="216" font-size="13" class="sb" fill="#6D6D72">Masks</text>
-        <text x="762" y="216" font-size="11" class="mono" fill="#6D6D72">2 applied</text>
-        <text x="988" y="216" font-size="12" class="sb" text-anchor="end" fill="#C36A00">Manage ›</text>
-
-        <!-- The strip: 48×36 tiles, gap 8 × 6.5, then the dashed ＋ tile. -->
-        <g id="strip-tiles">
-          <rect x="712" y="228" width="48" height="36" rx="6" fill="#1C1C1E"/>
-          <ellipse cx="748" cy="239" rx="10" ry="6.5" transform="rotate(-12 748 239)" fill="#FFFFFF" opacity="0.92"/>
-          <ellipse cx="748" cy="239" rx="14" ry="9" transform="rotate(-12 748 239)" fill="#FFFFFF" opacity="0.35"/>
-          <rect x="712" y="228" width="48" height="36" rx="6" fill="none" stroke="#C36A00" stroke-width="2.5"/>
-
-          <rect x="768" y="228" width="48" height="36" rx="6" fill="#1C1C1E"/>
-          <rect x="768" y="228" width="48" height="16" fill="#FFFFFF"/>
-          <rect x="768" y="244" width="48" height="11" fill="url(#quayfade)"/>
-          <rect x="768" y="228" width="48" height="36" rx="6" fill="none" stroke="#000" stroke-opacity="0.14"/>
-          <circle cx="774" cy="258" r="3.5" fill="none" stroke="#FFB340" stroke-width="1.4"/>
-          <line x1="771.6" y1="260.4" x2="776.4" y2="255.6" stroke="#FFB340" stroke-width="1.4"/>
-
-          <rect x="824" y="228" width="48" height="36" rx="6" fill="#C36A00" fill-opacity="0.04" stroke="#C36A00" stroke-opacity="0.5" stroke-width="1.5" stroke-dasharray="4 3"/>
-          <text x="848" y="252" font-size="15" class="sb" text-anchor="middle" fill="#C36A00">＋</text>
+        <rect x="706" y="184" width="298" height="620" rx="12" fill="#FFFFFF"/>
+        <text x="718" y="209" font-size="13.5" class="sb" fill="#6D6D72">Masks</text>
+        <text x="767" y="209" font-size="11.5" fill="#6D6D72">2 applied</text>
+        <text x="992" y="209" font-size="12.5" class="sb" text-anchor="end" fill="#C36A00">Manage ›</text>
+        <g class="mask-row">
+          <rect x="718" y="222" width="44" height="36" rx="6" fill="#1C1C1E"/>
+          <ellipse cx="751" cy="233" rx="9" ry="6" transform="rotate(-12 751 233)" fill="#FFFFFF" opacity="0.92"/>
+          <ellipse cx="751" cy="233" rx="13" ry="8.5" transform="rotate(-12 751 233)" fill="#FFFFFF" opacity="0.35"/>
+          <rect x="719" y="223" width="42" height="34" rx="5" fill="none" stroke="#C36A00" stroke-width="2"/>
+          <text x="770" y="237" font-size="13.5" class="sb" fill="#000">Sun</text>
+          <text x="770" y="252" font-size="11" fill="#6D6D72">Radial · enabled</text>
+          <g transform="translate(904,232) scale(0.6667)" data-symbol="EditorToolIcon.whiteBalance"><path d="M12 2.5a9.5 9.5 0 0 0 0 19z" fill="#3F7BD9"/><path d="M12 2.5a9.5 9.5 0 0 1 0 19z" fill="#F4B23A"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#1C1C1E" stroke-opacity=".7"/><path d="M12 3v18" stroke="#1C1C1E" stroke-width="1.2"/></g>
+          <g transform="translate(923,232) scale(0.6667)" data-symbol="EditorToolIcon.expCon"><defs><linearGradient id="ec15" x1="0" x2="1"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient></defs><circle cx="12" cy="12" r="9.5" fill="url(#ec15)" stroke="#1C1C1E" stroke-opacity=".45"/><path d="M16.5 6v4M14.5 8h4" stroke="#000" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 16h4" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
+          <g transform="translate(942,232) scale(0.6667)" data-symbol="EditorToolIcon.vibSat" opacity="0.35"><defs><linearGradient id="vs16" x1="0" x2="1"><stop offset="0" stop-color="#8E8E93"/><stop offset=".45" stop-color="#8E8E93"/><stop offset=".55" stop-color="#e04848"/><stop offset=".75" stop-color="#58c058"/><stop offset="1" stop-color="#4868e0"/></linearGradient></defs><path d="M12 2.5c3.5 5 7 8.5 7 12.5a7 7 0 0 1-14 0c0-4 3.5-7.5 7-12.5z" fill="url(#vs16)" stroke="#1C1C1E" stroke-opacity=".6"/></g>
+          <g transform="translate(961,232) scale(0.6667)" data-symbol="EditorToolIcon.texClar" opacity="0.35"><circle cx="12" cy="12" r="9" fill="none" stroke="#1C1C1E" stroke-width="1.5"/><path d="M6 15l4-9 3 6 2-3 3 6" fill="none" stroke="#1C1C1E" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></g>
+          <path d="M986 235 L990 240 L986 245" fill="none" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
         </g>
+        <g class="mask-row">
+          <rect x="718" y="266" width="44" height="36" rx="6" fill="#1C1C1E"/>
+          <rect x="718" y="266" width="44" height="16" fill="#FFFFFF"/>
+          <rect x="718" y="282" width="44" height="11" fill="url(#quayfade)"/>
+          <rect x="718" y="266" width="44" height="36" rx="6" fill="none" stroke="#000" stroke-opacity="0.14"/>
+          <circle cx="724" cy="296" r="3.5" fill="none" stroke="#FFB340" stroke-width="1.4"/>
+          <line x1="721.6" y1="298.4" x2="726.4" y2="293.6" stroke="#FFB340" stroke-width="1.4"/>
+          <text x="770" y="281" font-size="13.5" class="sb" fill="#000">Quay lift · inver…</text>
+          <text x="770" y="296" font-size="11" fill="#6D6D72">Linear · enabled</text>
+          <g transform="translate(904,276) scale(0.6667)" data-symbol="EditorToolIcon.whiteBalance" opacity="0.35"><path d="M12 2.5a9.5 9.5 0 0 0 0 19z" fill="#3F7BD9"/><path d="M12 2.5a9.5 9.5 0 0 1 0 19z" fill="#F4B23A"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#1C1C1E" stroke-opacity=".7"/><path d="M12 3v18" stroke="#1C1C1E" stroke-width="1.2"/></g>
+          <g transform="translate(923,276) scale(0.6667)" data-symbol="EditorToolIcon.highWhites"><circle cx="10" cy="13.5" r="8" fill="#D8D8DC"/><path d="M19 3.5v6M16 6.5h6" stroke="#1C1C1E" stroke-width="1.8" stroke-linecap="round"/></g>
+          <g transform="translate(942,276) scale(0.6667)" data-symbol="EditorToolIcon.vibSat"><defs><linearGradient id="vs20" x1="0" x2="1"><stop offset="0" stop-color="#8E8E93"/><stop offset=".45" stop-color="#8E8E93"/><stop offset=".55" stop-color="#e04848"/><stop offset=".75" stop-color="#58c058"/><stop offset="1" stop-color="#4868e0"/></linearGradient></defs><path d="M12 2.5c3.5 5 7 8.5 7 12.5a7 7 0 0 1-14 0c0-4 3.5-7.5 7-12.5z" fill="url(#vs20)" stroke="#1C1C1E" stroke-opacity=".6"/></g>
+          <g transform="translate(961,276) scale(0.6667)" data-symbol="EditorToolIcon.texClar" opacity="0.35"><circle cx="12" cy="12" r="9" fill="none" stroke="#1C1C1E" stroke-width="1.5"/><path d="M6 15l4-9 3 6 2-3 3 6" fill="none" stroke="#1C1C1E" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></g>
+          <path d="M986 279 L990 284 L986 289" fill="none" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+        </g>
+        <line x1="718" y1="314" x2="992" y2="314" stroke="#000" stroke-opacity="0.08"/>
 
-        <line x1="712" y1="280" x2="988" y2="280" stroke="#000" stroke-opacity="0.08"/>
+        <!-- The open grade (expandedPanel): header, Enabled / Show mask / Remove,
+             then the OLD sectioned rows — stale by design, see the desc. -->
+        <g id="expanded-grade">
+          <text x="718" y="338" font-size="15" class="b" fill="#000">Sun</text>
+          <text x="718" y="353" font-size="11" fill="#6D6D72">Radial</text>
+          <text x="948" y="338" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
+          <circle cx="982" cy="334" r="10" fill="#E9E9EB"/>
+          <path d="M978.5 330.5 L985.5 337.5 M985.5 330.5 L978.5 337.5" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round" data-symbol="xmark"/>
 
-        <!-- The open grade's header: name, kind, Reset, ✕. -->
-        <text x="712" y="304" font-size="15" class="b" fill="#000">Sun</text>
-        <text x="712" y="319" font-size="11" fill="#6D6D72">Radial</text>
-        <text x="944" y="304" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
-        <circle cx="978" cy="300" r="10" fill="#E9E9EB"/>
-        <path d="M974.5 296.5 L981.5 303.5 M981.5 296.5 L974.5 303.5" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round"/>
+          <rect x="718" y="367" width="14" height="14" rx="3" fill="#C36A00"/>
+          <path d="M721.5 374 L724.5 377 L728.5 370.5" stroke="#FFFFFF" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="checkmark"/>
+          <text x="740" y="379" font-size="13.5" class="sb" fill="#000">Enabled</text>
+          <rect x="812" y="367" width="14" height="14" rx="3" fill="none" stroke="#000" stroke-opacity="0.28"/>
+          <text x="834" y="379" font-size="13.5" class="sb" fill="#000">Show mask</text>
+          <text x="992" y="379" font-size="12" class="sb" text-anchor="end" fill="#6D6D72">Remove</text>
 
-        <rect x="712" y="333" width="14" height="14" rx="3" fill="#C36A00"/>
-        <path d="M715.5 340 L718.5 343 L722.5 336.5" stroke="#FFFFFF" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-        <text x="734" y="345" font-size="13.5" class="sb" fill="#000">Enabled</text>
-        <rect x="806" y="333" width="14" height="14" rx="3" fill="none" stroke="#000" stroke-opacity="0.28"/>
-        <text x="828" y="345" font-size="13.5" class="sb" fill="#000">Show mask</text>
-        <text x="988" y="345" font-size="12" class="sb" text-anchor="end" fill="#6D6D72">Remove</text>
+          <text x="718" y="411" font-size="13.5" class="sb" fill="#6D6D72">White Balance</text>
+          <circle cx="829.1" cy="407" r="3" fill="#C36A00"/>
+          <text x="992" y="411" font-size="12" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
+          <text x="718" y="435" font-size="13.5" fill="#6D6D72">Temp</text>
+          <text x="992" y="435" font-size="12.5" class="sb mono" text-anchor="end" fill="#C36A00">+452 K</text>
+          <rect x="718" y="445" width="274" height="4" rx="2" fill="#000" fill-opacity="0.16"/>
+          <circle cx="909.8" cy="447" r="10" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
+          <text x="718" y="471" font-size="13.5" fill="#6D6D72">Tint</text>
+          <text x="992" y="471" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="718" y="481" width="274" height="4" rx="2" fill="#000" fill-opacity="0.16"/>
+          <circle cx="855.0" cy="483" r="10" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
 
-        <text x="712" y="377" font-size="13.5" class="sb" fill="#6D6D72">White Balance</text>
-        <circle cx="815" cy="373" r="3" fill="#C36A00"/>
-        <text x="988" y="377" font-size="12" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
-        <text x="712" y="401" font-size="13.5" fill="#6D6D72">Temp</text>
-        <text x="988" y="401" font-size="12.5" class="sb mono" text-anchor="end" fill="#C36A00">+452 K</text>
-        <rect x="712" y="411" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="712" y="411" width="163" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="875" cy="413" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="712" y="437" font-size="13.5" fill="#6D6D72">Tint</text>
-        <text x="988" y="437" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
-        <rect x="712" y="447" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="712" y="447" width="138" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="850" cy="449" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+          <text x="718" y="515" font-size="13.5" class="sb" fill="#6D6D72">Light</text>
+          <circle cx="764.3" cy="511" r="3" fill="#C36A00"/>
+          <text x="992" y="515" font-size="12" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
+          <text x="718" y="539" font-size="13.5" fill="#6D6D72">Exposure</text>
+          <text x="992" y="539" font-size="12.5" class="sb mono" text-anchor="end" fill="#C36A00">+0.35</text>
+          <rect x="718" y="549" width="274" height="4" rx="2" fill="#000" fill-opacity="0.16"/>
+          <circle cx="879.0" cy="551" r="10" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
+          <text x="718" y="575" font-size="13.5" fill="#6D6D72">Contrast</text>
+          <text x="992" y="575" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="718" y="585" width="274" height="4" rx="2" fill="#000" fill-opacity="0.16"/>
+          <circle cx="855.0" cy="587" r="10" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
+          <text x="718" y="611" font-size="13.5" fill="#6D6D72">Highlights</text>
+          <text x="992" y="611" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="718" y="621" width="274" height="4" rx="2" fill="#000" fill-opacity="0.16"/>
+          <circle cx="855.0" cy="623" r="10" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
+          <text x="718" y="647" font-size="13.5" fill="#6D6D72">Shadows</text>
+          <text x="992" y="647" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="718" y="657" width="274" height="4" rx="2" fill="#000" fill-opacity="0.16"/>
+          <circle cx="855.0" cy="659" r="10" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
 
-        <text x="712" y="481" font-size="13.5" class="sb" fill="#6D6D72">Light</text>
-        <circle cx="756" cy="477" r="3" fill="#C36A00"/>
-        <text x="988" y="481" font-size="12" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
-        <text x="712" y="505" font-size="13.5" fill="#6D6D72">Exposure</text>
-        <text x="988" y="505" font-size="12.5" class="sb mono" text-anchor="end" fill="#C36A00">+0.35</text>
-        <rect x="712" y="515" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="712" y="515" width="163" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="875" cy="517" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="712" y="541" font-size="13.5" fill="#6D6D72">Contrast</text>
-        <text x="988" y="541" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
-        <rect x="712" y="551" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="712" y="551" width="138" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="850" cy="553" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="712" y="577" font-size="13.5" fill="#6D6D72">Highlights</text>
-        <text x="988" y="577" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
-        <rect x="712" y="587" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="712" y="587" width="138" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="850" cy="589" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="712" y="613" font-size="13.5" fill="#6D6D72">Shadows</text>
-        <text x="988" y="613" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
-        <rect x="712" y="623" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="712" y="623" width="138" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="850" cy="625" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-
-        <text x="712" y="657" font-size="13.5" class="sb" fill="#6D6D72">Color</text>
-        <text x="712" y="681" font-size="13.5" fill="#6D6D72">Saturation</text>
-        <text x="988" y="681" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
-        <rect x="712" y="691" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="712" y="691" width="138" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="850" cy="693" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+          <text x="718" y="691" font-size="13.5" class="sb" fill="#6D6D72">Color</text>
+          <text x="718" y="715" font-size="13.5" fill="#6D6D72">Saturation</text>
+          <text x="992" y="715" font-size="12.5" class="sb mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="718" y="725" width="274" height="4" rx="2" fill="#000" fill-opacity="0.16"/>
+          <circle cx="855.0" cy="727" r="10" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
+        </g>
+        <!-- Below the fold (desc): Effects (Clarity, Dehaze), the card's footnote
+             ("Applied inside this mask only, over the whole shoot. Stored as
+             parameters, rendered live — nothing is baked in."), then "Reset
+             adjustments" (the preset offer lives in the Presets group only,
+             2026-09-13). -->
       </g>
-
-      <!-- Below the fold at 700pt (desc): the Effects section (Clarity, Dehaze), the
-           card's footnote, the WHOLE PICTURE eyebrow, and the whole-picture
-           PhotoAdjustmentsPanel under it. -->
     </g>
   </g>
 
   <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
-  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Editor tab · Masks card expanded · 1000×700 pt window</text>
-  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (editorTab) + App/Overlay/MasksCard.swift — a mask's SHAPE lives in photo-viewer.masks.svg</text>
+  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Editor tab · Masks card · 1000×700 pt window</text>
+  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (railEditorStack) + App/Overlay/MasksCard.swift (compactRows · expandedPanel) — LL_MASKGRADE=first</text>
 </svg>

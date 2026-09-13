@@ -65,16 +65,48 @@ struct XYPad: View {
     private var wordInsetVertical: CGFloat { style == .dark ? 7 : 6 }
     private var wordInsetHorizontal: CGFloat { style == .dark ? 10 : 8 }
 
+    /// The knob's centre travels an inset rectangle, `knob/2` in from every
+    /// edge, and the crosshair and the value mapping use the same rectangle.
+    /// The pad is clipped to its rounded corners, so a knob whose centre
+    /// reached the edge would show as a quarter-disc — and a pad whose
+    /// neutral IS a corner (Sharpen, Noise: both axes 0…1) drew three
+    /// quarters of its knob off the pad and its crosshair along the clipped
+    /// edges, reading as no knob at all. Value 0 puts the centre at
+    /// `knob/2`, value 1 at `size − knob/2`; the words in the margins are
+    /// unaffected.
+    private func travel(in size: CGSize) -> CGRect {
+        let inset = knobDiameter / 2
+        return CGRect(
+            x: inset, y: inset,
+            width: max(size.width - knobDiameter, 0),
+            height: max(size.height - knobDiameter, 0))
+    }
+
+    /// Normalized value → the knob's centre in the pad's local space.
+    private func point(for value: CGPoint, in size: CGSize) -> CGPoint {
+        let rect = travel(in: size)
+        return CGPoint(
+            x: rect.minX + value.x * rect.width,
+            y: rect.minY + (1 - value.y) * rect.height)
+    }
+
+    /// A touch in the pad's local space → the normalized value, clamped so a
+    /// finger past the inset still pins the knob to the travel's edge.
+    private func normalized(at location: CGPoint, in size: CGSize) -> CGPoint {
+        let rect = travel(in: size)
+        guard rect.width > 0, rect.height > 0 else { return value }
+        return CGPoint(
+            x: min(max((location.x - rect.minX) / rect.width, 0), 1),
+            y: min(max(1 - (location.y - rect.minY) / rect.height, 0), 1))
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
             ZStack(alignment: .topLeading) {
                 background.view(light: style == .light)
                 crosshairLines(in: size)
-                knob
-                    .position(
-                        x: value.x * size.width,
-                        y: (1 - value.y) * size.height)
+                knob.position(point(for: value, in: size))
             }
             .overlay(alignment: .top) { word(words.top).padding(.top, wordInsetVertical) }
             .overlay(alignment: .bottom) { word(words.bottom).padding(.bottom, wordInsetVertical) }
@@ -142,8 +174,9 @@ struct XYPad: View {
 
     private func crosshairLines(in size: CGSize) -> some View {
         Path { path in
-            let x = (neutral.x * size.width).rounded() + 0.5
-            let y = ((1 - neutral.y) * size.height).rounded() + 0.5
+            let centre = point(for: neutral, in: size)
+            let x = centre.x.rounded() + 0.5
+            let y = centre.y.rounded() + 0.5
             path.move(to: CGPoint(x: 0, y: y))
             path.addLine(to: CGPoint(x: size.width, y: y))
             path.move(to: CGPoint(x: x, y: 0))
@@ -197,9 +230,7 @@ struct XYPad: View {
                     editing = true
                     onEditing(true)
                 }
-                value = CGPoint(
-                    x: min(max(gesture.location.x / size.width, 0), 1),
-                    y: min(max(1 - gesture.location.y / size.height, 0), 1))
+                value = normalized(at: gesture.location, in: size)
             }
     }
 

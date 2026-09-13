@@ -1,121 +1,127 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Photo grading viewer · side rail · landscape</title>
-  <desc>Mirrors App/PhotoViewerView.swift in its wide layout — the branch taken whenever the available width reaches 500pt: iPhone landscape (852pt), the iPad sheet (~578pt), or a widened Mac window. The threshold is 500 rather than 600 because the iPad sheet presents at ~578pt and a 600pt cutover left it stacked; the widest iPhone portrait is 440pt, so both stay firmly on the right side. The controls move into a side rail beside the image instead of stacking under it, and the sliders are shown outright — as they now are in the stacked layout too, which lost its Customise disclosure for the same reason: with the picture pinned, an accordion over the sliders only added a tap. Rail width is min(340, width × 0.42): 340pt at the 852pt iPhone-landscape width drawn here, and ~243pt on the iPad sheet. The rail scrolls on its own. There is deliberately NO preview-size drag handle here: the handle belongs to `stackedBody`, where media height and control room compete for the same axis. In the rail they do not — the image already has the whole height and gives up width, not height, to the controls — so the wide branch never draws one. Sliders, readouts, White Bal. picker and Save as Preset are identical to the portrait states (see project-photo.viewer.expanded.portrait.svg) — only the arrangement changes. Shown at the neutral grade with Natural selected. NOT YET RESTAGED (2026-08-18): the editor is a black fullScreenCover with a floating back chevron over the image rather than the light title bar with Done drawn here, and a "Preset" state row with its PresetStatePill heads the rail above the chips.</desc>
+  <desc>Mirrors App/PhotoViewerView.swift's rail layout (`railBody`, `controlRail`, `railEditorStack`, `railPanelStyle`) on a landscape iPhone with App/EditorControls/EditorGroupBar.swift (.macCard, dark), App/RailTabBar.swift and App/PhotoAdjustmentsPanel.swift (layout .rail, style .dark) — a PHOTO capture, so no strip under the pane (`hasTimeline` false), the pane the column's full 372 pt. Redrawn 2026-09-13 for the editor controls redesign: the light title bar, Done, the preset chip strip and the slider stack drawn before are gone. THE RAIL LAYOUT (`railBody` + `controlRail` + `railEditorStack`, `EditorLayout.rail`): taken by a landscape iPhone, a wide split and iPad portrait (settled 2026-09-13: wide enough for a rail, too tall for the sheet to reach the picture) — and by the Mac, whose rail is the light board 3b; on iOS the same rail is forced dark. Rail width = min(340, 0.42 × width) of the SAFE width — 734 pt on this canvas (59 pt insets either side) gives 308.3, so the media column is 425.4 pt from x = 59 and the rail runs 484.7…793 with its content inset 16 (276.3 pt wide; the iPhone 16 Pro simulator, at 750 pt safe, measured a 315 pt rail with 288 pt of content). The whole rail scrolls, tab pill included, padded 14 top / 16 sides / 20 bottom with 12 pt between cards: (1) `RailTabBar` — NOT the over-picture pill — a 36 pt LL.cardBackground capsule, padding 3, four equal 13 pt semibold segments padded 7, amber on ink with the selected one amber and black; (2) `EditorGroupBar(.macCard)` drawn dark: a radius-12 card padded 6 holding six 46 pt cells (SF Symbol 18 pt, 9.5 pt semibold label, 4 pt dot; the open group amber on amber 14 %, the rest #8E8E93) — the buttons STAY visible here, the sheet does not cover them, and on this rail the six cells (276 pt) overrun the card's 6 pt padding and sit flush with its edges; (3) the open group's `PhotoAdjustmentsPanel(layout: .rail, style: .dark)`: a radius-12 card padded 12 with the phone sheet's own header (15 pt title, dot, ✕ white 10 %, ✓ amber), chips, pad (170 pt) and readouts — at 252 pt of card content the three chips are 80 pt each, and 'Exp · Con' plus its icon and diamond does not fit: the label shrinks to 0.75 and then truncates to 'Exp ·…', 'High ·…', 'Shad ·…' (⚠️ noted in INDEX.md); (4) the Masks card (`MasksCard`, 'Masks · + Add' when the project has none); (5) the inline save offer where the project is Edited. 'Reset adjustments' is Mac-only (spec §3); on iOS the resets live under a long-press on the panel title. No marquee badge over the picture (`railMarqueeBadge` is macOS-only). The back disc floats top-leading of the pane (`chrome`, 16 / 12 padding); the 1:1 toggle bottom-trailing, 12 pt in, while `hasPixelsToReveal`. The picture fills the column's height or width, centred; the home indicator (21 pt safe inset) is the only bottom inset, so the rail's foot and the strip run to y = 372. THIS CANVAS: Light › Exp · Con open at board 2a's seed (exposure +0.30, contrast +12), a 3:2 photo 425×284 centred at 44…328. The pad is cut by the screen's foot at 393 — its readouts sit at y ≈ 414 and the Masks card below; scroll the rail. Stage with LL_VIEWER=1 LL_SECTIONS=light:expcon on a photo project in landscape (rotate the simulator through Device ▸ Rotate Left and read the orientation back — the click is dropped about one time in three); the reference capture iphone-land-light-expcon.png was an interval shoot with the strip.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
-    <clipPath id="photo"><rect x="151" y="72" width="258" height="345"/></clipPath>
+    <filter id="knob-shadow" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.5"/></filter>
+    <filter id="word-shadow" x="-20%" y="-40%" width="140%" height="180%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.6"/></filter>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
   <rect x="18" y="18" width="864" height="405" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
   <g clip-path="url(#screen)">
-    <rect x="24" y="24" width="852" height="393" fill="#F2F2F7"/>
+    <rect x="24" y="24" width="852" height="393" fill="#000000"/>
     <g transform="translate(24,24)">
-
-      <!-- title bar spans the full width above both panes -->
-      <g id="title-bar">
-        <rect x="0" y="0" width="852" height="48" fill="#F7F7FA"/>
-        <rect x="0" y="47.5" width="852" height="0.5" fill="#000" opacity="0.12"/>
-        <text x="62" y="30" font-size="15.5" class="sb" fill="#C36A00">Done</text>
-        <text x="426" y="30" font-size="15.5" class="sb" fill="#000" text-anchor="middle">Photo of rocks</text>
-      </g>
-
-      <!-- image pane: 852 - 340 rail = 512pt wide -->
-      <rect x="0" y="48" width="512" height="345" fill="#000"/>
-      <rect x="511.5" y="48" width="0.5" height="345" fill="#000" opacity="0.15"/>
-    </g>
-  </g>
-
-  <!-- the graded still, scaledToFit into the 512×345 pane → 3:4 gives 259×345 -->
-  <g clip-path="url(#photo)">
-    <rect x="151" y="72" width="258" height="345" fill="#8FB4CE"/>
-    <rect x="151" y="72" width="258" height="150" fill="#A9C8DC"/>
-    <ellipse cx="236" cy="136" rx="82" ry="30" fill="#E4EEF4" opacity="0.75"/>
-    <ellipse cx="348" cy="114" rx="60" ry="22" fill="#E4EEF4" opacity="0.6"/>
-    <polygon points="151,242 210,196 258,238 312,180 356,220 407,190 407,417 151,417" fill="#C9C6BE"/>
-    <polygon points="151,288 194,258 231,292 276,262 316,298 366,266 407,288 407,417 151,417" fill="#B4B1A8"/>
-    <path d="M336 180 l21 -12 v249 h-21 z" fill="#6E6B64"/>
-    <g fill="#3E5B33">
-      <polygon points="186,180 206,248 166,248"/>
-      <polygon points="186,216 210,290 162,290"/>
-      <polygon points="186,262 214,352 158,352"/>
-      <polygon points="272,290 288,352 256,352"/>
-    </g>
-    <rect x="183" y="248" width="5" height="150" fill="#4A3B2A"/>
-  </g>
-
-  <g clip-path="url(#screen)">
-    <g transform="translate(24,24)">
-      <!-- side rail: 340pt, controls shown outright; no preview-size handle in
-           the wide branch — the rail trades width for the image, not height -->
-      <g id="control-rail">
-        <rect x="512" y="48" width="340" height="345" fill="#F2F2F7"/>
-
-        <!-- preset chip strip, scrolls horizontally within the rail -->
-        <rect x="530" y="62" width="76" height="33" rx="16.5" fill="#C36A00"/>
-        <text x="568" y="83.5" font-size="13.5" class="sb" fill="#FFF" text-anchor="middle">Natural</text>
-        <rect x="614" y="62" width="77" height="33" rx="16.5" fill="#FFF"/>
-        <text x="652.5" y="83.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Cinema</text>
-        <rect x="699" y="62" width="66" height="33" rx="16.5" fill="#FFF"/>
-        <text x="732" y="83.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Matte</text>
-        <rect x="773" y="62" width="61" height="33" rx="16.5" fill="#FFF"/>
-        <text x="803.5" y="83.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Vivid</text>
-
-        <!-- slider panel -->
-        <g id="slider-panel">
-          <rect x="528" y="109" width="308" height="228" rx="12" fill="#FFF"/>
-
-          <text x="542" y="130" font-size="12" fill="#6D6D72">Highlights</text>
-          <text x="822" y="130" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
-          <rect x="542" y="139" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
-          <rect x="542" y="139" width="269" height="3.5" rx="1.75" fill="#C36A00"/>
-          <circle cx="811" cy="140.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
-
-          <text x="542" y="170" font-size="12" fill="#6D6D72">Shadows</text>
-          <text x="822" y="170" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
-          <rect x="542" y="179" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
-          <circle cx="553" cy="180.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
-
-          <text x="542" y="210" font-size="12" fill="#6D6D72">Vibrance</text>
-          <text x="822" y="210" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
-          <rect x="542" y="219" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
-          <rect x="542" y="219" width="140" height="3.5" rx="1.75" fill="#C36A00"/>
-          <circle cx="682" cy="220.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
-
-          <text x="542" y="250" font-size="12" fill="#6D6D72">Clarity</text>
-          <text x="822" y="250" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
-          <rect x="542" y="259" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
-          <circle cx="553" cy="260.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
-
-          <text x="542" y="290" font-size="12" fill="#6D6D72">Vignette</text>
-          <text x="822" y="290" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
-          <rect x="542" y="299" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
-          <circle cx="553" cy="300.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
-
-          <text x="542" y="326" font-size="12" fill="#6D6D72">White Bal.</text>
-          <text x="806" y="326" font-size="13.5" class="sb" fill="#C36A00" text-anchor="end">As Shot</text>
-          <g data-symbol="chevron.up.chevron.down" stroke="#C36A00" stroke-width="1.7" fill="none"
-             stroke-linecap="round" stroke-linejoin="round">
-            <path d="M813 323 l3.5 -3.5 3.5 3.5 M813 328.5 l3.5 3.5 3.5 -3.5"/>
-          </g>
-        </g>
-
-        <!-- Save as Preset -->
-        <g id="save-preset">
-          <rect x="528" y="349" width="308" height="40" rx="12" fill="#FFF"/>
-          <g data-symbol="square.and.arrow.down" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round">
-            <path d="M636 362 v11 M631.5 369 l4.5 4.5 4.5 -4.5"/>
-            <path d="M630 359.5 v-2.5 h12 v2.5" stroke-opacity="0.9"/>
-          </g>
-          <text x="650" y="374" font-size="14" class="sb" fill="#C36A00">Save as Preset</text>
-        </g>
-      </g>
-
+      <!-- media column: the picture pane (3:2 landscape shoot, fitted, centred) with the back disc over it -->
+<defs><linearGradient id="skyl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5F7CAA"/><stop offset="1" stop-color="#E7C39C"/></linearGradient><clipPath id="framel"><rect x="59" y="44.2" width="425.4" height="283.6"/></clipPath></defs>
+<g id="picturel" clip-path="url(#framel)">
+<rect x="59" y="44.2" width="425.4" height="283.6" fill="url(#skyl)"/>
+<circle cx="339.8" cy="146.3" r="17.6" fill="#FFCE7E" opacity="0.95"/>
+<path d="M59 220 L101.5 220 L101.5 203 L118.6 203 L118.6 186 L127.1 169 L135.6 186 L135.6 208.7 L186.6 208.7 L186.6 191.7 L203.6 191.7 L203.6 214.4 L246.2 214.4 L246.2 177.5 L254.7 163.3 L263.2 177.5 L263.2 200.2 L280.2 200.2 L280.2 214.4 L327 214.4 L327 194.5 L339.8 194.5 L339.8 180.3 L348.3 169 L356.8 180.3 L356.8 205.9 L399.3 205.9 L399.3 217.2 L441.9 217.2 L441.9 200.2 L458.9 200.2 L458.9 220 L484.4 220 L484.4 271.1 L59 271.1 Z" fill="#30394E"/>
+<path d="M59 271.1 L59 231.4 L152.6 231.4 L152.6 220 L161.1 214.4 L169.6 220 L169.6 231.4 L229.2 231.4 L229.2 242.7 L365.3 242.7 L365.3 225.7 L424.8 225.7 L424.8 271.1 Z" fill="#3E4258"/>
+<rect x="71.8" y="248.4" width="7.7" height="8.5" fill="#C9A36A" opacity="0.85"/>
+<rect x="93.9" y="248.4" width="7.7" height="8.5" fill="#C9A36A" opacity="0.85"/>
+<rect x="116" y="248.4" width="7.7" height="8.5" fill="#C9A36A" opacity="0.85"/>
+<rect x="138.1" y="248.4" width="7.7" height="8.5" fill="#C9A36A" opacity="0.85"/>
+<rect x="160.2" y="248.4" width="7.7" height="8.5" fill="#C9A36A" opacity="0.85"/>
+<rect x="182.4" y="248.4" width="7.7" height="8.5" fill="#C9A36A" opacity="0.85"/>
+<rect x="204.5" y="248.4" width="7.7" height="8.5" fill="#C9A36A" opacity="0.85"/>
+<rect x="246.2" y="254.1" width="7.7" height="7.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="269.6" y="254.1" width="7.7" height="7.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="293" y="254.1" width="7.7" height="7.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="316.4" y="254.1" width="7.7" height="7.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="339.8" y="254.1" width="7.7" height="7.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="59" y="271.1" width="425.4" height="56.7" fill="#4A5878"/>
+<rect x="71.8" y="276.8" width="6" height="25.5" fill="#C9A36A" opacity="0.35"/>
+<rect x="93.9" y="276.8" width="6" height="25.5" fill="#C9A36A" opacity="0.35"/>
+<rect x="116" y="276.8" width="6" height="25.5" fill="#C9A36A" opacity="0.35"/>
+<rect x="138.1" y="276.8" width="6" height="25.5" fill="#C9A36A" opacity="0.35"/>
+<rect x="160.2" y="276.8" width="6" height="25.5" fill="#C9A36A" opacity="0.35"/>
+<rect x="182.4" y="276.8" width="6" height="25.5" fill="#C9A36A" opacity="0.35"/>
+<rect x="204.5" y="276.8" width="6" height="25.5" fill="#C9A36A" opacity="0.35"/>
+<rect x="59" y="271.1" width="425.4" height="56.7" fill="#000" opacity="0.18"/>
+</g>
+<g id="back-button"><!-- the 36 pt disc the fullscreen player uses too (`backButton`) -->
+  <circle cx="93" cy="30" r="18" fill="#000" opacity="0.4"/>
+  <path d="M96 24 L90 30 L96 36" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+</g>
+<g id="pixel-zoom"><!-- `zoomControls`: the 1:1 toggle, bottom-trailing of the picture pane, 12 pt in, lifted above the foot; shown only while `hasPixelsToReveal` -->
+  <circle cx="456.4" cy="344" r="16" fill="#000" opacity="0.45"/>
+  <path d="M451.4 339 l-1 0 0 1 M451.4 339 l4 4 M461.4 349 l1 0 0 -1 M461.4 349 l-4 -4 M451.4 339 h3.5 M451.4 339 v3.5 M461.4 349 h-3.5 M461.4 349 v-3.5" fill="none" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.up.left.and.arrow.down.right"/>
+</g>
+<rect x="484.4" y="0" width="0.5" height="372" fill="#FFF" opacity="0.15"/><!-- Divider -->
+<g id="control-rail"><!-- controlRail (Editor page): the whole rail scrolls, padded 14 top / 16 sides / 20 bottom, 12 pt between cards; dark under the editor's forced dark scheme -->
+<g id="rail-tab-bar"><!-- RailTabBar: capsule LL.cardBackground, padding 3, equal 13 pt semibold segments padded 7 — amber on ink, the selected one amber with black text -->
+<rect x="500.7" y="14" width="276.3" height="36" rx="18" fill="#1C1C1E"/>
+<rect x="503.7" y="17" width="88.8" height="30" rx="15" fill="#FFB340"/>
+<text x="548.1" y="36.7" text-anchor="middle" font-size="13" class="sb" fill="#000">Editor</text>
+<text x="638.9" y="36.7" text-anchor="middle" font-size="13" class="sb" fill="#FFB340">Text</text>
+<text x="729.6" y="36.7" text-anchor="middle" font-size="13" class="sb" fill="#FFB340">Masks</text>
+</g>
+<g id="main-buttons"><!-- EditorGroupBar(style: .macCard) drawn dark: six 46 pt cells (icon 18, 9.5 pt semibold label, 4 pt dot, radius 12) in a padded-6 card — at this 276 pt rail the six cells overrun the card's padding and sit flush with its edges -->
+<rect x="500.7" y="62" width="276.3" height="61.7" rx="12" fill="#1C1C1E"/>
+<g transform="translate(514.9,74) scale(0.8)" color="#8E8E93" data-symbol="photo.stack"><rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g>
+<text x="523.9" y="104" text-anchor="middle" font-size="9.5" class="sb" fill="#8E8E93">Presets</text>
+<circle cx="523.9" cy="111" r="2" fill="#FFB340"/>
+<rect x="546.9" y="68" width="46" height="49" rx="12" fill="#FFB340" opacity="0.14"/>
+<g transform="translate(560.9,74) scale(0.8)" color="#FFB340" data-symbol="sun.max"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g>
+<text x="569.9" y="104" text-anchor="middle" font-size="9.5" class="sb" fill="#FFB340">Light</text>
+<circle cx="569.9" cy="111" r="2" fill="#FFB340"/>
+<g transform="translate(606.9,74) scale(0.8)" color="#8E8E93" data-symbol="circle.lefthalf.filled"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></g>
+<text x="615.9" y="104" text-anchor="middle" font-size="9.5" class="sb" fill="#8E8E93">Color</text>
+<circle cx="615.9" cy="111" r="2" fill="#FFB340"/>
+<g transform="translate(652.9,74) scale(0.8)" color="#8E8E93" data-symbol="sparkles"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" fill="currentColor"/></g>
+<text x="661.9" y="104" text-anchor="middle" font-size="9.5" class="sb" fill="#8E8E93">Effects</text>
+<circle cx="661.9" cy="111" r="2" fill="none"/>
+<g transform="translate(698.9,74) scale(0.8)" color="#8E8E93" data-symbol="triangle"><path d="M12 4l9 16H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g>
+<text x="707.9" y="104" text-anchor="middle" font-size="9.5" class="sb" fill="#8E8E93">Detail</text>
+<circle cx="707.9" cy="111" r="2" fill="none"/>
+<g transform="translate(744.9,74) scale(0.8)" color="#8E8E93" data-symbol="crop.rotate"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g>
+<text x="753.9" y="104" text-anchor="middle" font-size="9.5" class="sb" fill="#8E8E93">Crop</text>
+<circle cx="753.9" cy="111" r="2" fill="none"/>
+</g>
+<g id="group-panel"><!-- PhotoAdjustmentsPanel(layout: .rail, style: .dark): a radius-12 LL.cardBackground card padded 12; the same header, chips, pad and readouts as the phone sheet, the pad cut by the screen's foot — the rail scrolls -->
+<rect x="500.7" y="135.7" width="276.3" height="320" rx="12" fill="#1C1C1E"/>
+<text x="512.7" y="169" font-size="15" class="sb" fill="#FFF">Light</text>
+<circle cx="557.8" cy="163.7" r="3" fill="#FFB340"/>
+<circle cx="749" cy="163.7" r="16" fill="#FFB340"/>
+<path d="M743.5 164.2 l3.5 3.5 l7.5 -7.5" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+<circle cx="711" cy="163.7" r="16" fill="#FFF" opacity="0.1"/>
+<path d="M706.5 159.2 l9 9 M715.5 159.2 l-9 9" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" data-symbol="xmark"/>
+<g id="tool-chips"><!-- EditorToolChips: one chip per tool, the selected one's pad below -->
+<rect x="512.7" y="189.7" width="80.1" height="34" rx="12" fill="#FFB340" opacity="0.16"/>
+<rect x="513.5" y="190.4" width="78.6" height="32.5" rx="11.2" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+<g transform="translate(518.7,196.7) scale(0.8)" data-symbol="EditorToolIcon.expcon"><defs><linearGradient id="ecg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#FFF"/></linearGradient></defs><circle cx="12" cy="12" r="9.5" fill="url(#ecg)"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#FFF" stroke-opacity="0.7" stroke-width="1"/><path d="M16.5 6v4M14.5 8h4" stroke="#000" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 16h4" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/></g>
+<text x="544.7" y="210.9" font-size="11.5" class="sb" fill="#FFB340">Exp ·…</text>
+<rect x="598.8" y="189.7" width="80.1" height="34" rx="12" fill="#FFF" opacity="0.08"/>
+<g transform="translate(604.8,196.7) scale(0.8)" data-symbol="EditorToolIcon.highwhites"><circle cx="10" cy="13.5" r="8" fill="#D8D8DC"/><path d="M19 3.5v6M16 6.5h6" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/></g>
+<text x="630.8" y="210.9" font-size="11.5" class="sb" fill="#FFF">High ·…</text>
+<rect x="684.9" y="189.7" width="80.1" height="34" rx="12" fill="#FFF" opacity="0.08"/>
+<g transform="translate(690.9,196.7) scale(0.8)" data-symbol="EditorToolIcon.shadblacks"><circle cx="10" cy="13.5" r="8" fill="#3A3A3E" stroke="#9A9A9E" stroke-width="1"/><path d="M16 6.5h6" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/></g>
+<text x="716.9" y="210.9" font-size="11.5" class="sb" fill="#FFF">Shad ·…</text>
+</g>
+<g id="xy-pad"><!-- XYPad(expCon): x = Flat → Punchy, y = Darker → Brighter -->
+<defs><clipPath id="padexpCon"><rect x="512.7" y="233.7" width="252.3" height="170" rx="14"/></clipPath><linearGradient id="bgecl" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#101012"/><stop offset="0.5" stop-color="#6A6A6E"/><stop offset="1" stop-color="#E2E2E6"/></linearGradient></defs>
+<g clip-path="url(#padexpCon)">
+<rect x="512.7" y="233.7" width="252.3" height="170" fill="#1C1C1E"/>
+<rect x="512.7" y="233.7" width="252.3" height="170" fill="url(#bgecl)"/>
+<path d="M512.7 319.2 H765 M639.2 233.7 V403.7" stroke="#FFF" stroke-opacity="0.35" stroke-width="1"/>
+<g filter="url(#knob-shadow)"><circle cx="654" cy="313.6" r="15" fill="#FFF"/></g>
+<circle cx="654" cy="313.6" r="12" fill="#FFB340"/>
+</g>
+<text x="638.9" y="248.7" text-anchor="middle" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Brighter</text>
+<text x="638.9" y="394.2" text-anchor="middle" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Darker</text>
+<text x="522.7" y="322.4" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Flat</text>
+<text x="755" y="322.4" text-anchor="end" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Punchy</text>
+</g>
+<!-- PadReadouts follow at y ≈ 414, the Masks card and the save offer below — under the fold; scroll the rail -->
+</g>
+</g>
       <!-- hardware: landscape home indicator -->
-      <rect x="359" y="381" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+      <rect x="359" y="380.5" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
     </g>
   </g>
 
   <text x="450" y="447" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Photo grading viewer · side rail · landscape · 852×393 pt</text>
-  <text x="450" y="465" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift — wide branch at ≥500pt · rail min(340, width×0.42) · sliders always visible · no preview-size handle</text>
+  <text x="450" y="465" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors PhotoViewerView railBody — RailTabBar, EditorGroupBar(.macCard), the Light card; no strip · LL_VIEWER=1 LL_SECTIONS=light:expcon</text>
 </svg>

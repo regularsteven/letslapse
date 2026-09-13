@@ -782,10 +782,11 @@ struct VideoEditorView: View {
     }
 
     /// The Editor page's rail (3b / 6c), top to bottom: the tab pill, the
-    /// six main buttons, the open group's card, "Reset adjustments", and the
-    /// save offer where there is no exit to make it on. No masks card: shapes
-    /// are drawn on stills, and a movie has no Masks page to manage them
-    /// from. All of it scrolls.
+    /// six main buttons, the open group's card and "Reset adjustments". No
+    /// masks card: shapes are drawn on stills, and a movie has no Masks page
+    /// to manage them from. All of it scrolls. The inline save offer is NOT
+    /// here: it lives in one place only, inside the Presets card under the
+    /// tiles (`presetsContext.saveOffer`).
     @ViewBuilder private var railEditorStack: some View {
         railTabBar
         EditorGroupBar(
@@ -804,10 +805,6 @@ struct VideoEditorView: View {
             .disabled(!canResetEverything)
             .opacity(canResetEverything ? 1 : 0.4)
         #endif
-        // The Presets panel hosts the offer itself while it is open.
-        if presetState.isEdited, !ownsExit, !declinedPresetSave, openGroup != .presets {
-            presetSaveOffer
-        }
         if let error = presetStore.lastError {
             Text(error)
                 .font(.footnote)
@@ -954,7 +951,9 @@ struct VideoEditorView: View {
             cropNote: "shown on export",
             onCommit: commitPanel,
             onCancel: cancelPanel,
-            onHeaderDrag: layout == .floating ? floatingHeaderDragged : nil,
+            // The Presets card is pinned and ignores the seat, so its header
+            // must not move it for the next group.
+            onHeaderDrag: layout == .floating && group != .presets ? floatingHeaderDragged : nil,
             initialBand: hookBand)
     }
 
@@ -974,6 +973,7 @@ struct VideoEditorView: View {
                     source: .movie(url), isChosen: true)
             },
             presetState: presetState,
+            basePreset: preset,
             customPresets: presetStore.presets,
             cache: presetThumbnails,
             onSelect: { request($0) },

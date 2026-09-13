@@ -1,117 +1,117 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Photo grading viewer · media at full size · portrait</title>
-  <desc>Mirrors App/PhotoViewerView.swift, the editor presented from App/ProjectDetailView.swift (GradingCard's Edit pill) for a Photo-mode capture — and for an interval shoot, which opens it on its first source frame and persists the grade onto the same project fields. (A video project has no such viewer; it edits in App/VideoEditorView.swift — see project-detail.video.portrait.svg.) Not to be confused with project-photos.viewer.portrait.svg, which is the interval-frame pager (CaptureFrameViewer). Stacked layout (`stackedBody`), used whenever the available width is under 500pt — iPhone portrait at 393–440pt, and nothing else: the iPad sheet (~578pt) and iPhone landscape both take the side rail. Top to bottom: the graded image, the preview-size drag handle, the preset chip strip, then the adjustment sliders — which are always on screen. There is no Customise disclosure any more: with the picture pinned and the controls scrolling beneath it, hiding the sliders behind an accordion only added a tap. The handle between the two is the expand/collapse control for the media (`dragHandle(span:)`): dragging it up trades media height for control room, between a ceiling of 80% of the available height (`mediaCeilingFraction`) and a floor of 25% (`mediaFloorFraction`), i.e. mediaScale 1 → 0. Double-tapping it restores the ceiling, and VoiceOver sees it as the adjustable "Preview size" with a percentage value; it is drawn only while there is height to give away (`dragSpan` &gt; 0). This canvas draws it at rest — mediaScale = 1, media at the ceiling — so the control stack scrolls: the chips and the first sliders are above the fold and Save as Preset is not. See project-photo.viewer.expanded.portrait.svg for the handle dragged all the way up (LL_VIEWER=expanded), where the whole panel and Save as Preset fit, and project-photo.viewer.landscape.svg for the side rail, which has no handle at all. The image renders through PhotoGrader.render(url:preset:adjustments:maxDimension:) at 2000px, so it shows the live grade rather than the untouched original; renders are debounced 100ms. Chips are the five built-ins (Natural · Cinema · Matte · Vivid · Original) followed by any saved CustomPreset; the strip scrolls horizontally, so Original is clipped at the screen edge at this width. A built-in chip is highlighted only when no saved preset matches the current preset+adjustments exactly. Long-pressing a custom chip offers Delete preset. NOT YET RESTAGED (2026-08-18): the editor is a black fullScreenCover with a floating back chevron over the image rather than the light sheet with the Done bar drawn here, so the handle — white at 35% over black in the app — is drawn in this file's light idiom (#000 at 20%, the grabber value the rest of these specs use); and a "Preset" state row with its PresetStatePill sits between the image and the chips.</desc>
+  <title>iOS · Photo grading viewer · Light › Exp · Con · portrait</title>
+  <desc>Mirrors App/PhotoViewerView.swift (`phoneEditorBody`, `touchChrome`, `phoneFoot`, `openPanel(for:)`, `zoomControls`) with App/PhotoAdjustmentsPanel.swift (`phoneContainer`, `titleRow`, `toolsContent`, `pad`) and App/EditorControls/ — `EditorTabPill`, `EditorToolChips`, `EditorToolIcon`, `XYPad` + `PadReadouts`, `KeyframeDiamond` — on a PHOTO capture: one still, no second moment to grade, so no timeline card (`hasTimeline` false) and no Frames tab. The Light group is open on its first tool, Exp · Con. Redrawn 2026-09-13 for the editor controls redesign (section 6 lock-in, board 2a): the seven-section slider panel with its preset chips, drag handle and Done bar is gone; the picture is full height behind everything and the controls are one group at a time in a sheet over its foot. LAYOUT (2a / 6a, `phoneEditorBody`): the picture fills the safe area (59 top / 34 bottom on this canvas) and is fitted into it — a 3:4 portrait shoot spans the width and centres vertically, 176…700 — and everything else floats over it. `touchChrome`: the 36 pt back disc at (16, 71) and the `EditorTabPill` top-right (right 16, top 74: 12 pt of vertical padding under the safe area, the 30 pt pill centred on the 36 pt disc) — the boards draw both at top 60, the app sits them 11 pt lower. The pill is rgba(28,28,30,.85) over material, radius 18, 12 pt semibold, the selected tab amber with black text, the rest amber on ink; Frames appears only on a shoot with more than one frame. The foot (`phoneFoot`) is bottom-anchored on the safe area: the timeline card where `hasTimeline`, then EITHER the six main buttons (`EditorGroupBar(.phone)`) OR the open group's sheet (`PhotoAdjustmentsPanel(layout: .phone)`) — one or the other, the sheet needs the buttons' room. The sheet: 22 pt top corners, rgba(28,28,30,.86) over material running under the home indicator, padded 12 top / 16 sides / 0 bottom, 10 pt between rows, shadow up; header = title 15 pt semibold white · 6 pt dot (accent when the group holds a value or a travelling field, clear otherwise so the row never reflows) · spacer · ✕ 32 pt white 10 % (reverts to the snapshot `openPanel(for:)` took) · ✓ 32 pt amber (keeps and closes). Long-press the title for Reset &lt;group&gt; / Reset all adjustments. The 1:1 toggle (`zoomControls`, 32 pt black 45 %) sits bottom-trailing of the picture pane 12 pt in, lifted above the foot by its measured height; it exists only while `hasPixelsToReveal`, so a small source shows none. The readouts print the app's own formats (`%+.2f`, `%+.0f`, unsigned 0…100, Kelvin) with an ASCII hyphen-minus where the boards typeset U+2212. THIS CANVAS: Light · Exp · Con with the seed grade the board opens on (exposure +0.30, contrast +12, highlights −27, so the Light dot is lit). Chips (`EditorToolChips`): three equal 116.3 pt chips, 6 pt gaps, 34 pt tall, radius 12; drawn icon 20 pt + 6 + 11.5 pt semibold label; the selected chip is amber 16 % with a 1.5 pt amber border and an amber label, the others white 8 % with white labels. The pad (`XYPad`, 170 pt, radius 14): the Exp · Con gradient (#101012 at the foot → #6A6A6E → #E2E2E6 at the head), a white 35 % crosshair at the NEUTRAL of both axes, the corner words 10.5 pt semibold white 85 % with a shadow (Brighter/Darker on the Y axis, Flat/Punchy on X, 7 pt and 10 pt in), and the 30 pt amber knob with its 3 pt white ring at the value — exposure spans −5…+5 EV so +0.30 lifts the knob 5.1 pt, contrast −1…+1 puts +12 at 56 %. Readouts (`PadReadouts`, 12.5 pt semibold tabular, 4 pt in): label secondary #8E8E93, value amber on the dark editors whether or not it is neutral. Drag writes both fields in ONE write per tick; double-tap resets both. Not drawn: the other tools of the group (High · Wh — Lift/Recover, Whites −/Whites +; Shad · Bl — Open/Crush, Blacks −/Blacks +) swap the pad's words, gradient and fields in place; the Color, Effects and Detail groups are drawn in the sibling files; the sliders-only rendering is project-photo.viewer.pads-off.portrait.svg. Stage with LL_VIEWER=1 over a photo project (LL_DETAIL=latest) and LL_SECTIONS=light:expcon; the reference screenshots came from an interval shoot (LL_EDITOR=latest LL_VIEWER=1 LL_SECTIONS=light:expcon), which adds the card drawn in the keyframes file.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
-    <clipPath id="sheet"><rect x="24" y="94" width="393" height="782" rx="10"/></clipPath>
-    <clipPath id="photo"><rect x="33.75" y="156" width="373.5" height="498"/></clipPath>
+    <filter id="panel-shadow" x="-10%" y="-20%" width="120%" height="140%"><feDropShadow dx="0" dy="-8" stdDeviation="12" flood-color="#000" flood-opacity="0.45"/></filter>
+    <filter id="knob-shadow" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.5"/></filter>
+    <filter id="word-shadow" x="-20%" y="-40%" width="140%" height="180%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.6"/></filter>
+    
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
   <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
   <g clip-path="url(#screen)">
-    <!-- dimmed project detail behind the sheet -->
-    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
-    <g transform="translate(24,24)" opacity="0.4">
-      <text x="196.5" y="60" font-size="17" class="sb" fill="#000" text-anchor="middle">Photo of rocks</text>
-    </g>
-
-    <!-- sheet -->
-    <g clip-path="url(#sheet)">
-      <rect x="24" y="94" width="393" height="782" fill="#F2F2F7"/>
-      <g transform="translate(24,94)">
-        <rect x="178.5" y="6" width="36" height="5" rx="2.5" fill="#000" opacity="0.2"/>
-
-        <!-- title bar (.bar material) -->
-        <g id="title-bar">
-          <rect x="0" y="14" width="393" height="48" fill="#F7F7FA"/>
-          <rect x="0" y="61.5" width="393" height="0.5" fill="#000" opacity="0.12"/>
-          <text x="20" y="44" font-size="15.5" class="sb" fill="#C36A00">Done</text>
-          <text x="196.5" y="44" font-size="15.5" class="sb" fill="#000" text-anchor="middle">Photo of rocks</text>
-        </g>
-
-        <!-- image pane: scaledToFit against black, 3:4 still letterboxed -->
-        <g id="image-pane">
-          <rect x="0" y="62" width="393" height="498" fill="#000"/>
-        </g>
-      </g>
-    </g>
-
-    <!-- the graded still, drawn in screen space so the clip path is simple -->
-    <g clip-path="url(#photo)">
-      <rect x="33.75" y="156" width="373.5" height="498" fill="#8FB4CE"/>
-      <rect x="33.75" y="156" width="373.5" height="230" fill="#A9C8DC"/>
-      <ellipse cx="150" cy="250" rx="120" ry="46" fill="#E4EEF4" opacity="0.75"/>
-      <ellipse cx="300" cy="215" rx="90" ry="34" fill="#E4EEF4" opacity="0.6"/>
-      <polygon points="33.75,404 120,330 190,392 268,300 330,360 407,318 407,654 33.75,654" fill="#C9C6BE"/>
-      <polygon points="33.75,470 96,430 150,478 214,436 270,486 340,442 407,470 407,654 33.75,654" fill="#B4B1A8"/>
-      <path d="M300 300 l30 -18 v372 h-30 z" fill="#6E6B64"/>
-      <g fill="#3E5B33">
-        <polygon points="86,300 116,404 56,404"/>
-        <polygon points="86,352 122,466 50,466"/>
-        <polygon points="86,420 128,548 44,548"/>
-        <polygon points="212,470 236,548 188,548"/>
-        <polygon points="212,512 242,600 182,600"/>
-      </g>
-      <rect x="82" y="404" width="7" height="220" fill="#4A3B2A"/>
-      <rect x="209" y="548" width="6" height="106" fill="#4A3B2A"/>
-    </g>
-
-    <g clip-path="url(#sheet)">
-      <g transform="translate(24,94)">
-        <!-- preview-size drag handle: 36×5 capsule in a 28pt hit row between the
-             media and the controls. Drag up to shrink the media (mediaScale 1→0),
-             double-tap to restore the ceiling. -->
-        <g id="media-drag-handle">
-          <rect x="178.5" y="571.5" width="36" height="5" rx="2.5" fill="#000" opacity="0.2"/>
-        </g>
-
-        <!-- preset chip strip (horizontal scroll; Original clipped at the edge) -->
-        <g id="preset-strip">
-          <rect x="18" y="598" width="76" height="33" rx="16.5" fill="#C36A00"/>
-          <text x="56" y="619.5" font-size="13.5" class="sb" fill="#FFF" text-anchor="middle">Natural</text>
-          <rect x="102" y="598" width="77" height="33" rx="16.5" fill="#FFF"/>
-          <text x="140.5" y="619.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Cinema</text>
-          <rect x="187" y="598" width="66" height="33" rx="16.5" fill="#FFF"/>
-          <text x="220" y="619.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Matte</text>
-          <rect x="261" y="598" width="61" height="33" rx="16.5" fill="#FFF"/>
-          <text x="291.5" y="619.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Vivid</text>
-          <rect x="330" y="598" width="90" height="33" rx="16.5" fill="#FFF"/>
-          <text x="375" y="619.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Original</text>
-        </g>
-
-        <!-- slider panel, always on screen (no disclosure). At this media size the
-             scroll view only has room for its first rows; the rest — and Save as
-             Preset below it — scroll up. Full geometry: the expanded spec. -->
-        <g id="slider-panel">
-          <rect x="16" y="645" width="361" height="373" rx="12" fill="#FFF"/>
-
-          <!-- Highlights: -1…0, neutral = 0 = hard right -->
-          <text x="30" y="672" font-size="13.5" fill="#6D6D72">Highlights</text>
-          <text x="363" y="672" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
-          <rect x="30" y="690" width="333" height="4" rx="2" fill="#000" opacity="0.16"/>
-          <rect x="30" y="690" width="319" height="4" rx="2" fill="#C36A00"/>
-          <circle cx="349" cy="692" r="13.5" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
-
-          <!-- Shadows: 0…1, neutral = 0 = left -->
-          <text x="30" y="729" font-size="13.5" fill="#6D6D72">Shadows</text>
-          <text x="363" y="729" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
-          <rect x="30" y="747" width="333" height="4" rx="2" fill="#000" opacity="0.16"/>
-          <circle cx="44" cy="749" r="13.5" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
-
-          <!-- Vibrance and below sit under the fold at this media size -->
-          <text x="30" y="786" font-size="13.5" fill="#6D6D72">Vibrance</text>
-        </g>
-      </g>
-    </g>
-
-    <!-- hardware -->
+    <rect x="24" y="24" width="393" height="852" fill="#000000"/>
     <g transform="translate(24,24)">
-      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
-      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+      <!-- the picture: a Photo capture in portrait, 3:4, fitted to the safe area (imagePane) -->
+<defs><linearGradient id="skyp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5F7CAA"/><stop offset="1" stop-color="#E7C39C"/></linearGradient><clipPath id="framep"><rect x="0" y="176" width="393" height="524"/></clipPath></defs>
+<g id="picturep" clip-path="url(#framep)">
+<rect x="0" y="176" width="393" height="524" fill="url(#skyp)"/>
+<circle cx="259.4" cy="364.6" r="24.4" fill="#FFCE7E" opacity="0.95"/>
+<path d="M0 500.9 L39.3 500.9 L39.3 469.4 L55 469.4 L55 438 L62.9 406.6 L70.7 438 L70.7 479.9 L117.9 479.9 L117.9 448.5 L133.6 448.5 L133.6 490.4 L172.9 490.4 L172.9 422.3 L180.8 396.1 L188.6 422.3 L188.6 464.2 L204.4 464.2 L204.4 490.4 L247.6 490.4 L247.6 453.7 L259.4 453.7 L259.4 427.5 L267.2 406.6 L275.1 427.5 L275.1 474.7 L314.4 474.7 L314.4 495.6 L353.7 495.6 L353.7 464.2 L369.4 464.2 L369.4 500.9 L393 500.9 L393 595.2 L0 595.2 Z" fill="#30394E"/>
+<path d="M0 595.2 L0 521.8 L86.5 521.8 L86.5 500.9 L94.3 490.4 L102.2 500.9 L102.2 521.8 L157.2 521.8 L157.2 542.8 L283 542.8 L283 511.4 L338 511.4 L338 595.2 Z" fill="#3E4258"/>
+<rect x="11.8" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="32.2" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="52.7" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="73.1" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="93.5" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="114" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="134.4" y="553.3" width="7.1" height="15.7" fill="#C9A36A" opacity="0.85"/>
+<rect x="172.9" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="194.5" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="216.2" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="237.8" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="259.4" y="563.8" width="7.1" height="13.1" fill="#C9A36A" opacity="0.85"/>
+<rect x="0" y="595.2" width="393" height="104.8" fill="#4A5878"/>
+<rect x="11.8" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="32.2" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="52.7" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="73.1" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="93.5" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="114" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="134.4" y="605.7" width="5.5" height="47.2" fill="#C9A36A" opacity="0.35"/>
+<rect x="0" y="595.2" width="393" height="104.8" fill="#000" opacity="0.18"/>
+</g>
+<g id="touch-chrome"><!-- touchChrome: back disc leading, tab pill trailing, 16/12 padding under the safe area -->
+<g id="back-button"><!-- the 36 pt disc the fullscreen player uses too (`backButton`) -->
+  <circle cx="34" cy="89" r="18" fill="#000" opacity="0.4"/>
+  <path d="M37 83 L31 89 L37 95" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+</g>
+<g id="tab-pill"><!-- EditorTabPill top-right over the picture: rgba(28,28,30,.85) over material, amber on ink -->
+<rect x="195.8" y="74" width="181.2" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+<rect x="198.8" y="77" width="58.8" height="24" rx="12" fill="#FFB340"/>
+<text x="228.2" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+<text x="284.6" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+<text x="342.8" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Masks</text>
+</g>
+</g>
+<g id="pixel-zoom"><!-- `zoomControls`: the 1:1 toggle, bottom-trailing of the picture pane, 12 pt in, lifted above the foot; shown only while `hasPixelsToReveal` -->
+  <circle cx="365" cy="497" r="16" fill="#000" opacity="0.45"/>
+  <path d="M360 492 l-1 0 0 1 M360 492 l4 4 M370 502 l1 0 0 -1 M370 502 l-4 -4 M360 492 h3.5 M360 492 v3.5 M370 502 h-3.5 M370 502 v-3.5" fill="none" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.up.left.and.arrow.down.right"/>
+</g>
+<g id="group-panel"><!-- PhotoAdjustmentsPanel(layout: .phone): the open group's sheet over the picture's foot -->
+<path d="M0 852 L0 547 Q0 525 22 525 L371 525 Q393 525 393 547 L393 852 Z" fill="#1C1C1E" opacity="0.96" filter="url(#panel-shadow)"/>
+<g id="panel-header"><!-- title row: long-press the title for Reset Light / Reset all adjustments -->
+<text x="16" y="558.3" font-size="15" class="sb" fill="#FFF">Light</text>
+<circle cx="64.1" cy="553" r="3" fill="#FFB340"/>
+<!-- ✕ reverts to the snapshot taken when the panel opened; ✓ keeps and closes -->
+<circle cx="323" cy="553" r="16" fill="#FFF" opacity="0.1"/>
+<path d="M318.5 548.5 l9 9 M327.5 548.5 l-9 9" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" data-symbol="xmark"/>
+<circle cx="361" cy="553" r="16" fill="#FFB340"/>
+<path d="M355.5 553.5 l3.5 3.5 l7.5 -7.5" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+</g>
+<g id="tool-chips"><!-- EditorToolChips: one chip per tool, the selected one's pad below -->
+<rect x="16" y="579" width="116.3" height="34" rx="12" fill="#FFB340" opacity="0.16"/>
+<rect x="16.8" y="579.8" width="114.8" height="32.5" rx="11.2" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+<g transform="translate(33.1,586) scale(0.8)" data-symbol="EditorToolIcon.expcon"><defs><linearGradient id="ecg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#FFF"/></linearGradient></defs><circle cx="12" cy="12" r="9.5" fill="url(#ecg)"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#FFF" stroke-opacity="0.7" stroke-width="1"/><path d="M16.5 6v4M14.5 8h4" stroke="#000" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 16h4" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/></g>
+<text x="59.1" y="600.2" font-size="11.5" class="sb" fill="#FFB340">Exp · Con</text>
+<rect x="138.3" y="579" width="116.3" height="34" rx="12" fill="#FFF" opacity="0.08"/>
+<g transform="translate(155.5,586) scale(0.8)" data-symbol="EditorToolIcon.highwhites"><circle cx="10" cy="13.5" r="8" fill="#D8D8DC"/><path d="M19 3.5v6M16 6.5h6" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/></g>
+<text x="181.5" y="600.2" font-size="11.5" class="sb" fill="#FFF">High · Wh</text>
+<rect x="260.7" y="579" width="116.3" height="34" rx="12" fill="#FFF" opacity="0.08"/>
+<g transform="translate(279.9,586) scale(0.8)" data-symbol="EditorToolIcon.shadblacks"><circle cx="10" cy="13.5" r="8" fill="#3A3A3E" stroke="#9A9A9E" stroke-width="1"/><path d="M16 6.5h6" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/></g>
+<text x="305.9" y="600.2" font-size="11.5" class="sb" fill="#FFF">Shad · Bl</text>
+</g>
+<g id="xy-pad"><!-- XYPad(expCon): x = Flat → Punchy, y = Darker → Brighter -->
+<defs><clipPath id="padexpCon"><rect x="16" y="623" width="361" height="170" rx="14"/></clipPath><linearGradient id="bgec" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#101012"/><stop offset="0.5" stop-color="#6A6A6E"/><stop offset="1" stop-color="#E2E2E6"/></linearGradient></defs>
+<g clip-path="url(#padexpCon)">
+<rect x="16" y="623" width="361" height="170" fill="#1C1C1E"/>
+<rect x="16" y="623" width="361" height="170" fill="url(#bgec)"/>
+<path d="M16 708.5 H377 M196.5 623 V793" stroke="#FFF" stroke-opacity="0.35" stroke-width="1"/>
+<g filter="url(#knob-shadow)"><circle cx="218.2" cy="702.9" r="15" fill="#FFF"/></g>
+<circle cx="218.2" cy="702.9" r="12" fill="#FFB340"/>
+</g>
+<text x="196.5" y="638" text-anchor="middle" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Brighter</text>
+<text x="196.5" y="783.5" text-anchor="middle" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Darker</text>
+<text x="26" y="711.7" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Flat</text>
+<text x="367" y="711.7" text-anchor="end" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.85" stroke="#000" stroke-opacity="0.35" stroke-width="1.5" paint-order="stroke" stroke-linejoin="round">Punchy</text>
+</g>
+<g id="pad-readouts"><!-- PadReadouts under the pad: Y field first, X field trailing -->
+<text x="20" y="814" font-size="12.5" class="sb" fill="#8E8E93">Exposure</text>
+<text x="84.6" y="814" font-size="12.5" class="sb" fill="#FFB340">+0.30</text>
+<text x="373" y="814" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">+12</text>
+<text x="345.5" y="814" text-anchor="end" font-size="12.5" class="sb" fill="#8E8E93">Contrast</text>
+</g>
+</g>
+      <!-- hardware -->
+      <g id="hardware">
+        <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#1A1A1A" stroke-width="1"/>
+        <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
+      </g>
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Photo grading viewer · media at full size · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift — stacked layout under 500pt · preview-size handle at rest (mediaScale 1) · sliders always shown</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Photo grading viewer · Light › Exp · Con · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors PhotoViewerView phoneEditorBody + PhotoAdjustmentsPanel(.phone) — photo: no card · LL_VIEWER=1 LL_SECTIONS=light:expcon</text>
 </svg>
