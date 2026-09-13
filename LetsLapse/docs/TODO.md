@@ -388,9 +388,18 @@ tags are keywords (`sceneTags` stays as the searchable cache, seeded from the
 files); the Gallery panel's INFO and METADATA groups with from-file / edited-here
 markers, revert, and a Whole project / This frame scope for interval shoots;
 `lapse metadata <image>` headless. Verified on the Mac app, the iPhone 16 Pro
-and iPad Pro simulators with the four Part 2 §2 files. **Owed from M1:** the
-panel's SVG mirrors after Steven's sign-off (macOS `gallery.svg`, iOS/iPadOS
-gallery preview sheet/panel — rows marked ⚠️ in the INDEX files); metadata
+and iPad Pro simulators with the four Part 2 §2 files. **Signed off and
+mirrored 2026-09-13** (Steven: "Milestone 1 looks good", then design-sync the
+same day): the panel is ONE set of shared components —
+`docs/design/components/metadata-scope.*`, `metadata-info.*`, `metadata-fields.*`
+and `tag-field.imported.*` (components/README.md "Metadata record") — placed by
+macOS `gallery.svg` (interval, at rest), `gallery.metadata.svg` (the imported
+photo), `gallery.tags.svg` (scrolled to Keywords, picker open) and iOS
+`gallery.preview.portrait.svg` (the iPhone sheet); the iPad row leans on the Mac
+files. Found while drawing: a project tagged before the records existed showed an
+empty Keywords row (the manifest's `sceneTags` were never a layer) — fixed the
+same day, they read as "edited here" until the first edit writes them into the
+record. **Owed from M1:** metadata
 EXPORT (record → XMP packet in JPEG/HEIC/TIFF/DNG exports and `.xmp` beside
 raws, through the same table); the "Copy contact block from…" convenience
 (Part 2 §7); QuickTime metadata for video imports (Part 2 §9.2); the
@@ -419,12 +428,19 @@ spec asks for (W10's `capture_log.json.sessionID == id == originID` after an
 interval run; W11's linear write volume and a killed run's parseable `.ndjson`;
 W5's backfill pausing under thermal pressure) — a Release run on the iPhone 16
 Pro once Steven says so; the Mac → iPhone → Mac transfer round trip (the archive
-path was verified; the transfer shares the installer); SVG mirrors for the W7
-banner and the Settings ▸ Storage Trash row after sign-off; the ten
+path was verified; the transfer shares the installer); the ten
 `.hasSuffix(".json")` filters come out one release after W4; the Phase 1 §5
 after-audit on both real libraries once a build with the backfill has run
 against them (the Mac volume was audited unchanged after M1 — no build ran
-against it).
+against it). The W7 banner and the Settings ▸ Storage Trash row were mirrored
+2026-09-13 after sign-off: `components/library-banner.unreadable.*` placed by
+iOS `create-home.library-unreadable.portrait.svg`, and iOS
+`settings.storage.portrait.svg` (the Mac shares both — INDEX rows say how).
+**2026-09-13, first launch over the real library:** the backfill's hash loop
+kept every 1 MB chunk in an undrained autorelease pool (`FileHandle.read`), put
+the Mac into swap in six seconds and died on a 2315-frame DNG project; fixed in
+8a63c4c (POSIX reads, a pool per file, the backfill on its own queue so an
+import's records land at once, the decide-walk off the main actor).
 
 ### Asset metadata (IPTC Core), the index at scale, and the Lightroom catalogue
 

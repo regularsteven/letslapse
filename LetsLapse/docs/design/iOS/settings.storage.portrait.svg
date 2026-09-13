@@ -1,0 +1,235 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · Storage card with a Trash line and Empty trash · portrait</title>
+  <desc>Mirrors App/SettingsView.swift scrolled to the STORAGE card (storageCard), in the state data model Phase 1 W9 adds: while Projects/.trash/ holds anything, the card gains a Trash line and an Empty trash row. Code first 2026-09-13, mirrored after Steven's sign-off; verified on the running Mac Debug build against a scratch library (the Mac shares this card — see macOS/INDEX.md). THE CARD: Free on this device · LetsLapse library · the storage bar and its legend (Originals / Blended clips / Cache) exactly as settings.advanced.portrait.svg draws them, then — new, only while model.trashItemCount &gt; 0 or the measured trashBytes &gt; 0 — a hairline Divider and a "Trash" row: 16pt title, "3 items" 12pt secondary 8pt after it (the HStack's default spacing; "1 item" singular), the trash bytes 15pt secondary trailing. It is its own line, under the legend and outside it, so the library figure above is explained rather than padded: deleted projects, blends and collection renders wait in .trash for 30 days (purged at launch) or until Empty trash. Then the row section as before — Review large originals, Clear cache (542 MB) — and, new, "Empty trash (1,2 GB)" as the last row: an LLRow in LL.accent like Clear cache, "Emptying…" while it runs, disabled meanwhile, and gone with the Trash line once the folder is empty. DRAWN AS SHIPPED: Clear cache keeps showsDivider: false, so no hairline separates it from Empty trash. The card is 292pt against its 206pt at rest (+86), which pushes the ADVANCED section down by that much. Scrolled 105pt, which puts the STORAGE header just under the status bar and the tail of the ON-DEVICE AI card (its one row, AI Models — drawn in its no-model state) scrolling out above it. The Library-unreadable banner (W7) is a separate mirror: create-home.library-unreadable.portrait.svg.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- scrolled content (the screen has no nav bar; content scrolls under the status bar) -->
+      <g clip-path="url(#scroll)">
+        <!-- 105pt down, which puts the STORAGE header just under the status bar
+             with the whole card in view and the ADVANCED card following. The
+             tail of the ON-DEVICE AI card scrolls out above (its one row). -->
+        <g transform="translate(0,-105)">
+
+        <!-- on-device AI (tail of the previous card): one LLRow, AI Models, in its
+             no-model state -->
+        <text x="20" y="100" class="hdr">ON-DEVICE AI</text>
+        <g id="ai-card">
+          <rect x="16" y="108" width="361" height="54" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <text x="32" y="134" class="ttl">AI Models</text>
+          <text x="32" y="149" class="sub">Download a model to name and tag captures on this device</text>
+          <path d="M363 128 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+        </g>
+
+        <!-- storage -->
+        <text x="20" y="190" class="hdr">STORAGE</text>
+        <g id="storage-card">
+          <rect x="16" y="198" width="361" height="292" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <text x="32" y="225" class="ttl">Free on this device</text>
+          <text x="361" y="225" font-size="15" class="sb" fill="#6D6D72" text-anchor="end">32.4 GB</text>
+          <line x1="32" y1="239" x2="361" y2="239" stroke="#000" stroke-opacity="0.08"/>
+          <text x="32" y="265" class="ttl">LetsLapse library</text>
+          <text x="361" y="265" font-size="15" class="sec" text-anchor="end">12.6 GB</text>
+          <g id="storage-bar">
+            <rect x="32" y="276" width="329" height="8" rx="4" fill="#E4E4E9"/>
+            <rect x="32" y="276" width="214" height="8" fill="#C36A00"/>
+            <rect x="246" y="276" width="100" height="8" fill="#FFB340"/>
+          </g>
+          <g id="legend" font-size="11" fill="#6D6D72">
+            <circle cx="36" cy="298" r="3.5" fill="#C36A00"/><text x="44" y="302">Originals 8.2 GB</text>
+            <circle cx="140" cy="298" r="3.5" fill="#FFB340"/><text x="148" y="302">Blended clips 3.9 GB</text>
+            <circle cx="266" cy="298" r="3.5" fill="#B9B9C0"/><text x="274" y="302">Cache 542 MB</text>
+          </g>
+          <!-- W9 (2026-09-13): the Trash line — a Divider 10pt under the legend (the card's
+               VStack spacing), then Trash · "3 items" · bytes; drawn only while .trash holds
+               anything. Its own line, so the library figure above is explained, not padded. -->
+          <g id="trash-line">
+            <line x1="32" y1="315" x2="361" y2="315" stroke="#000" stroke-opacity="0.08"/>
+            <text x="32" y="339" class="ttl">Trash</text>
+            <text x="82" y="339" font-size="12" class="sec">3 items</text>
+            <text x="361" y="339" font-size="15" class="sec" text-anchor="end">1,2 GB</text>
+          </g>
+          <line x1="32" y1="357" x2="377" y2="357" stroke="#000" stroke-opacity="0.08"/>
+          <text x="32" y="384" class="ttl">Review large originals</text>
+          <path d="M363 372 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <line x1="32" y1="400" x2="377" y2="400" stroke="#000" stroke-opacity="0.08"/>
+          <text x="32" y="427" class="ttl" fill="#C36A00">Clear cache (542 MB)</text>
+          <!-- W9: Empty trash, the card's last row while .trash holds anything — "Emptying…"
+               while it runs. No hairline above it: Clear cache is showsDivider: false, as shipped. -->
+          <text x="32" y="470" class="ttl" fill="#C36A00">Empty trash (1,2 GB)</text>
+        </g>
+
+        <!-- advanced — every y below is settings.advanced.portrait.svg's value + 86, the Trash
+             line and Empty trash row above -->
+        <text x="20" y="518" class="hdr">ADVANCED</text>
+        <g id="advanced-card">
+          <rect x="16" y="526" width="361" height="676" rx="16" fill="#FFF" filter="url(#soft)"/>
+
+          <!-- layout — first row of the card, and the only one about the shell
+               rather than the engine: which tabs and filters the app shows.
+               Pushes settings.layout.portrait.svg -->
+          <text x="32" y="552" class="ttl">Layout</text>
+          <text x="32" y="567" class="sub">Which tabs and filters the app shows</text>
+          <path d="M363 556 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <line x1="32" y1="588" x2="377" y2="588" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- allow remote access — iOS only, off by default (opt-in: it
+               advertises the device on the local network). Three subtitle
+               lines: the real copy doesn't fit two at this column width -->
+          <g id="allow-remote-access-row">
+            <text x="32" y="614" class="ttl">Allow remote access</text>
+            <text x="32" y="629" class="sub">Lets a Mac on the same Wi-Fi control this camera. Only while</text>
+            <text x="32" y="642" class="sub">the capture screen is open, and only after entering the</text>
+            <text x="32" y="655" class="sub">pairing code shown there</text>
+            <rect x="316" y="604" width="51" height="31" rx="15.5" fill="#E4E4E9"/>
+            <circle cx="331.5" cy="619.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+          </g>
+          <line x1="32" y1="669" x2="377" y2="669" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- share projects with nearby devices — iOS only, off by default,
+               and a SEPARATE grant from the row above it: serving every project
+               on the device and driving its shutter are different things to
+               hand a stranger on the network. Three subtitle lines for the same
+               reason as its sibling, and the third is the one that matters —
+               the code is not per-project. Switching it on arms
+               ProjectTransferServer the next time the Projects tab appears and
+               shows the chip there (projects.sharing.portrait.svg); switching
+               it off stands the listener down immediately. -->
+          <g id="share-projects-row">
+            <text x="32" y="695" class="ttl">Share projects with nearby devices</text>
+            <text x="32" y="710" class="sub">Shows a pairing code in Projects so a Mac on the same</text>
+            <text x="32" y="723" class="sub">network can copy projects from here. Anyone with the code</text>
+            <text x="32" y="736" class="sub">can copy every project on this device</text>
+            <rect x="316" y="685" width="51" height="31" rx="15.5" fill="#E4E4E9"/>
+            <circle cx="331.5" cy="700.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+          </g>
+          <line x1="32" y1="750" x2="377" y2="750" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- custom frame rate -->
+          <text x="32" y="776" class="ttl">Custom frame rate</text>
+          <text x="32" y="791" class="sub">Adds an extra rate to capture's frame-rate options whenever</text>
+          <text x="32" y="804" class="sub">the camera supports it</text>
+          <text x="335" y="776" font-size="15" fill="#C6C6CB" text-anchor="end">Off</text>
+          <text x="361" y="776" font-size="15" class="sec" text-anchor="end">fps</text>
+          <line x1="32" y1="818" x2="377" y2="818" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- blend learning -->
+          <text x="32" y="844" class="ttl">Blend learning</text>
+          <text x="32" y="859" class="sub">What Psycho intervals have taught Safe mode on this device</text>
+          <path d="M363 848 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <line x1="32" y1="880" x2="377" y2="880" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- auto blend strategy — field-test selector, a menu like the
+               Creative defaults rows; per-device, stamped into capture_log -->
+          <g id="auto-blend-strategy-row">
+            <text x="32" y="906" class="ttl">Auto blend strategy</text>
+            <text x="32" y="921" class="sub">Field test: how BLEND Auto picks its depth on DNG shoots.</text>
+            <text x="32" y="934" class="sub">Every run logs what all three would have chosen</text>
+            <text x="351" y="906" font-size="15" class="sec" text-anchor="end">Zone</text>
+            <path d="M359 896 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
+          </g>
+          <line x1="32" y1="948" x2="377" y2="948" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- raw decode path — field-test selector, the same menu shape as
+               Auto blend strategy above it. Four cases: Bradford (default),
+               Forward matrix, Core Image RAW, Adobe DCP.
+               On THIS platform the DCP case is always listed and always
+               disabled: its profiles ship with Lightroom/Camera Raw and there
+               is no /Library/Application Support/Adobe on a phone, so
+               RawDecodePathRegistry.isAvailable(.dcpProfile) is false on iOS by
+               construction rather than by build setting. It is listed anyway
+               because a comparison that silently drops an option reads as a
+               bug — and it now carries the reason ("Adobe camera profiles are
+               not installed. They ship with Lightroom or Camera Raw") in place
+               of the bare "(unavailable)" it used to wear, so a greyed row is
+               not mistaken for an unfinished feature. That label lives inside
+               the menu, which this file does not draw — see INDEX.md.
+               The subtitle changed with the same work: the row no longer only
+               chooses WHERE white balance lands, because the DCP case also
+               applies the camera profile's look table -->
+          <g id="raw-decode-path-row">
+            <text x="32" y="974" class="ttl">Raw decode path</text>
+            <text x="32" y="989" class="sub">Field test: how a DNG is rendered before grading.</text>
+            <text x="32" y="1002" class="sub">Changing this re-renders every preview</text>
+            <text x="351" y="974" font-size="15" class="sec" text-anchor="end">Bradford (default)</text>
+            <path d="M359 964 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
+          </g>
+          <line x1="32" y1="1016" x2="377" y2="1016" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- performance -->
+          <text x="32" y="1042" class="ttl">Performance</text>
+          <text x="32" y="1057" class="sub">Capture stream rate, CPU workers, GPU batches</text>
+          <path d="M363 1046 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <line x1="32" y1="1078" x2="377" y2="1078" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- diagnostics -->
+          <text x="32" y="1104" class="ttl">Diagnostics</text>
+          <text x="32" y="1119" class="sub">Job folders, processing logs</text>
+          <path d="M363 1108 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <!-- this divider exists only while the Incomplete Captures row below does -->
+          <line x1="32" y1="1140" x2="377" y2="1140" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- incomplete captures — present only when orphaned logs exist -->
+          <g id="incomplete-captures-row">
+            <text x="32" y="1166" class="ttl">Incomplete Captures</text>
+            <text x="32" y="1181" class="sub">Logs from shoots that ended in a crash or force-quit</text>
+            <text x="355" y="1166" font-size="15" class="sec" text-anchor="end">2</text>
+            <path d="M363 1170 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+        </g>
+        </g>
+      </g>
+
+      <!-- floating tab bar (Settings selected) — floats over the scroll -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <g transform="translate(56.5 776) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g id="tab-gallery" fill="none" stroke="#8E8E93">
+          <g transform="translate(126.5 776) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <g id="tab-projects" fill="none" stroke="#8E8E93">
+          <g transform="translate(196.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <g transform="translate(266.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <rect x="303.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-settings" fill="none" stroke="#C36A00">
+          <g transform="translate(336.5 776) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Settings · Storage with Trash · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">SettingsView storageCard while Projects/.trash holds anything — Trash line under the legend, Empty trash after Clear cache (W9)</text>
+</svg>

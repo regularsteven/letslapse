@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 365 116" width="365" height="116" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Library banner · unreadable · phone</title>
+  <desc>Mirrors LibraryUnreadableBanner in App/LetsLapseApp.swift — the card over every tab, on every platform, while Projects/library.json could not be decoded at launch: the manifest was moved aside as library.json.unreadable-&lt;stamp&gt; (nothing overwrites it — every grade, tag and blend record is in that file) and every write is refused until the app is relaunched against a repaired or restored one (data model Phase 1, W7). The first sentence is the decoder's own reason. phone is a 393pt screen less 14pt each side; window the macOS default 760pt window less the same.</desc>
+<!-- LetsLapse design component · library banner. A 12pt-padded LL.cardBackground card, rx 12, 1pt LL.amber border
+     at 60%: exclamationmark.triangle.fill (15pt semibold, LL.amber), the 13pt semibold title, the 12pt secondary
+     detail wrapping, 3pt between. Placed 14pt in from the screen's edges and 8pt down from the top safe area. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="library-banner" data-state="unreadable" data-width="phone">
+    <rect x="0.5" y="0.5" width="364" height="114.5" rx="12" fill="#FFFFFF" stroke="#FFB340" stroke-opacity="0.6"/>
+    <g data-symbol="exclamationmark.triangle.fill" transform="translate(12,12)">
+      <path d="M8.5 1.5 l7.5 13 h-15 z" fill="#FFB340" stroke="#FFB340" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M8.5 6 v4.2 M8.5 12.4 v0.2" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/>
+    </g>
+    <text x="40" y="24.5" font-size="13" class="sb" fill="#000">Library not loaded — nothing is being saved</text>
+    <text x="40" y="42.5" font-size="12" fill="#6D6D72">The data couldn’t be read because it isn’t in the</text>
+    <text x="40" y="57.0" font-size="12" fill="#6D6D72">correct format. The manifest was set aside as</text>
+    <text x="40" y="71.5" font-size="12" fill="#6D6D72">library.json.unreadable-20260913-071546 in the</text>
+    <text x="40" y="86.0" font-size="12" fill="#6D6D72">Projects folder; every grade, tag and blend record is</text>
+    <text x="40" y="100.5" font-size="12" fill="#6D6D72">still in it. Quit, repair or restore it, and relaunch.</text>
+  </g>
+</svg>

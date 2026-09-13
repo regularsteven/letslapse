@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 365 1443" width="365" height="1443" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Metadata fields · file · phone</title>
+  <desc>Mirrors MetadataEditSection in App/MetadataPanelSections.swift — the editable IPTC Core record in the Gallery preview panel, in the brief's order: Title, Caption, Creator, Copyright, Rating, Copyright status, Copyright URL, Usage terms, then the Creator contact block (Address … Website) and the Location block (Sublocation … Country code). The Keywords row that follows is the shared tag editor (tag-field.*) under a 'Keywords' label the screen draws — tags ARE keywords. Every row carries its origin at the trailing end: 'from file' when the value is the file's own (the imported layer), 'edited here' with a revert arrow when a person changed it in this app (the edited layer; revert returns the file's value), nothing when the record has no value. Edits never touch the original file. Demo content is the _WEX3518 Lightroom export set — with Title edited here to show the third treatment — for the file state, and an untouched iPhone shoot for the empty state.</desc>
+<!-- LetsLapse design component · metadata fields. Header LLSectionHeader, 10pt under it; rows 10pt apart, each
+     2pt padding + label line (12pt semibold secondary; marker 10pt medium at the trailing edge: from file at 30%
+     black, edited here in LL.accent with a 10pt arrow.uturn.backward revert 6pt after) + 4pt + the control.
+     Text fields are .roundedBorder at 12pt: 22pt tall on the Mac (narrow), 33pt on iOS (phone); Caption is
+     vertical-axis, 1–4 lines. Rating is five 15pt stars (LL.amber when set; the same star again clears).
+     Copyright status is a full-width NSPopUpButton on the Mac and an accent .menu label on iOS. Group labels
+     (Creator contact, Location) are 12pt semibold secondary with 6pt above. See components/README.md. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="metadata-fields" data-state="file" data-width="phone">
+    <text x="4" y="12.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">METADATA</text>
+    <g data-field="title">
+      <text x="0" y="39.5" font-size="12" class="sb" fill="#6D6D72">Title</text>
+      <text x="351" y="39.5" font-size="10" class="m" text-anchor="end" fill="#C36A00">edited here</text>
+      <g data-symbol="arrow.uturn.backward" data-action="revert" transform="translate(355,31.0)" fill="none" stroke="#C36A00" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 3 l-2.5 2.5 2.5 2.5 M0.5 5.5 h5.5 a2.5 2.5 0 0 0 0 -5 h-1"/>
+      </g>
+      <rect x="0.5" y="47.0" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+      <text x="8" y="67.5" font-size="12" fill="#000">Charles Bridge, blue hour</text>
+    </g>
+    <g data-field="caption">
+      <text x="0" y="105.0" font-size="12" class="sb" fill="#6D6D72">Caption</text>
+      <text x="365" y="105.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="112.5" width="364" height="46.5" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+      <text x="8" y="133.0" font-size="12" fill="#000">Beautiful at dusk, Charles Bridge is a crown in the historic</text>
+      <text x="8" y="147.5" font-size="12" fill="#000">city of Prague.</text>
+    </g>
+    <g data-field="creator">
+      <text x="0" y="185.0" font-size="12" class="sb" fill="#6D6D72">Creator</text>
+      <text x="365" y="185.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="192.5" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+      <text x="8" y="213.0" font-size="12" fill="#000">Steven Wright</text>
+    </g>
+    <g data-field="rights">
+      <text x="0" y="250.5" font-size="12" class="sb" fill="#6D6D72">Copyright</text>
+      <text x="365" y="250.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="258.0" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+      <text x="8" y="278.5" font-size="12" fill="#000">© 2026 Steven Wright</text>
+    </g>
+    <g data-field="rating">
+      <text x="0" y="316.0" font-size="12" class="sb" fill="#6D6D72">Rating</text>
+      <text x="365" y="316.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <polygon data-symbol="star.fill" points="7.5,324.5 5.6,329.4 0.4,329.7 4.5,333.0 3.1,338.1 7.5,335.2 11.9,338.1 10.5,333.0 14.6,329.7 9.4,329.4" fill="#FFB340" stroke="#FFB340" stroke-width="1" stroke-linejoin="round"/>
+      <polygon data-symbol="star.fill" points="26.5,324.5 24.6,329.4 19.4,329.7 23.5,333.0 22.1,338.1 26.5,335.2 30.9,338.1 29.5,333.0 33.6,329.7 28.4,329.4" fill="#FFB340" stroke="#FFB340" stroke-width="1" stroke-linejoin="round"/>
+      <polygon data-symbol="star.fill" points="45.5,324.5 43.6,329.4 38.4,329.7 42.5,333.0 41.1,338.1 45.5,335.2 49.9,338.1 48.5,333.0 52.6,329.7 47.4,329.4" fill="#FFB340" stroke="#FFB340" stroke-width="1" stroke-linejoin="round"/>
+      <polygon data-symbol="star.fill" points="64.5,324.5 62.6,329.4 57.4,329.7 61.5,333.0 60.1,338.1 64.5,335.2 68.9,338.1 67.5,333.0 71.6,329.7 66.4,329.4" fill="#FFB340" stroke="#FFB340" stroke-width="1" stroke-linejoin="round"/>
+      <polygon data-symbol="star.fill" points="83.5,324.5 81.6,329.4 76.4,329.7 80.5,333.0 79.1,338.1 83.5,335.2 87.9,338.1 86.5,333.0 90.6,329.7 85.4,329.4" fill="#FFB340" stroke="#FFB340" stroke-width="1" stroke-linejoin="round"/>
+    </g>
+    <g data-field="rightsStatus">
+      <text x="0" y="366.5" font-size="12" class="sb" fill="#6D6D72">Copyright status</text>
+      <text x="8" y="389.5" font-size="14" fill="#C36A00">Unknown</text>
+      <path data-symbol="chevron.up.chevron.down" d="M74.2 382.5 l3-3 3 3 M74.2 386.5 l3 3 3-3" fill="none" stroke="#C36A00" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g data-field="rightsURL">
+      <text x="0" y="423.0" font-size="12" class="sb" fill="#6D6D72">Copyright URL</text>
+      <rect x="0.5" y="430.5" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+      <text x="8" y="451.0" font-size="12" fill="#000" fill-opacity="0.25">https://</text>
+    </g>
+    <g data-field="usageTerms">
+      <text x="0" y="488.5" font-size="12" class="sb" fill="#6D6D72">Usage terms</text>
+      <rect x="0.5" y="496.0" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <text x="0" y="558.0" font-size="12" class="sb" fill="#6D6D72">Creator contact</text>
+    <g data-field="contactAddress">
+      <text x="0" y="584.5" font-size="12" class="sb" fill="#6D6D72">Address</text>
+      <rect x="0.5" y="592.0" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <g data-field="contactCity">
+      <text x="0" y="650.0" font-size="12" class="sb" fill="#6D6D72">City</text>
+      <rect x="0.5" y="657.5" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <g data-field="contactState">
+      <text x="0" y="715.5" font-size="12" class="sb" fill="#6D6D72">State</text>
+      <rect x="0.5" y="723.0" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <g data-field="contactPostcode">
+      <text x="0" y="781.0" font-size="12" class="sb" fill="#6D6D72">Postcode</text>
+      <rect x="0.5" y="788.5" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <g data-field="contactCountry">
+      <text x="0" y="846.5" font-size="12" class="sb" fill="#6D6D72">Country</text>
+      <rect x="0.5" y="854.0" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <g data-field="contactPhone">
+      <text x="0" y="912.0" font-size="12" class="sb" fill="#6D6D72">Phone</text>
+      <rect x="0.5" y="919.5" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <g data-field="contactEmail">
+      <text x="0" y="977.5" font-size="12" class="sb" fill="#6D6D72">Email</text>
+      <rect x="0.5" y="985.0" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <g data-field="contactWebsite">
+      <text x="0" y="1043.0" font-size="12" class="sb" fill="#6D6D72">Website</text>
+      <rect x="0.5" y="1050.5" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <text x="0" y="1112.5" font-size="12" class="sb" fill="#6D6D72">Location</text>
+    <g data-field="locationSublocation">
+      <text x="0" y="1139.0" font-size="12" class="sb" fill="#6D6D72">Sublocation</text>
+      <text x="365" y="1139.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="1146.5" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+      <text x="8" y="1167.0" font-size="12" fill="#000">Mala Strana</text>
+    </g>
+    <g data-field="locationCity">
+      <text x="0" y="1204.5" font-size="12" class="sb" fill="#6D6D72">City</text>
+      <rect x="0.5" y="1212.0" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+    </g>
+    <g data-field="locationState">
+      <text x="0" y="1270.0" font-size="12" class="sb" fill="#6D6D72">State</text>
+      <text x="365" y="1270.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="1277.5" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+      <text x="8" y="1298.0" font-size="12" fill="#000">Prague</text>
+    </g>
+    <g data-field="locationCountry">
+      <text x="0" y="1335.5" font-size="12" class="sb" fill="#6D6D72">Country</text>
+      <text x="365" y="1335.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="1343.0" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+      <text x="8" y="1363.5" font-size="12" fill="#000">Czech Republic</text>
+    </g>
+    <g data-field="locationCountryCode">
+      <text x="0" y="1401.0" font-size="12" class="sb" fill="#6D6D72">Country code</text>
+      <text x="365" y="1401.0" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <rect x="0.5" y="1408.5" width="364" height="32" rx="5" fill="#FFF" stroke="#C6C6CB"/>
+      <text x="8" y="1429.0" font-size="12" fill="#000">CZ</text>
+    </g>
+  </g>
+</svg>

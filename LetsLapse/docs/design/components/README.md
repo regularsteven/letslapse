@@ -247,3 +247,108 @@ his own Mac, 2026-09-08.
 
 `SceneTagLine` itself stays exactly as it is: it is a *summary* for a list row (`ProjectsView`, and
 the Gallery tiles), not an editor, and it is correct there.
+
+## Metadata record — `metadata-scope.<state>.narrow.svg` · `metadata-info.<state>.<width>.svg` · `metadata-fields.<state>.<width>.svg` · `tag-field.imported.<width>.svg`
+
+The Gallery preview panel's INFO and METADATA groups — what a project's files said and the
+IPTC Core record a person edits — on every platform. Introduced 2026-09-13 with data model
+Milestone 1 (`docs/data-model-scale-and-metadata-2026-09-12.md` §4 and §7), code first,
+mirrored the same day after Steven's sign-off: `App/MetadataPanelSections.swift`
+(`MetadataScopeControl`, `MetadataInfoSection`, `MetadataEditSection`) inside
+`App/GalleryPreviewPanel.swift`'s `recordSections`. The same three views draw the Mac's 300 pt
+panel, the iPad's 300 pt panel and the iPhone's preview sheet, so one set of files serves all
+three — Steven's instruction for this pass: document it once.
+
+**Three flat files, stacked by the screen 14 pt apart, never nested.** Like the tag editor, an
+`<image>` inside an `<image>` is not reliably followed, so the Keywords row — the METADATA
+group's last row — is *not* inside `metadata-fields`: the screen draws its two-word label line
+("Keywords" 12 pt semibold secondary, the origin marker trailing) and places the existing
+`tag-field.<state>.<width>` 4 pt under it. That is also what keeps the tag editor one component:
+the panel's Keywords row IS the tag editor, since tags became keywords in this pass.
+
+| Piece | What it is | Where it goes |
+|---|---|---|
+| `metadata-scope` | Whole project / This frame, a 22 pt segmented picker on `LL.controlFill`; the `frame` state adds the stepper (‹ · file name over "n of N" · ›, 28 pt square buttons, the back chevron dimmed on the first frame) | first, and only for an interval project — a Photo or video project is one asset and shows nothing here |
+| `metadata-info` | the read-only group: `LLSectionHeader` INFO, then a 72 pt label column and the value, 25 pt per single-line row, 14.5 pt per extra line. Rows exist only when the resolved record has them; GPS carries the Open in Maps link | under the scope switch (or the divider) |
+| `metadata-fields` | the editable group: `LLSectionHeader` METADATA, then Title, Caption, Creator, Copyright, Rating, Copyright status, Copyright URL, Usage terms, the Creator contact block (Address … Website) and the Location block (Sublocation … Country code), rows 10 pt apart | under INFO; the screen adds the Keywords row after it |
+| `tag-field.imported` | the tag editor with the seven keywords a file carried | the Keywords row of a project whose keywords came from its files |
+
+**Origins, per row.** Every METADATA row says where its value came from, 10 pt medium at the
+trailing edge of the label line: **from file** (black at 30%) when the value is the file's own —
+the record's `imported` layer, read from XMP, IPTC-IIM or Exif at import, the `.xmp` sidecar
+winning over the raw; **edited here** (`LL.accent`) with a 10 pt `arrow.uturn.backward` revert
+6 pt after it when a person changed it in this app — the `edited` layer, one line appended to
+`assets.ndjson` (or `metadata.json` for the whole project) with `editedAt`/`editedBy`; nothing
+when the record has no value. Revert drops the edited value and the file's returns. Edits never
+touch the original file. A project tagged before the records existed shows its manifest tags
+as edited here; the first edit writes them into the record for good.
+
+**Coordinate contract.** 1 unit = 1 pt, origin at each block's own top-left. Two widths, chosen
+by the container, and — because the same SwiftUI draws AppKit controls on one and UIKit on the
+other — the width also chooses the control metrics:
+
+| Width | Total | Container | Controls |
+|---|---|---|---|
+| `narrow` | 272 pt | the macOS Gallery preview panel's column (the 300 pt panel less 14 pt each side); also the iPad's identical panel | AppKit: `.roundedBorder` fields 22 pt, rx 4; Copyright status a full-width `NSPopUpButton` with the accent up/down control trailing; the segmented picker 22 pt |
+| `phone` | 365 pt | the iPhone preview sheet's column (393 pt less 14 pt each side) | UIKit: fields 33 pt, rx 5, `#C6C6CB` border; Copyright status an `LL.accent` `.menu` label with `chevron.up.chevron.down`; Caption wraps (1–4 lines) where the Mac's clips at one |
+
+The iPad panel is the narrow width drawn with the phone file's control heights; no third file
+— its INDEX row leans on the Mac's, as it did before this pass. A `metadata-fields` row is
+2 pt padding + the label line (14.5) + 4 pt + the control + 2 pt; a single-line INFO row is 25 pt.
+Widths are the content box, so a file is placed at its natural size and never scaled; INFO's
+narrow values wrap at 176 pt (measured against the running panel), phone's at the full column.
+
+**States:**
+
+| File | Shows | Used by |
+|---|---|---|
+| `metadata-scope.project.narrow` | Whole project selected | `macOS/gallery.svg`, `macOS/gallery.tags.svg` |
+| `metadata-scope.frame.narrow` | This frame, with the stepper on frame-00001.jpg · 1 of 12 | no screen file yet — the state the Mac panel showed live 2026-09-13 |
+| `metadata-info.photo.narrow` / `.phone` | everything the `_WEX3518` ARW + sidecar said: camera, lens, exposure, captured in the file's zone, GPS + map, size + format, software | `macOS/gallery.metadata.svg`, `iOS/gallery.preview.portrait.svg` |
+| `metadata-info.interval.narrow` | an iPhone JPEG shoot's whole project — only Size is true of every frame | `macOS/gallery.svg`, `macOS/gallery.tags.svg` |
+| `metadata-fields.file.narrow` / `.phone` | the ARW's record with all three treatments: from file (Caption, Creator, Copyright, Rating 5 — the sidecar wins over the ARW's own 0 — Sublocation, State, Country, Country code), edited here + revert on Title, nothing on the empty rows | `macOS/gallery.metadata.svg`, `iOS/gallery.preview.portrait.svg` |
+| `metadata-fields.empty.narrow` | nothing from the files: no markers, the placeholders showing (Name, name · © year name · https://) | `macOS/gallery.svg`, `macOS/gallery.tags.svg` |
+| `tag-field.imported.narrow` / `.phone` | Bridge · Czech Republic · Dusk · Historic · Prague · River · Vltava, then **+ Add tag** | the Keywords row of the two photo screens above |
+
+Copy-only variants need no file: INFO's "Reading the files…" (before the reader lands),
+"Varies by frame — choose This frame." (an interval project whose frames disagree) and
+"Nothing in the file." are one 12 pt secondary line in the group's own layout; a Photo project
+tagged by the app shows `tag-field.applied.*` under a "Keywords · edited here ↩" label, which
+is what `macOS/gallery.svg` draws.
+
+The demo content is the Milestone 1 test set (`/Users/stevenwright/Desktop/Lightroom Exports`,
+imported by copy): `_WEX3518.ARW` with its Lightroom `.xmp` sidecar, whose values the panel was
+verified against on the Mac, the iPhone 16 Pro and the iPad Pro simulators, 2026-09-13. Title
+is drawn edited ("Charles Bridge, blue hour" over the sidecar's "Charles Bridge at night") only
+to show the third treatment; the empty state is an untouched iPhone shoot.
+
+**Mirrors.** `App/MetadataPanelSections.swift` (the three views, the row frame with its marker
+and revert, the commit-on-Return text row), `App/AppModel+Metadata.swift` (the resolution
+chain asset edited → project edited → asset imported → project imported, the manifest-tags
+fallback for keywords, the writes), the records in `Kit/Sources/LetsLapseKit/Library/AssetRecords.swift`,
+the reader in `Kit/…/Metadata/`. Screens: `macOS/gallery.svg` (interval, at rest),
+`macOS/gallery.metadata.svg` (the imported photo), `macOS/gallery.tags.svg` (the panel scrolled
+to Keywords, picker open), `iOS/gallery.preview.portrait.svg` (the iPhone sheet on the photo).
+
+## Library banner — `library-banner.unreadable.<width>.svg`
+
+`LibraryUnreadableBanner` in `App/LetsLapseApp.swift`: the card over every tab, on every
+platform, while `Projects/library.json` could not be decoded at launch (data model Phase 1
+W7, code first 2026-09-13, mirrored after sign-off). The manifest is moved aside as
+`library.json.unreadable-<stamp>` — never overwritten, since it is the only copy of every
+grade, tag and blend record — the library loads empty and every write is refused until the
+app is relaunched against a repaired or restored file. The card says so: a 13 pt semibold
+title, then the decoder's own reason, the set-aside name and what to do, 12 pt secondary;
+`exclamationmark.triangle.fill` in `LL.amber` leading; 12 pt padding, rx 12, a 1 pt `LL.amber`
+border at 60% on `LL.cardBackground`. It overlays the tab (a `VStack { banner; Spacer() }` at
+zIndex 50), 14 pt in from the edges and 8 pt under the top safe area, and pushes nothing.
+
+| Width | Total | Container |
+|---|---|---|
+| `phone` | 365 pt | a 393 pt iPhone screen less 14 pt each side — `iOS/create-home.library-unreadable.portrait.svg` |
+| `window` | 732 pt | the macOS default 760 pt window less the same; no Mac screen file — placement is the same, so the INDEX row points here |
+
+Height follows the wrapped detail (115.5 pt at `phone`, 86.5 at `window`). One state: there is
+no in-app repair before Phase 4's reconciliation, so the banner has nothing to offer but the
+facts. Verified on the running Mac Debug build against a scratch library whose manifest was
+corrupted by one byte, 2026-09-13.

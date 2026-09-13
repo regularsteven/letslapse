@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 44" width="272" height="44" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Metadata info · interval · narrow</title>
+  <desc>Mirrors MetadataInfoSection in App/MetadataPanelSections.swift — the read-only group under the Gallery preview panel's action buttons: what the camera and the file said (the imported layer only), never editable here. Rows appear only when the resolved record has them; a project whose frames disagree shows nothing of the whole and the copy 'Varies by frame — choose This frame.'; before the reader has landed, 'Reading the files…'; a file with nothing, 'Nothing in the file.'. Demo content is the _WEX3518 Lightroom export set the panel was verified with (photo) and an iPhone interval JPEG shoot (interval). The GPS row carries an Open in Maps link (SF Symbol map, LL.accent).</desc>
+<!-- LetsLapse design component · metadata info. Header LLSectionHeader (13pt semibold secondary, kerning 0.5,
+     4pt in) with 4pt under it; rows are a 72pt label column (12pt semibold secondary) + 10pt gap + the value
+     (12pt primary, wrapping), 5pt padding above and below — 25pt per single-line row, 14.5pt per extra line.
+     narrow = 272pt (macOS Gallery panel), phone = 365pt (the iPhone preview sheet). See components/README.md. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="metadata-info" data-state="interval" data-width="narrow">
+    <text x="4" y="12.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">INFO</text>
+    <g data-row="size">
+      <text x="0" y="36.5" font-size="12" class="sb" fill="#6D6D72">Size</text>
+      <text x="82" y="36.5" font-size="12" fill="#000">3024 × 4032 · JPG</text>
+    </g>
+  </g>
+</svg>

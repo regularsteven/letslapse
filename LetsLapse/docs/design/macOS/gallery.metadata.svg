@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1320 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>macOS · Gallery · tag picker popover · 1280×800</title>
-  <desc>gallery.svg with the tag picker open — the macOS door onto the shared tag editor, and the counterpart of iOS's project-tags.portrait.svg. The preview panel's TAGS block (components/tag-field.applied.narrow.svg) carries a dashed "+ Add tag" chip at 1119,541; clicking it raises a 361pt popover holding components/tag-suggestions.default.svg — a field that both filters and creates, then SUGGESTED (SceneMetadata.orderedTaxonomy in prompt order, minus what is applied) and YOUR TAGS (the custom tags this library already holds). It opens UPWARD, over the hero and action grid, because the chip sits low enough in a 300pt panel that a downward popover would run off the window bottom; AppKit picks that edge for itself, and this file draws the edge it will pick here. A POPOVER, not the sheet iOS uses: the panel is already a detail surface beside the thing being edited, and a modal sheet over a single-click selection would be heavier than the edit. It is otherwise the same component and the same rules — click a suggestion and it moves up into the field, click an xmark and it moves back down, and nothing is ever listed in both halves. Writes are immediate; there is no Apply here and none is wanted, since every change is one click to reverse. The typed state is iOS's project-tags.adding.portrait.svg, whose Create row and "No existing tag matches" line render identically in this popover (components/tag-suggestions.filtered.svg) — no separate Mac file. Everything behind the popover is gallery.svg unchanged; see there for the panel, the grid, the header-width arithmetic and the 119pt the TAGS block costs the panel. NOT YET IN CODE — design-first, 2026-09-08. SIDEBAR, 2026-09-11: a fourth section, SHAPES (Ellipse · Rectangle · Square · No Shapes), sits under COLLECTIONS — GallerySidebar.shapesSection over AppModel.shapeSummaries, one row per ShapeFilter; drawn at rest here (no row lit). **2026-09-13:** the TAGS block became the METADATA group's Keywords row (see gallery.svg's desc); the picker is the same popover, now raised from the Keywords row's "+ Add tag", and this file draws the panel scrolled 1320.5pt so that row is where TAGS used to be. The IN-CODE popover exists since 2026-09-08 (App/TagEditor.swift, .tagPicker on the Mac).</desc>
+  <title>macOS · Gallery · preview panel on an imported photo (INFO + METADATA from the file) · 1280×800</title>
+  <desc>Mirrors App/GalleryView.swift (macOS branch) + App/GallerySidebar.swift + App/GalleryGridContent.swift + App/GalleryTile.swift + App/GalleryPreviewPanel.swift with App/MetadataPanelSections.swift — the same window as gallery.svg (see its desc for the three-pane layout, the 1280×800 choice, the grid and tab-bar measurements; the sidebar and grid are drawn identically here) with a PHOTO project selected: _WEX3518, the Sony ARW + Lightroom .xmp sidecar of the Milestone 1 test set, imported through Create ▸ Import photos (the import copies; the original is never touched). What changes is the preview panel. Title is the file name, the date line the capture date and file size (31. 8. 2026 · 18,9 MB). The action grid is Open, then Edit · Text · Shapes — no New clip: a Photo capture is one asset. No scope switch for the same reason. INFO (components/metadata-info.photo.narrow.svg) is everything the file said: camera, lens, exposure, captured (in the file's own zone), GPS with the Open in Maps link, size with the format, software. METADATA (components/metadata-fields.file.narrow.svg) is the IPTC Core record with its origins: from file for what the sidecar carried (Caption, Creator, Copyright, Rating 5 — the sidecar wins over the ARW's own 0 — Sublocation, State, Country, Country code), edited here with the revert arrow on Title, which a person retyped in this panel, and no marker on the empty rows. Keywords is the group's last row: the seven dc:subject keywords from the sidecar (components/tag-field.imported.narrow.svg), marked from file; they also seed the project's searchable tags. Below: Storage alone among the metaRows (no AI elements, no field notes yet), the divider and the Rename · Share · Finder · Delete… footer, both ~1.5k pt down and reached by scrolling; no BLENDED CLIPS section, since a Photo project has none. The record itself lives in Projects/&lt;id&gt;/assets.ndjson (one line per asset: bytes, SHA-256, the imported layer, the edited layer with per-field editedAt/editedBy) and metadata.json (the project-level record); edits write the edited layer only. Verified against the running Mac Debug build on a scratch library, 2026-09-13.</desc>
 
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1280" height="800" rx="11"/></clipPath>
@@ -18,7 +18,6 @@
     <clipPath id="t10"><rect x="235" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
     <clipPath id="t11"><rect x="489" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
     <clipPath id="t12"><rect x="743" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
-    <clipPath id="panel"><rect x="1000" y="1368.5" width="300" height="772"/></clipPath>
     <clipPath id="hero"><rect x="1014" y="70" width="272" height="150" rx="10"/></clipPath>
 
     <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
@@ -314,179 +313,112 @@
       </g>
 
       <!-- selection: 2.5pt accent strokeBorder, inset on the tile's own radius -->
-      <rect x="236.25" y="116.25" width="239.5" height="179" rx="8" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+      <rect x="744.25" y="309.75" width="239.5" height="179" rx="8" fill="none" stroke="#C36A00" stroke-width="2.5"/>
     </g>
 
     <!-- ================= PREVIEW PANEL (GalleryPreviewPanel, fixed 300pt) ================= -->
     <line x1="999.5" y1="48" x2="999.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
     <g id="preview">
       <rect x="1000" y="48" width="300" height="772" fill="#FFFFFF"/>
-      <!-- The panel is SCROLLED 1320.5pt (2026-09-13): with the INFO + METADATA groups above it,
-           Keywords is ~1.8k pt down the panel, so the person scrolls to it before clicking
-           "+ Add tag". At this offset the Keywords label sits at y 452 and the tag field at
-           459 — exactly where the TAGS block was on 2026-09-08 — with the tail of the
-           METADATA group (the Location rows) scrolled in above it and the hero, actions and
-           INFO scrolled off. The popover anchor below is therefore unchanged. -->
-      <g clip-path="url(#panel)" transform="translate(0,-1320.5)">
-  
-        <g clip-path="url(#hero)">
-          <rect x="1014" y="70" width="272" height="150" fill="url(#dusk)"/>
-          <path d="M1014 166 h272 v54 h-272 z" fill="#3B4450" opacity="0.85"/>
-          <path d="M1014 160 l34-9 30 6 38-13 34 8 45-11 38 10 53-7 v16 h-272 z" fill="#2A3140"/>
-          <rect x="1036" y="182" width="170" height="5" rx="2.5" fill="#E7B478" opacity="0.45"/>
-          <rect x="1070" y="198" width="136" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
-        </g>
 
-        <text x="1014" y="248" font-size="16" class="b" fill="#000">River Sunset to Dusk</text>
-        <text x="1014" y="266" font-size="12" fill="#6D6D72">Aug 20, 2026</text>
-        <text x="1090" y="266" font-size="12" fill="#000" fill-opacity="0.3">·</text>
-        <text x="1099" y="266" font-size="12" fill="#6D6D72">4,8 GB</text>
-
-        <!-- Action grid (redrawn 2026-09-13 as shipped since 2026-09-11): Open alone
-             on top, filled; then one row of equal buttons — Edit, Text, Shapes (photo
-             projects only — a still has masks to edit) and New clip (never on a Photo
-             capture, which is one asset). Each is 57pt tall, rx 9, a 16pt medium
-             glyph over an 11pt medium label; 8pt gaps. -->
-        <g id="actions">
-          <rect x="1014" y="286" width="272" height="57" rx="9" fill="#C36A00"/>
-          <g fill="none" stroke="#FFFFFF" stroke-width="1.8" data-symbol="arrow.up.forward.square">
-            <rect x="1142" y="298" width="16" height="16" rx="3.4"/><path d="M1147 309 l6-6 M1149.5 303 h3.5 v3.5" stroke-linecap="round"/>
-          </g>
-          <text x="1150" y="333" font-size="11" class="m" text-anchor="middle" fill="#FFFFFF">Open</text>
-
-          <rect x="1014" y="351" width="62" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
-          <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="pencil">
-            <path d="M1038 376 l1-4.5 10.5-10.5 3.5 3.5 -10.5 10.5 z" stroke-linejoin="round"/>
-          </g>
-          <text x="1045" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Edit</text>
-
-          <rect x="1084" y="351" width="62" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
-          <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="textformat">
-            <path d="M1105 375 l6-13 6 13 M1107 371 h8 M1119 375 h6" stroke-linecap="round"/>
-          </g>
-          <text x="1115" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Text</text>
-
-          <rect x="1154" y="351" width="62" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
-          <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="circle.square">
-            <rect x="1177" y="362" width="16" height="16" rx="2.5"/><circle cx="1185" cy="370" r="4.5"/>
-          </g>
-          <text x="1185" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Shapes</text>
-
-          <rect x="1224" y="351" width="62" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
-          <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="plus.circle">
-            <circle cx="1255" cy="370" r="8"/><path d="M1251 370 h8 M1255 366 v8" stroke-linecap="round"/>
-          </g>
-          <text x="1255" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">New clip</text>
-        </g>
-
-        <line x1="1000" y1="424.5" x2="1300" y2="424.5" stroke="#000" stroke-opacity="0.10"/>
-
-        <!-- INFO + METADATA (2026-09-13, data model Milestone 1 — code first, mirrored after
-             Steven's sign-off): the TAGS block is gone; tags ARE keywords now, the last row of
-             the METADATA group. Three shared components, stacked 14pt apart, 12pt under the
-             divider (GalleryPreviewPanel.recordSections): the scope switch an interval project
-             gets (Whole project / This frame — metadata-scope.*), the read-only INFO group
-             (metadata-info.*: what the frames all agree on — this iPhone JPEG shoot's frames
-             share only their size; camera, exposure, captured and GPS vary and so are not
-             true of the whole, hence one row) and the editable METADATA group
-             (metadata-fields.*: nothing from these files, so no markers and every field
-             empty). Keywords is the group's last row: the label the panel draws, then the same
-             tag editor as before (tag-field.applied.narrow.svg) — these five came from the
-             app's own tagging, so the row says "edited here" and offers the revert. Edit the
-             component files, not this markup; see components/README.md. The group is 1218pt
-             tall, so from Copyright URL down the panel scrolls under the window edge —
-             specified, reached by scrolling, as the BLENDED CLIPS list already was. -->
-        <image href="../components/metadata-scope.project.narrow.svg" x="1014" y="437" width="272" height="22"/>
-        <image href="../components/metadata-info.interval.narrow.svg" x="1014" y="473" width="272" height="44"/>
-        <image href="../components/metadata-fields.empty.narrow.svg" x="1014" y="531" width="272" height="1218"/>
-        <g id="keywords-row" data-field="keywords">
-          <text x="1014" y="1772.5" font-size="12" class="sb" fill="#6D6D72">Keywords</text>
-          <text x="1272" y="1772.5" font-size="10" class="m" text-anchor="end" fill="#C36A00">edited here</text>
-          <g data-symbol="arrow.uturn.backward" data-action="revert" transform="translate(1276,1764)" fill="none" stroke="#C36A00" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 3 l-2.5 2.5 2.5 2.5 M0.5 5.5 h5.5 a2.5 2.5 0 0 0 0 -5 h-1"/>
-          </g>
-          <image href="../components/tag-field.applied.narrow.svg" x="1014" y="1779.5" width="272" height="115"/>
-        </g>
-
-        <!-- metaRows on a 72pt label column — 12pt under the record groups (metadataSection's padding.top); every y below is the 2026-09-08 value + 1322.5 -->
-        <g id="meta">
-          <text x="1014" y="1923.5" font-size="12" class="sb" fill="#6D6D72">In frame</text>
-          <text x="1096" y="1923.5" font-size="12" fill="#6D6D72">river, bridge, quay, sky</text>
-
-          <text x="1014" y="1950.5" font-size="12" class="sb" fill="#6D6D72">Storage</text>
-          <text x="1096" y="1950.5" font-size="12" fill="#6D6D72">4,8 GB</text>
-
-          <text x="1014" y="1977.5" font-size="12" class="sb" fill="#6D6D72">Field notes</text>
-          <text x="1096" y="1977.5" font-size="12" fill="#6D6D72">2 notes</text>
-        </g>
-
-        <line x1="1000" y1="1990" x2="1300" y2="1990" stroke="#000" stroke-opacity="0.10"/>
-
-        <!-- footer: four equal buttons, 20pt dividers, Delete tinted red -->
-        <g id="footer">
-          <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line">
-            <path d="M1043 2011.5 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M1040 2016.5 h16" stroke-linecap="round"/>
-          </g>
-          <text x="1047.6" y="2030.5" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
-          <line x1="1081.75" y1="2014.5" x2="1081.75" y2="2034.5" stroke="#000" stroke-opacity="0.10"/>
-
-          <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="square.and.arrow.up">
-            <path d="M1110 2010.5 v-8 M1106.5 2005.5 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M1104 2008.5 v8 h12 v-8"/>
-          </g>
-          <text x="1115.9" y="2030.5" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
-          <line x1="1150" y1="2014.5" x2="1150" y2="2034.5" stroke="#000" stroke-opacity="0.10"/>
-
-          <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="folder">
-            <path d="M1176 2003.5 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/>
-          </g>
-          <text x="1184.1" y="2030.5" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text>
-          <line x1="1218.25" y1="2014.5" x2="1218.25" y2="2034.5" stroke="#000" stroke-opacity="0.10"/>
-
-          <g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash">
-            <path d="M1245 2005.5 h15 M1247 2005.5 v11 h11 v-11 M1250.5 2003.5 h4"/>
-          </g>
-          <text x="1252.4" y="2030.5" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
-        </g>
-
-        <!-- ===== blended clips list (2026-09-07): the same shared component
-             iOS project-detail uses, in its "narrow" (272pt) width set, replacing
-             the old one-line "Variations · 3 blended clips" meta row above. Card
-             height = rows.count * 62 (no gap), a divider per internal boundary —
-             see components/README.md. 2026-09-07 (Part 2, design-first,
-             tick-chip revision same day): four independent tick chips — Blends,
-             Slices, Image, Video — sit between the header and the list; at this
-             narrow width they wrap to two 33pt rows (Blends/Slices, Image/Video)
-             rather than widening a gap the way the wide set does, 74pt total.
-             Pushes the card down 83pt; the window's #win clip-path, unchanged,
-             now trims a bit more of the third row than Part 1 did — still "the
-             panel scrolling under the window edge," just more of it, since the
-             filter claims real vertical budget in an already-tight 300pt-fixed
-             panel. Kept all three rows anyway rather than dropping to two, to
-             stay consistent with the iOS wide set's own three states. -->
-        <text x="1014" y="2074.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 3</text>
-        <image href="../components/blend-list-filter.all.narrow.svg" x="1014" y="2083.5" width="272" height="74"/>
-        <g id="blended-clips-list">
-          <rect x="1014" y="2166.5" width="272" height="186" rx="16" fill="#FFF" filter="url(#soft)"/>
-          <image href="../components/blended-clip-row.default.narrow.svg" x="1014" y="2166.5" width="272" height="62"/>
-          <line x1="1098" y1="2228.5" x2="1272" y2="2228.5" stroke="#000" stroke-opacity="0.08"/>
-          <image href="../components/blended-clip-row.from-codec.narrow.svg" x="1014" y="2228.5" width="272" height="62"/>
-          <line x1="1098" y1="2290.5" x2="1272" y2="2290.5" stroke="#000" stroke-opacity="0.08"/>
-          <image href="../components/blended-clip-row.true-light.narrow.svg" x="1014" y="2290.5" width="272" height="62"/>
-        </g>
+      <g clip-path="url(#hero)">
+        <rect x="1014" y="70" width="272" height="150" fill="url(#dusk)"/>
+        <path d="M1014 166 h272 v54 h-272 z" fill="#3B4450" opacity="0.85"/>
+        <path d="M1014 160 l34-9 30 6 38-13 34 8 45-11 38 10 53-7 v16 h-272 z" fill="#2A3140"/>
+        <rect x="1036" y="182" width="170" height="5" rx="2.5" fill="#E7B478" opacity="0.45"/>
+        <rect x="1070" y="198" width="136" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
       </g>
-    </g>
 
-    <!-- ================= TAG PICKER POPOVER (over the panel and the grid) =================
-         Anchored to the "+ Add tag" chip of components/tag-field.applied.narrow.svg, which that
-         file places at (105,82) in its own box — the Keywords row's field is at 1014,459 once the
-         panel is scrolled (see the panel comment), so the chip is at 1119,541 on this canvas. Opens upward: a 276pt popover hung below a chip at y 574 would end at 860, past
-         the window's own bottom edge at 820. Content is components/tag-suggestions.default.svg
-         inset 16pt; edit that file, not this markup. -->
-    <g id="tag-picker-popover">
-      <rect x="931" y="255" width="361" height="276" rx="12" fill="#FFFFFF" filter="url(#soft)"/>
-      <path d="M1157 530 h16 l-8 11 z" fill="#FFFFFF"/>
-      <image href="../components/tag-suggestions.default.svg" x="947" y="271" width="329" height="244"/>
+      <text x="1014" y="248" font-size="16" class="b" fill="#000">_WEX3518</text>
+      <text x="1014" y="266" font-size="12" fill="#6D6D72">31. 8. 2026</text>
+      <text x="1080" y="266" font-size="12" fill="#000" fill-opacity="0.3">·</text>
+      <text x="1089" y="266" font-size="12" fill="#6D6D72">18,9 MB</text>
+
+      <!-- Action grid (redrawn 2026-09-13 as shipped since 2026-09-11): Open alone
+           on top, filled; then one row of equal buttons — Edit, Text, Shapes. No New
+           clip: a Photo capture is one asset. Each is 57pt tall, rx 9, a 16pt medium
+           glyph over an 11pt medium label; 8pt gaps. -->
+      <g id="actions">
+        <rect x="1014" y="286" width="272" height="57" rx="9" fill="#C36A00"/>
+        <g fill="none" stroke="#FFFFFF" stroke-width="1.8" data-symbol="arrow.up.forward.square">
+          <rect x="1142" y="298" width="16" height="16" rx="3.4"/><path d="M1147 309 l6-6 M1149.5 303 h3.5 v3.5" stroke-linecap="round"/>
+        </g>
+        <text x="1150" y="333" font-size="11" class="m" text-anchor="middle" fill="#FFFFFF">Open</text>
+
+        <rect x="1014" y="351" width="85.3" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="pencil">
+          <path d="M1049.5 376 l1-4.5 10.5-10.5 3.5 3.5 -10.5 10.5 z" stroke-linejoin="round"/>
+        </g>
+        <text x="1056.7" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Edit</text>
+
+        <rect x="1107.3" y="351" width="85.3" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="textformat">
+          <path d="M1140 375 l6-13 6 13 M1142 371 h8 M1154 375 h6" stroke-linecap="round"/>
+        </g>
+        <text x="1150" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Text</text>
+
+        <rect x="1200.7" y="351" width="85.3" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="circle.square">
+          <rect x="1235.3" y="362" width="16" height="16" rx="2.5"/><circle cx="1243.3" cy="370" r="4.5"/>
+        </g>
+        <text x="1243.3" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Shapes</text>
+      </g>
+
+      <line x1="1000" y1="424.5" x2="1300" y2="424.5" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- INFO + METADATA (2026-09-13, data model Milestone 1): a Photo project is one asset,
+           so no scope switch — the panel edits its one record. INFO is what the file said
+           (metadata-info.photo.narrow.svg); METADATA the IPTC Core record with its origins
+           (metadata-fields.file.narrow.svg: from file, edited here + revert on Title, nothing on
+           the empty rows). Keywords, the group's last row: the label the panel draws, "from
+           file", then the sidecar's seven keywords in the shared tag editor
+           (tag-field.imported.narrow.svg). Edit the component files, not this markup — see
+           components/README.md. The window edge catches the panel after Copyright; the
+           rest is reached by scrolling. -->
+      <image href="../components/metadata-info.photo.narrow.svg" x="1014" y="437" width="272" height="250"/>
+      <image href="../components/metadata-fields.file.narrow.svg" x="1014" y="701" width="272" height="1218"/>
+      <g id="keywords-row" data-field="keywords">
+        <text x="1014" y="1942.5" font-size="12" class="sb" fill="#6D6D72">Keywords</text>
+        <text x="1286" y="1942.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+        <image href="../components/tag-field.imported.narrow.svg" x="1014" y="1949.5" width="272" height="156"/>
+      </g>
+
+      <!-- metaRows on a 72pt label column — 12pt under the record groups; Storage is the
+           only one this project has (no AI elements, no field notes) -->
+      <g id="meta">
+        <text x="1014" y="2134.5" font-size="12" class="sb" fill="#6D6D72">Storage</text>
+        <text x="1096" y="2134.5" font-size="12" fill="#6D6D72">18,9 MB</text>
+      </g>
+
+      <line x1="1000" y1="2147" x2="1300" y2="2147" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- footer: four equal buttons, 20pt dividers, Delete tinted red -->
+      <g id="footer">
+        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line">
+          <path d="M1043 2168.5 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M1040 2173.5 h16" stroke-linecap="round"/>
+        </g>
+        <text x="1047.6" y="2187.5" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
+        <line x1="1081.75" y1="2171.5" x2="1081.75" y2="2191.5" stroke="#000" stroke-opacity="0.10"/>
+
+        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="square.and.arrow.up">
+          <path d="M1110 2167.5 v-8 M1106.5 2162.5 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M1104 2165.5 v8 h12 v-8"/>
+        </g>
+        <text x="1115.9" y="2187.5" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
+        <line x1="1150" y1="2171.5" x2="1150" y2="2191.5" stroke="#000" stroke-opacity="0.10"/>
+
+        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="folder">
+          <path d="M1176 2160.5 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/>
+        </g>
+        <text x="1184.1" y="2187.5" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text>
+        <line x1="1218.25" y1="2171.5" x2="1218.25" y2="2191.5" stroke="#000" stroke-opacity="0.10"/>
+
+        <g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash">
+          <path d="M1245 2162.5 h15 M1247 2162.5 v11 h11 v-11 M1250.5 2160.5 h4"/>
+        </g>
+        <text x="1252.4" y="2187.5" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
+      </g>
+      <!-- no BLENDED CLIPS section: a Photo project has no blends -->
     </g>
 
     <!-- ================= FLOATING TAB BAR (over all three panes) ================= -->
@@ -518,6 +450,6 @@
   </g>
 
   <rect x="20" y="20" width="1280" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
-  <text x="660" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · tag picker popover · 1280×800 pt window</text>
-  <text x="660" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">the shared tag editor on the Mac — the panel's TAGS field plus its picker popover, raised from “+ Add tag”</text>
+  <text x="660" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · grid mode, sidebar + preview · 1280×800 pt window</text>
+  <text x="660" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GalleryView.swift + GallerySidebar + GalleryGridContent + GalleryTile + GalleryPreviewPanel — the 760×680 default window cannot draw this header (see desc)</text>
 </svg>
