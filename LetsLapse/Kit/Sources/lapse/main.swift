@@ -493,7 +493,7 @@ do {
                              "assets": counts.assets, "hashed": counts.hashedAssets, "searchRows": counts.searchRows]
         if !asJSON {
             print("index: \(index.url.path)")
-            print("  built \(index.meta("builtAt") ?? "never") · projects \(counts.projects) (+\(counts.deletedProjects) deleted) · blends \(counts.blends) · assets \(counts.assets) (\(counts.hashedAssets) hashed) · search rows \(counts.searchRows)")
+            print("  built \(index.meta("builtAt") ?? "incrementally by the app") · projects \(counts.projects) (+\(counts.deletedProjects) deleted) · blends \(counts.blends) · assets \(counts.assets) (\(counts.hashedAssets) hashed) · search rows \(counts.searchRows)")
         }
         var consistent = true
         if verify {
