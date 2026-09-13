@@ -27,24 +27,29 @@ public enum MetadataReader {
     /// The whole record for the file at `url`. `sidecar` names the `.xmp` to
     /// lay on top; nil looks beside the file (`<name>.xmp`, `<name>.<ext>.xmp`).
     public static func read(fileAt url: URL, sidecar: URL? = nil) -> Result {
-        var metadata = AssetMetadata()
-        if let properties = imageIOProperties(at: url) {
-            metadata = self.metadata(fromImageIOProperties: properties)
-        }
-        if let packet = embeddedPacket(at: url) {
-            metadata = AssetMetadata.resolving(self.metadata(fromXMP: packet), over: metadata)
-        }
-        var source = sourceFile
-        let sidecarURL = sidecar ?? LightroomSidecar.sidecarURL(forRawFile: url)
-        if let sidecarURL, let packet = try? XMPPacket.read(contentsOf: sidecarURL) {
-            let fromSidecar = self.metadata(fromXMP: packet)
-            if !fromSidecar.isEmpty {
-                metadata = AssetMetadata.resolving(fromSidecar, over: metadata)
-                source = sourceSidecar
+        // ImageIO hands back autoreleased dictionaries and XMP data; a caller
+        // walking thousands of frames inside one dispatch block would keep
+        // every one of them until the block ends, so each read drains its own.
+        autoreleasepool {
+            var metadata = AssetMetadata()
+            if let properties = imageIOProperties(at: url) {
+                metadata = self.metadata(fromImageIOProperties: properties)
             }
+            if let packet = embeddedPacket(at: url) {
+                metadata = AssetMetadata.resolving(self.metadata(fromXMP: packet), over: metadata)
+            }
+            var source = sourceFile
+            let sidecarURL = sidecar ?? LightroomSidecar.sidecarURL(forRawFile: url)
+            if let sidecarURL, let packet = try? XMPPacket.read(contentsOf: sidecarURL) {
+                let fromSidecar = self.metadata(fromXMP: packet)
+                if !fromSidecar.isEmpty {
+                    metadata = AssetMetadata.resolving(fromSidecar, over: metadata)
+                    source = sourceSidecar
+                }
+            }
+            metadata.normalize()
+            return Result(metadata: metadata, source: source, sidecarURL: sidecarURL)
         }
-        metadata.normalize()
-        return Result(metadata: metadata, source: source, sidecarURL: sidecarURL)
     }
 
     // MARK: - Sources

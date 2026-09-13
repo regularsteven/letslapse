@@ -251,20 +251,30 @@ extension AppModel {
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard let self else { return }
+            // The manifest is read on the main actor; the walk that decides
+            // which projects need work stats every asset of every project
+            // and reads every `assets.ndjson`, so it runs off it.
             let projects = self.captures.sorted { self.addedAt($0) > self.addedAt($1) }
-            var queued = 0
-            for capture in projects {
-                let folder = self.projectFolderURL(for: capture)
-                let names = self.assetNames(for: capture)
-                guard !names.isEmpty else { continue }
-                let records = self.assetStore.records(inProjectFolder: folder)
-                let needsHash = !records.namesNeedingHash(among: names, in: folder).isEmpty
-                let needsMetadata = names.contains { AssetRecordStore.isSourceStill($0) && records[$0]?.imported == nil }
-                    && self.projectMetadata(for: capture)?.imported == nil
-                guard needsHash || needsMetadata else {
-                    self.assetStore.compactIfNeeded(inProjectFolder: folder)
-                    continue
+                .map { ($0.id, self.projectFolderURL(for: $0), self.assetNames(for: $0)) }
+            let store = self.assetStore
+            let needing = await Task.detached(priority: .background) { () -> [UUID] in
+                var needing: [UUID] = []
+                for (id, folder, names) in projects where !names.isEmpty {
+                    let records = store.records(inProjectFolder: folder)
+                    let needsHash = !records.namesNeedingHash(among: names, in: folder).isEmpty
+                    let needsMetadata = names.contains { AssetRecordStore.isSourceStill($0) && records[$0]?.imported == nil }
+                        && store.projectMetadata(inProjectFolder: folder)?.imported == nil
+                    if needsHash || needsMetadata {
+                        needing.append(id)
+                    } else {
+                        store.compactIfNeeded(inProjectFolder: folder)
+                    }
                 }
+                return needing
+            }.value
+            var queued = 0
+            for id in needing {
+                guard let capture = self.captures.first(where: { $0.id == id }) else { continue }
                 self.recordAssets(for: capture, extractMetadata: true, priority: .background, pausable: true)
                 queued += 1
             }

@@ -23,6 +23,20 @@ final class AssetHashTests: XCTestCase {
         try bytes.write(to: url)
         XCTAssertEqual(try AssetHash.sha256(of: url), AssetHash.sha256(of: bytes))
     }
+
+    func testEmptyFileAndMissingFile() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hash-\(UUID().uuidString).bin")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data().write(to: url)
+        XCTAssertEqual(
+            try AssetHash.sha256(of: url),
+            "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+        let missing = url.deletingLastPathComponent().appendingPathComponent("hash-missing-\(UUID().uuidString).bin")
+        XCTAssertThrowsError(try AssetHash.sha256(of: missing)) { error in
+            XCTAssertEqual((error as NSError).domain, NSPOSIXErrorDomain)
+            XCTAssertEqual((error as NSError).code, Int(ENOENT))
+        }
+    }
 }
 
 /// The per-asset record file: append, latest-wins, torn last line,

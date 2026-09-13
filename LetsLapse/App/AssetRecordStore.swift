@@ -6,19 +6,25 @@ import LetsLapseKit
 /// serial queue, so the panel's edit and the background hasher never
 /// interleave half-lines in one file.
 ///
-/// Two queues on purpose. `writeQueue` does nothing but short appends and
+/// Three queues on purpose. `writeQueue` does nothing but short appends and
 /// atomic rewrites, so an edit from the main actor (`update`, synchronous —
 /// an edit is durable when the call returns) waits on at most one line.
-/// `workQueue` does the slow part — hashing a 47 MB DNG, reading a raw's
-/// header — and hops to `writeQueue` with the finished record. The hasher is
-/// the W5 `HashBackfill`: utility QoS, one file at a time, resumable (a
-/// killed run resumes from whatever lines landed), and paused while the
-/// device is hot, on low power, or the library is busy shooting, rendering
-/// or transferring.
+/// `workQueue` does the slow part for a registration — hashing a 47 MB DNG,
+/// reading a raw's header — and hops to `writeQueue` with the finished
+/// record; the panel opens on that project next, so it runs at once.
+/// `backfillQueue` is the W5 `HashBackfill`'s: background QoS, one file at a
+/// time, resumable (a killed run resumes from whatever lines landed), and
+/// paused while the device is hot, on low power, or the library is busy
+/// shooting, rendering or transferring. Separate from `workQueue` because
+/// both are serial: on 2026-09-13 the first launch over the real library
+/// queued 256 projects on the one queue and a fresh import's records sat
+/// behind a 2315-frame walk — the panel said "Reading the files…" for as
+/// long as the walk took.
 final class AssetRecordStore: @unchecked Sendable {
 
     private let writeQueue = DispatchQueue(label: "com.regularsteven.letslapse.asset-records.write", qos: .utility)
     private let workQueue = DispatchQueue(label: "com.regularsteven.letslapse.asset-records.work", qos: .utility)
+    private let backfillQueue = DispatchQueue(label: "com.regularsteven.letslapse.asset-records.backfill", qos: .background)
     private let lock = NSLock()
     private var recordCache: [String: AssetRecords] = [:]
     private var projectCache: [String: ProjectMetadata?] = [:]
@@ -149,9 +155,11 @@ final class AssetRecordStore: @unchecked Sendable {
     ///
     /// `extractMetadata` is on for registration and the backfill's first
     /// pass over a project, off for a blend output (a render has no IPTC).
-    /// `pausable` is the backfill's flag: a registration-time job runs at
-    /// once — the import that started it is what `shouldPause` would see as
-    /// "busy", and the panel opens on that project next.
+    /// `pausable` is the backfill's flag, and picks its queue: a
+    /// registration-time job runs at once on `workQueue` — the import that
+    /// started it is what `shouldPause` would see as "busy", and the panel
+    /// opens on that project next — while the backfill's jobs line up on
+    /// `backfillQueue` behind each other, never in front of a registration.
     func recordAssets(
         inProjectFolder folder: URL,
         names: [String],
@@ -169,7 +177,8 @@ final class AssetRecordStore: @unchecked Sendable {
         busyFolders.insert(key)
         lock.unlock()
 
-        workQueue.async(qos: priority) { [self] in
+        let queue = pausable ? backfillQueue : workQueue
+        queue.async(qos: priority) { [self] in
             defer {
                 lock.lock()
                 busyFolders.remove(key)
@@ -193,26 +202,34 @@ final class AssetRecordStore: @unchecked Sendable {
                 while pausable, shouldPause() {
                     Thread.sleep(forTimeInterval: 5)
                 }
-                let url = folder.appendingPathComponent(name)
-                guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { continue }
-                var record = records[name] ?? AssetRecord(name: name)
-                if extractMetadata, Self.isSourceStill(name) {
-                    let read = MetadataReader.read(fileAt: url)
-                    record.imported = read.metadata.isEmpty ? nil : read.metadata
-                    record.importedSource = read.source
-                    record.importedAt = Date()
+                // One pool per file: the whole walk is one dispatch block,
+                // and whatever Foundation and ImageIO autorelease on the way
+                // (resource values, property dictionaries, XMP data) would
+                // otherwise live until the last frame — see `AssetHash`.
+                let stored: Bool = autoreleasepool {
+                    let url = folder.appendingPathComponent(name)
+                    guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return false }
+                    var record = records[name] ?? AssetRecord(name: name)
+                    if extractMetadata, Self.isSourceStill(name) {
+                        let read = MetadataReader.read(fileAt: url)
+                        record.imported = read.metadata.isEmpty ? nil : read.metadata
+                        record.importedSource = read.source
+                        record.importedAt = Date()
+                    }
+                    if record.hash == nil || record.bytes != Int64(size) {
+                        guard let hash = try? AssetHash.sha256(of: url) else { return false }
+                        record.hash = hash
+                        record.bytes = Int64(size)
+                        record.hashedAt = Date()
+                    }
+                    records.put(record)
+                    let line = record
+                    writeQueue.sync {
+                        try? AssetRecords.append(line, to: AssetRecords.url(inProjectFolder: folder))
+                    }
+                    return true
                 }
-                if record.hash == nil || record.bytes != Int64(size) {
-                    guard let hash = try? AssetHash.sha256(of: url) else { continue }
-                    record.hash = hash
-                    record.bytes = Int64(size)
-                    record.hashedAt = Date()
-                }
-                records.put(record)
-                let line = record
-                writeQueue.sync {
-                    try? AssetRecords.append(line, to: AssetRecords.url(inProjectFolder: folder))
-                }
+                guard stored else { continue }
                 lock.lock()
                 recordCache[key] = records
                 lock.unlock()
