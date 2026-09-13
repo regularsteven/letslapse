@@ -100,6 +100,20 @@ USAGE:
                             Exit 0 when consistent, 1 otherwise. Never writes.
       --json                Machine-readable report
       --plist FILE          A preferences plist copy to read the device id from
+      --rebuild-index       Instead: rebuild the manifest from every project's
+                            project.json (live and .trash) and diff it against
+                            the real library.json, record by record, in one
+                            canonical form (dates to the millisecond). Exit 0
+                            when identical. The Phase 2 dual-write check.
+      --out FILE            With --rebuild-index: also write the rebuilt
+                            manifest here (never into the library)
+
+  lapse project-diff <a.json> <b.json> [--ignore k1,k2]
+                            Diff two project.json documents (or one against an
+                            archive's manifest) in the same canonical form;
+                            --ignore drops top-level capture keys and the blend
+                            keys an install re-mints (id, captureID,
+                            outputFileName). Exit 0 when nothing differs.
 
   lapse metadata <image> [--json]               Read what an import would carry as the asset's
                             metadata record — IPTC Core / XMP fields, camera,
@@ -377,7 +391,28 @@ do {
     case "audit":
         let asJSON = takeFlag(["--json"])
         let plistPath = takeOption(["--plist"])
+        let rebuild = takeFlag(["--rebuild-index"])
+        let outPath = takeOption(["--out"])
         guard args.count == 1 else { fail("audit needs one library root (the folder holding Projects/, or Projects/ itself)") }
+        if rebuild {
+            let root = URL(fileURLWithPath: args[0])
+            let report = LibraryIndexRebuild.run(root: root)
+            if asJSON {
+                FileHandle.standardOutput.write(try LibraryIndexRebuild.json(report))
+                FileHandle.standardOutput.write(Data("\n".utf8))
+            } else {
+                print(LibraryIndexRebuild.text(report))
+            }
+            if let outPath {
+                let out = URL(fileURLWithPath: outPath)
+                if out.standardizedFileURL.path.hasPrefix(root.standardizedFileURL.path + "/") {
+                    fail("--out must point outside the library (\(root.path))")
+                }
+                try LibraryIndexRebuild.rebuiltManifest(root: root).write(to: out, options: .atomic)
+                printErr("wrote the rebuilt manifest to \(out.path)")
+            }
+            exit(report.identical ? 0 : 1)
+        }
         var options = LibraryAudit.Options()
         options.preferencesPlist = plistPath.map { URL(fileURLWithPath: $0) }
         let report = LibraryAudit.run(root: URL(fileURLWithPath: args[0]), options: options)
@@ -388,6 +423,43 @@ do {
             print(LibraryAudit.text(report))
         }
         exit(report.consistent ? 0 : 1)
+
+    case "project-diff":
+        let ignored = Set((takeOption(["--ignore"]) ?? "").split(separator: ",").map { String($0) })
+        guard args.count == 2 else { fail("project-diff needs two project.json paths") }
+        func load(_ path: String) throws -> [String: Any] {
+            guard let object = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [String: Any] else {
+                fail("\(path) is not a JSON object")
+            }
+            return object
+        }
+        let a = try load(args[0]), b = try load(args[1])
+        var found: [LibraryIndexRebuild.Difference] = []
+        var captureA = LibraryIndexRebuild.canonical(a["capture"] as? [String: Any] ?? [:])
+        var captureB = LibraryIndexRebuild.canonical(b["capture"] as? [String: Any] ?? [:])
+        for key in ignored { captureA[key] = nil; captureB[key] = nil }
+        found += LibraryIndexRebuild.differences(between: captureA, and: captureB, record: "capture")
+        // Blends pair up by position: an install re-mints their ids.
+        let blendsA = (a["blends"] as? [[String: Any]] ?? []).map(LibraryIndexRebuild.canonical)
+        let blendsB = (b["blends"] as? [[String: Any]] ?? []).map(LibraryIndexRebuild.canonical)
+        if blendsA.count != blendsB.count {
+            found.append(LibraryIndexRebuild.Difference(record: "blends", path: "", index: "\(blendsA.count) items", document: "\(blendsB.count) items"))
+        }
+        for (offset, pair) in zip(blendsA, blendsB).enumerated() {
+            var x = pair.0, y = pair.1
+            for key in ignored { x[key] = nil; y[key] = nil }
+            found += LibraryIndexRebuild.differences(between: x, and: y, record: "blend[\(offset)]")
+        }
+        if let va = a["formatVersion"] as? Int, let vb = b["formatVersion"] as? Int, va != vb {
+            printErr("note: formatVersion \(va) vs \(vb)")
+        }
+        if found.isEmpty {
+            print("IDENTICAL (ignoring \(ignored.sorted().joined(separator: ", ")))")
+        } else {
+            for difference in found { print("  \(difference.record) · \(difference.path.isEmpty ? "(record)" : difference.path): \(difference.index) → \(difference.document)") }
+            print("\(found.count) differences")
+        }
+        exit(found.isEmpty ? 0 : 1)
 
     case "slice":
         let outputPath = takeOption(["-o", "--output"])
