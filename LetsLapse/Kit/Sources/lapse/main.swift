@@ -126,6 +126,24 @@ USAGE:
       --offset N --limit N  The page (default 0, 30)
       --json                Machine-readable output
 
+  lapse import-lightroom <catalog.lrcat> --library <root> [options]
+                            Migrate a Lightroom Classic catalogue into a
+                            LetsLapse library (Part 2 §6). The catalogue is
+                            opened read-only and immutable, never written.
+                            Frames Lightroom edited inside Projects/<id>/source/
+                            get its ratings, captions, keywords, creator and
+                            place as their imported record; every other image
+                            becomes a project of its own, holding a COPY of the
+                            file — the original stays where it is. Projects the
+                            app adopts at its next launch (Phase 4). Actions go
+                            to <root>/Lightroom/migration.ndjson, so a re-run is
+                            idempotent. Refuses while the app holds the library.
+      --library ROOT        The LetsLapse storage root (required)
+      --dry-run             Plan and report; write nothing
+      --limit N             Create at most N projects (a trial run)
+      --force               Run even while the app holds the library's lock
+      --json                Machine-readable plan and report
+
   lapse project-diff <a.json> <b.json> [--ignore k1,k2]
                             Diff two project.json documents (or one against an
                             archive's manifest) in the same canonical form;
@@ -520,6 +538,41 @@ do {
             FileHandle.standardOutput.write(Data("\n".utf8))
         }
         exit(consistent ? 0 : 1)
+
+    case "import-lightroom":
+        let asJSON = takeFlag(["--json"])
+        let dryRun = takeFlag(["--dry-run"])
+        let force = takeFlag(["--force"])
+        let limit = takeOption(["--limit"]).flatMap(Int.init)
+        guard let libraryPath = takeOption(["--library"]) else { fail("import-lightroom needs --library <root>") }
+        guard args.count == 1 else { fail("import-lightroom needs one catalogue path") }
+        let catalogueURL = URL(fileURLWithPath: args[0])
+        var options = LightroomMigration.Options(root: URL(fileURLWithPath: libraryPath))
+        options.dryRun = dryRun
+        options.createLimit = limit
+        options.force = force
+        let catalogue = try LightroomCatalogue(at: catalogueURL)
+        let plan = try LightroomMigration.plan(catalogue: catalogue, options: options)
+        let report = try LightroomMigration.apply(plan, options: options, catalogueName: catalogueURL.lastPathComponent) { line in
+            if !asJSON { printErr(line) }
+        }
+        if asJSON {
+            let payload: [String: Any] = [
+                "catalogue": catalogueURL.path, "library": options.root.path, "dryRun": dryRun,
+                "plan": ["images": plan.catalogueImages, "attach": plan.attaches.count, "create": plan.creates.count,
+                         "alreadyCreated": plan.alreadyCreated.count, "skipped": plan.skipped.map { ["image": $0.image.id, "path": $0.image.path, "why": $0.why] },
+                         "pinned": plan.pinnedProjects.map(\.uuidString).sorted(),
+                         "rootFolders": plan.rootFolders.map { ["id": $0.id, "path": $0.absolutePath, "name": $0.name] }] as [String: Any],
+                "report": ["attached": report.attached, "attachedUnchanged": report.attachedUnchanged, "attachMissingFile": report.attachMissingFile,
+                           "projectRecordsWritten": report.projectRecordsWritten, "created": report.created,
+                           "createFailed": report.createFailed, "skipped": report.skipped, "seconds": report.seconds] as [String: Any],
+            ]
+            FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]))
+            FileHandle.standardOutput.write(Data("\n".utf8))
+        } else {
+            print(LightroomMigration.text(plan: plan, report: report, options: options))
+        }
+        exit(report.createFailed.isEmpty ? 0 : 1)
 
     case "project-diff":
         let ignored = Set((takeOption(["--ignore"]) ?? "").split(separator: ",").map { String($0) })

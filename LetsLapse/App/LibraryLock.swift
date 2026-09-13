@@ -17,31 +17,14 @@ import LetsLapseKit
 /// the lock. iOS runs one instance and takes no lock.
 enum LibraryLock {
 
-    struct Holder: Codable, Equatable {
-        var pid: Int32
-        var host: String
-        var build: String
-        var deviceID: UUID
-        var takenAt: Date
-        var heartbeatAt: Date
-    }
+    typealias Holder = LibraryLockRecord
 
     enum Outcome: Equatable {
         case acquired
         case heldBy(Holder)
     }
 
-    static let fileName = ".lock"
-    static let heartbeatInterval: TimeInterval = 60
-    static let staleAfter: TimeInterval = 5 * 60
-
-    static func url(projectsRoot: URL) -> URL {
-        projectsRoot.appendingPathComponent(fileName)
-    }
-
-    private static var thisHost: String {
-        ProcessInfo.processInfo.hostName
-    }
+    static let heartbeatInterval = LibraryLockRecord.heartbeatInterval
 
     private static var thisBuild: String {
         let info = Bundle.main.infoDictionary
@@ -50,33 +33,17 @@ enum LibraryLock {
         return "\(version) (\(build))"
     }
 
-    static func read(projectsRoot: URL) -> Holder? {
-        guard let data = try? Data(contentsOf: url(projectsRoot: projectsRoot)) else { return nil }
-        return try? NDJSONFile.makeDecoder().decode(Holder.self, from: data)
-    }
-
-    /// True when `holder` is a live claim: fresh, and — on this host — a
-    /// process that still exists.
-    static func isLive(_ holder: Holder, now: Date = Date()) -> Bool {
-        guard now.timeIntervalSince(holder.heartbeatAt) < staleAfter else { return false }
-        guard holder.host == thisHost else { return true }
-        if holder.pid == ProcessInfo.processInfo.processIdentifier { return false }
-        // `kill(pid, 0)` delivers nothing and reports whether the process
-        // exists (EPERM means it does, under another user).
-        return kill(holder.pid, 0) == 0 || errno == EPERM
-    }
-
     /// Takes the lock unless another instance holds it. Never throws: a
     /// lock that cannot be written (a read-only volume) is logged, and the
     /// library opens as if acquired — the persister will refuse the writes
     /// on its own terms.
     static func acquire(projectsRoot: URL) -> Outcome {
-        if let existing = read(projectsRoot: projectsRoot), isLive(existing) {
+        if let existing = Holder.read(projectsRoot: projectsRoot), existing.isLive() {
             return .heldBy(existing)
         }
         let now = Date()
         let holder = Holder(
-            pid: ProcessInfo.processInfo.processIdentifier, host: thisHost, build: thisBuild,
+            pid: ProcessInfo.processInfo.processIdentifier, host: Holder.thisHost, build: thisBuild,
             deviceID: DeviceIdentity.id, takenAt: now, heartbeatAt: now)
         write(holder, projectsRoot: projectsRoot)
         return .acquired
@@ -84,27 +51,26 @@ enum LibraryLock {
 
     /// Refreshes the heartbeat. Only the holder calls this.
     static func heartbeat(projectsRoot: URL) {
-        guard var holder = read(projectsRoot: projectsRoot),
-              holder.pid == ProcessInfo.processInfo.processIdentifier, holder.host == thisHost else { return }
+        guard var holder = Holder.read(projectsRoot: projectsRoot), isOurs(holder) else { return }
         holder.heartbeatAt = Date()
         write(holder, projectsRoot: projectsRoot)
     }
 
     /// Removes the lock if this process holds it.
     static func release(projectsRoot: URL) {
-        guard let holder = read(projectsRoot: projectsRoot),
-              holder.pid == ProcessInfo.processInfo.processIdentifier, holder.host == thisHost else { return }
-        try? FileManager.default.removeItem(at: url(projectsRoot: projectsRoot))
+        guard let holder = Holder.read(projectsRoot: projectsRoot), isOurs(holder) else { return }
+        try? FileManager.default.removeItem(at: Holder.url(projectsRoot: projectsRoot))
+    }
+
+    private static func isOurs(_ holder: Holder) -> Bool {
+        holder.pid == ProcessInfo.processInfo.processIdentifier && holder.host == Holder.thisHost
     }
 
     private static func write(_ holder: Holder, projectsRoot: URL) {
         do {
-            let encoder = NDJSONFile.makeEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try FileManager.default.createDirectory(at: projectsRoot, withIntermediateDirectories: true)
-            try encoder.encode(holder).write(to: url(projectsRoot: projectsRoot), options: .atomic)
+            try holder.write(projectsRoot: projectsRoot)
         } catch {
-            LLog("library lock: could not write \(url(projectsRoot: projectsRoot).path): \(error)")
+            LLog("library lock: could not write \(Holder.url(projectsRoot: projectsRoot).path): \(error)")
         }
     }
 }

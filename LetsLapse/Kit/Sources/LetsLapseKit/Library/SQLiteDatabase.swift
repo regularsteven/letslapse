@@ -26,20 +26,46 @@ final class SQLiteDatabase {
     private var handle: OpaquePointer?
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-    init(at url: URL) throws {
+    /// Opens (creating when absent) for reading and writing, in WAL mode.
+    convenience init(at url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try self.init(path: url.path, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX)
+        try execute("PRAGMA journal_mode=WAL")
+        try execute("PRAGMA synchronous=NORMAL")
+        try execute("PRAGMA foreign_keys=ON")
+    }
+
+    /// Opens an existing database read-only and `immutable`: no lock is
+    /// taken, no journal or WAL file is created or touched, and the file's
+    /// bytes are never changed — the way a Lightroom catalogue is read.
+    convenience init(readingImmutable url: URL) throws {
+        var components = URLComponents()
+        components.scheme = "file"
+        components.path = url.path
+        components.queryItems = [URLQueryItem(name: "immutable", value: "1"), URLQueryItem(name: "mode", value: "ro")]
+        guard let uri = components.string else { throw Failure(message: "bad path", code: SQLITE_MISUSE) }
+        try self.init(path: uri, flags: SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_FULLMUTEX)
+    }
+
+    private init(path: String, flags: Int32) throws {
         var db: OpaquePointer?
-        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
-        let rc = sqlite3_open_v2(url.path, &db, flags, nil)
+        let rc = sqlite3_open_v2(path, &db, flags, nil)
         guard rc == SQLITE_OK, let db else {
             let message = db.map { String(cString: sqlite3_errmsg($0)) } ?? "could not open"
             if let db { sqlite3_close(db) }
             throw Failure(message: message, code: rc)
         }
         handle = db
-        try execute("PRAGMA journal_mode=WAL")
-        try execute("PRAGMA synchronous=NORMAL")
-        try execute("PRAGMA foreign_keys=ON")
+    }
+
+    /// True when a table of that name exists.
+    func hasTable(_ name: String) -> Bool {
+        ((try? scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", [.text(name)])) ?? 0) ?? 0 > 0
+    }
+
+    /// The column names of a table.
+    func columns(of table: String) -> [String] {
+        (try? query("PRAGMA table_info(\(table))") { $0.text(1) ?? "" }) ?? []
     }
 
     deinit {
