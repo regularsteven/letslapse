@@ -25,17 +25,35 @@ struct GalleryTile: View {
     var isSelected: Bool
     var showsCircle = false
     var onTap: () -> Void
+    /// A tap ON the circle: toggles this tile in the selection without
+    /// touching the others — the circle invites exactly that, and a plain
+    /// click on the picture keeps meaning "this one" (2026-09-13).
+    var onToggle: () -> Void = {}
     var onOpen: () -> Void
+    /// A tap the tile was handed that landed OUTSIDE its own frame — in the
+    /// grid's gutter. On iOS a lazy grid's cells answer for the gutters
+    /// around them (measured 2026-09-13: 5–6 pt into a 12 pt gap, both
+    /// axes), so without this a click "between" two tiles opened one of
+    /// them; the grid treats it as a click on the background instead.
+    var onOutsideTap: () -> Void = {}
 
     @State private var blendCount: Int?
+    /// The tile's own size, for telling a gutter tap from one on the picture.
+    @State private var size: CGSize = .zero
 
     private var thumbnailURL: URL? { model.thumbnailURL(for: capture) }
     private var mediaKind: AppModel.MediaKind { model.mediaKind(for: capture) }
+    /// The project's grade, so the tile shows the look a preset put on it;
+    /// nil while there is none, which keeps the plain thumbnail cache's path.
+    private var grade: PhotoGrade? {
+        let grade = model.photoGrade(for: capture)
+        return grade.isIdentity ? nil : grade
+    }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             // Thumbnail
-            ProjectThumbnailView(url: thumbnailURL, kind: mediaKind, cornerRadius: 8)
+            ProjectThumbnailView(url: thumbnailURL, kind: mediaKind, cornerRadius: 8, grade: grade)
                 .aspectRatio(4 / 3, contentMode: .fit)
                 .overlay(selectionOverlay)
 
@@ -54,11 +72,26 @@ struct GalleryTile: View {
             if showsCircle {
                 selectionCircle
                     .padding(6)
+                    .contentShape(Rectangle())
+                    // The circle's own tap wins over the tile's, so it toggles
+                    // rather than re-selecting.
+                    .onTapGesture { onToggle() }
+                    .accessibilityElement()
+                    .accessibilityLabel(isSelected ? "Deselect" : "Select")
+                    .accessibilityAddTraits(.isButton)
             }
         }
-        // Single tap → selection (preview panel)
-        .onTapGesture(count: 1) {
-            onTap()
+        // Hit-test the tile's own frame, whatever its picture overflows.
+        .contentShape(Rectangle())
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+        // Single tap → selection (preview panel); a tap outside the frame
+        // (the gutter, see `onOutsideTap`) is the background's.
+        .onTapGesture(count: 1) { location in
+            if size != .zero, !CGRect(origin: .zero, size: size).insetBy(dx: -0.5, dy: -0.5).contains(location) {
+                onOutsideTap()
+            } else {
+                onTap()
+            }
         }
         // Double tap → open Hero
         .onTapGesture(count: 2) {
@@ -101,7 +134,6 @@ struct GalleryTile: View {
         }
         .frame(width: 22, height: 22)
         .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-        .accessibilityHidden(true)
     }
 
     // MARK: Badge labels

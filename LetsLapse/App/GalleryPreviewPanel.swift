@@ -184,7 +184,10 @@ struct GalleryPreviewPanel: View {
     // MARK: Thumbnail
 
     private var thumbnail: some View {
-        ProjectThumbnailView(url: thumbnailURL, kind: mediaKind, cornerRadius: 10)
+        let grade = model.photoGrade(for: capture)
+        return ProjectThumbnailView(
+            url: thumbnailURL, kind: mediaKind, cornerRadius: 10,
+            grade: grade.isIdentity ? nil : grade)
             .frame(height: 150)
             .frame(maxWidth: .infinity)
             .onTapGesture {

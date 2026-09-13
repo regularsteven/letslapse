@@ -33,9 +33,11 @@ struct GalleryView: View {
     @State private var showPreviewSheet  = false  // iPhone/compact only
     @State private var showBatchSheet    = false  // iPhone/compact only
     @State private var deleteFailure: String?
+    /// A tile the keyboard moved the selection to, for the grid to scroll to.
+    @State private var scrollTarget: UUID?
     #if os(macOS)
-    /// ⌘A — see `installSelectAllShortcut`.
-    @State private var selectAllMonitor: Any?
+    /// The Gallery's keys — see `installKeyboardShortcuts`.
+    @State private var keyMonitor: Any?
     @State private var hostWindow: NSWindow?
     #endif
 
@@ -146,8 +148,8 @@ struct GalleryView: View {
             }
             #if os(macOS)
             .background(WindowReader(window: $hostWindow))
-            .onAppear { installSelectAllShortcut() }
-            .onDisappear { removeSelectAllShortcut() }
+            .onAppear { installKeyboardShortcuts() }
+            .onDisappear { removeKeyboardShortcuts() }
             #endif
         }
         // iPhone/compact: sidebar sheet
@@ -226,6 +228,7 @@ struct GalleryView: View {
                         columnCount:  columnCount,
                         timelineMode: timelineMode,
                         selection:    $selection,
+                        scrollTarget: $scrollTarget,
                         onOpen: { path.append($0) }
                     )
                 }
@@ -258,6 +261,7 @@ struct GalleryView: View {
                     columnCount:  columnCount,
                     timelineMode: timelineMode,
                     selection:    $selection,
+                    scrollTarget: $scrollTarget,
                     onOpen: { path.append($0) }
                 )
             }
@@ -565,31 +569,97 @@ struct GalleryView: View {
     }
 
     #if os(macOS)
-    /// ⌘A selects every tile the sidebar and the search field leave visible.
-    /// A local key monitor rather than a `keyboardShortcut` button, because
-    /// that would take ⌘A away from a focused text field (the search field,
-    /// a metadata row); this steps aside while the first responder is text,
-    /// and answers only in the window the Gallery is in — an editor window's
-    /// ⌘A is not this one.
-    private func installSelectAllShortcut() {
-        guard selectAllMonitor == nil else { return }
-        selectAllMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-                  event.charactersIgnoringModifiers == "a",
-                  let window = event.window,
+    /// The Gallery's keyboard (2026-09-13): ⌘A selects every tile the sidebar
+    /// and the search field leave visible, ⌘D selects none, the arrows move
+    /// the selection to the neighbouring tile (⇧ grows the run by it instead),
+    /// and 0–5 set the star rating on every selected project — 0 clears it.
+    /// A local key monitor rather than `keyboardShortcut` buttons, because
+    /// those would take ⌘A and the digits away from a focused text field
+    /// (the search field, a metadata row); this steps aside while the first
+    /// responder is text, and answers only in the window the Gallery is in —
+    /// an editor window's keys are not this one.
+    private func installKeyboardShortcuts() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard let window = event.window,
                   !(window.firstResponder is NSTextView) else { return event }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let key = event.charactersIgnoringModifiers ?? ""
             let handled = MainActor.assumeIsolated { () -> Bool in
                 guard window === hostWindow else { return false }
-                selection.selectAll(sortedCaptures.map(\.id))
-                return true
+                if flags == .command, key == "a" {
+                    selection.selectAll(sortedCaptures.map(\.id))
+                    return true
+                }
+                if flags == .command, key == "d" {
+                    selection.deselectAll()
+                    return true
+                }
+                if let arrow = Self.arrow(for: event), flags.subtracting(.shift).isEmpty {
+                    moveSelection(arrow, extending: flags.contains(.shift))
+                    return true
+                }
+                if flags.isEmpty, key.count == 1, let digit = Int(key), (0...5).contains(digit),
+                   !selection.isEmpty {
+                    rateSelection(digit)
+                    return true
+                }
+                return false
             }
             return handled ? nil : event
         }
     }
 
-    private func removeSelectAllShortcut() {
-        if let selectAllMonitor { NSEvent.removeMonitor(selectAllMonitor) }
-        selectAllMonitor = nil
+    private static func arrow(for event: NSEvent) -> GalleryArrow? {
+        switch event.specialKey {
+        case .leftArrow?: return .left
+        case .rightArrow?: return .right
+        case .upArrow?: return .up
+        case .downArrow?: return .down
+        default: return nil
+        }
+    }
+
+    /// The grid as rows, the way it is drawn — the standard grid by its
+    /// column count, the timeline by its day groups five across.
+    private var gridRows: [[UUID]] {
+        if timelineMode {
+            return timelineGroups(sortedCaptures).flatMap {
+                GallerySelection.rows($0.captures.map(\.id), columns: timelineColumnCount)
+            }
+        }
+        return GallerySelection.rows(sortedCaptures.map(\.id), columns: max(2, columnCount))
+    }
+
+    /// An arrow: from the anchor (or the first tile, with nothing selected)
+    /// to its neighbour, selecting that alone — or, with ⇧, adding it.
+    private func moveSelection(_ arrow: GalleryArrow, extending: Bool) {
+        let rows = gridRows
+        guard let first = rows.first?.first else { return }
+        let from = selection.anchor ?? selection.ids.first
+        let target: UUID
+        if let from, let next = GallerySelection.neighbour(of: from, in: rows, arrow) {
+            target = next
+        } else if from == nil {
+            target = first
+        } else {
+            return
+        }
+        if extending { selection.add(target) } else { selection.select(only: target) }
+        scrollTarget = target
+    }
+
+    /// 1–5 stars on every selected project, 0 none — the same write the
+    /// panels' star rows make, project scope.
+    private func rateSelection(_ stars: Int) {
+        for capture in sortedCaptures where selection.ids.contains(capture.id) {
+            model.setMetadata(.integer(stars), for: .rating, on: capture, scope: .project)
+        }
+    }
+
+    private func removeKeyboardShortcuts() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
     }
     #endif
 

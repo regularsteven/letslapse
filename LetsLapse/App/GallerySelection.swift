@@ -33,6 +33,12 @@ struct GallerySelection: Equatable {
         anchor = id
     }
 
+    /// Adds `id` (⇧-arrow: the run grows by one) and makes it the anchor.
+    mutating func add(_ id: UUID) {
+        ids.insert(id)
+        anchor = id
+    }
+
     mutating func toggle(_ id: UUID) {
         if ids.contains(id) {
             ids.remove(id)
@@ -84,5 +90,47 @@ struct GallerySelection: Equatable {
         let set = Set(visible)
         ids = ids.intersection(set)
         if let anchor, !set.contains(anchor) { self.anchor = nil }
+    }
+}
+
+// MARK: - Keyboard geometry
+
+/// Which way an arrow key moves the selection.
+enum GalleryArrow {
+    case left, right, up, down
+}
+
+extension GallerySelection {
+    /// The tile an arrow lands on from `id`, given the grid as rows of ids in
+    /// reading order (a standard grid chunked by its column count; the
+    /// timeline's day groups each chunked by five). Left and right walk the
+    /// flattened order and stop at the ends; up and down keep the column,
+    /// clamped to the row above or below, and stop at the first and last
+    /// rows — no wrapping, as in Finder.
+    static func neighbour(of id: UUID, in rows: [[UUID]], _ arrow: GalleryArrow) -> UUID? {
+        guard let row = rows.firstIndex(where: { $0.contains(id) }),
+              let column = rows[row].firstIndex(of: id) else { return nil }
+        switch arrow {
+        case .left:
+            if column > 0 { return rows[row][column - 1] }
+            return row > 0 ? rows[row - 1].last : nil
+        case .right:
+            if column + 1 < rows[row].count { return rows[row][column + 1] }
+            return row + 1 < rows.count ? rows[row + 1].first : nil
+        case .up:
+            guard row > 0 else { return nil }
+            let above = rows[row - 1]
+            return above[min(column, above.count - 1)]
+        case .down:
+            guard row + 1 < rows.count else { return nil }
+            let below = rows[row + 1]
+            return below[min(column, below.count - 1)]
+        }
+    }
+
+    /// `ids` cut into rows of `columns`.
+    static func rows(_ ids: [UUID], columns: Int) -> [[UUID]] {
+        let width = max(1, columns)
+        return stride(from: 0, to: ids.count, by: width).map { Array(ids[$0..<min($0 + width, ids.count)]) }
     }
 }

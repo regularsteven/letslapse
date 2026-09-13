@@ -45,6 +45,10 @@ struct ProjectThumbnailView: View {
     /// caller: an outer clip tighter than this radius cuts through the
     /// already-rounded corner and leaves a notch of card showing through.
     var cornerRadius: CGFloat = 9
+    /// When set (and not identity), the tile renders through this grade —
+    /// the Gallery's tiles and its panel's hero, so a preset shows the moment
+    /// it lands (2026-09-13). Nil is the plain, file-keyed thumbnail.
+    var grade: PhotoGrade? = nil
     @State private var thumbnail: Image?
     /// Which asset `thumbnail` belongs to, so a reload for the *same* asset can
     /// keep the current image on screen while it runs.
@@ -70,7 +74,12 @@ struct ProjectThumbnailView: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .task(id: "\(url?.path ?? "-")|\(cache.generation)") {
+            // The clip trims the drawing, not the hit test: a 16:9 picture
+            // filling a 4:3 tile still took taps 19 pt into the gap either
+            // side of it, which is how a click "between" two Gallery tiles
+            // opened one of them (2026-09-13). The shape is the tile.
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .task(id: "\(url?.path ?? "-")|\(cache.generation)|\(grade?.cacheToken ?? "-")") {
                 // Only blank for a *different* asset. Re-requesting the same one
                 // (cache invalidated, or the row was rebuilt) used to clear here
                 // first, which turned any cache purge into a wall of gray tiles
@@ -82,7 +91,7 @@ struct ProjectThumbnailView: View {
                 guard let url else { return }
                 // nil means "no answer" — a failed decode or a cancelled load —
                 // so never overwrite an image already on screen with it.
-                if let image = await ProjectThumbnailCache.shared.thumbnail(for: url, kind: kind) {
+                if let image = await ProjectThumbnailCache.shared.thumbnail(for: url, kind: kind, grade: grade) {
                     thumbnail = image
                 }
             }

@@ -36,13 +36,12 @@ Select All, Deselect All, Done); the Mac's batch header, ticks and panel from
 
 Owed, in order:
 
-1. **Steven's verification on his Mac** of the three modifier paths —
-   ⌘-click toggling, ⇧-click selecting the run from the anchor, ⌘A selecting
-   the filtered grid (and stepping aside while the search field has focus).
-   They are plain `NSEvent.modifierFlags` reads inside the tile's tap and a
-   local key monitor scoped to the Gallery's window; none could be driven
-   from here (two same-bundle instances, and the screen-control approval
-   was not answered).
+1. ~~Steven's verification on his Mac of the modifier paths~~ — verified
+   2026-09-13. Added the same day on his review: arrow keys (⇧ grows the
+   run), ⌘D selects none, 0–5 rate the selection, the circle toggles without
+   clearing, a gutter click selects none, and tiles render through the grade
+   so a preset shows at once. The keys are Mac-only (the local monitor); an
+   iPad hardware keyboard gets none of them yet.
 2. **The SVG mirrors, after that** (Steven, 2026-09-13: code first, then the
    design files): the selection header on `macOS/gallery.svg`'s canvas and
    `iOS/gallery.portrait.svg`'s, the tiles' circles and ticks, the tile menu

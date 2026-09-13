@@ -29,6 +29,11 @@ final class ProjectThumbnailCache: ObservableObject {
     static let shared = ProjectThumbnailCache()
 
     private let cache = NSCache<NSURL, CGImage>()
+    /// Tile renders THROUGH a project's grade, keyed by file + grade token —
+    /// memory only, since the disk tier is keyed by the file alone and a
+    /// graded tile is not the file. What lets a Gallery tile change the
+    /// moment a preset lands on its project (2026-09-13).
+    private let gradedCache = NSCache<NSString, CGImage>()
     /// Sources that failed to decode, remembered so scrolling doesn't re-pay a
     /// doomed decode on every pass. Keys include the modification date, so a
     /// file that later appears or changes retries naturally.
@@ -62,7 +67,39 @@ final class ProjectThumbnailCache: ObservableObject {
         // Thumbnails are small, but hundreds of ~1 MB BGRA images is real
         // memory on a phone that is also running a camera — cap bytes too.
         cache.totalCostLimit = 96 * 1024 * 1024
+        gradedCache.countLimit = 200
+        gradedCache.totalCostLimit = 64 * 1024 * 1024
         observeMemoryPressure()
+    }
+
+    /// The thumbnail rendered through `grade` — a still through the grader,
+    /// a movie's poster frame through `VideoGrader.gradedFrame` — so a tile
+    /// shows the project as its hero and its export would. An identity grade
+    /// (or none) is the plain thumbnail; a render that fails falls back to it
+    /// too rather than leaving a gray tile. Renders are cached in memory by
+    /// file + grade token, so a scroll back over graded tiles costs nothing
+    /// and a new preset re-renders exactly the tiles it changed.
+    func thumbnail(for url: URL, kind: AppModel.MediaKind, grade: PhotoGrade?) async -> Image? {
+        guard let grade, !grade.isIdentity else {
+            return await thumbnail(for: url, kind: kind)
+        }
+        let key = "\(url.path)|\(grade.cacheToken)" as NSString
+        if let cached = gradedCache.object(forKey: key) {
+            return Image(decorative: cached, scale: 1)
+        }
+        let rendered = await MediaWorkQueue.shared.run { () -> CGImage? in
+            kind == .video
+                ? VideoGrader.gradedFrame(at: url, grade: grade, maxDimension: 480)
+                : PhotoGrader.render(
+                    url: url, preset: grade.preset, adjustments: grade.adjustments,
+                    rotationDegrees: grade.rotationDegrees,
+                    whiteBalance: grade.whiteBalance, maxDimension: 480)
+        }
+        guard let rendered, let image = rendered else {
+            return await thumbnail(for: url, kind: kind)
+        }
+        gradedCache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
+        return Image(decorative: image, scale: 1)
     }
 
     /// Returns a fitted thumbnail for `url`, decoding it only on the first
