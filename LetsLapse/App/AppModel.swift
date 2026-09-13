@@ -9590,8 +9590,9 @@ final class AppModel: ObservableObject {
             // lzfse barely shrinks video and stills, so the archive's own size
             // is a fair floor for what it will unpack to. Refusing here beats
             // filling the disk and failing somewhere in the middle.
+            try FileManager.default.createDirectory(at: ImportStaging.volumeURL, withIntermediateDirectories: true)
             let available = Int64(
-                (try? FileManager.default.temporaryDirectory
+                (try? ImportStaging.volumeURL
                     .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
                     .volumeAvailableCapacityForImportantUsage) ?? 0)
             if archiveBytes > 0, available < archiveBytes {

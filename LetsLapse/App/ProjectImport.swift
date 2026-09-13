@@ -150,45 +150,58 @@ final class LetsLapseAppDelegate: NSObject, NSApplicationDelegate {
 
 /// Where an archive is unpacked before it becomes a project.
 ///
+/// Under `<root>/Incoming/` since data model Phase 4 — the same folder the
+/// network transfer assembles in — rather than `temporaryDirectory`: the
+/// install moves the unpacked `source/` and `blends/` into `Projects/`, and
+/// on a custom root (the library on an external volume) a move out of
+/// `/var/folders` is a copy across volumes, which doubled the peak disk of
+/// every import and took minutes for a 16 GB project. On the library's own
+/// volume every move is a rename.
+///
 /// A finished import deletes its own tree, and so does a cancelled or failed
 /// one. A *killed* one cannot — force-quit, a crash, or a power cut leaves the
-/// whole partially-unpacked project sitting in the temporary directory, and for
-/// this app that is gigabytes, not kilobytes. macOS clears `/var/folders`
-/// eventually; "eventually" is not a good enough answer at this size, so the
-/// leftovers are swept at launch, the same way `CaptureSessionLogger` handles
-/// logs that outlived the process that wrote them.
+/// whole partially-unpacked project on disk, and for this app that is
+/// gigabytes, not kilobytes — so the leftovers are swept at launch, the same
+/// way `CaptureSessionLogger` handles logs that outlived the process that
+/// wrote them. The sweep still looks in the temporary directory too, for
+/// what a build from before this change left there.
 enum ImportStaging {
     private static let prefix = "lapse-import-"
 
     static func makeURL() -> URL {
-        FileManager.default.temporaryDirectory
+        StorageRoot.incomingRootURL
             .appendingPathComponent("\(prefix)\(UUID().uuidString)", isDirectory: true)
     }
+
+    /// The volume an archive will unpack onto — what the free-space check
+    /// has to ask.
+    static var volumeURL: URL { StorageRoot.incomingRootURL }
 
     /// Off the main thread — deleting several gigabytes is not instant, and
     /// nothing at launch is waiting on the answer.
     static func sweepOrphans() {
         DispatchQueue.global(qos: .utility).async {
             let fileManager = FileManager.default
-            let temporary = fileManager.temporaryDirectory
-            guard let entries = try? fileManager.contentsOfDirectory(
-                at: temporary,
-                includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey])
-            else { return }
+            for folder in [StorageRoot.incomingRootURL, fileManager.temporaryDirectory] {
+                guard let entries = try? fileManager.contentsOfDirectory(
+                    at: folder,
+                    includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey])
+                else { continue }
 
-            for entry in entries where entry.lastPathComponent.hasPrefix(prefix) {
-                let values = try? entry.resourceValues(
-                    forKeys: [.contentModificationDateKey, .isDirectoryKey])
-                guard values?.isDirectory == true else { continue }
-                // A second copy of LetsLapse can be running — a Debug build
-                // beside a Release one, which is the normal state of this
-                // project — and its live extraction writes into a tree that
-                // looks exactly like an abandoned one. An extraction touches
-                // its tree constantly, so anything untouched for a quarter of
-                // an hour is nobody's.
-                let modified = values?.contentModificationDate ?? .distantPast
-                guard Date().timeIntervalSince(modified) > 15 * 60 else { continue }
-                try? fileManager.removeItem(at: entry)
+                for entry in entries where entry.lastPathComponent.hasPrefix(prefix) {
+                    let values = try? entry.resourceValues(
+                        forKeys: [.contentModificationDateKey, .isDirectoryKey])
+                    guard values?.isDirectory == true else { continue }
+                    // A second copy of LetsLapse can be running — a Debug build
+                    // beside a Release one, which is the normal state of this
+                    // project — and its live extraction writes into a tree that
+                    // looks exactly like an abandoned one. An extraction touches
+                    // its tree constantly, so anything untouched for a quarter of
+                    // an hour is nobody's.
+                    let modified = values?.contentModificationDate ?? .distantPast
+                    guard Date().timeIntervalSince(modified) > 15 * 60 else { continue }
+                    try? fileManager.removeItem(at: entry)
+                }
             }
         }
     }

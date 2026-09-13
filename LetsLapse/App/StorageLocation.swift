@@ -99,16 +99,19 @@ enum StorageRoot {
     static var current: URL { defaultRootURL }
     #endif
 
-    /// Where a project arriving over the network is assembled before it becomes
-    /// a project.
+    /// Where a project arriving over the network — and, since Phase 4, a
+    /// `.lapse` archive being unpacked (`ImportStaging`) — is assembled before
+    /// it becomes a project.
     ///
     /// Inside the library root, NOT in `temporaryDirectory`, for two reasons.
     /// A partial transfer has to outlive the connection, the window and the app
-    /// — `ImportStaging` sweeps anything untouched for 15 minutes, which is
-    /// right for an archive being unpacked and fatal for 12 GB somebody is
-    /// half-way through rescuing off a phone. And being on the same volume as
-    /// the library is what makes the install a rename rather than a copy, which
-    /// is what keeps peak disk at 1× the project instead of 2×.
+    /// — `ImportStaging` sweeps its own `lapse-import-*` trees when untouched
+    /// for 15 minutes, which is right for an archive being unpacked and fatal
+    /// for 12 GB somebody is half-way through rescuing off a phone, so the
+    /// transfer trees (named by capture id) get 24 hours. And being on the
+    /// same volume as the library is what makes the install a rename rather
+    /// than a copy, which is what keeps peak disk at 1× the project instead
+    /// of 2×.
     ///
     /// `"Incoming"` is in `libraryItemNames` (macOS) so a storage-location
     /// change carries it: a half-finished transfer stranded on the old volume
