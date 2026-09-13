@@ -572,8 +572,13 @@ Everything lives under one storage root, JSON-manifested, human-inspectable. The
 <storage root>/                      # Application Support/LetsLapse by default
 ├── CaptureLogs/                     # crash-surviving per-shoot session logs (Settings ▸ Incomplete Captures)
 ├── Projects/
-│   ├── library.json                 # LibraryManifest: [CaptureProject] + [BlendProject] + [LapseCollection]
+│   ├── library.json                 # LibraryManifest: [CaptureProject] + [BlendProject] + [LapseCollection] — authoritative until Phase 3's switch
+│   ├── .lock                        # macOS: who has the library open (pid, host, build, heartbeat); a second instance opens read-only
+│   ├── .trash/<captureUUID>/        # deleted projects (tombstoned in the manifest) until Empty trash / the 30-day purge
 │   └── <captureUUID>/
+│       ├── project.json             # the project's own record: {formatVersion 2, capture, blends}; written on every persist; what a .lapse and a transfer carry
+│       ├── assets.ndjson            # one line per source frame / blend output: bytes, SHA-256, imported + edited metadata layers
+│       ├── metadata.json            # the project-level metadata record (imported + edited)
 │       ├── source/                  # the preserved original
 │       │   ├── original.mov         #   imported/recorded video, or
 │       │   ├── frame-00001.jpg …    #   interval/photo stills (JPEG), or
@@ -586,7 +591,13 @@ Everything lives under one storage root, JSON-manifested, human-inspectable. The
 │       └── blends/
 │           └── <blendUUID>.mp4|.png # one file per blended clip
 ├── Collections/
+│   ├── collections.json             # every collection (tombstoned included) as one document, so a manifest rebuilt from the folders keeps them
 │   └── <collectionUUID>/render.mp4  # the collection's kept export (instant re-export while its recipe matches)
+├── Index/
+│   └── library.sqlite               # the SQLite index (LibraryIndex): a CACHE rebuilt from every project.json / assets.ndjson / metadata.json; paged lists, tag counts, FTS5 search
+├── Incoming/                        # network transfers and .lapse archives assembled here, on the library's volume, so installs are renames
+├── Lightroom/
+│   └── migration.ndjson             # what `lapse import-lightroom` did (attached / created / pinned), the record that makes a re-run idempotent
 ├── Thumbnails/                      # disk JPEG thumbnail tier (path + mtime keyed)
 ├── Logs/
 │   └── liveblend-<timestamp>.json   # video-tap Live Blend session logs
@@ -610,6 +621,8 @@ Key model types (all `Codable`, in `App/AppModel.swift` unless noted):
 - `LapseCollection` (`App/CollectionsModel.swift`) — id, name, canvas ratio raw value (nil until the first clip sets it), ordered `Entry` list (blend id + in/out trim fractions + per-ratio collection-local crop offsets), and the kept export record (file name, date, recipe string). Clip-default crops live on `BlendProject.defaultCrops` (ratio raw → pan offset 0…1), so every collection without its own override follows the clip.
 - `LiveCaptureSequence` (`App/LiveCaptureSequence.swift`) — mode (ramp/marker), locked resolution, base and burst frame rates, segments with per-segment frame rate and time range, markers, ramp intervals.
 - `CustomPreset` (`App/CustomPreset.swift`) — id, name, base preset, adjustments; stored app-wide, not per project.
+
+**The data-model programme (2026-09, `docs/data-model-*.md`)** made the per-project files the truth-in-waiting and `library.json` a document the folders can reproduce: `lapse audit <root> --rebuild-index` reconstructs the manifest from every `project.json` (live and `.trash`) plus `Collections/collections.json` and diffs it against the real one — the check that must read IDENTICAL after any change to the persist path. At launch the app (1) takes or respects `Projects/.lock`, (2) loads the manifest — or, when it cannot be decoded, sets it aside and rebuilds it from the documents, (3) adopts any UUID folder under `Projects/` that has no record (from its own document, or as a "Recovered" project from its media), (4) sweeps the trash, (5) brings every `project.json` and `collections.json` up to the manifest and the SQLite index up to the files (a fresh or discarded index is rebuilt whole). Every persist goes through one version-gated `LibraryPersister`, which writes `library.json`, then the documents that changed, then their index rows. `lapse index <root>` reads or rebuilds the index headless; `lapse import-lightroom` migrates a Lightroom catalogue (read-only on the catalogue) into folders the app adopts.
 
 Preferences use `UserDefaults` under `letslapse.*` keys (defaults, performance knobs, burst-ramp defaults, resolution allowlists), `letslapse.capture.*` (remembered recording settings), and a few view-owned `@AppStorage` keys (`gallery.columnCount`, `capture.captureFlat`, `camera.appleLogEnabled`). Deletion is guarded (can't delete the project that's mid-blend; blend files are path-validated to live inside their project before removal), and cache cleanup recognizes temp prefixes (`live-capture`, `picked-`, `import-`, `LetsLapse-graded-`, `graded-`, …).
 

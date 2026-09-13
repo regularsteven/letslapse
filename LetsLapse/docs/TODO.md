@@ -433,6 +433,69 @@ path was verified; the transfer shares the installer); the ten
 after-audit on both real libraries once a build with the backfill has run
 against them (the Mac volume was audited unchanged after M1 — no build ran
 against it). The W7 banner and the Settings ▸ Storage Trash row were mirrored
+
+**Phase 2 landed 2026-09-13** (commits 40fcbb1 → 864a637, one per work item):
+W1 every persist also writes `Projects/<id>/project.json` (`ProjectDocument`,
+format 2, ISO-8601 to the millisecond, slashes unescaped) — `ProjectDocumentWriter`
+on the persister's queue rewrites only the documents that differ from the last
+written, a tombstoned project's document follows its folder into `.trash`, the
+one-time launch pass (`reconcileDocuments`) brought 258 documents up in 0.07 s and
+confirms them in 0.03 s on the next launch; `project.json` is registered in
+`ProjectFileRegistry` (kept out of `travellingRootFiles` because the installer
+reads and re-keys it). W2 `lapse audit --rebuild-index` reconstructs the manifest
+from the documents (live + `.trash`) and diffs it in canonical form; `lapse
+project-diff` for two documents. W3 export and transfer send the on-disk document
+after one `persistAndWait`; the `.lapse` round trip differs only in `id`,
+`importedFromID`, `addedAt` and the blend re-keying. The `ProjectArchiveManifest`
+type is gone; the installer accepts formats 1 and 2. Mac → iPhone → Mac transfer
+round trip still owed (needs a device install — ask first).
+
+**Phase 3 landed 2026-09-13** (c91f8c4, fb02c62): Kit `LibraryIndex` over the
+system SQLite at `<root>/Index/library.sqlite` — a cache rebuilt from every
+`project.json`, `assets.ndjson` and `metadata.json` (258 projects in 0.13 s;
+`verify` proves deleting it loses nothing): one row per project / blend / asset,
+FTS5 over names, titles, captions, keywords, tags, elements, creator, place and
+camera; `projects(query)` pages by capture / added / edit / size / name with
+kind, scanner, chip-tag and text filters; `search`, `tagCounts`. The app keeps it
+current (document writes upsert, asset-record writes re-index once per job, a
+fresh database is rebuilt at launch, a stale row re-indexed by file date) and
+`lapse index <root>` reads or rebuilds it headless. **Still open from Phase 3 —
+the read-side switch:** the grids and the Projects search still render from
+`AppModel.captures` / `SceneQuery` (substring matching). Making `captures` a
+window over `LibraryIndex.projects(query)` and the search FTS-backed is a UI
+milestone of its own: the seams are `ProjectsView` (sort + `CaptureFilter` +
+`SceneQuery` → one `ProjectQuery`), `GalleryView.sortedCaptures`, the transfer
+picker, and every `captures.first { $0.id == … }` lookup that would become
+`project(id:)` + a document read; FTS prefix matching changes what a typed word
+finds, so it needs Steven's call and a design pass on the search field.
+
+**Phase 4 landed 2026-09-13** (78becec, 7af6901, 70a4f6f): `Collections/
+collections.json` (every collection, tombstoned included) so a manifest rebuilt
+from the folders keeps them; the W7 dead end became a repair — an undecodable
+`library.json` is set aside AND rebuilt from the documents, the library carries
+on, the banner tells the story (a manifest with one capture's `kind` corrupted
+came back with all 258 records, 140 blends and the collection); launch
+reconciliation from folders — a UUID folder with no record is adopted from its
+own document (live even when the document is tombstoned: a folder dragged out of
+`.trash` is a folder someone wants back), a folder with media but no document is
+registered as "Recovered · <id>", an empty folder and a record without a folder
+are logged; `Projects/.lock` on macOS (pid, host, build, heartbeat) — a second
+instance opens read-only with the banner, a dead holder is taken over — plus a
+foreground check that `library.json` was not written by something else; `.lapse`
+archives unpack under `Incoming/` so installs are renames on a custom root. The
+`LibraryNoticeBanner` now has three stories — **SVG mirrors for the rebuilt and
+read-only stories owed after sign-off**. **The first launch of this build against
+`/Volumes/letslapse` will adopt the 3 orphan folders (44623568, 5968F261,
+894519E4) as "Recovered" projects** — keep or trash them from the list.
+
+**`lapse import-lightroom` landed 2026-09-13** (a16b242) — see the entry below.
+Owed across the programme: the device checks from M2; the transfer round trip;
+the `.hasSuffix(".json")` filters (one release after W4 — not yet); the iPhone
+library's after-audit (the Mac volume's is in `docs/data-model-audit-reports/
+mac-after-backfill-2026-09-13.txt`: hash coverage 100 %, `.json` names 0,
+origins 258/258). One pre-existing Kit test fails unrelated to this work:
+`ShapeDetectionModeTests.testExternalEnginesKnowTheirRigDetector` (a set-order
+assertion in the shape-detection area).
 2026-09-13 after sign-off: `components/library-banner.unreadable.*` placed by
 iOS `create-home.library-unreadable.portrait.svg`, and iOS
 `settings.storage.portrait.svg` (the Mac shares both — INDEX rows say how).
@@ -468,8 +531,29 @@ read-only `lapse import-lightroom` tool that attaches per-frame metadata to
 existing projects and creates Photo projects for the ~3,800 standalone images.
 **2026-09-13:** the metadata half shipped as Milestone 1 of the Phase 1 work
 (see the entry above) — per-asset lines in `assets.ndjson` + `metadata.json`,
-the mapping table, the reader, the panel. Still open here: the SQLite index
-(Phase 3) and the Lightroom tool.
+the mapping table, the reader, the panel. **Later the same day:** the SQLite
+index shipped as Phase 3 (Kit `LibraryIndex`, `lapse index`; the app's read-side
+switch to paged queries is the open half — see the entry above) and the
+Lightroom tool as `lapse import-lightroom <catalog> --library <root> [--dry-run]
+[--limit N] [--force]` (commit a16b242): read-only and `immutable` on the
+catalogue; frames inside `Projects/<id>/source/` get the catalogue's rating,
+caption, copyright, creator, place, keywords, capture time, camera and exposure
+as their `imported` layer over the file's own (a person's `edited` layer is never
+touched); every other still or movie becomes a project folder holding a COPY of
+the file plus its record, `metadata.json` and a `project.json` (develop settings
+→ the whole-picture grade through `LightroomImport`, keywords → tags) that the
+app adopts at its next launch; collections become a keyword each; the pinned
+projects and every action go to `<root>/Lightroom/migration.ndjson`, which makes
+a re-run idempotent; it refuses while the Mac app holds the library's lock. Four
+Kit tests over a synthetic catalogue with Lightroom's own table names. **Not yet
+run on the real catalogue** — by instruction it was not opened this session;
+the run is Steven's: `--dry-run` first (it lists the root folders and which
+LetsLapse projects they are), then `--limit 20` as a trial, then the whole
+thing with the Mac app quit, then a launch to adopt the created projects and
+`lapse audit --rebuild-index` / `lapse index --verify` after. Part 2 §6's
+verification (per-root counts, the four example files, an export read back
+through ImageIO and Lightroom) is owed with that run; metadata EXPORT (record →
+XMP in exports) is still not built, so the last of those cannot pass yet.
 
 ### Shape-mation · Match, Sort and Timing — shipped 2026-09-11, owed follow-ups
 
