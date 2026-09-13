@@ -489,6 +489,13 @@ read-only stories owed after sign-off**. **The first launch of this build agains
 894519E4) as "Recovered" projects** — keep or trash them from the list.
 
 **`lapse import-lightroom` landed 2026-09-13** (a16b242) — see the entry below.
+**Handover brief for the switch (documents as the truth, SQLite as the index,
+`library.json` retired) written 2026-09-13:**
+[data-model-switch-brief-2026-09-13.md](data-model-switch-brief-2026-09-13.md)
+— the evidence that the ground is ready, the reading order, the five
+milestones (M1 truth flips → M2 read side over the index → M3 no arrays → M4
+retire `library.json` → M5 the `apply(change)` funnel and journal) with their
+acceptance tests, the rules, the recipes, the traps and the decisions to take.
 Owed across the programme: the device checks from M2; the transfer round trip;
 the `.hasSuffix(".json")` filters (one release after W4 — not yet); the iPhone
 library's after-audit (the Mac volume's is in `docs/data-model-audit-reports/
