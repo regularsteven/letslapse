@@ -423,11 +423,25 @@ header `originID`, registration keeps it); W11 `NDJSONWriter` + the `.ndjson`
 experiment log with the document written once at finish, logs pruned to 50; W12
 `.jobs/` scratch with relative paths and removal at completion, branded
 `LetsLapse-Models`, `.gps-backup` sweep. DEBUG hooks added: `LL_IMPORT_ARCHIVE`,
-`LL_EXPORT_ARCHIVE`, `LL_DELETE`. **Owed from M2:** the on-device checks the
-spec asks for (W10's `capture_log.json.sessionID == id == originID` after an
-interval run; W11's linear write volume and a killed run's parseable `.ndjson`;
-W5's backfill pausing under thermal pressure) — a Release run on the iPhone 16
-Pro once Steven says so; the Mac → iPhone → Mac transfer round trip (the archive
+`LL_EXPORT_ARCHIVE`, `LL_DELETE`. **On-device checks done 2026-09-13** on
+Steven's iPhone 16 Pro (Release build he installed; driven over the remote
+link with `shoot.py`, evidence pulled with `devicectl … copy from`): **W10 ✓** —
+after a 60 s Basic interval run (2 s, 5-frame blend, 30 outputs) the project
+`EB0F1B6A` has `capture_log.json.sessionID == capture.id == originID`, its
+`originDeviceID` is the id the launch printed, no `.json` names, and its 30
+assets were hashed + read at registration within 0.4 s; a run killed at
+window 13 left an orphan `CaptureLogs/capture-C449EE1E….log` whose
+`capture_start.projectID` (`F9A1AFA7…`) names both its staging folder
+`tmp/liveblend-F9A1AFA7…` (13 frames) and its experiment log's `originID`.
+**W11 ✓** — the finished run's `liveblend-…150123.ndjson` (header + 30 outputs
++ summary) rebuilds its `.json` document field-for-field; the killed run's
+`liveblend-…150515.ndjson` is 14 parseable lines (header + 13 outputs), ends
+on a newline, and has no `.json` — exactly the shape a crash leaves. **W5's
+thermal pause was NOT exercised:** the phone's library is fully recorded, so
+there is nothing left for a backfill to pause on, and heating the device on
+purpose is a bench session of its own; the pause loop also fires on "library
+busy", which the registration path (never paused) was verified around. Still
+owed: the Mac → iPhone → Mac transfer round trip (the archive
 path was verified; the transfer shares the installer); the ten
 `.hasSuffix(".json")` filters come out one release after W4; the Phase 1 §5
 after-audit on both real libraries once a build with the backfill has run
