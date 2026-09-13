@@ -98,6 +98,16 @@ extension AppModel {
                 }
             }
         }
+        // A project tagged before the records existed (every project in the
+        // library on 2026-09-13 — auto-tagged or typed) holds its keywords
+        // only in the manifest's `sceneTags`. They are this app's own work,
+        // so they read as edited here; the first edit through the panel
+        // writes them into the project record for good.
+        if value.keywords == nil,
+           let tags = captures.first(where: { $0.id == capture.id })?.sceneTags, !tags.isEmpty {
+            value.keywords = tags
+            origins[.keywords] = .edited(.project)
+        }
         let source: String?
         if case .frame(let name) = scope { source = records[name]?.importedSource ?? project?.importedSource }
         else { source = project?.importedSource ?? single?.importedSource }
