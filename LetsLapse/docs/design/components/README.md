@@ -280,6 +280,7 @@ TAGS, then the scope switch, INFO and METADATA — `macOS/gallery.svg`, `gallery
 | `metadata-info` | the read-only group: `LLSectionHeader` INFO, then a 72 pt label column and the value, 25 pt per single-line row, 14.5 pt per extra line. Rows exist only when the resolved record has them; GPS carries the Open in Maps link | under the scope switch (or the divider) |
 | `metadata-fields` | the editable group: `LLSectionHeader` METADATA, then Title, Caption, Creator, Copyright, Rating, Copyright status, Copyright URL, Usage terms, the Creator contact block (Address … Website) and the Location block (Sublocation … Country code), rows 10 pt apart | under INFO; nothing after it since 2026-09-13's later pass (the Keywords row moved up to the TAGS block) |
 | `tag-field.imported` | the tag editor with the seven keywords a file carried | the TAGS block of a project whose keywords came from its files (until 2026-09-13's later pass, METADATA's Keywords row) |
+| `metadata-fields.mixed` | the same record read over SEVERAL selected projects — every row "Mixed" until they agree, no marker where the provenance differs, Rating with "Mixed" after the stars, Copyright status a borderless accent menu | the Gallery **batch panel** (`macOS/gallery.batch.svg`, `iOS/gallery.batch-sheet.portrait.svg`), 2026-09-13 |
 
 **Origins, per row.** Every METADATA row says where its value came from, 10 pt medium at the
 trailing edge of the label line: **from file** (black at 30%) when the value is the file's own —

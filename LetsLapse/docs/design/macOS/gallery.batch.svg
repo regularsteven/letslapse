@@ -1,0 +1,446 @@
+<svg viewBox="0 0 1320 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Gallery · batch mode — three projects selected, the batch panel · 1280×800</title>
+  <desc>Mirrors App/GalleryView.swift (selectionHeader, the batch pane) + App/GalleryGridContent.swift (tap(_:order:), the selection circles) + App/GalleryTile.swift (selectionCircle) + App/GalleryBatchPanel.swift + App/GallerySelection.swift — gallery.svg's window with THREE tiles selected (2026-09-13, code first, mirrored after Steven's verification on his Mac): tile 1 clicked, tiles 2 and 6 ⌘-clicked. SELECTION: `GallerySelection` is a set with an anchor (the last plain or ⌘ click) and a selecting flag. On the Mac a plain click selects one tile, ⌘-click toggles a tile, ⇧-click adds the run from the anchor to the clicked tile in the grid's own order (the timeline's day groups included), ⌘A selects every tile the sidebar and the search field leave visible, ⌘D selects none; the arrows move the selection to the neighbouring tile (up and down keep the column, ⇧ grows the run) and the grid scrolls it into view; 0–5 rate every selected project, 0 clearing the rating — all from a local key monitor scoped to the Gallery's window that steps aside while a text field is first responder. The tile menu (gallery.menu.svg) adds Select Multiple, which puts the empty circle on every tile so tap after tap adds to the selection, and Select All. More than one tile selected — or Select Multiple on — is BATCH MODE: the header row becomes Done · "3 selected" · Select All (Deselect All once every visible tile is in) and search, sort, zoom and Timeline are gone; every tile wears its circle, ticked where selected, and a click on the circle toggles that tile without touching the rest. A click in a gutter or the margin selects none. THE BATCH PANEL takes the pane the preview panel had: "3 projects" 16 pt bold over "Changes here apply to every selected project." 12 pt secondary, a divider, then the three groups the single panel leads with, read over the selection — TAGS as the union of the projects' keywords, a solid chip (accent, xmark) for a tag on every project and a MIXED chip (accent at 13 %, LL.accentDeep text, the count 11 pt at 70 %) for a tag on some: the xmark takes the tag off every project, the body of a mixed chip puts it on every project, + Add tag raises the shared picker over the tags on all so anything it adds lands on all; PRESETS as the collapsed disclosure row with the pill reading the common state or "Mixed" (grey, styled as Edited) — open, it is gallery.presets.svg's grid previewed on the FIRST selected project with a "Previewed on River Sunset to Dusk" 11 pt caption under it, a tile tap applying the preset to every selected project through AppModel.applyPreset / applyCustomPreset (each keeps its own rotation, crop and owned white) after a confirmation that counts the Edited ones ("1 of the 3 selected projects carries manual adjustments, which the Cinema preset will replace; the rest simply take the preset. There's no undo."); METADATA as components/metadata-fields.mixed.narrow.svg — every row the value the projects agree on or "Mixed", a commit writing all of them, a revert reverting all of them. No INFO (nothing the files said is true of several files), no meta rows, no footer, no clips list. Tiles render through each project's grade (ProjectThumbnailCache.thumbnail(for:kind:grade:)), so a preset applied here shows in the grid at once. STATES NOT DRAWN: Select Multiple with nothing selected (the header reads "Select projects", every circle empty, no pane — iOS/gallery.selecting.portrait.svg draws it); the batch panel with PRESETS open; the batch preset confirmation; the picker over the batch field. Hooks: LL_TAB=gallery LL_SELECT=all|multiple|&lt;uuid&gt;,&lt;uuid&gt; (LL_PANEL=presets opens the row). Verified 2026-09-13 on the Mac Debug build over a scratch library and by Steven on his own Mac (⌘/⇧-click, ⌘A).</desc>
+
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1280" height="800" rx="11"/></clipPath>
+    <clipPath id="grid"><rect x="221" y="101" width="778" height="719"/></clipPath>
+    <clipPath id="searchclip"><rect x="457" y="57" width="168" height="34"/></clipPath>
+    <clipPath id="t1"><rect x="235" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t2"><rect x="489" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t3"><rect x="743" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t4"><rect x="235" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t5"><rect x="489" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t6"><rect x="743" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t7"><rect x="235" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t8"><rect x="489" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t9"><rect x="743" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t10"><rect x="235" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t11"><rect x="489" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t12"><rect x="743" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="hero"><rect x="1014" y="70" width="272" height="150" rx="10"/></clipPath>
+
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
+    </linearGradient>
+    <linearGradient id="dawn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7E9AB8"/><stop offset="0.6" stop-color="#E4C39A"/><stop offset="1" stop-color="#F7E6C8"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9BB0C4"/><stop offset="1" stop-color="#D8C6AE"/>
+    </linearGradient>
+    <linearGradient id="fog" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C7CFD6"/><stop offset="1" stop-color="#8E9AA4"/>
+    </linearGradient>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#131A2A"/><stop offset="1" stop-color="#2E3348"/>
+    </linearGradient>
+    <linearGradient id="storm" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A5464"/><stop offset="1" stop-color="#A9A08E"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B7A272"/><stop offset="1" stop-color="#4E5A63"/>
+    </linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="7.5" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1280" height="800" fill="#F2F2F7"/>
+
+    <!-- Window chrome. The title is "Gallery", not "LetsLapse": GalleryView's
+         macOS branch sets .navigationTitle, which retitles the main Window. -->
+    <g id="titlebar">
+      <rect x="20" y="20" width="1280" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="660" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Gallery</text>
+    </g>
+
+    <!-- ================= SIDEBAR (GallerySidebar, fixed 200pt) ================= -->
+    <g id="sidebar">
+      <rect x="20" y="48" width="200" height="772" fill="#F2F2F7"/>
+
+      <text x="38" y="75" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">LIBRARY</text>
+
+      <!-- All (selected) -->
+      <rect x="24" y="81" width="192" height="31" rx="8" fill="#C36A00" fill-opacity="0.10"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.6" data-symbol="square.grid.2x2">
+        <rect x="41" y="90" width="6" height="6" rx="1.4"/><rect x="49" y="90" width="6" height="6" rx="1.4"/>
+        <rect x="41" y="98" width="6" height="6" rx="1.4"/><rect x="49" y="98" width="6" height="6" rx="1.4"/>
+      </g>
+      <text x="68" y="101" font-size="14" fill="#C36A00">All</text>
+
+      <!-- Photos -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="photo">
+        <rect x="40" y="124" width="16" height="12" rx="2"/><circle cx="45" cy="128.5" r="1.6"/>
+        <path d="M41 134 l5-4 4 3 3-2 3 3"/>
+      </g>
+      <text x="68" y="134" font-size="14" fill="#000">Photos</text>
+
+      <!-- Interval -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="square.stack">
+        <rect x="41" y="155" width="14" height="10" rx="2"/>
+        <path d="M42.5 168 h11 M44.5 171 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="167" font-size="14" fill="#000">Interval</text>
+
+      <!-- Video -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="film">
+        <rect x="40" y="189" width="16" height="12" rx="2"/>
+        <path d="M43.5 189 v12 M52.5 189 v12" stroke-width="1.1" opacity="0.8"/>
+      </g>
+      <text x="68" y="200" font-size="14" fill="#000">Video</text>
+
+      <line x1="32" y1="231" x2="208" y2="231" stroke="#000" stroke-opacity="0.10"/>
+
+      <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">TAGS</text>
+
+      <circle cx="37.5" cy="288" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="293" font-size="14" fill="#000">Water</text>
+      <circle cx="37.5" cy="319" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="324" font-size="14" fill="#000">Sky &amp; weather</text>
+      <circle cx="37.5" cy="350" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="355" font-size="14" fill="#000">Urban</text>
+      <circle cx="37.5" cy="381" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="386" font-size="14" fill="#000">Landmark</text>
+      <!-- 2026-09-08: a hand-typed tag is a first-class member of this list. Today
+           SceneSearch.availableTags filters the library's tags through
+           SceneMetadata.orderedTaxonomy, which would drop it silently — that filter
+           has to widen with the editor, or a tag the user created is searchable and
+           invisible here. -->
+      <circle cx="37.5" cy="412" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="417" font-size="14" fill="#000">Rooftops</text>
+
+      <line x1="32" y1="447" x2="208" y2="447" stroke="#000" stroke-opacity="0.10"/>
+
+      <text x="38" y="480" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">COLLECTIONS</text>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="rectangle.stack">
+        <rect x="41" y="494" width="14" height="10" rx="2"/>
+        <path d="M42.5 507 h11 M44.5 510 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="506" font-size="14" fill="#000">All Collections</text>
+
+      <line x1="32" y1="537" x2="208" y2="537" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- SHAPES (2026-09-11): GallerySidebar.shapesSection — the four ShapeFilter rows,
+           drawn as LibraryFilterRow like the kind rows above. A project shows under
+           Ellipse / Rectangle / Square when its shapes.json register holds one (found by
+           Find shapes or drawn in the Masks tab) and under No Shapes when it holds none or
+           has no register. Rows narrow like the tag rows (a project must hold every lit
+           shape); No Shapes stands alone — lighting it clears the others. A lit row draws
+           as All does above: #C36A00 @ 10% capsule (x 24, 192×31, rx 8), accent glyph and
+           label; while any row is lit a 12pt semibold "Clear shapes" link in #C36A00 sits
+           14pt in, 4pt under the last row. All four rows are always offered — an empty row
+           is the prompt to run Find shapes, not a dead control. -->
+      <text x="38" y="570" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">SHAPES</text>
+
+      <!-- Ellipse -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="oval">
+        <ellipse cx="48" cy="591" rx="8" ry="5.5"/>
+      </g>
+      <text x="68" y="596" font-size="14" fill="#000">Ellipse</text>
+
+      <!-- Rectangle -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="rectangle">
+        <rect x="40" y="618.5" width="16" height="11" rx="2"/>
+      </g>
+      <text x="68" y="629" font-size="14" fill="#000">Rectangle</text>
+
+      <!-- Square -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="square">
+        <rect x="42" y="650.5" width="12" height="12" rx="2"/>
+      </g>
+      <text x="68" y="662" font-size="14" fill="#000">Square</text>
+
+      <!-- No Shapes -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="circle.slash">
+        <circle cx="48" cy="690" r="7"/>
+        <path d="M43 685 L53 695"/>
+      </g>
+      <text x="68" y="695" font-size="14" fill="#000">No Shapes</text>
+    </g>
+
+    <line x1="220.5" y1="48" x2="220.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= HEADER (galleryHeader, 52pt) ================= -->
+    <!-- The selection row (GalleryView.selectionHeader, 2026-09-13) in the header's
+         52 pt band: Done 15 pt semibold accent leading, "N selected" 20 pt bold centred
+         on the column, Select All / Deselect All 15 pt semibold accent trailing. No
+         library toggle, search, sort, zoom or Timeline while selecting. -->
+    <g id="selection-header">
+      <text x="237" y="79" font-size="15" class="sb" fill="#C36A00">Done</text>
+      <text x="610" y="81" font-size="20" class="b" text-anchor="middle" fill="#000">3 selected</text>
+      <text x="983" y="79" font-size="15" class="sb" text-anchor="end" fill="#C36A00">Select All</text>
+    </g>
+
+    <line x1="221" y1="100.5" x2="999" y2="100.5" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= GRID (GalleryGridContent.standardGrid) ================= -->
+    <g id="grid" clip-path="url(#grid)">
+
+      <!-- row 1 -->
+      <g clip-path="url(#t1)">
+        <rect x="235" y="115" width="242" height="181.5" fill="url(#dusk)"/>
+        <path d="M235 232 h242 v64.5 h-242 z" fill="#3B4450" opacity="0.85"/>
+        <path d="M235 226 l30-8 26 5 34-12 30 7 40-10 34 9 48-6 v22 h-242 z" fill="#2A3140"/>
+        <rect x="255" y="248" width="150" height="4" rx="2" fill="#E7B478" opacity="0.45"/>
+        <rect x="285" y="262" width="120" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
+      </g>
+      <g clip-path="url(#t2)">
+        <rect x="489" y="115" width="242" height="181.5" fill="url(#dawn)"/>
+        <path d="M489 244 h242 v52.5 h-242 z" fill="#7C8698" opacity="0.8"/>
+        <path d="M540 244 v-46 h14 v-16 h10 v16 h14 v46 z" fill="#5D6675"/>
+        <path d="M489 250 h242 v6 h-242 z" fill="#4E576A"/>
+      </g>
+      <g clip-path="url(#t3)">
+        <rect x="743" y="115" width="242" height="181.5" fill="url(#roof)"/>
+        <path d="M743 210 l40-26 40 26 z" fill="#A5613F"/>
+        <path d="M803 226 l46-30 46 30 z" fill="#93553A"/>
+        <path d="M869 216 l44-28 44 28 z" fill="#AA6844"/>
+        <rect x="743" y="248" width="242" height="48.5" fill="#C8B79E"/>
+      </g>
+
+      <!-- row 2 -->
+      <g clip-path="url(#t4)">
+        <rect x="235" y="308.5" width="242" height="181.5" fill="url(#fog)"/>
+        <path d="M235 420 h242 v70 h-242 z" fill="#7A858F" opacity="0.6"/>
+        <ellipse cx="330" cy="424" rx="120" ry="16" fill="#DCE3E8" opacity="0.55"/>
+        <ellipse cx="410" cy="450" rx="140" ry="14" fill="#CBD4DB" opacity="0.5"/>
+      </g>
+      <g clip-path="url(#t5)">
+        <rect x="489" y="308.5" width="242" height="181.5" fill="url(#night)"/>
+        <rect x="489" y="424" width="242" height="66" fill="#0E1220"/>
+        <rect x="500" y="440" width="220" height="5" rx="2.5" fill="#FFD98A" opacity="0.85"/>
+        <rect x="512" y="456" width="200" height="4" rx="2" fill="#FF8A6A" opacity="0.7"/>
+        <rect x="528" y="470" width="170" height="3" rx="1.5" fill="#FFC46A" opacity="0.5"/>
+      </g>
+      <g clip-path="url(#t6)">
+        <rect x="743" y="308.5" width="242" height="181.5" fill="url(#storm)"/>
+        <ellipse cx="820" cy="352" rx="90" ry="22" fill="#39414E" opacity="0.7"/>
+        <ellipse cx="920" cy="342" rx="70" ry="18" fill="#333B47" opacity="0.6"/>
+        <rect x="743" y="440" width="242" height="50" fill="#8E8571"/>
+      </g>
+
+      <!-- row 3 -->
+      <g clip-path="url(#t7)">
+        <rect x="235" y="502" width="242" height="181.5" fill="url(#dusk)"/>
+        <ellipse cx="356" cy="580" rx="110" ry="20" fill="#F0C489" opacity="0.5"/>
+        <rect x="235" y="612" width="242" height="71.5" fill="#5A4B3E"/>
+      </g>
+      <g clip-path="url(#t8)">
+        <rect x="489" y="502" width="242" height="181.5" fill="url(#night)"/>
+        <circle cx="560" cy="546" r="3" fill="#FFF" opacity="0.7"/><circle cx="618" cy="530" r="2.2" fill="#FFF" opacity="0.6"/>
+        <circle cx="676" cy="558" r="2.6" fill="#FFF" opacity="0.5"/>
+        <rect x="489" y="614" width="242" height="69.5" fill="#0C1018"/>
+        <rect x="505" y="630" width="86" height="4" rx="2" fill="#7FD4FF" opacity="0.55"/>
+      </g>
+      <g clip-path="url(#t9)">
+        <rect x="743" y="502" width="242" height="181.5" fill="url(#water)"/>
+        <rect x="743" y="592" width="242" height="91.5" fill="#4A555E"/>
+        <rect x="765" y="606" width="180" height="5" rx="2.5" fill="#C7A874" opacity="0.5"/>
+        <rect x="785" y="624" width="140" height="4" rx="2" fill="#B79A6B" opacity="0.4"/>
+      </g>
+
+      <!-- row 4, scrolling in under the tab bar -->
+      <g clip-path="url(#t10)"><rect x="235" y="695.5" width="242" height="181.5" fill="url(#dawn)"/></g>
+      <g clip-path="url(#t11)"><rect x="489" y="695.5" width="242" height="181.5" fill="url(#roof)"/></g>
+      <g clip-path="url(#t12)"><rect x="743" y="695.5" width="242" height="181.5" fill="url(#fog)"/></g>
+
+      <!-- shoot-type badges (MediaBadge, bottom-leading, 6pt padding) -->
+      <g id="type-badges" font-size="11.5" fill="#FFFFFF" class="sb">
+        <rect x="241" y="266.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="282" text-anchor="middle">Interval</text>
+        <rect x="495" y="266.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="525" y="282" text-anchor="middle">Interval</text>
+        <rect x="749" y="266.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="774" y="282" text-anchor="middle">Video</text>
+
+        <rect x="241" y="460" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="475.5" text-anchor="middle">Interval</text>
+        <rect x="495" y="460" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="520" y="475.5" text-anchor="middle">Video</text>
+        <rect x="749" y="460" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="775" y="475.5" text-anchor="middle">Photo</text>
+
+        <rect x="241" y="653.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="669" text-anchor="middle">Interval</text>
+        <rect x="495" y="653.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="525" y="669" text-anchor="middle">Interval</text>
+        <rect x="749" y="653.5" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="775" y="669" text-anchor="middle">Photo</text>
+      </g>
+
+      <!-- "N clips" badges (amber, top-trailing, only where blends ≥ 2) -->
+      <g id="clip-badges" font-size="11.5" fill="#FFB340" class="sb">
+        <rect x="410" y="121" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="136.5" text-anchor="middle">3 clips</text>
+        <rect x="410" y="314.5" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="330" text-anchor="middle">2 clips</text>
+        <rect x="410" y="508" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="523.5" text-anchor="middle">4 clips</text>
+      </g>
+
+      <!-- Selection (2026-09-13): three tiles ⌘-clicked — 1, 2 and 6. Each selected tile keeps
+           the 2.5 pt accent border; with more than one selected every tile also wears the
+           22 pt circle top-leading (6 pt in): black 30 % with a 1.5 pt white ring, filled
+           LL.accent with a white tick when selected. A click ON the circle toggles that tile
+           alone; a plain click on the picture selects it alone; ⌘-click toggles; ⇧-click
+           adds the run from the anchor; a click in a gutter or the margin selects none. -->
+      <g id="selection">
+        <rect x="236.25" y="116.25" width="239.5" height="179" rx="6.75" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+        <rect x="490.25" y="116.25" width="239.5" height="179" rx="6.75" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+        <rect x="744.25" y="309.75" width="239.5" height="179" rx="6.75" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+        <g data-symbol="checkmark.circle" data-state="selected">
+          <circle cx="252" cy="132" r="11" fill="#C36A00"/>
+          <circle cx="252" cy="132" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          <path d="M247.5 132.5 l3 3 6.5-6.5" fill="none" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+        <g data-symbol="checkmark.circle" data-state="selected">
+          <circle cx="506" cy="132" r="11" fill="#C36A00"/>
+          <circle cx="506" cy="132" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          <path d="M501.5 132.5 l3 3 6.5-6.5" fill="none" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+        <g data-symbol="circle" data-state="unselected">
+          <circle cx="760" cy="132" r="11" fill="#000" fill-opacity="0.3"/>
+          <circle cx="760" cy="132" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+        </g>
+        <g data-symbol="circle" data-state="unselected">
+          <circle cx="252" cy="325.5" r="11" fill="#000" fill-opacity="0.3"/>
+          <circle cx="252" cy="325.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+        </g>
+        <g data-symbol="circle" data-state="unselected">
+          <circle cx="506" cy="325.5" r="11" fill="#000" fill-opacity="0.3"/>
+          <circle cx="506" cy="325.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+        </g>
+        <g data-symbol="checkmark.circle" data-state="selected">
+          <circle cx="760" cy="325.5" r="11" fill="#C36A00"/>
+          <circle cx="760" cy="325.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          <path d="M755.5 326 l3 3 6.5-6.5" fill="none" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+        <g data-symbol="circle" data-state="unselected">
+          <circle cx="252" cy="519" r="11" fill="#000" fill-opacity="0.3"/>
+          <circle cx="252" cy="519" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+        </g>
+        <g data-symbol="circle" data-state="unselected">
+          <circle cx="506" cy="519" r="11" fill="#000" fill-opacity="0.3"/>
+          <circle cx="506" cy="519" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+        </g>
+        <g data-symbol="circle" data-state="unselected">
+          <circle cx="760" cy="519" r="11" fill="#000" fill-opacity="0.3"/>
+          <circle cx="760" cy="519" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+        </g>
+        <g data-symbol="circle" data-state="unselected">
+          <circle cx="252" cy="712.5" r="11" fill="#000" fill-opacity="0.3"/>
+          <circle cx="252" cy="712.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+        </g>
+        <g data-symbol="circle" data-state="unselected">
+          <circle cx="506" cy="712.5" r="11" fill="#000" fill-opacity="0.3"/>
+          <circle cx="506" cy="712.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+        </g>
+        <g data-symbol="circle" data-state="unselected">
+          <circle cx="760" cy="712.5" r="11" fill="#000" fill-opacity="0.3"/>
+          <circle cx="760" cy="712.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+        </g>
+      </g>
+    </g>
+
+    <!-- ================= BATCH PANEL (GalleryBatchPanel, fixed 300pt) ================= -->
+    <line x1="999.5" y1="48" x2="999.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
+    <g id="batch-panel">
+      <rect x="1000" y="48" width="300" height="772" fill="#FFFFFF"/>
+      <text x="1014" y="85" font-size="16" class="b" fill="#000">3 projects</text>
+      <text x="1014" y="101" font-size="12" fill="#6D6D72">Changes here apply to every</text>
+      <text x="1014" y="115.5" font-size="12" fill="#6D6D72">selected project.</text>
+      <line x1="1000" y1="138.5" x2="1300" y2="138.5" stroke="#000" stroke-opacity="0.10"/>
+      <!-- TAGS over the three: Water on all three (solid), Sky & weather and Urban on two,
+           Nature, Rooftops and Landmark on one each (mixed, with the count). -->
+      <g id="tags">
+        <text x="1018" y="163" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+        <g id="batch-tag-field">
+          <g data-tag="Water" data-state="all" transform="translate(1014,171.5)">
+            <rect x="0" y="0" width="82" height="33" rx="16.5" fill="#C36A00"/>
+            <text x="12" y="21.5" font-size="14" class="sb" fill="#FFF">Water</text>
+            <g stroke="#FFF" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+              <path d="M61.5 12.5 l8 8 M69.5 12.5 l-8 8"/>
+            </g>
+          </g>
+          <g data-tag="Sky &amp; weather" data-state="some" data-count="2/3" transform="translate(1104,171.5)">
+            <rect x="0" y="0" width="169" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
+            <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Sky &amp; weather</text>
+            <text x="122" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">2/3</text>
+            <g stroke="#8A4A00" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+              <path d="M148.5 12.5 l8 8 M156.5 12.5 l-8 8"/>
+            </g>
+          </g>
+          <g data-tag="Urban" data-state="some" data-count="2/3" transform="translate(1014,212.5)">
+            <rect x="0" y="0" width="105" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
+            <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Urban</text>
+            <text x="58" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">2/3</text>
+            <g stroke="#8A4A00" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+              <path d="M84.5 12.5 l8 8 M92.5 12.5 l-8 8"/>
+            </g>
+          </g>
+          <g data-tag="Nature" data-state="some" data-count="1/3" transform="translate(1127,212.5)">
+            <rect x="0" y="0" width="113" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
+            <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Nature</text>
+            <text x="66" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">1/3</text>
+            <g stroke="#8A4A00" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+              <path d="M92.5 12.5 l8 8 M100.5 12.5 l-8 8"/>
+            </g>
+          </g>
+          <g data-tag="Rooftops" data-state="some" data-count="1/3" transform="translate(1014,253.5)">
+            <rect x="0" y="0" width="129" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
+            <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Rooftops</text>
+            <text x="82" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">1/3</text>
+            <g stroke="#8A4A00" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+              <path d="M108.5 12.5 l8 8 M116.5 12.5 l-8 8"/>
+            </g>
+          </g>
+          <g data-tag="Landmark" data-state="some" data-count="1/3" transform="translate(1151,253.5)">
+            <rect x="0" y="0" width="129" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
+            <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Landmark</text>
+            <text x="82" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">1/3</text>
+            <g stroke="#8A4A00" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+              <path d="M108.5 12.5 l8 8 M116.5 12.5 l-8 8"/>
+            </g>
+          </g>
+          <g data-action="add" transform="translate(1014,294.5)">
+            <rect x="0.6" y="0.6" width="110.8" height="31.8" rx="15.9" fill="#FFFFFF" stroke="#C36A00" stroke-width="1.2" stroke-dasharray="4 3"/>
+            <path d="M19 16.5 h9 M23.5 12 v9" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" data-symbol="plus"/>
+            <text x="35" y="21.5" font-size="14" class="m" fill="#C36A00">Add tag</text>
+          </g>
+        </g>
+      </g>
+      <g id="presets" data-state="collapsed">
+        <text x="1018" y="358.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
+        <rect x="1209" y="341.5" width="60" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
+        <text x="1239" y="358.5" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Mixed</text>
+        <path d="M1277 349.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+      </g>
+      <image href="../components/metadata-fields.mixed.narrow.svg" x="1014" y="380.5" width="272" height="1218"/>
+      <!-- the rest of the record scrolls under the window edge -->
+    </g>
+
+    <!-- ================= FLOATING TAB BAR (over all three panes) ================= -->
+    <g id="tab-bar">
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(520 772) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+        <text x="520" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+      </g>
+      <rect x="557" y="757" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+      <g fill="none" stroke="#C36A00">
+        <g transform="translate(590 772) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+        <text x="590" y="796" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(660 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="660" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(730 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="730" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(800 772) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+        <text x="800" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1280" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="660" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · batch mode — 3 selected, the batch panel · 1280×800 pt window</text>
+  <text x="660" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">⌘-click / ⇧-click / ⌘A select many; the selection row replaces the header and GalleryBatchPanel the pane — tags, presets and metadata on every selected project at once</text>
+</svg>

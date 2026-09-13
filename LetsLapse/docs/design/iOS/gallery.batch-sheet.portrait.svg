@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Gallery · batch sheet — two projects · portrait</title>
+  <desc>Mirrors App/GalleryBatchPanel.swift inside App/GalleryView.swift's batch sheet (the `.sheet(isPresented: $showBatchSheet)` block — a NavigationStack with a "Close" cancellationAction, raised by the selection row's Edit glyph once two or more tiles are selected), 2026-09-13, code first, drawn from the iPhone 17 Pro simulator after Steven's verification. THE SHEET over the two selected projects of gallery.batch.portrait.svg: "2 projects" and "Changes here apply to every selected project.", a divider, then TAGS — the union of the two projects' keywords: Water on both (a solid accent chip, the xmark taking it off both), Sky &amp; weather, Urban and Landmark on one each (mixed chips: accent at 13 %, LL.accentDeep text, the count "1/2" 11 pt at 70 %; the body puts the tag on both, the xmark takes it off the one that has it) and + Add tag, which raises the shared picker (TagPickerSheet) over the tags on both, so anything it adds lands on both; PRESETS — the collapsed disclosure row, its pill "Mixed" (grey, styled as Edited) because the two are on different looks; open, it is gallery.preview.presets.portrait.svg's 76 pt strip previewed on the FIRST selected project with a "Previewed on …" 11 pt caption, a tile tap applying the preset to both through AppModel.applyPreset / applyCustomPreset (each keeps its own rotation, crop and owned white) after a confirmation that counts the Edited ones; METADATA — components/metadata-fields.mixed.phone.svg, every row "Mixed" until the two agree, a commit writing both, a revert reverting both; Rating's five stars set both (0–5 on a Mac keyboard do the same). No INFO, no meta rows, no footer, no clips list: those describe one project. The tiles behind the sheet render through each project's grade, so a preset applied here shows in the grid the moment the sheet closes — and sooner on the iPad and the Mac, where the panel is a pane.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
+    <clipPath id="hero"><rect x="14" y="152" width="365" height="150" rx="10"/></clipPath>
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar over the shrunken Gallery tab behind the sheet -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge (the Gallery tab scaled back), 10pt above the sheet -->
+      <rect x="17" y="59" width="359" height="30" rx="10" fill="#D5D5D9"/>
+
+      <!-- ===== THE SHEET: NavigationStack { GalleryPreviewPanel }, "Close" leading ===== -->
+      <g id="preview-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="69" width="393" height="783" fill="#FFFFFF"/>
+        <text x="16" y="106" font-size="17" fill="#C36A00">Close</text>
+
+        <!-- GalleryBatchPanel in the NavigationStack sheet the selection row's Edit glyph raises
+             (2026-09-13): "2 projects" 16 pt bold 22 pt under the bar, the 12 pt secondary line,
+             a divider 16 under, then TAGS · PRESETS · METADATA 12 pt under it, 14 apart — the
+             single sheet's order, read over both projects. -->
+        <text x="14" y="167" font-size="16" class="b" fill="#000">2 projects</text>
+        <text x="14" y="183" font-size="12" fill="#6D6D72">Changes here apply to every selected project.</text>
+        <line x1="0" y1="203.5" x2="393" y2="203.5" stroke="#000" stroke-opacity="0.10"/>
+        <g id="tags">
+          <text x="18" y="228" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+          <g id="batch-tag-field">
+            <g data-tag="Water" data-state="all" transform="translate(14,236.5)">
+              <rect x="0" y="0" width="82" height="33" rx="16.5" fill="#C36A00"/>
+              <text x="12" y="21.5" font-size="14" class="sb" fill="#FFF">Water</text>
+              <g stroke="#FFF" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+                <path d="M61.5 12.5 l8 8 M69.5 12.5 l-8 8"/>
+              </g>
+            </g>
+            <g data-tag="Sky &amp; weather" data-state="some" data-count="1/2" transform="translate(104,236.5)">
+              <rect x="0" y="0" width="169" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
+              <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Sky &amp; weather</text>
+              <text x="122" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">1/2</text>
+              <g stroke="#8A4A00" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+                <path d="M148.5 12.5 l8 8 M156.5 12.5 l-8 8"/>
+              </g>
+            </g>
+            <g data-tag="Urban" data-state="some" data-count="1/2" transform="translate(14,277.5)">
+              <rect x="0" y="0" width="105" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
+              <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Urban</text>
+              <text x="58" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">1/2</text>
+              <g stroke="#8A4A00" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+                <path d="M84.5 12.5 l8 8 M92.5 12.5 l-8 8"/>
+              </g>
+            </g>
+            <g data-tag="Landmark" data-state="some" data-count="1/2" transform="translate(127,277.5)">
+              <rect x="0" y="0" width="129" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
+              <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Landmark</text>
+              <text x="82" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">1/2</text>
+              <g stroke="#8A4A00" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+                <path d="M108.5 12.5 l8 8 M116.5 12.5 l-8 8"/>
+              </g>
+            </g>
+            <g data-action="add" transform="translate(264,277.5)">
+              <rect x="0.6" y="0.6" width="110.8" height="31.8" rx="15.9" fill="#FFFFFF" stroke="#C36A00" stroke-width="1.2" stroke-dasharray="4 3"/>
+              <path d="M19 16.5 h9 M23.5 12 v9" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" data-symbol="plus"/>
+              <text x="35" y="21.5" font-size="14" class="m" fill="#C36A00">Add tag</text>
+            </g>
+          </g>
+        </g>
+        <g id="presets" data-state="collapsed">
+          <text x="18" y="341.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
+          <rect x="302" y="324.5" width="60" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
+          <text x="332" y="341.5" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Mixed</text>
+          <path d="M370 332.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+        </g>
+        <image href="../components/metadata-fields.mixed.phone.svg" x="14" y="363.5" width="365" height="1443"/>
+        <!-- below the screen edge — specified, reached by scrolling -->
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Gallery · batch sheet · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">GalleryView (compact) ▸ GalleryBatchPanel sheet · tags, presets and metadata over every selected project (components/metadata-fields.mixed.phone)</text>
+</svg>

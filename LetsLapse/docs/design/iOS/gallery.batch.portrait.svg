@@ -1,0 +1,245 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Gallery · batch mode — two projects selected · portrait</title>
+  <desc>gallery.portrait.svg with tiles 1 and 5 selected (App/GallerySelection.swift, 2026-09-13): the selection row reads Done · "2 selected" · Select All (Deselect All once every visible tile is in) and the Edit glyph is lit in LL.accent — it raises the batch sheet (gallery.batch-sheet.portrait.svg). Each selected tile keeps the 2.5 pt accent border and its circle is filled accent with a white tick; the rest stay empty. The state is reached by Select Multiple and two taps, or by Select All and unticking, and it is what more than one selected tile always looks like — on the iPad and the Mac too, where ⌘-click gets there without the menu and the batch panel is the pane rather than a sheet. Drawn from the iPhone 17 Pro simulator, 2026-09-13; LL_SELECT=&lt;uuid&gt;,&lt;uuid&gt; stages it.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="t00"><rect x="14" y="140" width="113.67" height="85.25" rx="8"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- ===== HEADER — compactHeader (iPhone portrait only) ===== -->
+      <!-- The selection row on the phone (GalleryView.selectionHeader, isPhonePortrait):
+           Done 15 pt semibold accent leading, the title 17 pt bold centred, Select All /
+           Deselect All 15 pt semibold accent, then the 32 pt Edit glyph (slider.horizontal.3)
+           that raises the batch sheet — accent once two or more are selected, secondary
+           and disabled before. 12 pt of vertical padding. -->
+      <g id="selection-header">
+        <text x="16" y="94" font-size="15" class="sb" fill="#C36A00">Done</text>
+        <text x="196.5" y="95" font-size="17" class="b" text-anchor="middle" fill="#000">2 selected</text>
+        <text x="337" y="94" font-size="15" class="sb" text-anchor="end" fill="#C36A00">Select All</text>
+        <rect x="345" y="73" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+        <g fill="none" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" data-symbol="slider.horizontal.3">
+          <path d="M353 84 h16 M353 89 h16 M353 94 h16"/>
+          <circle cx="364" cy="84" r="2.2" fill="#F2F2F7"/><circle cx="358" cy="89" r="2.2" fill="#F2F2F7"/><circle cx="366" cy="94" r="2.2" fill="#F2F2F7"/>
+        </g>
+      </g>
+
+      <line x1="0" y1="117.5" x2="393" y2="117.5" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- ===== GRID — GalleryGridContent.standardGrid, columnCount 3 ===== -->
+      <g id="grid">
+                <rect x="14" y="140" width="113.67" height="85.25" rx="8" fill="#5A4A3A"/>
+        <rect x="139.67" y="140" width="113.67" height="85.25" rx="8" fill="#4A3B2E"/>
+        <rect x="265.33" y="140" width="113.67" height="85.25" rx="8" fill="#6B5B48"/>
+        <rect x="14" y="237.25" width="113.67" height="85.25" rx="8" fill="#2E3A46"/>
+        <rect x="139.67" y="237.25" width="113.67" height="85.25" rx="8" fill="#1E2633"/>
+        <rect x="265.33" y="237.25" width="113.67" height="85.25" rx="8" fill="#3B5A7A"/>
+        <rect x="14" y="334.5" width="113.67" height="85.25" rx="8" fill="#3D4A5C"/>
+        <rect x="139.67" y="334.5" width="113.67" height="85.25" rx="8" fill="#55402F"/>
+        <rect x="265.33" y="334.5" width="113.67" height="85.25" rx="8" fill="#5C6B3A"/>
+        <rect x="14" y="431.75" width="113.67" height="85.25" rx="8" fill="#7A6A5A"/>
+        <rect x="139.67" y="431.75" width="113.67" height="85.25" rx="8" fill="#4B4B50"/>
+        <rect x="265.33" y="431.75" width="113.67" height="85.25" rx="8" fill="#6A5A4A"/>
+        <rect x="14" y="529" width="113.67" height="85.25" rx="8" fill="#7C7A72"/>
+        <rect x="139.67" y="529" width="113.67" height="85.25" rx="8" fill="#6E5F4E"/>
+        <rect x="265.33" y="529" width="113.67" height="85.25" rx="8" fill="#9FB4C8"/>
+        <rect x="14" y="626.25" width="113.67" height="85.25" rx="8" fill="#8E6B3F"/>
+        <rect x="139.67" y="626.25" width="113.67" height="85.25" rx="8" fill="#5A6E52"/>
+        <rect x="265.33" y="626.25" width="113.67" height="85.25" rx="8" fill="#4F6A35"/>
+        <rect x="14" y="723.5" width="113.67" height="85.25" rx="8" fill="#232C38"/>
+        <rect x="139.67" y="723.5" width="113.67" height="85.25" rx="8" fill="#3A3F45"/>
+        <rect x="265.33" y="723.5" width="113.67" height="85.25" rx="8" fill="#3D5A3A"/>
+        <rect x="14" y="820.75" width="113.67" height="85.25" rx="8" fill="#44352B"/>
+        <rect x="139.67" y="820.75" width="113.67" height="85.25" rx="8" fill="#2B3540"/>
+        <rect x="265.33" y="820.75" width="113.67" height="85.25" rx="8" fill="#50483A"/>
+                <polygon points="14,202 54,180 92,198 127.67,184 127.67,225.25 14,225.25" fill="#3A2E22" clip-path="url(#t00)"/>
+        <circle cx="295.33" cy="170" r="10" fill="#FFB340" opacity="0.85"/>
+        <ellipse cx="195.67" cy="267.25" rx="30" ry="9" fill="#9FC2E8" opacity="0.35"/>
+        <rect x="281.33" y="382.5" width="82" height="3" fill="#E8E4D8" opacity="0.5"/>
+        <circle cx="86" cy="459.75" r="12" fill="#FFD9A0" opacity="0.8"/>
+        <ellipse cx="179.67" cy="563" rx="26" ry="8" fill="#FFFFFF" opacity="0.35"/>
+        <!-- shoot-type badges: MediaBadge, bottom-leading, 6pt in -->
+        <g id="type-badges" font-size="11.5" fill="#FFFFFF" class="sb">
+                    <rect x="20" y="195.25" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="50" y="210.75" text-anchor="middle">Interval</text>
+          <rect x="145.67" y="195.25" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="175.67" y="210.75" text-anchor="middle">Interval</text>
+          <rect x="271.33" y="195.25" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="301.33" y="210.75" text-anchor="middle">Interval</text>
+          <rect x="20" y="292.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="45" y="308" text-anchor="middle">Video</text>
+          <rect x="145.67" y="292.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="175.67" y="308" text-anchor="middle">Interval</text>
+          <rect x="271.33" y="292.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="296.33" y="308" text-anchor="middle">Video</text>
+          <rect x="20" y="389.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="46" y="405.25" text-anchor="middle">Photo</text>
+          <rect x="145.67" y="389.75" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="170.67" y="405.25" text-anchor="middle">Video</text>
+          <rect x="271.33" y="389.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="405.25" text-anchor="middle">Photo</text>
+          <rect x="20" y="487" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="46" y="502.5" text-anchor="middle">Photo</text>
+          <rect x="145.67" y="487" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="171.67" y="502.5" text-anchor="middle">Photo</text>
+          <rect x="271.33" y="487" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="502.5" text-anchor="middle">Photo</text>
+          <rect x="20" y="584.25" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="46" y="599.75" text-anchor="middle">Photo</text>
+          <rect x="145.67" y="584.25" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="171.67" y="599.75" text-anchor="middle">Photo</text>
+          <rect x="271.33" y="584.25" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="599.75" text-anchor="middle">Photo</text>
+          <rect x="20" y="681.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="45" y="697" text-anchor="middle">Video</text>
+          <rect x="145.67" y="681.5" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="171.67" y="697" text-anchor="middle">Photo</text>
+          <rect x="271.33" y="681.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="301.33" y="697" text-anchor="middle">Interval</text>
+          <rect x="20" y="778.75" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="45" y="794.25" text-anchor="middle">Video</text>
+          <rect x="145.67" y="778.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="171.67" y="794.25" text-anchor="middle">Photo</text>
+          <rect x="271.33" y="778.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="794.25" text-anchor="middle">Photo</text>
+          <rect x="20" y="876" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="50" y="891.5" text-anchor="middle">Interval</text>
+          <rect x="145.67" y="876" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="170.67" y="891.5" text-anchor="middle">Video</text>
+          <rect x="271.33" y="876" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="891.5" text-anchor="middle">Photo</text>
+        </g>
+        <!-- "N clips" badge: amber, top-trailing, only where blends ≥ 2 -->
+        <g id="clip-badges" font-size="11.5" fill="#FFB340" class="sb">
+                    <rect x="186.33" y="243.25" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="216.83" y="258.75" text-anchor="middle">2 clips</text>
+        </g>
+        <g id="selection">
+          <rect x="15.25" y="141.25" width="111.17" height="82.75" rx="6.75" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+          <rect x="140.92" y="238.5" width="111.17" height="82.75" rx="6.75" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+          <g data-symbol="checkmark.circle" data-state="selected">
+            <circle cx="31" cy="157" r="11" fill="#C36A00"/>
+            <circle cx="31" cy="157" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+            <path d="M26.5 157.5 l3 3 6.5-6.5" fill="none" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="156.67" cy="157" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="156.67" cy="157" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="282.34" cy="157" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="282.34" cy="157" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="31" cy="254.25" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="31" cy="254.25" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="checkmark.circle" data-state="selected">
+            <circle cx="156.67" cy="254.25" r="11" fill="#C36A00"/>
+            <circle cx="156.67" cy="254.25" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+            <path d="M152.17 254.75 l3 3 6.5-6.5" fill="none" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="282.34" cy="254.25" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="282.34" cy="254.25" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="31" cy="351.5" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="31" cy="351.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="156.67" cy="351.5" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="156.67" cy="351.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="282.34" cy="351.5" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="282.34" cy="351.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="31" cy="448.75" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="31" cy="448.75" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="156.67" cy="448.75" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="156.67" cy="448.75" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="282.34" cy="448.75" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="282.34" cy="448.75" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="31" cy="546" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="31" cy="546" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="156.67" cy="546" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="156.67" cy="546" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="282.34" cy="546" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="282.34" cy="546" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="31" cy="643.25" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="31" cy="643.25" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="156.67" cy="643.25" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="156.67" cy="643.25" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="282.34" cy="643.25" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="282.34" cy="643.25" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="31" cy="740.5" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="31" cy="740.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="156.67" cy="740.5" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="156.67" cy="740.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="282.34" cy="740.5" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="282.34" cy="740.5" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="31" cy="837.75" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="31" cy="837.75" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="156.67" cy="837.75" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="156.67" cy="837.75" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+          <g data-symbol="circle" data-state="unselected">
+            <circle cx="282.34" cy="837.75" r="11" fill="#000" fill-opacity="0.3"/>
+            <circle cx="282.34" cy="837.75" r="10.25" fill="none" stroke="#FFF" stroke-width="1.5"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- floating tab bar (Gallery selected) -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <g transform="translate(56.5 776) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <rect x="93.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-gallery" fill="none" stroke="#C36A00">
+          <g transform="translate(126.5 776) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <g id="tab-projects" fill="none" stroke="#8E8E93">
+          <g transform="translate(196.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <g transform="translate(266.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <g id="tab-settings" fill="none" stroke="#8E8E93">
+          <g transform="translate(336.5 776) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Gallery · batch mode · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">two selected: ticks on the tiles, "2 selected" in the header, the Edit glyph lit to raise the batch sheet</text>
+</svg>

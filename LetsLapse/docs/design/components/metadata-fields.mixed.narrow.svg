@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 1218" width="272" height="1218" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Metadata fields · mixed · narrow</title>
+  <desc>Mirrors GalleryBatchPanel.metadataSection in App/GalleryBatchPanel.swift — the editable IPTC Core record read over SEVERAL selected projects (batch mode, 2026-09-13). Same rows, same order and rhythm as metadata-fields.empty/file: each shows the value every selected project agrees on, or the placeholder "Mixed" when they differ; no origin marker where the provenance differs (a common origin shows the usual from file / edited here + revert). A commit writes the value to every selected project, a revert reverts every one. Rating draws the common stars (none here) with "Mixed" 11pt secondary after them; Copyright status is a borderless accent menu reading the common status or "Mixed" — on the Mac the menu draws its own up/down control, on iOS the label carries chevron.up.chevron.down. Drawn with every field mixed, which is what a fresh multi-selection of unrelated projects reads.</desc>
+  <!-- LetsLapse design component · metadata fields, mixed state (the batch panel). Rows as metadata-fields.empty: label line, 4pt, the control; "Mixed" is the placeholder at 25% black. See components/README.md. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="metadata-fields" data-state="mixed" data-width="narrow">
+    <text x="4" y="12.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">METADATA</text>
+    <g data-field="title">
+      <text x="0" y="39.5" font-size="12" class="sb" fill="#6D6D72">Title</text>
+      <rect x="0.5" y="47.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="62.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="caption">
+      <text x="0" y="94.0" font-size="12" class="sb" fill="#6D6D72">Caption</text>
+      <rect x="0.5" y="101.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="116.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="creator">
+      <text x="0" y="148.5" font-size="12" class="sb" fill="#6D6D72">Creator</text>
+      <rect x="0.5" y="156.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="171.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="rights">
+      <text x="0" y="203.0" font-size="12" class="sb" fill="#6D6D72">Copyright</text>
+      <rect x="0.5" y="210.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="225.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="rating">
+      <text x="0" y="257.5" font-size="12" class="sb" fill="#6D6D72">Rating</text>
+      <polygon data-symbol="star" points="7.5,266.0 5.6,270.9 0.40000000000000036,271.2 4.5,274.5 3.0999999999999996,279.6 7.5,276.7 11.9,279.6 10.5,274.5 14.6,271.2 9.4,270.9" fill="none" stroke="#000" stroke-width="1" stroke-opacity="0.45" stroke-linejoin="round"/>
+      <polygon data-symbol="star" points="26.5,266.0 24.6,270.9 19.4,271.2 23.5,274.5 22.1,279.6 26.5,276.7 30.9,279.6 29.5,274.5 33.6,271.2 28.4,270.9" fill="none" stroke="#000" stroke-width="1" stroke-opacity="0.45" stroke-linejoin="round"/>
+      <polygon data-symbol="star" points="45.5,266.0 43.6,270.9 38.4,271.2 42.5,274.5 41.1,279.6 45.5,276.7 49.9,279.6 48.5,274.5 52.6,271.2 47.4,270.9" fill="none" stroke="#000" stroke-width="1" stroke-opacity="0.45" stroke-linejoin="round"/>
+      <polygon data-symbol="star" points="64.5,266.0 62.6,270.9 57.4,271.2 61.5,274.5 60.1,279.6 64.5,276.7 68.9,279.6 67.5,274.5 71.6,271.2 66.4,270.9" fill="none" stroke="#000" stroke-width="1" stroke-opacity="0.45" stroke-linejoin="round"/>
+      <polygon data-symbol="star" points="83.5,266.0 81.6,270.9 76.4,271.2 80.5,274.5 79.1,279.6 83.5,276.7 87.9,279.6 86.5,274.5 90.6,271.2 85.4,270.9" fill="none" stroke="#000" stroke-width="1" stroke-opacity="0.45" stroke-linejoin="round"/>
+      <text x="99" y="276.5" font-size="11" fill="#6D6D72">Mixed</text>
+    </g>
+    <g data-field="rightsStatus">
+      <text x="0" y="308.0" font-size="12" class="sb" fill="#6D6D72">Copyright status</text>
+      <text x="8" y="330.5" font-size="13" class="m" fill="#C36A00">Mixed</text>
+      <path data-symbol="chevron.up.chevron.down" d="M49 324.5 l2.5-2.5 2.5 2.5 M49 328.0 l2.5 2.5 2.5-2.5" fill="none" stroke="#C36A00" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g data-field="rightsURL">
+      <text x="0" y="362.5" font-size="12" class="sb" fill="#6D6D72">Copyright URL</text>
+      <rect x="0.5" y="370.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="385.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="usageTerms">
+      <text x="0" y="417.0" font-size="12" class="sb" fill="#6D6D72">Usage terms</text>
+      <rect x="0.5" y="424.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="439.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <text x="0" y="475.5" font-size="12" class="sb" fill="#6D6D72">Creator contact</text>
+    <g data-field="contactAddress">
+      <text x="0" y="502.0" font-size="12" class="sb" fill="#6D6D72">Address</text>
+      <rect x="0.5" y="509.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="524.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="contactCity">
+      <text x="0" y="556.5" font-size="12" class="sb" fill="#6D6D72">City</text>
+      <rect x="0.5" y="564.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="579.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="contactState">
+      <text x="0" y="611.0" font-size="12" class="sb" fill="#6D6D72">State</text>
+      <rect x="0.5" y="618.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="633.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="contactPostcode">
+      <text x="0" y="665.5" font-size="12" class="sb" fill="#6D6D72">Postcode</text>
+      <rect x="0.5" y="673.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="688.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="contactCountry">
+      <text x="0" y="720.0" font-size="12" class="sb" fill="#6D6D72">Country</text>
+      <rect x="0.5" y="727.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="742.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="contactPhone">
+      <text x="0" y="774.5" font-size="12" class="sb" fill="#6D6D72">Phone</text>
+      <rect x="0.5" y="782.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="797.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="contactEmail">
+      <text x="0" y="829.0" font-size="12" class="sb" fill="#6D6D72">Email</text>
+      <rect x="0.5" y="836.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="851.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="contactWebsite">
+      <text x="0" y="883.5" font-size="12" class="sb" fill="#6D6D72">Website</text>
+      <rect x="0.5" y="891.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="906.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <text x="0" y="942.0" font-size="12" class="sb" fill="#6D6D72">Location</text>
+    <g data-field="locationSublocation">
+      <text x="0" y="968.5" font-size="12" class="sb" fill="#6D6D72">Sublocation</text>
+      <rect x="0.5" y="976.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="991.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="locationCity">
+      <text x="0" y="1023.0" font-size="12" class="sb" fill="#6D6D72">City</text>
+      <rect x="0.5" y="1030.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="1045.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="locationState">
+      <text x="0" y="1077.5" font-size="12" class="sb" fill="#6D6D72">State</text>
+      <rect x="0.5" y="1085.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="1100.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="locationCountry">
+      <text x="0" y="1132.0" font-size="12" class="sb" fill="#6D6D72">Country</text>
+      <rect x="0.5" y="1139.5" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="1154.5" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+    <g data-field="locationCountryCode">
+      <text x="0" y="1186.5" font-size="12" class="sb" fill="#6D6D72">Country code</text>
+      <rect x="0.5" y="1194.0" width="271" height="21" rx="4" fill="#FFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="7" y="1209.0" font-size="12" fill="#000" fill-opacity="0.25">Mixed</text>
+    </g>
+  </g>
+</svg>
