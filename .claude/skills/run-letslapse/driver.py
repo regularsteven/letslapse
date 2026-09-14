@@ -185,9 +185,14 @@ def cmd_build(args):
     if args.platform == "sim":
         udid = args.device or booted_sim()
         cmd += ["-destination", f"platform=iOS Simulator,id={udid}",
-                # Simulator builds never need a signature; skipping it keeps the
-                # build off the keychain entirely.
-                "CODE_SIGNING_ALLOWED=NO"]
+                # Signed "to run locally" (ad-hoc — no identity, so no login-
+                # keychain prompt) rather than CODE_SIGNING_ALLOWED=NO: an
+                # unsigned Simulator app carries no entitlements, and the
+                # Simulator's keychain answers -34018 to it — the PicPlace
+                # sign-in could never store its tokens (2026-09-15). The
+                # project embeds App/LetsLapse-Simulator.entitlements for the
+                # simulator SDK.
+                "CODE_SIGN_IDENTITY=-"]
     elif args.platform == "device":
         udid = resolve_device(args.device)
         # A device build must actually sign — no CODE_SIGNING_ALLOWED=NO here.

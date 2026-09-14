@@ -70,6 +70,9 @@ final class PicPlaceController: ObservableObject {
     }
 
     enum ProjectState: Equatable {
+        /// The project's sources are not on this device; its poster is (v2
+        /// plan §3.6). Whatever the session, the card says so first.
+        case previewOnly(PicPlaceSyncRecord?)
         case signedOut
         /// Signed in, but this library is not (or not this account's): a sync
         /// would push into the wrong place.
@@ -82,7 +85,7 @@ final class PicPlaceController: ObservableObject {
     }
 
     /// What the Projects-list pill shows; nil keeps the card quiet.
-    enum ListState { case synced, syncing, failed }
+    enum ListState { case synced, syncing, failed, previewOnly }
 
     /// The session's cached profile — shown offline until the server says otherwise.
     private static let profileKey = "letslapse.picplace.account"
@@ -91,10 +94,10 @@ final class PicPlaceController: ObservableObject {
     /// v1's device-wide sync records, keyed by capture id; migrated once.
     private static let legacyRecordsKey = "letslapse.picplace.syncStates"
 
-    @Published private(set) var binding: PicPlaceBindingRecord?
+    @Published internal(set) var binding: PicPlaceBindingRecord?
     @Published private(set) var profile: Profile?
     @Published private(set) var usage: Usage?
-    @Published private(set) var records: [UUID: PicPlaceSyncRecord] = [:]
+    @Published internal(set) var records: [UUID: PicPlaceSyncRecord] = [:]
     @Published private(set) var progress: [UUID: PicPlaceSyncProgress] = [:]
     @Published private(set) var summaries: [UUID: FolderSummary] = [:]
     @Published private(set) var isSigningIn = false
@@ -107,6 +110,11 @@ final class PicPlaceController: ObservableObject {
     /// The "Connect this library?" question, raised after a sign-in on an
     /// unbound library and by the cards' Connect buttons.
     @Published var isOfferingConnect = false
+    /// The question's case-specific line (clean · fresh · merge, §4.1).
+    @Published private(set) var connectCaseText: String?
+    /// The first connection's progress while it runs (§4.1 step 4).
+    @Published internal(set) var initialSyncProgress: InitialSyncProgress?
+    var initialSyncTask: Task<Void, Never>?
 
     /// What a Sync sends. Stage 2: the minimal set; the originals follow per
     /// project in stage 5. `LL_PICPLACE_POLICY=minimal|originals|everything`
@@ -118,12 +126,12 @@ final class PicPlaceController: ObservableObject {
         return .minimal
     }
 
-    private unowned let model: AppModel
-    private var client: PicPlaceClient!
+    unowned let model: AppModel
+    var client: PicPlaceClient!
     private var syncTasks: [UUID: Task<Void, Never>] = [:]
     private var summaryTasks: [UUID: Task<Void, Never>] = [:]
     private let signInFlow = PicPlaceSignIn()
-    private let root = StorageRoot.current
+    let root = StorageRoot.current
 
     #if DEBUG
     /// `LL_PICPLACE=<state>` stages every project's card in one state for
@@ -173,6 +181,17 @@ final class PicPlaceController: ObservableObject {
             }
         }
         stagedState = Self.stagedState(from: ProcessInfo.processInfo.environment["LL_PICPLACE"])
+        // `LL_PICPLACE_BIND=clean|fresh|merge` stages the connect question's
+        // case line with no server.
+        if let staged = ProcessInfo.processInfo.environment["LL_PICPLACE_BIND"] {
+            switch staged {
+            case "clean": connectCaseText = "Nothing is on PicPlace yet. This library's 12 projects will be kept there — records and a preview each; originals stay here until you upload them."
+            case "fresh": connectCaseText = "PicPlace holds 12 projects and this library is empty. They'll appear here as previews; originals download per project."
+            case "merge": connectCaseText = "PicPlace holds 12 projects, this library 9. Projects on both sides stay in step, the rest are exchanged."
+            default: break
+            }
+            Task { @MainActor in self.isOfferingConnect = true }
+        }
         // `LL_PICPLACE_SIGNIN=1|silent` presses Sign in at launch; `silent`
         // opens no browser, so a test drives the consent page itself and
         // delivers the callback URL (open -a <app> "letslapse://…").
@@ -300,7 +319,7 @@ final class PicPlaceController: ObservableObject {
                 let tokens = try await signInFlow.run(server: signInServer)
                 await client.setTokens(tokens, accountKey: nil)
                 try await establishProfile()
-                if binding == nil { isOfferingConnect = true }
+                if binding == nil { await offerConnectNow() } else { runInitialSyncIfPending() }
             } catch is PicPlaceSignIn.Cancelled {
                 // Nothing to say: they closed it.
             } catch {
@@ -348,6 +367,7 @@ final class PicPlaceController: ObservableObject {
     private func bootstrapSession() async {
         do {
             try await establishProfile()
+            runInitialSyncIfPending()
         } catch {
             // Offline at launch is fine: the stored profile stands until the
             // server says otherwise (a refused refresh calls handleSignedOutByServer).
@@ -478,7 +498,12 @@ final class PicPlaceController: ObservableObject {
     /// The Connect buttons: raise the question (the cards present it).
     func offerConnect() {
         guard isSignedIn, binding == nil else { return }
+        Task { await offerConnectNow() }
+    }
+
+    private func offerConnectNow() async {
         lastConnectError = nil
+        connectCaseText = await describeConnectCase()
         isOfferingConnect = true
     }
 
@@ -524,6 +549,7 @@ final class PicPlaceController: ObservableObject {
             binding = record
             PicPlaceSyncState.save(records, root: root)
             LLog("picplace: library bound to @\(username) on \(record.server.host)")
+            runInitialSyncIfPending()
         } catch {
             LLog("picplace: could not write the binding: \(error)")
             lastConnectError = "Couldn't connect this library: \(error.localizedDescription)"
@@ -538,6 +564,9 @@ final class PicPlaceController: ObservableObject {
         for task in syncTasks.values { task.cancel() }
         syncTasks.removeAll()
         progress.removeAll()
+        initialSyncTask?.cancel()
+        initialSyncTask = nil
+        initialSyncProgress = nil
         PicPlaceBindingRecord.remove(inRoot: root)
         binding = nil
         records = [:]
@@ -546,10 +575,20 @@ final class PicPlaceController: ObservableObject {
 
     // MARK: Project state
 
+    /// A project whose sources are not on this device and which PicPlace
+    /// accounts for — it has a poster, or this library pulled it (v2 plan
+    /// §3.6). A project whose files simply went missing is not this.
+    func isPreviewOnly(_ capture: AppModel.CaptureProject) -> Bool {
+        guard model.sourcesMissing(capture) else { return false }
+        if model.posterURL(for: capture) != nil { return true }
+        return records[model.originID(of: capture)]?.policy == "pull"
+    }
+
     func state(for capture: AppModel.CaptureProject) -> ProjectState {
         #if DEBUG
         if let stagedState { return stagedState }
         #endif
+        if isPreviewOnly(capture) { return .previewOnly(records[model.originID(of: capture)]) }
         guard isSignedIn else { return .signedOut }
         guard canSync else { return .notConnected }
         if let progress = progress[capture.id] { return .syncing(progress) }
@@ -570,9 +609,11 @@ final class PicPlaceController: ObservableObject {
             }
         }
         #endif
+        guard let capture = model.capture(id: captureID) else { return nil }
+        if isPreviewOnly(capture) { return .previewOnly }
         guard canSync else { return nil }
         if progress[captureID] != nil { return .syncing }
-        guard let capture = model.capture(id: captureID), let record = records[model.originID(of: capture)] else { return nil }
+        guard let record = records[model.originID(of: capture)] else { return nil }
         return record.lastError == nil ? .synced : .failed
     }
 
@@ -682,6 +723,13 @@ final class PicPlaceController: ObservableObject {
 
     func cancelSync(_ id: UUID) {
         syncTasks[id]?.cancel()
+    }
+
+    /// A sync the caller waits for — the first connection pushes one
+    /// project at a time.
+    func syncAndWait(_ capture: AppModel.CaptureProject) async {
+        sync(capture)
+        await syncTasks[capture.id]?.value
     }
 
     // MARK: Persistence
@@ -825,6 +873,10 @@ final class PicPlaceController: ObservableObject {
                                       uploaded: 3, alsoOn: ["iPad Air"], server: PicPlaceConfiguration.serverString, lastError: nil,
                                       policy: "minimal", heavyFiles: 341, heavyBytes: 4_900_000_000)
         switch value {
+        case "preview-only":
+            var record = demo
+            record.policy = "pull"; record.uploaded = 0; record.files = 2; record.bytes = 180_000
+            return .previewOnly(record)
         case "signed-out": return .signedOut
         case "not-connected": return .notConnected
         case "not-synced": return .notSynced

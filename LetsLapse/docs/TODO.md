@@ -59,7 +59,10 @@ rename + marker + relaunch, root-relative thumbnail keys; verified on the
 play-pen: signed in, connected, two projects synced) · **stage 2 built
 2026-09-14 late** (plan §10: `SyncPolicy.minimal`, registry-classified
 inventory, deterministic `records.aar`, `poster.jpg`, originID as the server
-key, the manifest cap; dry-run verified, the play-pen push owed) · **code-first by
+key, the manifest cap; committed 8cf8b41 after the play-pen re-sync) · **stage 3
+built 2026-09-14 night** (plan §11: the first connection's cases, the pull,
+preview-only; merge + fresh verified on scratch roots, the play-pen's own merge
+and the Simulator owed) · **code-first by
 decision** — mirrors follow per screen once the sync logic holds · **Size:**
 large (five stages) · seams: `App/PicPlace/*` (binding, sync state, Keychain
 per account, `SyncPolicy`, the pull, the merge), `App/StorageLocation.swift`

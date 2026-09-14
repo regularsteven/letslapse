@@ -136,6 +136,8 @@ struct PicPlaceStatusCard: View {
     @ViewBuilder
     private func glyph(for state: PicPlaceController.ProjectState, size: CGFloat) -> some View {
         switch state {
+        case .previewOnly:
+            Image(systemName: "icloud.and.arrow.down").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
         case .signedOut, .notSynced:
             Image(systemName: "icloud").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
         case .notConnected:
@@ -151,6 +153,7 @@ struct PicPlaceStatusCard: View {
 
     private func title(for state: PicPlaceController.ProjectState) -> String {
         switch state {
+        case .previewOnly: return "Preview only"
         case .signedOut: return "Keep a copy on PicPlace"
         case .notConnected: return "Library not connected"
         case .notSynced: return "Not on PicPlace"
@@ -163,6 +166,11 @@ struct PicPlaceStatusCard: View {
 
     private func caption(for capture: AppModel.CaptureProject, state: PicPlaceController.ProjectState) -> String {
         switch state {
+        case .previewOnly(let record):
+            if let record, let heavy = record.heavyFiles, heavy > 0 {
+                return "The originals — \(heavy.formatted()) file\(heavy == 1 ? "" : "s") · \(LLFormat.bytes(record.heavyBytes ?? 0)) — are on PicPlace, not on this device. Downloading them comes in a later stage."
+            }
+            return "The originals are on PicPlace, not on this device. Downloading them comes in a later stage."
         case .signedOut:
             return "Sign in with PicPlace to sync this project"
         case .notConnected:
@@ -217,6 +225,7 @@ struct PicPlaceStatusCard: View {
     private func actionButton(for capture: AppModel.CaptureProject, state: PicPlaceController.ProjectState, size: CGFloat) -> some View {
         let (label, isCancel): (String, Bool) = {
             switch state {
+            case .previewOnly: return ("Download originals", false)
             case .signedOut: return (picplace.isSigningIn ? "Signing in…" : "Sign in", false)
             case .notConnected: return (picplace.libraryLink == .mismatch ? "Settings" : "Connect…", false)
             case .notSynced: return ("Sync to PicPlace", false)
@@ -228,6 +237,7 @@ struct PicPlaceStatusCard: View {
         }()
         return Button {
             switch state {
+            case .previewOnly: break                       // stage 5
             case .signedOut: picplace.signIn()
             case .notConnected: if picplace.libraryLink == .unbound { picplace.offerConnect() } else { model.requestedTab = .settings }
             case .syncing: picplace.cancelSync(capture.id)
@@ -239,7 +249,7 @@ struct PicPlaceStatusCard: View {
                 .foregroundStyle(LL.accent)
         }
         .buttonStyle(.plain)
-        .disabled(picplace.isSigningIn && !isCancel)
+        .disabled((picplace.isSigningIn && !isCancel) || { if case .previewOnly = state { return true } else { return false } }())
     }
 
     private func progressBar(_ progress: PicPlaceSyncProgress, height: CGFloat) -> some View {
@@ -290,6 +300,7 @@ struct PicPlaceSettingsCard: View {
                         .foregroundStyle(.secondary)
                 }
                 libraryRow
+                initialSyncRow
                 if PicPlaceConfiguration.showsServerSetting {
                     LLRow(title: "Server") {
                         Text(profile.host)
@@ -442,6 +453,44 @@ struct PicPlaceSettingsCard: View {
         }
     }
 
+    /// "Bringing the library in step" — the first connection's cases and
+    /// counts (v2 plan §4.1), shown while it runs and once it has run.
+    @ViewBuilder
+    private var initialSyncRow: some View {
+        if let progress = picplace.initialSyncProgress {
+            LLRow(title: initialSyncTitle(progress), subtitle: initialSyncSubtitle(progress)) {
+                if progress.phase == .pulling || progress.phase == .pushing || progress.phase == .deciding {
+                    ProgressView().controlSize(.small)
+                }
+            }
+        } else if let binding = picplace.binding, binding.initialSync.state == .pending, picplace.isSignedIn {
+            LLRow(title: "First connection pending", subtitle: "Runs once the library has loaded") {
+                EmptyView()
+            }
+        }
+    }
+
+    private func initialSyncTitle(_ progress: PicPlaceController.InitialSyncProgress) -> String {
+        switch progress.phase {
+        case .deciding: return "Comparing with PicPlace…"
+        case .pulling: return "Bringing projects here…"
+        case .pushing: return "Sending projects…"
+        case .done: return progress.failures.isEmpty ? "Library in step with PicPlace" : "First connection finished with problems"
+        case .failed: return "First connection failed"
+        }
+    }
+
+    private func initialSyncSubtitle(_ progress: PicPlaceController.InitialSyncProgress) -> String {
+        if case .failed(let why) = progress.phase { return why }
+        var parts: [String] = []
+        if progress.pulled > 0 || progress.phase == .pulling { parts.append("\(progress.pulled) brought here") }
+        if progress.pushed > 0 || progress.phase == .pushing { parts.append("\(progress.pushed) sent") }
+        if progress.inStep > 0 { parts.append("\(progress.inStep) in step") }
+        if progress.deferred > 0 { parts.append("\(progress.deferred) need a merge (a later stage)") }
+        if !progress.failures.isEmpty { parts.append(progress.failures.joined(separator: "; ")) }
+        return parts.isEmpty ? "Nothing to exchange" : parts.joined(separator: " · ")
+    }
+
     private var disconnectRow: some View {
         Button {
             isConfirmingDisconnect = true
@@ -481,7 +530,8 @@ private struct PicPlaceConnectAlert: ViewModifier {
             Button("Not now", role: .cancel) {}
         } message: {
             Text([
-                "This library's projects will be kept on \(picplace.sessionHost) as @\(picplace.profile?.username ?? "")",
+                "Connect as @\(picplace.profile?.username ?? "") on \(picplace.sessionHost)",
+                picplace.connectCaseText,
                 picplace.connectDestinationDescription,
             ].compactMap { $0 }.joined(separator: ". "))
         }
@@ -514,6 +564,7 @@ struct PicPlacePill: View {
         case .synced: return "checkmark.icloud.fill"
         case .syncing: return "icloud.and.arrow.up"
         case .failed: return "exclamationmark.icloud.fill"
+        case .previewOnly: return "icloud"
         }
     }
 
@@ -522,11 +573,13 @@ struct PicPlacePill: View {
         case .synced: return .green
         case .syncing: return LL.amber
         case .failed: return LL.levelOff
+        case .previewOnly: return .secondary
         }
     }
 
     private var label: String {
         switch state {
+        case .previewOnly: return "Preview only — originals on PicPlace"
         case .synced: return "On PicPlace"
         case .syncing: return "Syncing to PicPlace"
         case .failed: return "PicPlace sync failed"

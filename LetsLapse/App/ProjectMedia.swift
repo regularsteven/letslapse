@@ -79,7 +79,7 @@ struct ProjectThumbnailView: View {
             // side of it, which is how a click "between" two Gallery tiles
             // opened one of them (2026-09-13). The shape is the tile.
             .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .task(id: "\(url?.path ?? "-")|\(cache.generation)|\(grade?.cacheToken ?? "-")") {
+            .task(id: "\(url?.path ?? "-")|\(cache.generation)|\(effectiveGrade?.cacheToken ?? "-")") {
                 // Only blank for a *different* asset. Re-requesting the same one
                 // (cache invalidated, or the row was rebuilt) used to clear here
                 // first, which turned any cache purge into a wall of gray tiles
@@ -91,11 +91,19 @@ struct ProjectThumbnailView: View {
                 guard let url else { return }
                 // nil means "no answer" — a failed decode or a cancelled load —
                 // so never overwrite an image already on screen with it.
-                if let image = await ProjectThumbnailCache.shared.thumbnail(for: url, kind: kind, grade: grade) {
+                if let image = await ProjectThumbnailCache.shared.thumbnail(for: url, kind: effectiveKind, grade: effectiveGrade) {
                     thumbnail = image
                 }
             }
     }
+
+    /// A project's `poster.jpg` standing in for media that is not on this
+    /// device (v2 plan §3.5) is a finished, already-graded picture — decoded
+    /// as the image it is whatever the project's kind, and never graded a
+    /// second time.
+    private var isPoster: Bool { url?.lastPathComponent == ProjectFileRegistry.posterName }
+    private var effectiveKind: AppModel.MediaKind { isPoster ? .image : kind }
+    private var effectiveGrade: PhotoGrade? { isPoster ? nil : grade }
 }
 
 struct ProjectMediaPreviewSheet: View {

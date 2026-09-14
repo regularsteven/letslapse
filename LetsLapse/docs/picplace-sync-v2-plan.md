@@ -605,3 +605,79 @@ second *Sync again* should move nothing. Kit tests: 8/8 in the touched suites.
 - The second push of *China Pics-1849* uploaded 1 object (the poster; the
   bundle hashed identical and was skipped) — the determinism fix holds on
   the real server.
+
+## 11. Stage 3 — landed 2026-09-14 (uncommitted), the play-pen's merge owed
+
+**What shipped**
+
+- **The first connection** (`App/PicPlace/PicPlaceLibrarySync.swift`,
+  §4.1): once the library is loaded (`AppModel.isLibraryLoaded`, set at the
+  end of every launch path) and the session is up, a bound library whose
+  `initialSync.state` is `pending` compares the account's index with its
+  own by origin id and runs the rows that need no base — **pull** what the
+  server has and it lacks, **push** (minimal) what it has and the server
+  lacks, **note as in step** what both hold at the same revision (recording
+  the base), and **count as deferred** what both hold at different revisions
+  (stage 4). The case (`clean` · `fresh` · `merge`) is written to the
+  binding; `state` becomes `done` when nothing failed and nothing was
+  deferred, else it stays `pending` and re-runs at the next launch (the
+  finished rows are idempotent). A Settings row shows it: *Bringing projects
+  here… · 2 brought here · 2 in step*, then *Library in step with PicPlace*.
+- **The connect question knows its case**: before it is raised, `/status`
+  and the local count decide the line — *Nothing is on PicPlace yet…* /
+  *PicPlace holds N projects and this library is empty…* / *PicPlace holds
+  N, this library M…*. `LL_PICPLACE_BIND` stages it.
+- **The pull** (§4.3): `GET /projects/{uuid}` twice (typed for the assets,
+  raw for the manifest — `PicPlaceClient.getData`), the overflow stub
+  followed, the document decoded with the Kit's decoder; `records.aar`
+  extracted into `Projects/<originID>/` and `poster.jpg` written, each
+  through a presigned GET from `POST /projects/{uuid}/assets/urls`; a
+  project pushed before the bundle existed (v1) has its loose sidecars
+  collected by their registry role instead. `AppModel.registerPulledProject`
+  inserts the document with `id == originID` (D11), the blends re-keyed to
+  it and their files absent, `addedAt` now — nothing re-minted. The sync
+  record's base is the server's revision (`policy: pull`); presence is
+  posted at tier `preview`. A failure removes the folder.
+- **Preview-only** (§3.6, D7): `AppModel.sourcesMissing` (listed frames,
+  none on disk) and the controller's `isPreviewOnly` (missing + a poster
+  or a pull record — a project whose files simply vanished is not this).
+  `thumbnailURL` falls back to `poster.jpg`; `ProjectThumbnailView` shows a
+  poster as the finished image it is (image kind, no grade on top); the
+  Projects pill (outline cloud), the card (*Preview only · The originals —
+  3 files · 4,9 MB — are on PicPlace, not on this device*, a disabled
+  *Download originals* until stage 5) and the detail's Play original
+  (shows the poster) follow it. The editor already refused: `editorAsset`
+  is nil without sources.
+- The controller is created at the end of the launch (it was lazy, and an
+  empty library's Projects tab never drew a card to create it — so a fresh
+  library never synced).
+
+**Verified on scratch roots bound to the account** (Debug, `picplace.test`):
+the **merge** case on a records-only copy of the play-pen — *2 to pull, 0
+to push, 2 in step, 0 deferred → done*, the two residue projects arriving
+with their tags and grades, a second launch not re-running; the **fresh**
+case on an empty library — *4 to pull → done*, China Pics with its poster
+standing in, the others as placeholders (v1 pushes carry no poster). The
+pulled card and the Settings row screenshotted. Mac + Simulator build.
+
+**Awaiting**: the play-pen's own merge at Steven's next relaunch (2 pulled,
+2 in step); the Simulator as a true second device — its own sign-in, an
+empty library, the fresh case (the consent page is Steven's step).
+
+**Noted for later**: v1-pushed projects have no poster, so they arrive as
+placeholders until the pushing device re-syncs them under the minimal
+policy; the disabled *Download originals* is drawn in the accent colour
+(cosmetic, mirrors owed by D12); the deferred rows (both sides moved) are
+stage 4's.
+
+**Simulator sign-in (2026-09-15):** the first Simulator sign-in failed with
+Keychain `-34018` (`errSecMissingEntitlement`): the project scoped its iOS
+entitlements to `sdk=iphoneos*` and the run skill built the Simulator app
+with `CODE_SIGNING_ALLOWED=NO`, so the app carried no entitlements and the
+Simulator's keychain refused it (v1's Simulator run had injected tokens
+behind a swallowed `try?`). Fixed by `App/LetsLapse-Simulator.entitlements`
+(`application-identifier`, `keychain-access-groups`, `get-task-allow`) bound
+to `sdk=iphonesimulator*` in the project, and the skill's simulator build
+signing ad-hoc (`CODE_SIGN_IDENTITY=-`) instead of not at all. Verified: the
+iPhone 16 Pro Simulator signed in, connected as the **fresh** case and pulled
+all four projects — the second device the plan asked for.

@@ -1,0 +1,264 @@
+import Foundation
+import Combine
+import LetsLapseKit
+
+/// The first connection's cases and the pull (v2 plan §4.1, §4.3), and the
+/// rows of the merge table that need no base (§4.4): a project the server
+/// has and this library does not comes here as its records and poster; a
+/// project this library has and the server does not goes up under the
+/// minimal policy; a project on both sides at the same revision is noted
+/// as in step. Rows where both sides moved, or where this library never
+/// agreed a base, are counted and left for stage 4.
+extension PicPlaceController {
+
+    struct InitialSyncProgress: Equatable {
+        enum Phase: Equatable { case deciding, pulling, pushing, done, failed(String) }
+        var phase: Phase = .deciding
+        var pulled = 0
+        var pushed = 0
+        var inStep = 0
+        var deferred = 0
+        var total = 0
+        var failures: [String] = []
+    }
+
+    /// The case an unbound library is in, for the connect question's copy
+    /// (§4.1): computed from the server's count and this library's.
+    func describeConnectCase() async -> String? {
+        guard isSignedIn else { return nil }
+        var localCount = 0
+        if let counts = try? model.libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery()) {
+            localCount = counts.values.reduce(0, +)
+        }
+        guard let status: PPStatus = try? await client.get("status") else { return nil }
+        let serverCount = status.projects?.count ?? 0
+        switch (serverCount, localCount) {
+        case (0, _):
+            return "Nothing is on PicPlace yet. This library's \(localCount) project\(localCount == 1 ? "" : "s") will be kept there — records and a preview each; originals stay here until you upload them."
+        case (_, 0):
+            return "PicPlace holds \(serverCount) project\(serverCount == 1 ? "" : "s") and this library is empty. They'll appear here as previews; originals download per project."
+        default:
+            return "PicPlace holds \(serverCount) project\(serverCount == 1 ? "" : "s"), this library \(localCount). Projects on both sides stay in step, the rest are exchanged."
+        }
+    }
+
+    /// Runs the pending first connection once the library is loaded and the
+    /// session is up — at launch, and right after an in-place connect on iOS.
+    func runInitialSyncIfPending() {
+        guard let binding, binding.initialSync.state == .pending, canSync, initialSyncTask == nil else { return }
+        initialSyncTask = Task { [weak self] in
+            guard let self else { return }
+            // The launch walk first: a project it has not indexed yet would
+            // read as absent and be pulled a second time.
+            if !model.isLibraryLoaded {
+                for await loaded in model.$isLibraryLoaded.values where loaded { break }
+            }
+            await runInitialSync()
+            initialSyncTask = nil
+        }
+    }
+
+    private func runInitialSync() async {
+        var progress = InitialSyncProgress()
+        initialSyncProgress = progress
+        do {
+            let index: PPProjectIndex = try await client.get("projects")
+            let rows = index.projects
+            guard let libraryIndex = model.libraryIndex else { throw PicPlaceSyncRun.Failed(caption: "The library index is not open.") }
+
+            // Every live local project, by origin id.
+            var localByOrigin: [UUID: UUID] = [:]
+            var query = LibraryIndex.ProjectQuery()
+            query.limit = 100_000
+            for row in (try libraryIndex.projects(query)).rows {
+                localByOrigin[row.originID ?? row.id] = row.id
+            }
+
+            var toPull: [PPProject] = []
+            var serverOrigins = Set<UUID>()
+            for row in rows {
+                guard let origin = UUID(uuidString: row.uuid) else { continue }
+                serverOrigins.insert(origin)
+                if let localID = localByOrigin[origin], let capture = model.capture(id: localID) {
+                    let localRevision = Int(model.lastEdited(capture).timeIntervalSince1970 * 1000)
+                    if localRevision == row.revision {
+                        // In step. Make sure the base is recorded.
+                        if records[origin] == nil {
+                            records[origin] = PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: row.assets.confirmed, bytes: row.assets.bytes,
+                                                                 uploaded: 0, alsoOn: [], server: profile?.server ?? serverString, lastError: nil, policy: "in-step")
+                        }
+                        progress.inStep += 1
+                    } else {
+                        // Both sides differ: the merge's business (stage 4).
+                        progress.deferred += 1
+                        LLog("picplace: initial sync — \(capture.displayTitle) differs from the server (local \(localRevision), server \(row.revision)); left for the merge")
+                    }
+                } else {
+                    toPull.append(row)
+                }
+            }
+            let toPush = localByOrigin.filter { !serverOrigins.contains($0.key) }.compactMap { model.capture(id: $0.value) }
+            progress.total = toPull.count + toPush.count
+            let caseName: PicPlaceBindingRecord.InitialSync.Case = rows.isEmpty ? .clean : (localByOrigin.isEmpty ? .fresh : .merge)
+            LLog("picplace: initial sync (\(caseName.rawValue)) — \(toPull.count) to pull, \(toPush.count) to push, \(progress.inStep) in step, \(progress.deferred) deferred")
+            noteInitialSyncCase(caseName)
+
+            progress.phase = .pulling
+            initialSyncProgress = progress
+            for row in toPull {
+                do {
+                    try await pull(row)
+                    progress.pulled += 1
+                } catch {
+                    LLog("picplace: pull of \(row.name) (\(row.uuid.prefix(8))) failed: \(error)")
+                    progress.failures.append("\(row.name): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+                }
+                initialSyncProgress = progress
+                if Task.isCancelled { return }
+            }
+
+            progress.phase = .pushing
+            initialSyncProgress = progress
+            for capture in toPush {
+                await syncAndWait(capture)
+                if let record = records[model.originID(of: capture)], record.lastError == nil {
+                    progress.pushed += 1
+                } else {
+                    progress.failures.append("\(capture.displayTitle): \(records[model.originID(of: capture)]?.lastError ?? "not synced")")
+                }
+                initialSyncProgress = progress
+                if Task.isCancelled { return }
+            }
+
+            PicPlaceSyncState.save(records, root: root)
+            progress.phase = .done
+            initialSyncProgress = progress
+            if progress.failures.isEmpty, progress.deferred == 0 {
+                markInitialSyncDone()
+            }
+            refreshUsage()
+        } catch {
+            LLog("picplace: initial sync failed: \(error)")
+            progress.phase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            initialSyncProgress = progress
+        }
+    }
+
+    private func noteInitialSyncCase(_ caseName: PicPlaceBindingRecord.InitialSync.Case) {
+        guard var record = binding, record.initialSync.case != caseName else { return }
+        record.initialSync.case = caseName
+        try? record.write(inRoot: root)
+        binding = record
+    }
+
+    private func markInitialSyncDone() {
+        guard var record = binding else { return }
+        record.initialSync.state = .done
+        record.initialSync.completedAt = Date()
+        do {
+            try record.write(inRoot: root)
+            binding = record
+            LLog("picplace: initial sync done (\(record.initialSync.case?.rawValue ?? "?"))")
+        } catch {
+            LLog("picplace: could not mark the initial sync done: \(error)")
+        }
+    }
+
+    // MARK: The pull
+
+    /// One project from the server onto this device (§4.3): its records
+    /// bundle and poster into `Projects/<originID>/`, the document registered
+    /// with `id == originID`, the sync record's base set to the server's
+    /// revision, presence posted at tier `preview`. No `source/` media: the
+    /// project is preview-only by rule (§3.6). A failure leaves no folder.
+    func pull(_ row: PPProject) async throws {
+        let uuid = row.uuid.lowercased()
+        guard let originID = UUID(uuidString: uuid) else { throw PicPlaceSyncRun.Failed(caption: "PicPlace named a project without a valid id.") }
+        let folder = model.projectFolderURL(for: originID)
+        guard !FileManager.default.fileExists(atPath: folder.path) else {
+            throw PicPlaceSyncRun.Failed(caption: "A folder for \(row.name) already exists here.")
+        }
+
+        let detail: PPProjectDetail = try await client.get("projects/\(uuid)")
+        let raw = try await client.getData("projects/\(uuid)")
+        guard let object = try JSONSerialization.jsonObject(with: raw) as? [String: Any],
+              var manifest = object["manifest"] as? [String: Any] else {
+            throw PicPlaceSyncRun.Failed(caption: "PicPlace sent no manifest for \(row.name).")
+        }
+        let assets = (detail.assets ?? []).filter { $0.status == "confirmed" }
+        // The overflow shape: the manifest is an asset the stub points at.
+        if let manifestAssetID = manifest["manifest_asset"] as? String {
+            let data = try await download(assetID: manifestAssetID, projectUUID: uuid)
+            guard let real = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw PicPlaceSyncRun.Failed(caption: "The manifest asset of \(row.name) is not a project document.")
+            }
+            manifest = real
+        }
+        let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.withoutEscapingSlashes])
+        let document = try ProjectDocumentFormat.makeDecoder().decode(ProjectDocument.self, from: manifestData)
+        guard (1...ProjectDocumentFormat.current).contains(document.formatVersion) else {
+            throw PicPlaceSyncRun.Failed(caption: "\(row.name) needs a newer LetsLapse (document format \(document.formatVersion)).")
+        }
+
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        do {
+            var files = 0
+            var bytes: Int64 = 0
+            if let bundle = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName }) {
+                let data = try await download(assetID: bundle.id, projectUUID: uuid)
+                let tmp = folder.appendingPathComponent("tmp", isDirectory: true)
+                try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+                let archive = tmp.appendingPathComponent(PicPlaceSyncInventory.bundleName)
+                try data.write(to: archive, options: .atomic)
+                try DirectoryArchive.extract(archive, to: folder)
+                try? FileManager.default.removeItem(at: tmp)
+                files += 1; bytes += Int64(data.count)
+            }
+            else {
+                // A project pushed before the bundle existed (v1) holds its
+                // records as loose objects (kinded by their folder then —
+                // `note` at the root, `source` under source/): collect the
+                // ones the registry knows as records or sidecars, into place.
+                for loose in assets where PicPlaceSyncInventory.role(for: loose.name) == .bundle {
+                    let data = try await download(assetID: loose.id, projectUUID: uuid)
+                    let destination = folder.appendingPathComponent(loose.name)
+                    try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try data.write(to: destination, options: .atomic)
+                    files += 1; bytes += Int64(data.count)
+                }
+            }
+            if let poster = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName }) {
+                let data = try await download(assetID: poster.id, projectUUID: uuid)
+                try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
+                files += 1; bytes += Int64(data.count)
+            }
+            let capture = try model.registerPulledProject(capture: document.capture, blends: document.blends, originID: originID)
+            let heavy = assets.filter { $0.kind == "source" || $0.kind == "blend" }
+            records[originID] = PicPlaceSyncRecord(
+                syncedAt: Date(), revision: row.revision, files: files, bytes: bytes, uploaded: 0,
+                alsoOn: row.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name),
+                server: profile?.server ?? serverString, lastError: nil, policy: "pull",
+                heavyFiles: heavy.count, heavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) })
+            PicPlaceSyncState.save(records, root: root)
+            let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": row.revision, "tier": "preview"])
+            LLog("picplace: pulled \(capture.displayTitle) (\(uuid.prefix(8))) — \(files) object(s), \(bytes) bytes; \(heavy.count) heavy file(s) stay on PicPlace")
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
+    }
+
+    /// One asset's bytes through a presigned GET minted for it.
+    private func download(assetID: String, projectUUID: String) async throws -> Data {
+        let urls: [String: [PPDownloadURL]] = try await client.post("projects/\(projectUUID)/assets/urls", json: ["assets": [assetID]])
+        guard let item = urls["assets"]?.first else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted no download URL.") }
+        if let error = item.error { throw PicPlaceSyncRun.Failed(caption: item.message ?? error) }
+        guard let string = item.url, let url = URL(string: string) else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted an unusable download URL.") }
+        var request = URLRequest(url: url)
+        request.httpMethod = item.method ?? "GET"
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200 ..< 300).contains(status) else { throw PicPlaceSyncRun.Failed(caption: "Storage refused the download (\(status)).") }
+        return data
+    }
+}

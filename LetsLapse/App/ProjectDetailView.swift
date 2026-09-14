@@ -1306,6 +1306,13 @@ struct ProjectDetailView: View {
         // The original is ungraded on disk, so the player applies the project's
         // grade live — the same grade the card above it is previewing.
         let grade = model.photoGrade(for: capture)
+        // A preview-only project (its sources on PicPlace, not here) shows
+        // the poster it has, whatever its kind; there is nothing to play.
+        if model.picplace.isPreviewOnly(capture), let poster = model.posterURL(for: capture) {
+            fullscreenMedia = FullscreenMediaRequest(
+                .photo(url: poster), captureID: capture.id, title: capture.displayTitle)
+            return
+        }
         guard capture.kind == .video else {
             guard let url = heroMediaURL(for: capture) else { return }
             fullscreenMedia = FullscreenMediaRequest(

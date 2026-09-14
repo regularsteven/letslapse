@@ -1467,8 +1467,10 @@ final class AppModel: ObservableObject {
     /// `mediaURL` still gates the answer, so a project with a missing source
     /// file goes on rendering as the placeholder instead of a broken image.
     func thumbnailURL(for capture: CaptureProject) -> URL? {
-        if capture.isPhotoCapture { return heroImageURL(for: capture) }
-        guard let media = mediaURL(for: capture) else { return nil }
+        if capture.isPhotoCapture { return heroImageURL(for: capture) ?? posterURL(for: capture) }
+        // No media on this device: the poster stands in (a preview-only
+        // project). `ProjectThumbnailView` shows it as the plain image it is.
+        guard let media = mediaURL(for: capture) else { return posterURL(for: capture) }
         guard capture.kind == .photos else { return media }
         return thumbnailFrameURL(for: capture) ?? media
     }
@@ -8628,7 +8630,20 @@ final class AppModel: ObservableObject {
     /// never probed for fps, duration or dimensions, stills from before
     /// they were probed at all (gated on dimensions, always derivable, so
     /// this settles in one pass); the index says which (M3).
+    /// True once the launch walk has brought the index up to date with the
+    /// folders — what anything that compares the library against the
+    /// outside world (the PicPlace initial sync) must wait for, or a project
+    /// the walk has not indexed yet would look absent and be pulled twice.
+    @Published private(set) var isLibraryLoaded = false
+
     private func finishLaunch() {
+        defer {
+            isLibraryLoaded = true
+            // The PicPlace controller is lazy, but a session and a pending
+            // first connection must not wait for a card to be drawn: an
+            // empty library's Projects tab draws none.
+            _ = picplace
+        }
         sweepTrashAtLaunch()
         if libraryExportStale {
             libraryExportStale = false
@@ -9923,6 +9938,43 @@ final class AppModel: ObservableObject {
             }
         }
         return capture
+    }
+
+    // MARK: - PicPlace pull (v2 plan §4.3, §3.6)
+
+    /// Registers a project whose folder the PicPlace pull has just written —
+    /// the records bundle's members and the poster, no sources. The record
+    /// arrives keyed by its origin id (D11): `id == originID`, the blends
+    /// re-keyed to it, their files absent until a later download. Nothing
+    /// is re-minted: this IS the same project, on another device.
+    func registerPulledProject(capture arrived: CaptureProject, blends arrivedBlends: [BlendProject], originID: UUID) throws -> CaptureProject {
+        var capture = arrived
+        capture.id = originID
+        capture.originID = originID
+        capture.sourceFileNames.removeAll { $0.hasSuffix(".json") }
+        capture.addedAt = Date()
+        let blends = arrivedBlends.map { blend -> BlendProject in
+            var blend = blend
+            blend.captureID = originID
+            return blend
+        }
+        try store.insert(ProjectDocument(capture: capture, blends: blends))
+        validatedSourceFrames.remove(originID)
+        assetStore.forget(projectFolder: captureFolderURL(for: originID))
+        return capture
+    }
+
+    /// `Projects/<id>/poster.jpg` when the project has one (v2 plan §3.5).
+    func posterURL(for capture: CaptureProject) -> URL? {
+        let url = captureFolderURL(for: capture.id).appendingPathComponent(ProjectFileRegistry.posterName)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// True for a project whose listed source frames are not on this device
+    /// (v2 plan D7) — the file-side half of "preview only"; the PicPlace
+    /// controller adds whether it knows the project from the server.
+    func sourcesMissing(_ capture: CaptureProject) -> Bool {
+        !capture.sourceFileNames.isEmpty && mediaURL(for: capture) == nil
     }
 
     // MARK: - Project transfer

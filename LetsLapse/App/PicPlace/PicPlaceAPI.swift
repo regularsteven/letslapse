@@ -101,9 +101,23 @@ struct PPProjectIndex: Decodable {
     var serverTime: Date?
 }
 
-/// `GET /projects/{uuid}` — the registry row beside the manifest and the asset list.
+/// `GET /projects/{uuid}` — the registry row beside the manifest and the asset
+/// list. The manifest is LetsLapse's own JSON and is read from the raw body
+/// (`PicPlaceClient.getData`), never through this type.
 struct PPProjectDetail: Decodable {
     var project: PPProject
+    var assets: [PPAsset]?
+}
+
+/// One item of `POST /projects/{uuid}/assets/urls` (and `GET /assets/{id}/url`):
+/// a presigned GET, or a per-item error.
+struct PPDownloadURL: Decodable {
+    var id: String?
+    var url: String?
+    var method: String?
+    var expiresAt: Date?
+    var error: String?
+    var message: String?
 }
 
 struct PPConfirmResult: Decodable {
@@ -336,7 +350,23 @@ actor PicPlaceClient {
         try await send("DELETE", path, query: [:], body: nil)
     }
 
+    /// A GET whose body the caller reads itself — the project detail, whose
+    /// `manifest` is the app's own JSON.
+    func getData(_ path: String, query: [String: String] = [:]) async throws -> Data {
+        try await sendData("GET", path, query: query, body: nil).0
+    }
+
     private func send<T: Decodable>(_ method: String, _ path: String, query: [String: String], body: Any?, retrying: Bool = false) async throws -> T {
+        let (data, http) = try await sendData(method, path, query: query, body: body, retrying: retrying)
+        do {
+            return try Self.decoder.decode(T.self, from: data)
+        } catch {
+            LLog("picplace: \(method) \(path) → \(T.self) failed to decode: \(error); body: \(String(decoding: data.prefix(600), as: UTF8.self))")
+            throw PicPlaceAPIError(status: http.statusCode, code: "bad_response", message: "PicPlace sent something LetsLapse couldn't read (\(Self.describe(error))).", claim: nil)
+        }
+    }
+
+    private func sendData(_ method: String, _ path: String, query: [String: String], body: Any?, retrying: Bool = false) async throws -> (Data, HTTPURLResponse) {
         let current = try await validTokens()
         var components = URLComponents(url: apiBase(for: current).appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) } }
@@ -360,17 +390,12 @@ actor PicPlaceClient {
         if http.statusCode == 401, !retrying, tokens != nil {
             // The access token was revoked or expired early; refresh once and retry.
             _ = try await refresh()
-            return try await send(method, path, query: query, body: body, retrying: true)
+            return try await sendData(method, path, query: query, body: body, retrying: true)
         }
         guard (200 ..< 300).contains(http.statusCode) else {
             throw Self.decodeError(status: http.statusCode, data: data)
         }
-        do {
-            return try Self.decoder.decode(T.self, from: data)
-        } catch {
-            LLog("picplace: \(method) \(path) → \(T.self) failed to decode: \(error); body: \(String(decoding: data.prefix(600), as: UTF8.self))")
-            throw PicPlaceAPIError(status: http.statusCode, code: "bad_response", message: "PicPlace sent something LetsLapse couldn't read (\(Self.describe(error))).", claim: nil)
-        }
+        return (data, http)
     }
 
     /// Which key, in plain words, when a reply does not match the wire types.
