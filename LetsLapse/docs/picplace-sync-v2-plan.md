@@ -782,3 +782,46 @@ Throwaway projects tombstoned.
 object over 5 GB exists; the server refuses one at negotiate); per-blend
 posters; eviction ("free up space") — the presence tier now says what each
 device holds, which is the input it needs.
+
+## 14. Auto-sync — landed 2026-09-15 (§4.7, the first half)
+
+**What shipped** (`App/PicPlace/PicPlaceAutoSync.swift`):
+
+- **Sync changes automatically** (on by default once a library is
+  connected): a project's document reaching the disk
+  (`LibraryPersister.onProjectWritten`, only when the writer actually
+  wrote) is debounced twenty seconds after the last change and pushed
+  under the minimal policy — if its revision moved past the base (a pull
+  writes the document too and must not bounce back; a derived write
+  without a human stamp does not move it); and a **timer check** every
+  three minutes while the app runs, beside the launch and foreground
+  checks, brings other devices' changes in. A shoot being written, a check
+  in flight, a conflict on the project, or a manual sync of it defers the
+  push.
+- **Upload originals automatically** (off by default — a 431 GB library
+  must not start uploading the moment it connects): after every check and
+  every auto-push, the queue walks the library oldest first and uploads,
+  one project at a time, every project whose originals are only here
+  (records pushed, sources on disk, the server holding fewer originals
+  than the folder). **Wi-Fi only** (iOS, on by default; `NWPathMonitor`,
+  expensive paths excluded) and Low Power Mode gate it; a running shoot
+  pauses it; flipping a switch stops what is no longer allowed and starts
+  what now is. Settings shows *Auto-sync · Uploading originals · <name> ·
+  N files · size*, or why the originals wait.
+- With auto-sync on, a project in step shows **no Sync button** (the next
+  edit goes up on its own); the other states keep theirs as a nudge or a
+  retry. Downloads of originals stay per project by design.
+- The switches are per install (`UserDefaults`): a phone and a Mac want
+  different answers.
+
+**Verified between the two scratch devices**: a rename made through the
+real funnel on A went up 21 s later and B took it by its timer check; a
+seeded project with its source, auto-originals on, was pushed minimal by
+the launch check and its original uploaded by the queue with no further
+action; the Settings rows screenshotted. (The rename test touched a real
+project once — *China City* — and was reverted through the same path.)
+
+**Not done**: background transfers that survive the app being suspended on
+iOS (foreground `URLSession` today — an upload pauses with the app);
+automatic downloads; eviction. Next of §4.7: per-blend posters, eviction
+("free up space" once the tier says a copy is elsewhere), the mirrors.

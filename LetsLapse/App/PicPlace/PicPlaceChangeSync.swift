@@ -188,6 +188,7 @@ extension PicPlaceController {
                 LLog("picplace: conflict — \(conflict.name) (\(conflict.originID.uuidString.prefix(8))) \(conflict.kind): local \(conflict.localRevision.map(String.init) ?? "-") vs server \(conflict.serverRevision)\(conflict.serverDevice.map { " from \($0)" } ?? "")")
             }
             refreshUsage()
+            scheduleOriginalsQueue()
             #if DEBUG
             // `LL_PICPLACE_DOWNLOAD=<uuid>` / `LL_PICPLACE_UPLOAD=<uuid>` move a
             // project's originals after the check (stage 5).

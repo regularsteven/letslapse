@@ -1306,6 +1306,14 @@ final class AppModel: ObservableObject {
         }
         persister.onManifestWritten = { [weak self] date in self?.noteManifestWritten(at: date) }
         persister.onIndexChanged = { [weak self] in Task { @MainActor in self?.noteIndexChanged() } }
+        // An edit that reached the disk is auto-sync's cue (v2 plan §4.7) —
+        // once the library is loaded; the launch walk's own rewrites are not edits.
+        persister.onProjectWritten = { [weak self] id in
+            Task { @MainActor in
+                guard let self, self.isLibraryLoaded else { return }
+                self.picplace.noteProjectChanged(id)
+            }
+        }
         manifestSeenModifiedAt = (try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         assetStore.onChange = { [weak self] _ in
             self?.metadataRevision += 1

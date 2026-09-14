@@ -59,6 +59,11 @@ final class LibraryPersister: @unchecked Sendable {
     /// written, a project removed — so the lists re-ask (M2).
     var onIndexChanged: (@Sendable () -> Void)?
 
+    /// Called on the queue after a project's document actually changed on
+    /// disk (the writer skips an identical one) — what auto-sync debounces
+    /// into a push (v2 plan §4.7).
+    var onProjectWritten: (@Sendable (UUID) -> Void)?
+
     /// The per-document writer and indexer. Used on `queue` — and by the
     /// launch walk, before any persist is queued.
     let writer: ProjectDocumentWriter
@@ -225,7 +230,10 @@ final class LibraryPersister: @unchecked Sendable {
         let data = try writer.write(document, to: url)
         var outcome = ProjectDocumentWriter.Outcome()
         writer.index(data, at: url, id: id, outcome: &outcome)
-        if outcome.indexed > 0 { onIndexChanged?() }
+        if outcome.indexed > 0 {
+            onIndexChanged?()
+            onProjectWritten?(id)
+        }
     }
 
     private func report(_ error: Error) {

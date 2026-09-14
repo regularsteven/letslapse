@@ -61,7 +61,7 @@ struct PicPlaceStatusCard: View {
                         }
                     }
                     Spacer(minLength: 8)
-                    actionButton(for: capture, state: state, size: 12.5)
+                    if showsAction(for: state) { actionButton(for: capture, state: state, size: 12.5) }
                 }
                 if case .syncing(let progress) = state {
                     progressBar(progress, height: 4)
@@ -108,7 +108,7 @@ struct PicPlaceStatusCard: View {
                 Text(title(for: state))
                     .font(.system(size: 12, weight: .semibold))
                 Spacer(minLength: 8)
-                actionButton(for: capture, state: state, size: 11)
+                if showsAction(for: state) { actionButton(for: capture, state: state, size: 11) }
             }
             if case .syncing(let progress) = state {
                 progressBar(progress, height: 3)
@@ -141,6 +141,13 @@ struct PicPlaceStatusCard: View {
             }
         }
         .padding(.vertical, 6)
+    }
+
+    /// With auto-sync on, a project in step needs no button — the next edit
+    /// goes up on its own. The other states keep theirs (a nudge, a retry).
+    private func showsAction(for state: PicPlaceController.ProjectState) -> Bool {
+        if case .synced = state { return !picplace.autoSyncEnabled }
+        return true
     }
 
     private func isPreviewOnly(_ state: PicPlaceController.ProjectState) -> Bool {
@@ -367,6 +374,7 @@ struct PicPlaceSettingsCard: View {
                 }
                 libraryRow
                 initialSyncRow
+                autoSyncRows
                 checkRow
                 if PicPlaceConfiguration.showsServerSetting {
                     LLRow(title: "Server") {
@@ -534,6 +542,33 @@ struct PicPlaceSettingsCard: View {
         } else if let binding = picplace.binding, binding.initialSync.state == .pending, picplace.isSignedIn {
             LLRow(title: "First connection pending", subtitle: "Runs once the library has loaded") {
                 EmptyView()
+            }
+        }
+    }
+
+    /// Auto-sync (§4.7): the switches and what it is doing.
+    @ViewBuilder
+    private var autoSyncRows: some View {
+        if picplace.binding?.initialSync.state == .done {
+            LLRow(title: "Sync changes automatically",
+                  subtitle: "Edits and new projects go to PicPlace as you make them; other devices' changes arrive every few minutes") {
+                Toggle("", isOn: $picplace.autoSyncEnabled).labelsHidden()
+            }
+            LLRow(title: "Upload originals automatically",
+                  subtitle: "Source photos, videos and blends of every project, one project at a time. Nothing is ever removed from this device.") {
+                Toggle("", isOn: $picplace.autoOriginalsEnabled).labelsHidden().disabled(!picplace.autoSyncEnabled)
+            }
+            #if os(iOS)
+            if picplace.autoOriginalsEnabled {
+                LLRow(title: "Wi-Fi only", subtitle: "Originals wait for Wi-Fi") {
+                    Toggle("", isOn: $picplace.wifiOnly).labelsHidden()
+                }
+            }
+            #endif
+            if let status = picplace.autoStatus ?? picplace.originalsHold.map { "Originals: \($0)" } {
+                LLRow(title: "Auto-sync", subtitle: status) {
+                    if picplace.autoStatus != nil { ProgressView().controlSize(.small) }
+                }
             }
         }
     }

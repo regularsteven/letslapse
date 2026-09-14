@@ -128,6 +128,25 @@ final class PicPlaceController: ObservableObject {
     var checkTask: Task<Void, Never>?
     var lastCheckAt: Date?
     var foregroundObserver: NSObjectProtocol?
+    /// Auto-sync (§4.7): the switches, what it is doing, its timers and queues.
+    @Published var autoSyncEnabled: Bool = UserDefaults.standard.object(forKey: PicPlaceController.autoSyncKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(autoSyncEnabled, forKey: Self.autoSyncKey); autoSyncSettingChanged() }
+    }
+    @Published var autoOriginalsEnabled: Bool = UserDefaults.standard.bool(forKey: PicPlaceController.autoOriginalsKey) {
+        didSet { UserDefaults.standard.set(autoOriginalsEnabled, forKey: Self.autoOriginalsKey); autoSyncSettingChanged() }
+    }
+    @Published var wifiOnly: Bool = UserDefaults.standard.object(forKey: PicPlaceController.wifiOnlyKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(wifiOnly, forKey: Self.wifiOnlyKey); autoSyncSettingChanged() }
+    }
+    @Published internal(set) var autoStatus: String?
+    @Published internal(set) var isOnWiFi = true
+    var pendingPushes: [UUID: Task<Void, Never>] = [:]
+    var autoTimer: Timer?
+    var originalsQueueTask: Task<Void, Never>?
+    var pathMonitorBox: AnyObject?
+    static let autoSyncKey = "letslapse.picplace.autoSync"
+    static let autoOriginalsKey = "letslapse.picplace.autoOriginals"
+    static let wifiOnlyKey = "letslapse.picplace.wifiOnly"
     /// The server's watermark from the last index read (stage 4).
     var syncMeta = PicPlaceSyncState.Meta()
 
@@ -147,7 +166,7 @@ final class PicPlaceController: ObservableObject {
 
     unowned let model: AppModel
     var client: PicPlaceClient!
-    private var syncTasks: [UUID: Task<Void, Never>] = [:]
+    var syncTasks: [UUID: Task<Void, Never>] = [:]
     private var summaryTasks: [UUID: Task<Void, Never>] = [:]
     private let signInFlow = PicPlaceSignIn()
     let root = StorageRoot.current
@@ -256,6 +275,7 @@ final class PicPlaceController: ObservableObject {
             }
         }
         armChangeChecks()
+        armAutoSync()
         #if os(macOS)
         // `LL_PICPLACE_NEST=<host>:<username>` binds an unbound library to a
         // staged account and runs the Mac nest — the rename into
@@ -871,8 +891,8 @@ final class PicPlaceController: ObservableObject {
 
     /// A sync the caller waits for — the first connection pushes one
     /// project at a time.
-    func syncAndWait(_ capture: AppModel.CaptureProject) async {
-        sync(capture)
+    func syncAndWait(_ capture: AppModel.CaptureProject, policy: PicPlaceSyncPolicy? = nil) async {
+        sync(capture, policy: policy)
         await syncTasks[capture.id]?.value
     }
 
