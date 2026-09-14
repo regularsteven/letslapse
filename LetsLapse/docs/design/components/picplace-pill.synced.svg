@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 18" width="22" height="18" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · PicPlace pill · synced</title>
+  <desc>Mirrors PicPlacePill (App/ProjectsView.swift, planned) — the 22×18 media pill a Projects-list card wears on its thumbnail's top-right corner (4pt in) once the project has anything to do with PicPlace: synced (checkmark.icloud.fill, confirm green), syncing (icloud.and.arrow.up, LL.amber — the progress colour over dark), failed (exclamationmark.icloud.fill, system orange). Never drawn for a project that has never been synced, so the list stays quiet for people who never opted in. The media-pill treatment (black at 50%) rather than a second text-row pill: the size line already carries the SourceFormatPill, which on an interval card with FLAT runs to the card's edge, and the thumbnail corner reads the same on every card height.</desc>
+<!-- LetsLapse design component · PicPlace pill · 22×18, origin top-left; the glyph is 13pt centred. See components/README.md. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="picplace-pill" data-state="synced">
+    <rect x="0" y="0" width="22" height="18" rx="9" fill="#000" fill-opacity="0.5"/>
+    <g transform="translate(4.5,2.5) scale(0.5417)" data-symbol="checkmark.icloud.fill"><path d="M7.2 18.5 a4.2 4.2 0 0 1 -0.6 -8.35 a6.1 6.1 0 0 1 11.6 -1.2 a4.3 4.3 0 0 1 0.6 8.55 a3 3 0 0 1 -0.6 0.5 z" fill="#34C759"/><path d="M8.6 12.6 l2.3 2.3 4.6 -4.8" fill="none" stroke="#FFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+  </g>
+</svg>

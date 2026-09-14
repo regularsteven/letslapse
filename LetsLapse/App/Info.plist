@@ -60,6 +60,37 @@
 	     adds custom crypto, or encrypts user content at rest with our own
 	     scheme, this key has to be revisited — it is a legal declaration, not a
 	     build setting. -->
+	<!-- PicPlace presigned URLs point at the object store directly. Production is
+	     https; the local Garage used in development is plain http on loopback. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>127.0.0.1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.regularsteven.letslapse.picplace</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>letslapse</string>
+			</array>
+		</dict>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 

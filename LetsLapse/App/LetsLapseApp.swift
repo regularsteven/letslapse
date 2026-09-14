@@ -112,14 +112,21 @@ struct LetsLapseApp: App {
             // the URL ever arriving here, so opening a project silently does
             // nothing at all. The single-window scene below is the fix.
             .onOpenURL { url in
-                model.openArchive(at: url)
+                // The PicPlace sign-in callback (letslapse://…) or a .lapse file.
+                if !model.picplace.handleCallbackURL(url) {
+                    model.openArchive(at: url)
+                }
             }
             #if os(macOS)
             // The warm half of the same door, and the earliest point a file
             // that launched the app can be acted on: the model exists from
             // here, so anything the delegate caught before now is released.
             .onAppear {
-                LetsLapseAppDelegate.handler = { model.openArchive(at: $0) }
+                LetsLapseAppDelegate.handler = { url in
+                    if !model.picplace.handleCallbackURL(url) {
+                        model.openArchive(at: url)
+                    }
+                }
                 // The last queued write lands before the process goes (W6),
                 // the compatibility export is regenerated from the documents
                 // (M3), and the lock goes with it (Phase 4).
@@ -615,7 +622,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_DRAG"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_DRAG", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -933,9 +940,15 @@ struct ContentView: View {
                 }
             }
         }
-        if environment["LL_DETAIL"] == "latest", let capture = model.newestCapture() {
-            selectedTab = .projects
-            model.requestedProjectDetailID = capture.id
+        // `LL_DETAIL=latest|<capture-uuid>` — the project detail screen; a
+        // UUID names a specific project (the PicPlace sync verification
+        // seeds one into a scratch library and needs to land on it).
+        if let detail = environment["LL_DETAIL"] {
+            let capture = detail == "latest" ? model.newestCapture() : UUID(uuidString: detail).flatMap { model.capture(id: $0) }
+            if let capture {
+                selectedTab = .projects
+                model.requestedProjectDetailID = capture.id
+            }
         }
         // `LL_EDITOR=latest` — the photo editor on the LARGEST interval shoot
         // in the library (the bench wants the worst case), which is otherwise

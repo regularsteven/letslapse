@@ -393,6 +393,7 @@ struct ProjectDetailView: View {
                         ScannerProjectSections(capture: capture) {
                             model.openCapture(capture)
                         }
+                        PicPlaceStatusCard(picplace: model.picplace, captureID: capture.id)
                         managementCard(for: capture)
                     } else if layout.isWide {
                         wideBody(for: capture, layout: layout)
@@ -505,6 +506,9 @@ struct ProjectDetailView: View {
             makeSection(for: capture)
         }
         sourceMaterialSection(for: capture)
+        // The project's copy on PicPlace: after the material, before the
+        // management of it (picplace-sync-v1.md §3.7).
+        PicPlaceStatusCard(picplace: model.picplace, captureID: capture.id)
         managementCard(for: capture)
     }
 
@@ -536,8 +540,11 @@ struct ProjectDetailView: View {
                 sourceMaterialSection(for: capture)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            managementCard(for: capture)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 14) {
+                PicPlaceStatusCard(picplace: model.picplace, captureID: capture.id)
+                managementCard(for: capture)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 

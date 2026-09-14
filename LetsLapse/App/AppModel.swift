@@ -914,6 +914,10 @@ final class AppModel: ObservableObject {
     let store: ProjectStore = ProjectStore(
         projectsRoot: StorageRoot.current.appendingPathComponent("Projects", isDirectory: true),
         index: AppModel.sharedPersister.index, persister: AppModel.sharedPersister)
+    /// The optional cloud tier (docs/picplace-sync-v1.md): sign-in, the
+    /// projects this device pushed, and the pushes in flight. Main-actor
+    /// state the cards observe directly; nothing else in the model reads it.
+    @MainActor lazy var picplace = PicPlaceController(model: self)
     /// Bumped on the main actor whenever the index changed — after a
     /// persist's rows landed, after the launch pass, after the asset store
     /// re-indexed a project — so a list re-asks its question (M2).

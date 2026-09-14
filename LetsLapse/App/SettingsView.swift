@@ -132,6 +132,12 @@ struct SettingsView: View {
                 storageCard
                     .padding(.bottom, 12)
 
+                // Between Storage and Advanced because it is about where
+                // projects live, not about the engine (picplace-sync-v1.md).
+                LLSectionHeader("PicPlace")
+                PicPlaceSettingsCard(picplace: model.picplace)
+                    .padding(.bottom, 12)
+
                 LLSectionHeader("Advanced")
                 advancedCard
 

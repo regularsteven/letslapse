@@ -149,6 +149,17 @@ struct GalleryPreviewPanel: View {
                 metadataSection
                     .padding(.horizontal, 14)
 
+                // The project's copy on PicPlace, between the info rows and
+                // the footer — inspector only (macOS/gallery.item.picplace.svg).
+                if style == .inspector {
+                    VStack(alignment: .leading, spacing: 4) {
+                        LLSectionHeader("PicPlace")
+                        PicPlaceStatusCard(picplace: model.picplace, captureID: capture.id, style: .narrow)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 14)
+                }
+
                 Divider()
                     .padding(.top, 4)
 

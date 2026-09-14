@@ -403,3 +403,20 @@ Height follows the wrapped detail (115.5 pt at `phone`, 86.5 at `window`). One s
 no in-app repair before Phase 4's reconciliation, so the banner has nothing to offer but the
 facts. Verified on the running Mac Debug build against a scratch library whose manifest was
 corrupted by one byte, 2026-09-13.
+
+## PicPlace — `picplace-status.<state>.<width>.svg` · `picplace-account.<state>.phone.svg` · `picplace-pill.<state>.svg`
+
+The optional cloud tier's chrome, drawn 2026-09-14 (design first, Steven's call; spec in [../../picplace-sync-v1.md](../../picplace-sync-v1.md)). Three pieces:
+
+**Status card** — `picplace-status.<state>.<width>.svg`: a project's copy on the user's PicPlace account and the one action that state offers. Six states: `signed-out` (Sign in), `not-synced` (Sync to PicPlace), `changes` (Sync now — edited since the last sync), `syncing` (an LL.amber bar on LL.controlFill, "127 of 341 files · 1.8 MB of 4.9 MB", Cancel), `synced` (Sync again, and the **Also on** row: the other devices the server holds presence records for), `failed` (Try again, the reason in the caption — the write claim held by another device is the common one). The glyph column names the state: `icloud` secondary outline (signed-out, not-synced), `icloud.and.arrow.up` accent (changes, syncing), `checkmark.icloud.fill` confirm green (synced), `exclamationmark.icloud.fill` system orange (failed).
+
+| Width | Where | Grammar | Heights |
+|---|---|---|---|
+| `phone` (361) | the iOS project-detail cards, at x 16 on the card's top — the SCREEN draws the white rx16 card and shadow at the component's height, as for the blended-clip rows | glyph 20 at x 16 · title 16 at x 44 on 25 · subtitle 11.5 on 40 · action 12.5 semibold accent trailing at x 345 on 29 | 56 (lone row) · 76 (syncing) · 96 (synced: divider at 52, Also on row on 80) |
+| `narrow` (302) | the Mac Gallery item inspector at x 34, flat on the pane under a PICPLACE header the screen draws (13 pt at x 38, like OUTPUT) | glyph 16 at x 0 · title 12 semibold at x 24 on 17 · action 11 medium accent trailing at x 302 · caption 11 on 32 | 40 · 60 (syncing: bar on 39, caption on 54) · 60 (synced: Also on row on 52, label at 24, value at 106) |
+
+**Account card** — `picplace-account.<state>.phone.svg` (361): the Settings PICPLACE card's contents, the screen drawing the card. `signed-out` (96): Sign in with PicPlace in accent over "Keep a copy of your projects on picplace.co", then Server with a chevron. `signed-in` (220): five 44 pt rows — Account · This device · On PicPlace · Server (read-only) · Sign out… in record red. Same row grammar as the Storage card.
+
+**Pill** — `picplace-pill.<state>.svg` (22×18): the media pill a Projects-list card wears on its thumbnail's top-right corner, 4 pt in — black at 50 % with the state's glyph (green check · amber up-arrow · orange exclamation). Never drawn for a project that has never been synced.
+
+Referenced by `iOS/project-detail.photo.picplace.portrait.svg`, `iOS/settings.picplace.*.portrait.svg`, `iOS/projects.picplace.portrait.svg` and `macOS/gallery.item.picplace.svg`. **Mirrors** (2026-09-14, same day as sign-off): `App/PicPlace/PicPlaceViews.swift` — `PicPlaceStatusCard` (`.phone` draws the header and card, `.narrow` the flat group; `glyph`, `title`, `caption`, `actionButton`, `progressBar`), `PicPlaceSettingsCard`, `PicPlacePill`. The phone states were verified on the iPhone 16 Pro simulator through a real sync; the narrow width is owed a look on the Mac (`LL_PICPLACE=<state>` stages any of the six without a server).

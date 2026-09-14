@@ -11,6 +11,35 @@ live inline.
 
 ## Open
 
+### PicPlace sync v1 — sign in, push a nominated project, show its status
+
+**Detail:** [picplace-sync-v1.md](picplace-sync-v1.md) · **Raised:** 2026-09-14
+(Steven: "add the authentication to the LetsLapse app and sync of a nominated
+photo — or video or interval — project to the picplace server, with some
+indication of status inside the app") · **DESIGN SIGNED OFF AND IMPLEMENTED
+2026-09-14; verified on the iPhone simulator against picplace.test; OWED: the
+real Sign-in button by hand, a look at the Mac inspector group, and the
+production server (Hetzner storage, cron) before picplace.co** · medium · seams:
+`App/SettingsView.swift` (a PICPLACE card between Storage and Advanced),
+`App/ProjectDetailView.swift` + `App/GalleryPreviewPanel.swift` (the status
+card / inspector group), `App/ProjectsView.swift` (a thumbnail pill),
+`App/Info.plist` (the `letslapse` URL scheme), new `App/PicPlace/*` (PKCE
+sign-in, Keychain tokens, the API client, the sync task, device-local state).
+
+The server side is built and verified (the `picplace` repo, phases 0–4): PKCE
+sign-in, a project registry keyed by the project's own UUID, single-device
+write claims, presence, and presigned uploads negotiated in batches. The app's
+half is a Settings sign-in, one Sync button per project that claims, PUTs
+`project.json` as the manifest, negotiates every file under the project
+folder (sha256 from `assets.ndjson` where it has one), PUTs them straight to
+object storage, confirms, posts presence and releases — and a six-state card
+(signed-out · not-synced · changes · syncing · synced with the other devices
+that hold a copy · failed) drawn once as components and placed on the iPhone
+detail and the Mac inspector, plus a media pill on the Projects thumbnail.
+Nothing touches a record, a file format or the index; a device that never
+signs in sees no difference. Out of v1: downloads, multi-project or automatic
+sync, force-taking a claim, background transfers, production hosting.
+
 ### Post-crop vignette centring — the still and blend paths centre the vignette on the whole frame
 
 **Raised:** 2026-09-12 (editor-controls redesign, stage D2) · known
