@@ -100,18 +100,38 @@ struct PhotoZoomGeometry {
         CGSize(width: fit.width * scale, height: fit.height * scale)
     }
 
+    /// Where the picture's top-left corner sits in the pane, in the pane's
+    /// points: centred (so a letterboxed picture starts half the slack in),
+    /// then moved by the pan. This is the one place that relation lives —
+    /// the visible region and the drawing gestures both go through it.
+    func pictureOrigin(scale: CGFloat, offset: CGSize) -> CGPoint {
+        let drawn = drawnSize(scale: scale)
+        return CGPoint(x: (container.width - drawn.width) / 2 + offset.width,
+                       y: (container.height - drawn.height) / 2 + offset.height)
+    }
+
+    /// A point in the pane's own coordinates as a point in the picture's —
+    /// the space every mask and shape is defined in. Not clamped: a drag may
+    /// start or end in the letterbox, and a linear mask's far end belongs
+    /// off the picture.
+    func picturePoint(_ point: CGPoint, scale: CGFloat, offset: CGSize) -> CGPoint {
+        let origin = pictureOrigin(scale: scale, offset: offset)
+        return CGPoint(x: point.x - origin.x, y: point.y - origin.y)
+    }
+
     /// Which part of the source is on screen, normalised with a top-left
     /// origin.
     func visibleRegion(scale: CGFloat, offset: CGSize) -> CGRect {
         let drawn = drawnSize(scale: scale)
         guard drawn.width > 0, drawn.height > 0 else { return CGRect(x: 0, y: 0, width: 1, height: 1) }
-        func span(drawn: CGFloat, container: CGFloat, offset: CGFloat) -> (CGFloat, CGFloat) {
-            let low = min(max(((drawn - container) / 2 - offset) / drawn, 0), 1)
-            let high = min(max(((drawn + container) / 2 - offset) / drawn, 0), 1)
+        let origin = pictureOrigin(scale: scale, offset: offset)
+        func span(drawn: CGFloat, container: CGFloat, origin: CGFloat) -> (CGFloat, CGFloat) {
+            let low = min(max(-origin / drawn, 0), 1)
+            let high = min(max((container - origin) / drawn, 0), 1)
             return (low, max(high, low))
         }
-        let (x0, x1) = span(drawn: drawn.width, container: container.width, offset: offset.width)
-        let (y0, y1) = span(drawn: drawn.height, container: container.height, offset: offset.height)
+        let (x0, x1) = span(drawn: drawn.width, container: container.width, origin: origin.x)
+        let (y0, y1) = span(drawn: drawn.height, container: container.height, origin: origin.y)
         return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     }
 

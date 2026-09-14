@@ -4,6 +4,7 @@ import SwiftUI
 #if DEBUG && os(macOS)
 /// The editors `LL_EDITOR` has already opened in this process — see the hook.
 @MainActor private var llHookOpenedEditors: Set<UUID> = []
+@MainActor private var llHookDragFired = false
 #endif
 
 @main
@@ -612,7 +613,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_DRAG"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -1223,6 +1224,31 @@ struct ContentView: View {
         if environment["LL_PROBE_FORMATS"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 HolyGrailFormatProbe.run()
+            }
+        }
+        #endif
+        // LL_DRAG=x1,y1,x2,y2[,delay] — a synthetic mouse drag in the main
+        // window, in window points from its top-left (what `screencapture -l
+        // <windowID>` shows, at 1×), `delay` seconds after launch (default
+        // 4) and once per process. Built in-process and handed straight to
+        // the view under the point (`DebugDrag`), never through the HID
+        // stream, so a drawing gesture — a mask, a shape, a crop handle —
+        // can be checked on a copy running beside somebody's own without
+        // posting any real input.
+        // Pair with the hooks that stage the state it is drawn in, e.g.
+        // `LL_TAB=gallery LL_ITEM=latest:masks LL_SHAPETOOL=rect`.
+        #if os(macOS)
+        if let hook = environment["LL_DRAG"], !llHookDragFired {
+            llHookDragFired = true
+            let numbers = hook.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+            if numbers.count >= 4 {
+                let delay = numbers.count > 4 ? numbers[4] : 4
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    DebugDrag.perform(from: CGPoint(x: numbers[0], y: numbers[1]),
+                                      to: CGPoint(x: numbers[2], y: numbers[3]))
+                }
+            } else {
+                LLog("LL_DRAG: expected x1,y1,x2,y2[,delay], got \(hook)")
             }
         }
         #endif

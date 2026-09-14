@@ -2118,16 +2118,27 @@ struct PhotoViewerView: View {
     /// while a tool is armed, or sets an armed slider. Both are the same
     /// gesture object because they are the same finger, and only one of them
     /// can be live at a time.
+    ///
+    /// It reads the PANE's points and converts them itself. The gesture sits
+    /// on the pane so a stroke can begin in the letterbox, and the picture's
+    /// named space (`MaskShapeOverlay.space`) is registered on a descendant
+    /// of it — a `.named` space a gesture cannot find among its ancestors is
+    /// silently resolved as `.local` (measured 2026-09-13), which put every
+    /// drawn mask and shape one letterbox inset away from where it was drawn:
+    /// to the right for a portrait picture in a wide pane, down for a wide
+    /// one in a tall pane, and by the pan once zoomed. The handles inside
+    /// the picture keep using the named space; from in there it resolves.
     private func maskPictureGesture(in geometry: PhotoZoomGeometry) -> some Gesture {
-        let drawn = geometry.drawnSize(scale: zoom.scale)
-        return DragGesture(minimumDistance: 0, coordinateSpace: .named(MaskShapeOverlay.space))
+        let scale = zoom.scale, offset = zoom.offset
+        let drawn = geometry.drawnSize(scale: scale)
+        return DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
+                let start = geometry.picturePoint(value.startLocation, scale: scale, offset: offset)
+                let point = geometry.picturePoint(value.location, scale: scale, offset: offset)
                 if railTab == .masks, let kind = shapeTool {
-                    continueDrawingShape(kind, from: value.startLocation,
-                                         to: value.location, in: drawn)
+                    continueDrawingShape(kind, from: start, to: point, in: drawn)
                 } else if railTab == .masks, let kind = maskTool {
-                    continueDrawing(kind, from: value.startLocation,
-                                    to: value.location, in: drawn)
+                    continueDrawing(kind, from: start, to: point, in: drawn)
                 } else if let field = armedMaskField {
                     continueArmedDrag(field, translation: value.translation)
                 }
