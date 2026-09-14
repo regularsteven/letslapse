@@ -526,6 +526,41 @@ the Mac into swap in six seconds and died on a 2315-frame DNG project; fixed in
 8a63c4c (POSIX reads, a pool per file, the backfill on its own queue so an
 import's records land at once, the decide-walk off the main actor).
 
+**M1 landed 2026-09-14 — the truth flips** (538dbb1 the Kit, 77116f1 the app;
+report `data-model-audit-reports/scratch-m1-switch-2026-09-14.txt`): the app
+loads every `Projects/<id>/project.json` (live and `.trash`, one strict decode
+each — `App/LibraryDocumentLoader.swift`) plus `Collections/collections.json`
+and no longer decodes `library.json`; the persister writes the documents first
+and `library.json` after them as a generated compatibility export marked
+`"generated": true` (Kit `LibraryExportFormat`; `lapse audit` reports it as
+such and lists the kept copies; `--rebuild-index --out` marks its output too).
+A missing, unreadable or pre-switch export — or one whose ids no longer match
+the documents — is regenerated at the end of the launch; the first launch that
+meets a manifest without the marker keeps it as
+`library.json.pre-switch-<stamp>`. Rules: a document under `Projects/` is live
+whatever its tombstone says, one under `.trash/` is deleted (stamped if
+undated); an undecodable document is reported, left byte-for-byte alone and
+kept out of the folder reconciliation; a live folder with no document takes
+its record from the manifest once; a library with no documents at all
+bootstraps from its manifest and flips on that launch; the loader seeds the
+document writer so an adopting launch's persist writes one document (28 ms)
+instead of everything (8 s). Verified on scratch roots built from the Mac
+volume's manifest and 366 documents: the flip rewrites no document, reads 366
+in 0.16 s, `--rebuild-index` IDENTICAL and `index --verify` CONSISTENT after
+every launch, the pre-switch copy against the export differs only in a
+half-millisecond `addedAt` (µs → ms) and the folder-order tie of two twins
+with identical `createdAt`; a deleted export regenerates byte-identical with a
+pixel-identical Projects list; a corrupt one is set aside, bannered (the
+Phase 4 "rebuilt from N folders" story, unchanged copy — no SVG applies) and
+regenerated; a manifest-only root bootstraps and reads IDENTICAL on launch two;
+six edge faults at once behave. **Owed from M1:** the real Mac library's first
+M1 launch and its read-only `lapse audit` after (this session could not point
+`lapse` at the volume); the iPhone 16 Pro launch time at 518 projects (a device
+install — ask first); the banner's "regenerated" wording for an unreadable
+export (a copy change, with M4 when the story goes). **M2 waits on the brief's
+§9 decisions** (search semantics, how long the export stays, the Recovered
+badge, the collections' in-memory shape).
+
 ### Asset metadata (IPTC Core), the index at scale, and the Lightroom catalogue
 
 **Detail:** [data-model-scale-and-metadata-2026-09-12.md](data-model-scale-and-metadata-2026-09-12.md)

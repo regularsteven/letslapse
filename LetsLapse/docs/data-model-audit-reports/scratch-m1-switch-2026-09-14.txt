@@ -1,0 +1,89 @@
+M1 · the truth flips — verification on a scratch root, 2026-09-14
+root: <scratch>/lib-full = the Mac volume's Projects/library.json (pre-switch, schema 4, 366 captures / 140 blends / 1 collection)
+      + every project.json, assets.ndjson and metadata.json (365 live folders + 1 in .trash) + Collections/collections.json; no media.
+build: ios-app @ 77116f1 (M1 W1 538dbb1 + W2 77116f1), Debug Mac app on -storage.libraryRootPath <root>; the volume itself was not touched.
+
+== launch 1 (the flip) — console ==
+🎥LL 978.397 library lock: taken (pid 6693)
+🎥LL 978.514 library: pre-switch manifest kept as library.json.pre-switch-20260914-071847
+🎥LL 978.555 library: read 366 documents (1 in .trash) in 0.158 s — 365 live, 1 deleted, 140 blends, 1 collections · switched from library.json
+🎥LL 978.638 project documents: reconciled 0 written · 366 current · 0 without a folder · 0 failed in 0.07 s
+🎥LL 978.638 index: 0 projects re-indexed · 0 asset files re-indexed
+   documents rewritten by the launch: 0 (every project.json mtime unchanged)
+
+== launch 2 (generated export in place) — console ==
+🎥LL  92.333 library lock: taken (pid 7046)
+🎥LL  92.421 library: read 366 documents (1 in .trash) in 0.087 s — 365 live, 1 deleted, 140 blends, 1 collections
+🎥LL  92.498 project documents: reconciled 0 written · 366 current · 0 without a folder · 0 failed in 0.07 s
+🎥LL  92.498 index: 0 projects re-indexed · 0 asset files re-indexed
+   library.json mtime unchanged; no second pre-switch copy
+
+== launch 3 (library.json deleted) — console ==
+🎥LL 113.212 library lock: taken (pid 7167)
+🎥LL 113.310 library: no library.json — the export will be regenerated
+🎥LL 113.310 library: read 366 documents (1 in .trash) in 0.097 s — 365 live, 1 deleted, 140 blends, 1 collections
+🎥LL 113.384 project documents: reconciled 0 written · 366 current · 0 without a folder · 0 failed in 0.07 s
+🎥LL 113.384 index: 0 projects re-indexed · 0 asset files re-indexed
+   regenerated export byte-identical to the deleted one; Projects list pixel-identical to launches 1 and 2 (bar '17 hours ago' → '18 hours ago')
+
+== launch 4 (library.json corrupt) — console ==
+🎥LL 199.958 library lock: taken (pid 7494)
+🎥LL 200.059 library: manifest undecodable, set aside as library.json.unreadable-20260914-072229 — Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected end
+🎥LL 200.061 library: read 366 documents (1 in .trash) in 0.101 s — 365 live, 1 deleted, 140 blends, 1 collections
+🎥LL 200.137 project documents: reconciled 0 written · 366 current · 0 without a folder · 0 failed in 0.07 s
+🎥LL 200.137 index: 0 projects re-indexed · 0 asset files re-indexed
+   set aside as library.json.unreadable-20260914-072229; banner 'Library rebuilt from 366 project folders'; export regenerated, generated: true, 366 captures
+
+== lapse audit (after) ==
+lapse audit · <scratch>/lib-full
+  manifest: decoded · 2670165 bytes · schema 4 · generated export
+  set-aside manifests: library.json.unreadable-20260914-072229
+  pre-switch manifests kept: library.json.pre-switch-20260914-071847
+  (the 'listed source files missing' below the fold are the scratch root's absent media, as in every scratch audit)
+
+== lapse audit --rebuild-index (after) ==
+diff (index vs documents, canonical form)
+  only in the index: 0
+  only in the documents: 0
+  collections: 1 in the index · 1 in Collections/collections.json
+  differing records: 0 · differing fields: 0
+
+REBUILD IDENTICAL
+
+== lapse index --verify (after) ==
+  verify: 366 documents · 366 indexed · missing from index 0 · stale in index 0 → CONSISTENT
+
+== pre-switch manifest vs post-switch export ==
+  Kit: the pre-switch copy put in place of the export on a copy of the root → REBUILD IDENTICAL (both sides identical to the same 366 documents in canonical form).
+  direct (Python, by id): captures 366/366, blends 140/140, collections 1/1; only-in-either 0; one addedAt differs by the half-millisecond the
+  documents never carried (810995433.2405 → .241, the µs→ms loss Part 1 §7 set); the export's capture order differs at 4 positions = two pairs
+  of twin projects with byte-identical createdAt whose tie now resolves in folder order instead of manifest order (cosmetic, stable from here on).
+
+== bootstrap root (manifest + 365 folder skeletons, NO documents, no collections.json) ==
+   launch 1:
+🎥LL 473.893 library lock: taken (pid 8740)
+🎥LL 473.964 library: pre-switch manifest kept as library.json.pre-switch-20260914-072703
+🎥LL 473.965 library: bootstrapped from library.json (365 live, 1 deleted, 140 blends) — no project documents yet; the launch pass writes them
+🎥LL 474.227 project documents: reconciled 366 written · 0 current · 1 without a folder · 0 failed in 0.26 s
+🎥LL 474.227 index: rebuilt from the files — 365 projects
+   launch 2:
+🎥LL 510.576 library lock: taken (pid 9421)
+🎥LL 510.677 library: library.json lists 1 capture(s) and 0 blend(s) the documents don't, and lacks 0 and 0 — the export will be regenerated
+🎥LL 510.677 library: read 365 documents (0 in .trash) in 0.100 s — 365 live, 0 deleted, 140 blends, 1 collections
+🎥LL 510.760 project documents: reconciled 0 written · 365 current · 0 without a folder · 0 failed in 0.08 s
+🎥LL 510.760 index: 0 projects re-indexed · 0 asset files re-indexed
+   after launch 2: REBUILD IDENTICAL · index CONSISTENT; the one record not carried across is the tombstone whose .trash folder the root never had (kept in the pre-switch copy).
+
+== edge root (six deliberate faults at once) ==
+🎥LL 389.672 library: BA7FDCE4 has a folder and a manifest record but no document yet — taken from the manifest
+🎥LL 389.673 library: 9462125C tombstoned but under Projects/ — live (restored from its folder)
+🎥LL 389.673 library: 7B4358B4 in .trash without a deletedAt — stamped now
+🎥LL 389.673 library: document in 79564E4F-7C5F-4143-B9B3-902F6766F980 could not be read and was left alone: dataCorrupted(Swift.DecodingError.Context(codingPath: [], d
+🎥LL 389.673 library: document in 959B9326-6D4E-4B0E-98E9-8DBB82958560 could not be read and was left alone: dataCorrupted(Swift.DecodingError.Context(codingPath: [Codi
+🎥LL 389.673 library: read 362 documents (1 in .trash) in 0.124 s — 362 live, 1 deleted, 140 blends, 1 collections
+🎥LL 389.677 reconcile: recovered 3F09DE6F from its folder (1 files)
+🎥LL 389.705 reconcile: 0 adopted, 1 recovered, persisted
+🎥LL 398.009 project documents: reconciled 0 written · 364 current · 0 without a folder · 0 failed in 8.30 s
+   (the 8.30 s launch pass is the index being built from scratch on this root's 57,052 asset rows, on the persister's queue — the same 8 s lapse index --rebuild takes)
+   the two unreadable documents byte-identical after the launch and its persist; the gap folder's document written; the live tombstone restored;
+   the recordless folder recovered; the .trash document stamped; the recovering persist 28 ms (4 documents), where an unseeded writer took 8 s.
