@@ -25,7 +25,7 @@ struct FramingReviewView: View {
     @Environment(\.dismiss) private var dismiss
 
     private var capture: AppModel.CaptureProject? {
-        model.captures.first { $0.id == captureID }
+        model.capture(id: captureID)
     }
 
     private var review: FramingReview? { store.review(for: captureID) }

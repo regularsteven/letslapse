@@ -498,7 +498,7 @@ final class ProjectTransferServer: ObservableObject {
             return
         }
 
-        let name = model.captures.first(where: { $0.id == captureID })
+        let name = model.capture(id: captureID)
             .map { $0.name ?? $0.originalName } ?? "Project"
         let files = Self.fileManifest(folder: folder, manifestBytes: Int64(manifestData.count))
         let ready = PTTransferReady(captureID: captureID, files: files)

@@ -545,7 +545,7 @@ struct PhotoViewerView: View {
     private let renderDebounce: Duration = .milliseconds(100)
 
     private var capture: AppModel.CaptureProject? {
-        model.captures.first { $0.id == captureID }
+        model.capture(id: captureID)
     }
 
     /// What this shoot's white balance is anchored to.

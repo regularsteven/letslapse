@@ -163,7 +163,7 @@ struct CapturePhotoGrid: View {
     /// project's (or the project's grade is a no-op).
     private var grade: PhotoGrade? {
         guard let captureID,
-              let capture = model.captures.first(where: { $0.id == captureID }) else { return nil }
+              let capture = model.capture(id: captureID) else { return nil }
         let grade = model.photoGrade(for: capture)
         return grade.isIdentity ? nil : grade
     }
@@ -236,7 +236,7 @@ private struct CaptureFrameViewer: View {
 
     private var capture: AppModel.CaptureProject? {
         guard let captureID else { return nil }
-        return model.captures.first { $0.id == captureID }
+        return model.capture(id: captureID)
     }
 
     private var grade: PhotoGrade? {

@@ -613,7 +613,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_DRAG"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_DRAG"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -796,7 +796,7 @@ struct ContentView: View {
                 // asks, ContentView switches tabs, ScansView pushes — rather
                 // than setting the path here. A hook that took a short cut
                 // would be a hook that couldn't catch the routing breaking.
-                if let capture = model.captures.first(where: { $0.id == id }) {
+                if let capture = model.capture(id: id) {
                     model.requestedScanDetailID = id
                     model.autoCorrectScan(capture)
                 }
@@ -810,7 +810,7 @@ struct ContentView: View {
         if let hook = environment["LL_SCANS_DELETED"] {
             if let id = model.debugSeedScannerProject(
                 poses: 8, corrected: true, paper: .a4, spacingSeconds: 27) {
-                if let capture = model.captures.first(where: { $0.id == id }) {
+                if let capture = model.capture(id: id) {
                     model.deleteScanPage(Int(hook) ?? 3, from: capture)
                 }
                 selectedTab = .scans
@@ -828,7 +828,7 @@ struct ContentView: View {
             let perDocument = max(1, Int(hook) ?? 1)
             if let id = model.debugSeedScannerProject(
                 poses: 9, corrected: true, paper: .a4, spacingSeconds: 27) {
-                let pages = model.captures.first { $0.id == id }
+                let pages = model.capture(id: id)
                     .map(model.scanPageNumbers(for:)) ?? []
                 model.debugSeedScanDocuments(
                     for: id, starts: stride(from: 1, through: pages.count, by: perDocument).map { $0 })
@@ -889,7 +889,7 @@ struct ContentView: View {
         if let which = environment["LL_DELETE"], !which.isEmpty {
             let capture = which == "latest"
                 ? model.captures.first
-                : UUID(uuidString: which).flatMap { id in model.captures.first { $0.id == id } }
+                : UUID(uuidString: which).flatMap { id in model.capture(id: id) }
             if let capture {
                 do {
                     try model.deleteCapture(capture)
@@ -899,13 +899,30 @@ struct ContentView: View {
                 }
             }
         }
+        // LL_APPLY_PRESET=latest|<capture-uuid>:<Natural|Cinema|Matte|Vivid|
+        // Original> — applies that built-in preset to the project through
+        // the real grade path (`applyPreset` → `updateCapture`, queued), two
+        // seconds after launch so the launch pass has finished: the M2 check
+        // that a grade settle rewrites one document and one index row.
+        if let raw = environment["LL_APPLY_PRESET"], let colon = raw.lastIndex(of: ":"),
+           let preset = PhotoPreset(rawValue: String(raw[raw.index(after: colon)...])) {
+            let which = String(raw[..<colon])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                let capture = which == "latest"
+                    ? model.captures.first
+                    : UUID(uuidString: which).flatMap { id in model.capture(id: id) }
+                guard let capture else { LLog("LL_APPLY_PRESET: no such project \(which)"); return }
+                model.applyPreset(preset, for: capture)
+                LLog("LL_APPLY_PRESET applied \(preset.rawValue) to \(capture.id.uuidString.prefix(8))")
+            }
+        }
         // LL_EXPORT_ARCHIVE=latest|<capture-uuid> — writes that project's
         // `.lapse` to the temporary directory and logs the path, so a round
         // trip (export → LL_IMPORT_ARCHIVE) needs no Share sheet.
         if let which = environment["LL_EXPORT_ARCHIVE"], !which.isEmpty {
             let capture = which == "latest"
                 ? model.captures.first
-                : UUID(uuidString: which).flatMap { id in model.captures.first { $0.id == id } }
+                : UUID(uuidString: which).flatMap { id in model.capture(id: id) }
             if let capture {
                 Task {
                     do {

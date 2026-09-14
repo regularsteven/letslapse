@@ -216,7 +216,7 @@ struct CollectionClipThumb: View {
     }
 
     private var blend: AppModel.BlendProject? {
-        model.blends.first { $0.id == blendID }
+        model.blend(id: blendID)
     }
 }
 

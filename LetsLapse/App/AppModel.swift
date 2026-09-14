@@ -1344,12 +1344,12 @@ final class AppModel: ObservableObject {
 
     var currentCapture: CaptureProject? {
         guard let currentCaptureID else { return nil }
-        return captures.first { $0.id == currentCaptureID }
+        return capture(id: currentCaptureID)
     }
 
     var currentBlend: BlendProject? {
         guard let resultBlendID else { return nil }
-        return blends.first { $0.id == resultBlendID }
+        return blend(id: resultBlendID)
     }
 
     func blends(for capture: CaptureProject) -> [BlendProject] {
@@ -1384,7 +1384,7 @@ final class AppModel: ObservableObject {
     }
 
     func capture(for blend: BlendProject) -> CaptureProject? {
-        captures.first { $0.id == blend.captureID }
+        capture(id: blend.captureID)
     }
 
     func mediaKind(for capture: CaptureProject) -> MediaKind {
@@ -1485,18 +1485,15 @@ final class AppModel: ObservableObject {
     /// Toggle the nomination on `fileName` inside `capture`. Persists the
     /// change immediately. Does nothing and returns if the project isn't found.
     func toggleFrameNomination(fileName: String, in captureID: UUID) {
-        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
-        var names = Set(captures[index].nominatedBadFrameNames ?? [])
-        if names.contains(fileName) {
-            names.remove(fileName)
-        } else {
-            names.insert(fileName)
+        updateCapture(captureID) { capture in
+            var names = Set(capture.nominatedBadFrameNames ?? [])
+            if names.contains(fileName) {
+                names.remove(fileName)
+            } else {
+                names.insert(fileName)
+            }
+            capture.nominatedBadFrameNames = names.isEmpty ? nil : Array(names).sorted()
         }
-        captures[index].nominatedBadFrameNames = names.isEmpty ? nil : Array(names).sorted()
-        // A person changed this project — see CaptureProject.modifiedAt.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
-        try? persistLibrary()
     }
 
     /// The integer frame indices (into `sourceFrameURLs`) that the user has
@@ -1533,13 +1530,7 @@ final class AppModel: ObservableObject {
     /// frames, and a shoot with two ruined frames and one with fifty deserve
     /// separate answers.
     func setHideBadFrames(_ value: Bool, for captureID: UUID) {
-        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
-        guard captures[index].hideBadFrames != value else { return }
-        captures[index].hideBadFrames = value
-        // A person changed this project — see CaptureProject.modifiedAt.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
-        try? persistLibrary()
+        updateCapture(captureID) { $0.hideBadFrames = value }
     }
 
     /// How many frames this project has *to show* — its source frames less the
@@ -1674,12 +1665,7 @@ final class AppModel: ObservableObject {
     /// Records the stock a session is presented as, after a re-correction has
     /// gone through on a different one.
     func setScannerPaper(_ paper: PerspectiveAspect, for id: UUID) {
-        guard let index = captures.firstIndex(where: { $0.id == id }) else { return }
-        captures[index].scannerPaper = paper.rawValue
-        // A person changed this project — see CaptureProject.modifiedAt.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
-        try? persistLibrary()
+        updateCapture(id) { $0.scannerPaper = paper.rawValue }
     }
 
     // MARK: - Scan documents
@@ -1694,7 +1680,7 @@ final class AppModel: ObservableObject {
     /// never empty for a session with pages, and exactly one entry for a scan
     /// made before grouping existed.
     func scanDocuments(for sessionID: UUID) -> [ScanDocument] {
-        guard let capture = captures.first(where: { $0.id == sessionID }) else { return [] }
+        guard let capture = capture(id: sessionID) else { return [] }
         return ScanDocumentStore.resolve(
             ScanDocumentStore.load(from: scanSourceFolder(for: sessionID)),
             pageNumbers: scanPageNumbers(for: capture))
@@ -1919,7 +1905,7 @@ final class AppModel: ObservableObject {
         // the folder goes to `.trash` rather than away — reversible, and a
         // kill between the two leaves a tombstone the launch sweep finishes.
         let now = Date()
-        var tombstone = captures.first { $0.id == capture.id } ?? capture
+        var tombstone = self.capture(id: capture.id) ?? capture
         tombstone.deletedAt = now
         tombstone.deletedBy = DeviceIdentity.id
         let removedBlends = blends.filter { $0.captureID == capture.id }.map { blend -> BlendProject in
@@ -1988,7 +1974,7 @@ final class AppModel: ObservableObject {
         }
 
         // W9: tombstone first, on disk, then the file to `.trash`.
-        var tombstone = blends.first { $0.id == blend.id } ?? blend
+        var tombstone = self.blend(id: blend.id) ?? blend
         tombstone.deletedAt = Date()
         tombstone.deletedBy = DeviceIdentity.id
         let previousCollections = collections
@@ -2205,7 +2191,7 @@ final class AppModel: ObservableObject {
         var collection = collections[index]
         var setRatio: CanvasRatio?
         for blendID in blendIDs {
-            guard let blend = blends.first(where: { $0.id == blendID }),
+            guard let blend = blend(id: blendID),
                   blend.kind == .video,
                   collection.entry(for: blendID) == nil else { continue }
             if collection.ratio == nil {
@@ -2364,7 +2350,7 @@ final class AppModel: ObservableObject {
     /// What zoom 1 means for this entry: the largest canvas-shaped window
     /// over the clip, sitting where the resolved crop puts it.
     func kenBurnsUnitBase(entry: LapseCollection.Entry, in collection: LapseCollection) -> CGRect {
-        let aspect = blends.first(where: { $0.id == entry.blendID }).map(blendAspect) ?? 16.0 / 9.0
+        let aspect = blend(id: entry.blendID).map(blendAspect) ?? 16.0 / 9.0
         return CollectionMath.kenBurnsUnitBase(
             clipAspect: aspect,
             canvasAspect: collection.ratio?.aspect ?? 16.0 / 9.0,
@@ -2458,7 +2444,7 @@ final class AppModel: ObservableObject {
     /// clip's default, else centred. nil when the clip matches the canvas.
     func resolvedCropOffset(entry: LapseCollection.Entry, in collection: LapseCollection) -> Double? {
         guard let ratio = collection.ratio,
-              let blend = blends.first(where: { $0.id == entry.blendID }),
+              let blend = blend(id: entry.blendID),
               blendNeedsCrop(blend, on: ratio) else { return nil }
         return entry.crops[ratio.rawValue]
             ?? blend.defaultCrops?[ratio.rawValue]
@@ -2560,7 +2546,7 @@ final class AppModel: ObservableObject {
 
     /// One clip's kept length on the timeline.
     func entrySeconds(_ entry: LapseCollection.Entry) -> Double {
-        guard let blend = blends.first(where: { $0.id == entry.blendID }),
+        guard let blend = blend(id: entry.blendID),
               let duration = blendDuration(for: blend) else { return 0 }
         return entry.keptFraction * duration
     }
@@ -2588,7 +2574,7 @@ final class AppModel: ObservableObject {
             return entrySeconds(entry)
         }
         let target = Double(kenBurnsEffectiveClipSeconds(collection))
-        guard let blend = blends.first(where: { $0.id == entry.blendID }),
+        guard let blend = blend(id: entry.blendID),
               let full = blendDuration(for: blend) else { return target }
         if kenBurns.autoAdjustSpeed {
             // Longer clips speed up to the target; a clip that can't fill it
@@ -2613,7 +2599,7 @@ final class AppModel: ObservableObject {
         let lengths: [Double]
         if collection.kenBurnsUsesWindows {
             lengths = collection.entries.compactMap { entry in
-                blends.first { $0.id == entry.blendID }.flatMap(blendDuration(for:))
+                blend(id: entry.blendID).flatMap(blendDuration(for:))
             }
         } else {
             lengths = collection.entries.map(entrySeconds)
@@ -2664,7 +2650,7 @@ final class AppModel: ObservableObject {
     /// clip is thinned — clamped to the app's output range.
     func collectionExportFPS(_ collection: LapseCollection) -> Int {
         let best = collection.entries
-            .compactMap { entry in blends.first { $0.id == entry.blendID }?.outputFPS }
+            .compactMap { entry in blend(id: entry.blendID)?.outputFPS }
             .max() ?? 30
         return min(60, max(24, best))
     }
@@ -2724,7 +2710,7 @@ final class AppModel: ObservableObject {
 
     /// The blend's media file, for collection playback and export.
     func blendMediaURL(for blendID: UUID) -> URL? {
-        blends.first { $0.id == blendID }.map(blendOutputURL(for:))
+        blend(id: blendID).map(blendOutputURL(for:))
     }
 
     private func mutateCollection(_ id: UUID, _ mutate: (inout LapseCollection) -> Void) {
@@ -2842,7 +2828,7 @@ final class AppModel: ObservableObject {
     /// own, so the staged screen is built by the same code a real run's
     /// boundaries go through.
     func debugSeedScanDocuments(for sessionID: UUID, starts: [Int]) {
-        guard let capture = captures.first(where: { $0.id == sessionID }) else { return }
+        guard let capture = capture(id: sessionID) else { return }
         let documents = ScanDocumentStore.build(
             starts: starts, pageNumbers: scanPageNumbers(for: capture))
         try? ScanDocumentStore.save(documents, to: scanSourceFolder(for: sessionID))
@@ -2912,7 +2898,7 @@ final class AppModel: ObservableObject {
             captures.sort { $0.createdAt > $1.createdAt }
             try? persistLibrary()
         }
-        if corrected, let capture = captures.first(where: { $0.id == id }) {
+        if corrected, let id, let capture = capture(id: id) {
             let folder = projectFolderURL(for: capture).appendingPathComponent("source")
             PerspectiveCorrector.correctSequence(in: folder, aspect: paper)
             // A half-corrected set is what an interrupted correction leaves
@@ -3222,7 +3208,7 @@ final class AppModel: ObservableObject {
     }
 
     func openBlend(_ blend: BlendProject) {
-        guard let capture = captures.first(where: { $0.id == blend.captureID }) else {
+        guard let capture = capture(id: blend.captureID) else {
             errorMessage = "The source capture for that blend is missing."
             return
         }
@@ -4015,36 +4001,28 @@ final class AppModel: ObservableObject {
     }
 
     func renameProject(_ capture: CaptureProject, to newName: String) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        captures[index].name = trimmed.isEmpty ? nil : trimmed
-        // A person changed this project — see CaptureProject.modifiedAt.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
-        try? persistLibrary()
+        updateCapture(capture.id) { $0.name = trimmed.isEmpty ? nil : trimmed }
     }
 
     /// Applies what the user accepted from an on-device scene analysis. One write, because a
     /// rename and a tag change arriving separately would leave the manifest briefly disagreeing
     /// with the sheet the user just confirmed.
     func applySceneMetadata(_ metadata: SceneMetadata, to capture: CaptureProject) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         let trimmed = metadata.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            captures[index].name = trimmed
+        // An edit: this is the ACCEPTED "Auto rename & tag" proposal, which
+        // renames the project. The silent pass that put tags there in the
+        // first place (`applyAutomaticTags`) is not stamped — nobody chose it.
+        updateCapture(capture.id) { capture in
+            if !trimmed.isEmpty {
+                capture.name = trimmed
+            }
+            capture.sceneTags = metadata.tags.isEmpty ? nil : metadata.tags
+            capture.sceneElements = metadata.elements.isEmpty ? nil : metadata.elements
+            // Confirmed by a person now, whatever put them there first — so the "tagged automatically"
+            // marker comes off the card.
+            capture.sceneTaggedAutomatically = nil
         }
-        captures[index].sceneTags = metadata.tags.isEmpty ? nil : metadata.tags
-        captures[index].sceneElements = metadata.elements.isEmpty ? nil : metadata.elements
-        // Confirmed by a person now, whatever put them there first — so the "tagged automatically"
-        // marker comes off the card.
-        captures[index].sceneTaggedAutomatically = nil
-        // And an edit for the same reason: this is the ACCEPTED "Auto rename &
-        // tag" proposal, which renames the project. The silent pass that put
-        // tags there in the first place (`applyAutomaticTags`) is not stamped —
-        // nobody chose it.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
-        try? persistLibrary()
     }
 
     /// Sets a project's subject tags directly, from the tag editor.
@@ -4057,7 +4035,7 @@ final class AppModel: ObservableObject {
     /// makes: one tap to reverse, and a confirmation would have to promise a rollback the Gallery
     /// panel's inline field cannot offer anyway.
     func setSceneTags(_ tags: [String], on capture: CaptureProject) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        guard let current = self.capture(id: capture.id) else { return }
         // Trimmed and de-duplicated case-insensitively here as well as in the editor: this is the
         // only door onto the field, and a duplicate would filter and search as a separate thing.
         var cleaned: [String] = []
@@ -4069,31 +4047,26 @@ final class AppModel: ObservableObject {
             else { continue }
             cleaned.append(canonical)
         }
-        guard cleaned != (captures[index].sceneTags ?? []) else { return }
+        guard cleaned != (current.sceneTags ?? []) else { return }
 
-        captures[index].sceneTags = cleaned.isEmpty ? nil : cleaned
-        // A person chose these now, whatever put them there first — so the "tagged automatically"
-        // marker comes off the card, exactly as accepting a proposal does.
-        captures[index].sceneTaggedAutomatically = nil
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
-        try? persistLibrary()
+        updateCapture(capture.id) { capture in
+            capture.sceneTags = cleaned.isEmpty ? nil : cleaned
+            // A person chose these now, whatever put them there first — so the "tagged automatically"
+            // marker comes off the card, exactly as accepting a proposal does.
+            capture.sceneTaggedAutomatically = nil
+        }
         // Tags are keywords (Part 2 §4.5): the same list lands in the project record's edited
         // layer, where an export will read `dc:subject` from and where "from file / edited here"
         // is answered.
-        writeProjectKeywords(cleaned, for: captures[index])
+        if let updated = self.capture(id: capture.id) { writeProjectKeywords(cleaned, for: updated) }
     }
 
     /// Seeds a project's tags from the keywords its files carried — only when it has none of its
     /// own, so a person's list is never overwritten by a re-read. Called when the asset recorder
     /// finishes a project (`recordAssets`), off the main persist path.
     func seedSceneTags(_ keywords: [String], on captureID: UUID) {
-        guard !keywords.isEmpty,
-              let index = captures.firstIndex(where: { $0.id == captureID }),
-              captures[index].sceneTags == nil
-        else { return }
-        captures[index].sceneTags = keywords
-        persistLibraryOffMain()
+        guard !keywords.isEmpty, capture(id: captureID)?.sceneTags == nil else { return }
+        updateCapture(captureID, edited: false, persist: .queued) { $0.sceneTags = keywords }
     }
 
     /// Every tag already used somewhere in this library, taxonomy first, then hand-typed ones.
@@ -4136,17 +4109,18 @@ final class AppModel: ObservableObject {
     /// Writes what the background pass found — tags only, and only onto a project nobody has
     /// tagged in the meantime.
     private func applyAutomaticTags(_ result: SceneAnalysisResult, to captureID: UUID) {
-        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
+        guard let current = capture(id: captureID) else { return }
         // A run the user started while this was in flight has the better answer; don't overwrite it.
-        guard captures[index].sceneTags == nil else { return }
+        guard current.sceneTags == nil else { return }
         guard !result.subjectTags.isEmpty || !result.elements.isEmpty else { return }
-
-        captures[index].sceneTags = result.subjectTags.isEmpty ? nil : result.subjectTags
-        captures[index].sceneElements = result.elements.isEmpty ? nil : result.elements
-        // The name is untouched on purpose — Vision writes none, and a project silently renaming
-        // itself after a shoot would be alarming even if it could.
-        captures[index].sceneTaggedAutomatically = true
-        try? persistLibrary()
+        // Not an edit: nobody chose these.
+        updateCapture(captureID, edited: false) { capture in
+            capture.sceneTags = result.subjectTags.isEmpty ? nil : result.subjectTags
+            capture.sceneElements = result.elements.isEmpty ? nil : result.elements
+            // The name is untouched on purpose — Vision writes none, and a project silently renaming
+            // itself after a shoot would be alarming even if it could.
+            capture.sceneTaggedAutomatically = true
+        }
     }
 
     /// Which frames stand for a capture, by mode: a Photo project *is* one asset, an interval shoot
@@ -4177,15 +4151,9 @@ final class AppModel: ObservableObject {
     /// an explicit "hard cuts on this one". With "remember last" on, an
     /// explicit choice also becomes the new app default.
     func setBurstRamp(_ seconds: Double?, for capture: CaptureProject) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        guard self.capture(id: capture.id) != nil else { return }
         let normalized = seconds.map { min(max(0, $0), BurstRamp.maxDuration) }
-        if captures[index].burstRampDuration != normalized {
-            captures[index].burstRampDuration = normalized
-            // A person changed this project — see CaptureProject.modifiedAt.
-            captures[index].modifiedAt = Date()
-            captures[index].modifiedBy = DeviceIdentity.id
-            try? persistLibrary()
-        }
+        updateCapture(capture.id) { $0.burstRampDuration = normalized }
         // "Use default" is the absence of a choice — there is nothing to
         // remember, and writing it back would erase the remembered value.
         if burstRampRememberLast, let normalized {
@@ -4512,6 +4480,43 @@ final class AppModel: ObservableObject {
         guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
         captures[index].modifiedAt = Date()
         captures[index].modifiedBy = DeviceIdentity.id
+    }
+
+    /// How a single-project change reaches the disk: at once, on this
+    /// thread, the way `persistLibrary()` does for a change that touches
+    /// files or that a screen waits on — or queued, the way
+    /// `persistLibraryOffMain()` does for a grade tick and anything else
+    /// that changes numbers at gesture cadence.
+    enum ProjectPersist {
+        case now
+        case queued
+    }
+
+    /// The one path a change to ONE project takes (M2 — the seed of Phase
+    /// 5's `apply(change)` funnel): the record is changed in place, stamped
+    /// as a human edit when `edited` and something actually changed, and
+    /// persisted — the project's document first, then its index row, then
+    /// the export. A change that changes nothing persists nothing and is
+    /// not an edit. False when the project is not in the library.
+    @discardableResult
+    func updateCapture(_ id: UUID, edited: Bool = true, persist: ProjectPersist = .now,
+                       _ change: (inout CaptureProject) -> Void) -> Bool {
+        guard let index = captureIndexByID[id] ?? captures.firstIndex(where: { $0.id == id }) else { return false }
+        let before = captures[index]
+        var record = before
+        change(&record)
+        guard record != before else { return true }
+        if edited {
+            // A person changed this project — see CaptureProject.modifiedAt.
+            record.modifiedAt = Date()
+            record.modifiedBy = DeviceIdentity.id
+        }
+        captures[index] = record
+        switch persist {
+        case .now: try? persistLibrary()
+        case .queued: persistLibraryOffMain()
+        }
+        return true
     }
 
     /// Whether the stored size can still be believed: never measured, or
@@ -5126,7 +5131,7 @@ final class AppModel: ObservableObject {
                     // project's text bakes into this clip (same rule as the
                     // grade and the canvas, resolved before the job).
                     let overlayBake = await self.makeOverlayExportBake(
-                        for: self.captures.first { $0.id == captureID })
+                        for: self.capture(id: captureID))
                     if photoDepth >= filteredURLs.count {
                         // The blend depth spans every still, so fold them all
                         // into one frame: the classic single long exposure.
@@ -5657,7 +5662,7 @@ final class AppModel: ObservableObject {
         // The project's text overlays and level, resolved up front — mask and
         // all — by the captureID this job STARTED with (same rule as the
         // sequence path: a selection change mid-render must not retarget it).
-        let overlayBake = await makeOverlayExportBake(for: captures.first { $0.id == captureID })
+        let overlayBake = await makeOverlayExportBake(for: capture(id: captureID))
         let renderer = TimeSliceRenderer()
         // iOS holds at most four poster buffers at once (~49 MB each at
         // 12 MP); the Mac takes the whole batch in one walk (§3.4).
@@ -7279,7 +7284,7 @@ final class AppModel: ObservableObject {
         try persistLibrary()
         // The render's hash line. Frames only (no metadata read): a blend
         // output carries no IPTC, and the frames were recorded at registration.
-        if let capture = captures.first(where: { $0.id == captureID }) {
+        if let capture = capture(id: captureID) {
             recordAssets(for: capture, extractMetadata: false)
         }
         return blend
@@ -9035,7 +9040,7 @@ final class AppModel: ObservableObject {
     }
 
     private func refreshVideoMetadata(for captureID: UUID) async {
-        guard let capture = captures.first(where: { $0.id == captureID }),
+        guard let capture = capture(id: captureID),
               let captureSource = try? source(for: capture) else { return }
 
         // Probe maps are keyed by the sidecar's LOGICAL segment name — the
@@ -9101,28 +9106,29 @@ final class AppModel: ObservableObject {
             }
         }
 
-        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
-        if let fps { captures[index].sourceFPS = fps }
-        if totalDuration > 0 { captures[index].sourceDurationSeconds = totalDuration }
-        // Merge, never replace: a segment whose file couldn't be read this
-        // pass must not erase a truth an earlier pass established.
-        if !segmentSeconds.isEmpty {
-            captures[index].sourceSegmentSeconds = (captures[index].sourceSegmentSeconds ?? [:])
-                .merging(segmentSeconds) { _, probed in probed }
+        // A probe, not an edit.
+        updateCapture(captureID, edited: false) { capture in
+            if let fps { capture.sourceFPS = fps }
+            if totalDuration > 0 { capture.sourceDurationSeconds = totalDuration }
+            // Merge, never replace: a segment whose file couldn't be read this
+            // pass must not erase a truth an earlier pass established.
+            if !segmentSeconds.isEmpty {
+                capture.sourceSegmentSeconds = (capture.sourceSegmentSeconds ?? [:])
+                    .merging(segmentSeconds) { _, probed in probed }
+            }
+            if !segmentFPS.isEmpty {
+                capture.sourceSegmentFPS = (capture.sourceSegmentFPS ?? [:])
+                    .merging(segmentFPS) { _, probed in probed }
+            }
+            if !segmentSize.isEmpty {
+                capture.sourceSegmentSize = (capture.sourceSegmentSize ?? [:])
+                    .merging(segmentSize) { _, probed in probed }
+            }
+            if let width, let height {
+                capture.sourceWidth = width
+                capture.sourceHeight = height
+            }
         }
-        if !segmentFPS.isEmpty {
-            captures[index].sourceSegmentFPS = (captures[index].sourceSegmentFPS ?? [:])
-                .merging(segmentFPS) { _, probed in probed }
-        }
-        if !segmentSize.isEmpty {
-            captures[index].sourceSegmentSize = (captures[index].sourceSegmentSize ?? [:])
-                .merging(segmentSize) { _, probed in probed }
-        }
-        if let width, let height {
-            captures[index].sourceWidth = width
-            captures[index].sourceHeight = height
-        }
-        try? persistLibrary()
     }
 
     /// The stills counterpart of `refreshVideoMetadata`: what a photo-kind
@@ -9134,7 +9140,7 @@ final class AppModel: ObservableObject {
     /// for stills yet — the badge and header lines stay kind-gated until that
     /// screen exists.
     private func refreshStillsMetadata(for captureID: UUID) async {
-        guard let capture = captures.first(where: { $0.id == captureID }),
+        guard let capture = capture(id: captureID),
               capture.kind == .photos else { return }
         let urls = sourceFrameURLs(for: capture)
         guard let first = urls.first else { return }
@@ -9143,26 +9149,19 @@ final class AppModel: ObservableObject {
              elapsed: FrameTimestamps.load(besideFrames: urls)?
                 .elapsedSeconds(coveringExactly: urls.count))
         }.value
-        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
-        var changed = false
-        if let size = probed.size, size.width > 0, size.height > 0 {
-            let width = Int(size.width.rounded())
-            let height = Int(size.height.rounded())
-            if captures[index].sourceWidth != width || captures[index].sourceHeight != height {
-                captures[index].sourceWidth = width
-                captures[index].sourceHeight = height
-                changed = true
+        // A probe, not an edit; nothing is written when nothing changed.
+        updateCapture(captureID, edited: false) { capture in
+            if let size = probed.size, size.width > 0, size.height > 0 {
+                capture.sourceWidth = Int(size.width.rounded())
+                capture.sourceHeight = Int(size.height.rounded())
+            }
+            // A single photo's span is 0 and a sidecar that doesn't cover the
+            // frames is nil — both leave the field alone rather than inventing a
+            // duration.
+            if let span = probed.elapsed?.last, span > 0 {
+                capture.sourceDurationSeconds = span
             }
         }
-        // A single photo's span is 0 and a sidecar that doesn't cover the
-        // frames is nil — both leave the field alone rather than inventing a
-        // duration.
-        if let span = probed.elapsed?.last, span > 0,
-           captures[index].sourceDurationSeconds != span {
-            captures[index].sourceDurationSeconds = span
-            changed = true
-        }
-        if changed { try? persistLibrary() }
     }
 
     // MARK: - Clip conversion
@@ -10098,7 +10097,7 @@ final class AppModel: ObservableObject {
     /// result is persisted, so the second look is free and the local grids get
     /// it for nothing too.
     func projectTransferThumbnail(for captureID: UUID) async -> Data? {
-        guard let capture = captures.first(where: { $0.id == captureID }),
+        guard let capture = capture(id: captureID),
               let source = thumbnailURL(for: capture) else { return nil }
         let kind: MediaKind = capture.kind == .video ? .video : .image
         return await Task.detached(priority: .utility) { () -> Data? in
@@ -10129,7 +10128,7 @@ final class AppModel: ObservableObject {
     /// folder has no document to read, which a persist that just succeeded
     /// should never leave behind.
     func projectTransferManifestData(for captureID: UUID) throws -> Data? {
-        guard let capture = captures.first(where: { $0.id == captureID }) else { return nil }
+        guard let capture = capture(id: captureID) else { return nil }
         try persistAndWait(reason: .valuesChanged)
         let url = ProjectDocumentFormat.url(inProjectFolder: captureFolderURL(for: captureID))
         if let data = try? Data(contentsOf: url) { return data }
@@ -10349,7 +10348,7 @@ final class AppModel: ObservableObject {
     /// every adjustment as well as the preset, because Original means the file
     /// exactly as captured.
     func applyPreset(_ preset: PhotoPreset, for capture: CaptureProject) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        guard let current = self.capture(id: capture.id) else { return }
         let state: PresetState = preset == .original
             ? .original
             : .named(id: preset.presetID, snapshot: preset.snapshot)
@@ -10360,30 +10359,30 @@ final class AppModel: ObservableObject {
         // level is geometry, not a look, and stays — at every moment it had;
         // so does the crop, which `rotationOnly` keeps beside it for the same
         // reason (a preset applied to a cropped photograph must not uncrop it).
-        let current = photoGrade(for: captures[index]).rotationOnly
+        let level = photoGrade(for: current).rotationOnly
         write(
-            preset: preset, adjustments: current.adjustments, state: state,
-            timeline: current.timeline, at: index)
+            preset: preset, adjustments: level.adjustments, state: state,
+            timeline: level.timeline, for: capture.id)
     }
 
     /// Applies a saved preset wholesale: its base preset and its slider values,
     /// plus the snapshot that pins what "this preset" meant at this moment.
     func applyCustomPreset(_ preset: CustomPreset, for capture: CaptureProject) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        guard let current = self.capture(id: capture.id) else { return }
         // The preset's look over the project's own level, its own crop and its
         // own white, none of which the preset ever carried (see
         // `PresetSnapshot.matches`) — so all three are re-applied from the
         // project, the crop included, or applying a look would uncrop it.
-        let current = photoGrade(for: captures[index]).rotationOnly
+        let level = photoGrade(for: current).rotationOnly
         var adjustments = preset.adjustments.withoutGeometry.withoutWhite
-        adjustments.rotationDegrees = current.adjustments.rotationDegrees
-        adjustments.crop = current.adjustments.crop
-        adjustments.whiteMired = current.adjustments.whiteMired
-        adjustments.whiteTint = current.adjustments.whiteTint
+        adjustments.rotationDegrees = level.adjustments.rotationDegrees
+        adjustments.crop = level.adjustments.crop
+        adjustments.whiteMired = level.adjustments.whiteMired
+        adjustments.whiteTint = level.adjustments.whiteTint
         write(
             preset: preset.basePreset, adjustments: adjustments,
             state: .named(id: preset.id, snapshot: preset.snapshot),
-            timeline: current.timeline, at: index)
+            timeline: level.timeline, for: capture.id)
     }
 
     /// The editors' write-back: the live values and the state they resolved to,
@@ -10399,7 +10398,7 @@ final class AppModel: ObservableObject {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         write(
             preset: preset, adjustments: adjustments, state: state, timeline: timeline,
-            at: index)
+            for: capture.id)
     }
 
     /// The one place a project's grade changes, so no path can leave the state
@@ -10409,19 +10408,16 @@ final class AppModel: ObservableObject {
         adjustments: PhotoAdjustments,
         state: PresetState,
         timeline: GradeTimeline,
-        at index: Int
+        for captureID: UUID
     ) {
         // An empty timeline is stored as nil, so a project that never grew one
         // reads and writes exactly the sidecar it always did.
         let stored: GradeTimeline? = timeline.isEmpty ? nil : timeline
-        guard captures[index].selectedPreset != preset.rawValue
-                || captures[index].adjustments != adjustments
-                || captures[index].presetState != state
-                || captures[index].gradeTimeline != stored else { return }
-        captures[index].selectedPreset = preset.rawValue
-        captures[index].adjustments = adjustments
-        captures[index].presetState = state
-        captures[index].gradeTimeline = stored
+        guard let current = capture(id: captureID) else { return }
+        guard current.selectedPreset != preset.rawValue
+                || current.adjustments != adjustments
+                || current.presetState != state
+                || current.gradeTimeline != stored else { return }
         // A LUT renders from a cube the project must be able to find on any
         // device it travels to: copy it into the project's own `luts/` (a
         // transferable subfolder) the first time a grade carries it. Cheap
@@ -10430,21 +10426,25 @@ final class AppModel: ObservableObject {
         if let id = adjustments.lut?.id { lutIDs.insert(id) }
         for keyframe in timeline.keyframes { if let id = keyframe.adjustments.lut?.id { lutIDs.insert(id) } }
         if !lutIDs.isEmpty {
-            let folder = captureFolderURL(for: captures[index].id)
+            let folder = captureFolderURL(for: captureID)
             for id in lutIDs { LUTStore.shared.ensureCopy(of: id, inProjectFolder: folder) }
         }
-        // A person changed this project — see CaptureProject.modifiedAt. A
-        // grade moves no bytes, so this DOES cost the project's stored size a
-        // needless re-measure on the next size sort; carrying a second
-        // "files changed" timestamp to avoid it would be a worse trade than
-        // one directory walk on a deliberate, occasional gesture.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
-        // Not `persistLibrary()`: a grade write changes numbers, never files,
-        // so it must not clear the size caches — and the editors call this at
-        // gesture cadence, so the manifest encode cannot run on the main
-        // thread (editor-performance-plan.md, stage 2).
-        persistLibraryOffMain()
+        // An edit — see CaptureProject.modifiedAt. A grade moves no bytes,
+        // so this DOES cost the project's stored size a needless re-measure
+        // on the next size sort; carrying a second "files changed" timestamp
+        // to avoid it would be a worse trade than one directory walk on a
+        // deliberate, occasional gesture.
+        //
+        // Queued, not `persistLibrary()`: a grade write changes numbers,
+        // never files, so it must not clear the size caches — and the
+        // editors call this at gesture cadence, so the encode cannot run on
+        // the main thread (editor-performance-plan.md, stage 2).
+        updateCapture(captureID, persist: .queued) { capture in
+            capture.selectedPreset = preset.rawValue
+            capture.adjustments = adjustments
+            capture.presetState = state
+            capture.gradeTimeline = stored
+        }
     }
 
     /// Pins (or unpins) what this shoot's white balance is measured from.
@@ -10455,15 +10455,10 @@ final class AppModel: ObservableObject {
     /// runs over every frame of the shoot, and the answer is only stale when
     /// the source changes or the series is re-measured.
     func setWhiteBalanceSource(_ source: WhiteBalanceSource, for capture: CaptureProject) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         let stored: WhiteBalanceSource? = source.isAsShot ? nil : source
-        guard captures[index].whiteBalanceSource != stored else { return }
-        captures[index].whiteBalanceSource = stored
-        // A person changed this project — see CaptureProject.modifiedAt.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
+        guard self.capture(id: capture.id)?.whiteBalanceSource != stored else { return }
         Self.forgetWhiteBalanceTrack(capture.id)
-        persistLibraryOffMain()
+        updateCapture(capture.id, persist: .queued) { $0.whiteBalanceSource = stored }
     }
 
     /// Measures every still's as-shot white balance and writes the sidecar the
@@ -10713,7 +10708,7 @@ final class AppModel: ObservableObject {
     /// Stands in for a rendered blend, whose own file carries no metadata.
     private func currentCaptureLocation() async -> CLLocation? {
         guard let captureID = currentCaptureID,
-              let capture = captures.first(where: { $0.id == captureID }),
+              let capture = capture(id: captureID),
               let url = sourceClipURLs(for: capture).first
                 ?? sourceFrameURLs(for: capture).first
         else { return nil }

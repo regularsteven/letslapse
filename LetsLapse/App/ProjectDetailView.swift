@@ -87,7 +87,7 @@ struct ProjectDetailView: View {
     @State private var blendFilter = BlendListFilter()
 
     private var capture: AppModel.CaptureProject? {
-        model.captures.first { $0.id == captureID }
+        model.capture(id: captureID)
     }
 
     var body: some View {
@@ -1067,7 +1067,7 @@ struct ProjectDetailView: View {
     /// `renameProject` has none — every change is one tap to reverse.
     private func tagsBinding(for capture: AppModel.CaptureProject) -> Binding<[String]> {
         Binding(
-            get: { model.captures.first { $0.id == capture.id }?.sceneTags ?? [] },
+            get: { model.capture(id: capture.id)?.sceneTags ?? [] },
             set: { model.setSceneTags($0, on: capture) })
     }
 
@@ -1598,7 +1598,7 @@ private struct ProjectHeroPane: View {
     private let renderDebounce: Duration = .milliseconds(100)
 
     private var capture: AppModel.CaptureProject? {
-        model.captures.first { $0.id == captureID }
+        model.capture(id: captureID)
     }
 
     /// What the pane previews, and how it has to be decoded — the asset the
@@ -1882,7 +1882,7 @@ private struct PresetStripSection: View {
     @State private var pendingApply: PresetApplyRequest?
 
     private var capture: AppModel.CaptureProject? {
-        model.captures.first { $0.id == captureID }
+        model.capture(id: captureID)
     }
 
     var body: some View {
@@ -2036,7 +2036,7 @@ private struct SourceClipRow: View {
         }
     }
 
-    private var capture: AppModel.CaptureProject? { model.captures.first { $0.id == captureID } }
+    private var capture: AppModel.CaptureProject? { model.capture(id: captureID) }
 
     var body: some View {
         if let capture, let displayURL = model.activeEncodingURL(for: capture, clip: clipName) {
@@ -2183,7 +2183,7 @@ private struct ManageClipSheet: View {
     @State private var errorMessage: String?
     @State private var encodingPendingDelete: AppModel.ClipEncoding?
 
-    private var capture: AppModel.CaptureProject? { model.captures.first { $0.id == captureID } }
+    private var capture: AppModel.CaptureProject? { model.capture(id: captureID) }
 
     var body: some View {
         NavigationStack {

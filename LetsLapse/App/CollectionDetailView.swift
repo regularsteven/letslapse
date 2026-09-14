@@ -154,7 +154,7 @@ struct CollectionDetailView: View {
         #endif
         .task {
             for entry in model.collection(withID: collectionID)?.entries ?? [] {
-                if let blend = model.blends.first(where: { $0.id == entry.blendID }) {
+                if let blend = model.blend(id: entry.blendID) {
                     await model.probeBlendMediaIfNeeded(blend)
                 }
             }
@@ -364,7 +364,7 @@ struct CollectionDetailView: View {
         _ collection: LapseCollection, maxWidth: CGFloat, maxHeight: CGFloat, landscape: Bool
     ) -> some View {
         let entry = selectedEntry(collection)
-        let blend = entry.flatMap { e in model.blends.first { $0.id == e.blendID } }
+        let blend = entry.flatMap { e in model.blend(id: e.blendID) }
 
         if let entry, let blend {
             let aspect = model.blendAspect(blend)
@@ -977,7 +977,7 @@ struct CollectionDetailView: View {
     private func commitCrop(entry: LapseCollection.Entry, collection: LapseCollection) {
         guard let drag = cropDrag, drag.moved, drag.blendID == entry.blendID,
               let ratio = collection.ratio,
-              let blend = model.blends.first(where: { $0.id == entry.blendID }) else {
+              let blend = model.blend(id: entry.blendID) else {
             cropDrag = nil
             return
         }
@@ -1045,7 +1045,7 @@ struct CollectionDetailView: View {
     /// "16:9", "4:3 · the first clip’s shape"
     private func ratioChoiceLabel(_ ratio: CanvasRatio, in collection: LapseCollection) -> String {
         let firstRatio = collection.entries.first
-            .flatMap { e in model.blends.first { $0.id == e.blendID } }
+            .flatMap { e in model.blend(id: e.blendID) }
             .map(model.canvasRatio(for:))
         var label = ratio.rawValue
         if ratio == firstRatio {
@@ -1398,7 +1398,7 @@ struct CollectionDetailView: View {
         _ entry: LapseCollection.Entry, at index: Int,
         in collection: LapseCollection, count: Int
     ) -> some View {
-        let blend = model.blends.first { $0.id == entry.blendID }
+        let blend = model.blend(id: entry.blendID)
         let selected = entry.blendID == selectedEntry(collection)?.blendID
         let isDraggedRow = reorder?.blendID == entry.blendID
 
@@ -1667,7 +1667,7 @@ struct CollectionDetailView: View {
     /// caption used to spell out, computed from wherever the frame sits.
     private func cropKeepLabel(entry: LapseCollection.Entry, in collection: LapseCollection) -> String? {
         guard let ratio = collection.ratio,
-              let blend = model.blends.first(where: { $0.id == entry.blendID }),
+              let blend = model.blend(id: entry.blendID),
               model.blendNeedsCrop(blend, on: ratio),
               let pixels = model.blendDisplaySize(for: blend),
               let offset = displayedCropOffset(entry: entry, in: collection),

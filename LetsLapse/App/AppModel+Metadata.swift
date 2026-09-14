@@ -104,7 +104,7 @@ extension AppModel {
         // so they read as edited here; the first edit through the panel
         // writes them into the project record for good.
         if value.keywords == nil,
-           let tags = captures.first(where: { $0.id == capture.id })?.sceneTags, !tags.isEmpty {
+           let tags = self.capture(id: capture.id)?.sceneTags, !tags.isEmpty {
             value.keywords = tags
             origins[.keywords] = .edited(.project)
         }
@@ -119,7 +119,7 @@ extension AppModel {
     /// `sceneTags` (which is kept in step as the searchable cache).
     func resolvedKeywords(for capture: CaptureProject) -> [String] {
         resolvedMetadata(for: capture, scope: .project).value.keywords
-            ?? captures.first { $0.id == capture.id }?.sceneTags ?? []
+            ?? self.capture(id: capture.id)?.sceneTags ?? []
     }
 
     // MARK: - Editing
@@ -284,7 +284,7 @@ extension AppModel {
             }.value
             var queued = 0
             for id in needing {
-                guard let capture = self.captures.first(where: { $0.id == id }) else { continue }
+                guard let capture = self.capture(id: id) else { continue }
                 self.recordAssets(for: capture, extractMetadata: true, priority: .background, pausable: true)
                 queued += 1
             }

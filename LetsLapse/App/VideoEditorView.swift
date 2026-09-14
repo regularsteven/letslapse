@@ -181,7 +181,7 @@ struct VideoEditorView: View {
     private static let restWhiteMired: Float = 1e6 / 6500
 
     private var capture: AppModel.CaptureProject? {
-        model.captures.first { $0.id == captureID }
+        model.capture(id: captureID)
     }
 
     /// True when this editor owns the way out — the back button it draws on

@@ -43,7 +43,7 @@ struct ScanDetailView: View {
     @State private var deletionFailure: String?
 
     private var capture: AppModel.CaptureProject? {
-        model.captures.first { $0.id == sessionID }
+        model.capture(id: sessionID)
     }
 
     var body: some View {

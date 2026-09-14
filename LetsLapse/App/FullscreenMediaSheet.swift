@@ -155,7 +155,7 @@ struct FullscreenMediaSheet: View {
     /// the interval frames the motion preview plays.
     private var projectGrade: PhotoGrade? {
         guard let captureID = request.captureID,
-              let capture = model.captures.first(where: { $0.id == captureID }) else { return nil }
+              let capture = model.capture(id: captureID) else { return nil }
         let grade = model.photoGrade(for: capture)
         return grade.isIdentity ? nil : grade
     }

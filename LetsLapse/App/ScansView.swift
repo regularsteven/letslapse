@@ -139,7 +139,7 @@ struct ScansView: View {
     /// library. Confirmed first: a scan is minutes of someone's hands and there
     /// is no undo behind this.
     private func delete(_ session: ScanSession) {
-        guard let capture = model.captures.first(where: { $0.id == session.id }) else { return }
+        guard let capture = model.capture(id: session.id) else { return }
         do {
             try model.deleteCapture(capture)
             sessions.removeAll { $0.id == session.id }
