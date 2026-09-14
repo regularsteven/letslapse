@@ -825,3 +825,17 @@ project once — *China City* — and was reverted through the same path.)
 iOS (foreground `URLSession` today — an upload pauses with the app);
 automatic downloads; eviction. Next of §4.7: per-blend posters, eviction
 ("free up space" once the tier says a copy is elsewhere), the mirrors.
+
+**Only on Wi-Fi (Steven, 2026-09-15: "auto sync must work on wifi, not cell
+data"):** the network rule now holds **every** automatic transfer, on both
+platforms — the debounced pushes, the launch / foreground / timer checks,
+the first connection and the originals queue — until `NWPathMonitor` says
+Wi-Fi or Ethernet, not expensive, not constrained (a Mac on a phone's
+hotspot is mobile data too). Held pushes and a held check are kept and run
+the moment the path changes (`heldPushes`, `heldCheck`; the first
+connection shows *First connection — waiting for Wi-Fi* and re-runs on
+its own). A person's own press — Sync, Download originals, Check PicPlace
+now — runs on any connection: that is their call. The switch sits at the
+top level of the card on both platforms, on by default. Verified with
+`LL_PICPLACE_NETWORK=cellular:45`: the launch check held, a funnel rename's
+push held, both ran at the release.

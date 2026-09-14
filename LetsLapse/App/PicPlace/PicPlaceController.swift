@@ -141,6 +141,10 @@ final class PicPlaceController: ObservableObject {
     @Published internal(set) var autoStatus: String?
     @Published internal(set) var isOnWiFi = true
     var pendingPushes: [UUID: Task<Void, Never>] = [:]
+    /// Pushes and a check that were due while the network rule held them.
+    var heldPushes: Set<UUID> = []
+    var heldCheck = false
+    var forcedNetwork = false
     var autoTimer: Timer?
     var originalsQueueTask: Task<Void, Never>?
     var pathMonitorBox: AnyObject?

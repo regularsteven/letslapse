@@ -12,7 +12,7 @@ import LetsLapseKit
 extension PicPlaceController {
 
     struct InitialSyncProgress: Equatable {
-        enum Phase: Equatable { case deciding, pulling, pushing, done, failed(String) }
+        enum Phase: Equatable { case waiting(String), deciding, pulling, pushing, done, failed(String) }
         var phase: Phase = .deciding
         var pulled = 0
         var pushed = 0
@@ -64,6 +64,12 @@ extension PicPlaceController {
                 #endif
                 checkForChanges(reason: "launch")
             }
+            return
+        }
+        if wifiOnly, !isOnWiFi {
+            // The records of a whole library are not a mobile-data transfer;
+            // the network change re-runs this.
+            initialSyncProgress = InitialSyncProgress(phase: .waiting("Waiting for Wi-Fi"))
             return
         }
         initialSyncTask = Task { [weak self] in

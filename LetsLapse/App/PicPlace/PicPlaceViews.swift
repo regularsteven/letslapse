@@ -554,18 +554,15 @@ struct PicPlaceSettingsCard: View {
                   subtitle: "Edits and new projects go to PicPlace as you make them; other devices' changes arrive every few minutes") {
                 Toggle("", isOn: $picplace.autoSyncEnabled).labelsHidden()
             }
+            LLRow(title: "Only on Wi-Fi",
+                  subtitle: "Auto-sync waits for Wi-Fi or Ethernet — a personal hotspot counts as mobile data. Syncing a project yourself works on any connection.") {
+                Toggle("", isOn: $picplace.wifiOnly).labelsHidden().disabled(!picplace.autoSyncEnabled)
+            }
             LLRow(title: "Upload originals automatically",
                   subtitle: "Source photos, videos and blends of every project, one project at a time. Nothing is ever removed from this device.") {
                 Toggle("", isOn: $picplace.autoOriginalsEnabled).labelsHidden().disabled(!picplace.autoSyncEnabled)
             }
-            #if os(iOS)
-            if picplace.autoOriginalsEnabled {
-                LLRow(title: "Wi-Fi only", subtitle: "Originals wait for Wi-Fi") {
-                    Toggle("", isOn: $picplace.wifiOnly).labelsHidden()
-                }
-            }
-            #endif
-            if let status = picplace.autoStatus ?? picplace.originalsHold.map { "Originals: \($0)" } {
+            if let status = picplace.autoStatus ?? picplace.autoHold ?? picplace.originalsHold.map { "Originals: \($0)" } {
                 LLRow(title: "Auto-sync", subtitle: status) {
                     if picplace.autoStatus != nil { ProgressView().controlSize(.small) }
                 }
@@ -621,6 +618,7 @@ struct PicPlaceSettingsCard: View {
 
     private func initialSyncTitle(_ progress: PicPlaceController.InitialSyncProgress) -> String {
         switch progress.phase {
+        case .waiting(let why): return "First connection — \(why.lowercased())"
         case .deciding: return "Comparing with PicPlace…"
         case .pulling: return "Bringing projects here…"
         case .pushing: return "Sending projects…"
@@ -631,6 +629,7 @@ struct PicPlaceSettingsCard: View {
 
     private func initialSyncSubtitle(_ progress: PicPlaceController.InitialSyncProgress) -> String {
         if case .failed(let why) = progress.phase { return why }
+        if case .waiting = progress.phase { return "Runs on its own once the network allows" }
         var parts: [String] = []
         if progress.pulled > 0 || progress.phase == .pulling { parts.append("\(progress.pulled) brought here") }
         if progress.pushed > 0 || progress.phase == .pushing { parts.append("\(progress.pushed) sent") }

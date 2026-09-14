@@ -11,9 +11,13 @@ import LetsLapseKit
 /// connected) pushes settled edits and new projects and runs a check every
 /// few minutes; **Upload originals automatically** (off by default — a
 /// 431 GB library must not start uploading the moment it connects) queues
-/// every project whose originals are only here; **Wi-Fi only** (iOS,
-/// on by default) gates the originals. A shoot being written pauses all of
-/// it; downloads of originals stay per project.
+/// every project whose originals are only here; **Only on Wi-Fi** (on by
+/// default, both platforms) holds EVERY automatic transfer — pushes,
+/// checks, the first connection, the originals — until the path is Wi-Fi
+/// or Ethernet and not expensive (a personal hotspot is mobile data). A
+/// person's own press — Sync, Download originals, Check now — works on any
+/// connection: that is their call. A shoot being written pauses all of it;
+/// downloads of originals stay per project.
 extension PicPlaceController {
 
     private static let pushDebounce: TimeInterval = 20
@@ -50,57 +54,104 @@ extension PicPlaceController {
                 self.checkForChanges(reason: "timer")
             }
         }
-        #if os(iOS)
+        #if DEBUG
+        // `LL_PICPLACE_NETWORK=cellular[:seconds]` pretends the path is mobile
+        // data — for the given seconds, then Wi-Fi again — so the holds and
+        // their release are exercised on a Mac that has no cellular.
+        if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_NETWORK"], raw.hasPrefix("cellular") {
+            forcedNetwork = true
+            isOnWiFi = false
+            if let seconds = raw.split(separator: ":").dropFirst().first.flatMap({ Double($0) }) {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                    guard let self else { return }
+                    self.isOnWiFi = true
+                    LLog("picplace hook: network back to Wi-Fi")
+                    self.autoSyncSettingChanged()
+                }
+            }
+            return
+        }
+        #endif
+        // Both platforms: a Mac on a phone's hotspot is on mobile data too.
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
-            let wifi = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
+            let unmetered = (path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet))
+                && !path.isExpensive && !path.isConstrained && path.status == .satisfied
             Task { @MainActor in
                 guard let self else { return }
                 let was = self.isOnWiFi
-                self.isOnWiFi = wifi && !path.isExpensive
-                if was != self.isOnWiFi { self.autoSyncSettingChanged() }
+                self.isOnWiFi = unmetered
+                if was != unmetered {
+                    LLog("picplace: network is \(unmetered ? "Wi-Fi/Ethernet" : "mobile or metered") — auto-sync \(self.autoAllowed ? "may run" : "waits")")
+                    self.autoSyncSettingChanged()
+                }
             }
         }
         monitor.start(queue: DispatchQueue(label: "picplace.path"))
         pathMonitorBox = monitor
-        #endif
     }
 
-    /// A switch or a condition moved: stop what is no longer allowed, start
-    /// what now is.
-    func autoSyncSettingChanged() {
-        if !autoSyncEnabled {
-            for task in pendingPushes.values { task.cancel() }
-            pendingPushes.removeAll()
-        }
-        if !originalsAllowed {
-            originalsQueueTask?.cancel()
-            originalsQueueTask = nil
-            if autoStatus?.hasPrefix("Uploading originals") == true { autoStatus = nil }
-        } else {
-            scheduleOriginalsQueue()
-        }
-    }
-
-    /// Whether the originals may move right now.
-    var originalsAllowed: Bool {
-        guard autoSyncEnabled, autoOriginalsEnabled, canSync, model.stage != .processing else { return false }
-        #if os(iOS)
+    /// Whether anything automatic may move right now: the switch, the
+    /// session, the network rule, the battery.
+    var autoAllowed: Bool {
+        guard autoSyncEnabled, canSync else { return false }
         if wifiOnly, !isOnWiFi { return false }
+        #if os(iOS)
         if ProcessInfo.processInfo.isLowPowerModeEnabled { return false }
         #endif
         return true
     }
 
+    /// Why nothing automatic is moving, for the status line.
+    var autoHold: String? {
+        guard autoSyncEnabled else { return nil }
+        if !canSync { return "not connected" }
+        if wifiOnly, !isOnWiFi { return "waiting for Wi-Fi" }
+        #if os(iOS)
+        if ProcessInfo.processInfo.isLowPowerModeEnabled { return "paused in Low Power Mode" }
+        #endif
+        return nil
+    }
+
+    /// A switch or a condition moved: stop what is no longer allowed, start
+    /// what now is — the pushes that were held, the check that was held,
+    /// the first connection, the originals.
+    func autoSyncSettingChanged() {
+        if !autoSyncEnabled {
+            for task in pendingPushes.values { task.cancel() }
+            pendingPushes.removeAll()
+            heldPushes.removeAll()
+        }
+        if !originalsAllowed {
+            originalsQueueTask?.cancel()
+            originalsQueueTask = nil
+            if autoStatus?.hasPrefix("Uploading originals") == true { autoStatus = nil }
+        }
+        guard autoAllowed else { return }
+        if binding?.initialSync.state == .pending {
+            runInitialSyncIfPending()
+            return
+        }
+        if heldCheck {
+            heldCheck = false
+            checkForChanges(reason: "network")
+        }
+        for id in heldPushes { noteProjectChanged(id) }
+        heldPushes.removeAll()
+        scheduleOriginalsQueue()
+    }
+
+    /// Whether the originals may move right now.
+    var originalsAllowed: Bool {
+        autoAllowed && autoOriginalsEnabled && model.stage != .processing
+    }
+
     /// Why the originals are not moving, for the status line.
     var originalsHold: String? {
         guard autoSyncEnabled, autoOriginalsEnabled else { return nil }
-        if !canSync { return "not connected" }
+        if let hold = autoHold { return hold }
         if model.stage == .processing { return "paused while a shoot runs" }
-        #if os(iOS)
-        if wifiOnly, !isOnWiFi { return "waiting for Wi-Fi" }
-        if ProcessInfo.processInfo.isLowPowerModeEnabled { return "paused in Low Power Mode" }
-        #endif
         return nil
     }
 
@@ -121,7 +172,9 @@ extension PicPlaceController {
     }
 
     private func pushIfMoved(_ id: UUID) async {
-        guard canSync, model.stage != .processing, syncTasks[id] == nil, checkTask == nil, initialSyncTask == nil,
+        // Held, not dropped: the network rule lifts, the push goes.
+        guard autoAllowed else { heldPushes.insert(id); return }
+        guard model.stage != .processing, syncTasks[id] == nil, checkTask == nil, initialSyncTask == nil,
               let capture = model.capture(id: id) else { return }
         let origin = model.originID(of: capture)
         if conflicts.contains(where: { $0.originID == origin }) { return }

@@ -76,6 +76,13 @@ extension PicPlaceController {
     func checkForChanges(reason: String) {
         guard canSync, binding?.initialSync.state == .done, checkTask == nil, initialSyncTask == nil else { return }
         if model.stage == .processing { LLog("picplace: check (\(reason)) skipped — a capture is running"); return }
+        // Only a person's press runs on mobile data; every automatic reason
+        // waits for Wi-Fi and is picked up when the network changes.
+        if reason != "manual", !autoAllowed {
+            heldCheck = true
+            LLog("picplace: check (\(reason)) held — \(autoHold ?? "auto-sync off")")
+            return
+        }
         // Foreground checks are rate-limited: the Mac fires didBecomeActive
         // on every window switch.
         if reason == "foreground", let last = lastCheckAt, Date().timeIntervalSince(last) < 60 { return }
