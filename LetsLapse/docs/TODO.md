@@ -16,10 +16,12 @@ live inline.
 **Detail:** [picplace-sync-v1.md](picplace-sync-v1.md) · **Raised:** 2026-09-14
 (Steven: "add the authentication to the LetsLapse app and sync of a nominated
 photo — or video or interval — project to the picplace server, with some
-indication of status inside the app") · **DESIGN SIGNED OFF AND IMPLEMENTED
-2026-09-14; verified on the iPhone simulator against picplace.test; OWED: the
-real Sign-in button by hand, a look at the Mac inspector group, and the
-production server (Hetzner storage, cron) before picplace.co** · medium · seams:
+indication of status inside the app") · **IMPLEMENTED AND LIVE 2026-09-14** — v1 (sign in + push one project) works
+end to end; picplace.co is live (Hetzner storage, scheduler, APP_DEBUG=false).
+The transport is done; the LetsLapse product flows (first-time connection,
+accounts across libraries, auto-sync, restore, sign-out, presence/eviction) are
+handed to the repo owner in [picplace-integration-handover.md](picplace-integration-handover.md).
+Owed on this side: close the Mac inspector mirror (🟡). · medium · seams:
 `App/SettingsView.swift` (a PICPLACE card between Storage and Advanced),
 `App/ProjectDetailView.swift` + `App/GalleryPreviewPanel.swift` (the status
 card / inspector group), `App/ProjectsView.swift` (a thumbnail pill),

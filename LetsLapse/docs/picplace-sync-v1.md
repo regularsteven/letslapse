@@ -1,5 +1,11 @@
 # PicPlace sync, version one — sign in, push one project, show where it is
 
+> **Handover:** the product flows this feature still needs (first-time
+> connection, accounts across libraries, auto-sync, restore, sign-out,
+> presence) are collected for the repo owner in
+> [picplace-integration-handover.md](picplace-integration-handover.md). This
+> file is the record of what v1 implemented.
+
 **Date:** 2026-09-14 · **Status:** design signed off (Steven, 2026-09-14) and **implemented the same day** in `App/PicPlace/` + the four screens; verified end to end on the iPhone 16 Pro simulator against picplace.test (§7) · **Server:** the PicPlace Laravel app (`picplace` repo, phases 0–4 built and verified 2026-09-14 against Garage; production rollout pending)
 
 Steven's framing (2026-09-14): add authentication to the LetsLapse app and the sync of a **nominated** project — photo, video or interval — to the PicPlace server, with some indication of the status inside the app. This is deliberately the small slice: the full "server as the source of truth" programme ([data-model-server-portability-2026-09-12.md](data-model-server-portability-2026-09-12.md), phase 6) stays where it is. Nothing here changes a record, a file format or the index; a device that never signs in sees no difference.
