@@ -1,0 +1,46 @@
+M2 · the read side moves to the index — verification, 2026-09-14
+root: <scratch>/lib-full (the Mac volume's manifest + all 366 documents, sizes measured and persisted, no media); the same tree seeded into the
+      iPhone 16 Pro simulator's container. Before = the M1 build + the list hooks (298ff6c); after = M2 W2 (00a7513) / W3 (3fc7a85).
+method: LL_TAB + -projects.sortKey/-projects.sortAscending/-gallery.* launch arguments + LL_FILTER / LL_QUERY / LL_CHIPS; LL_DUMP_ORDER=1 logs the
+        ids each list rendered, in order; the .order lines are diffed as text. 36 cases per platform.
+
+== the 36 cases ==
+  projects × {capture, added, edit, size} × {desc, asc}; gallery × the same (16)
+  projects/gallery × filter {photos, interval, video} (6)
+  projects × search {"night water", "weather", "Sky & weather", "brid", "idge", "Tatra T3", "tram", "Shape testing", "prague dusk", "13:49", "photo"} (11)
+  projects/gallery × chips {skyWeather, water} (2); projects × chips {tram} + query "photo" under Edit (1)
+
+== results ==
+  Mac after vs Mac before:   33 identical, 3 differ (below)
+  sim after vs sim before:   33 identical, the same 3
+  sim after vs Mac after:    36 identical
+  sim before vs Mac before:  36 identical
+
+== the three that differ — the §9.1 decision's own ==
+  query "idge": before 17, after 0
+  query "13:49": before 4, after 0
+  query "photo": before 258, after 292
+    "idge"  — a mid-word substring; prefix-per-word finds nothing (the bridge projects are found by "brid").
+    "13:49" — a fragment of an unnamed project's dated DISPLAY title ("Photo 13. 9. at 13:49"), a rendering, not a field in the record.
+    "photo" — +34, all unnamed interval shoots whose originalName is "N photos"; nothing lost.
+
+== every sort's first five, after (identical to before) ==
+  projects-capture-desc:  6D33CB06,7A623E7C,D3976E54,FE7FEB97,E77CEB6F
+  projects-added-desc:  52A001BB,34DB5A69,5C040948,B0A24803,EE6E52A0
+  projects-edit-desc:  79564E4F,5CAA46B8,D3976E54,9A458778,B5A23668
+  projects-size-desc:  76BEF654,BB6CBBE2,E33ED216,3355871A,A55DF0EE
+  projects-capture-asc:  B4F5B092,AFB679FB,5F449C70,BD6AED05,A618BE58
+  projects-edit-asc:  AFB679FB,A618BE58,FEE94B7D,09085E1B,5DF25B60
+  (the twins with identical createdAt — e.g. 47315E01/0729FF70 — hold the same relative order: the id tie-break turns with the sort, as the arrays' reversal did)
+
+== the grade settle (W3) ==
+  root: <scratch>/lib-grade = two projects, one with its real media (6D33CB06, 6 MB). LL_APPLY_PRESET=6D33CB06…:Vivid two seconds after launch.
+  files changed: Projects/6D33CB06…/project.json · Projects/library.json · Index/library.sqlite(+wal,shm). Nothing else.
+  index rows changed: 6D33CB06 only (edited_at, document_modified_at). The other project's document and row untouched.
+
+== the index after the switch ==
+  built 2026-09-14T05:52:26.969Z · projects 365 (+1 deleted) · blends 140 · assets 57052 (57052 hashed) · search rows 52691
+  categories: photo 269 · interval 80 · video 16 · scan 0
+  tags: tram 84 · skyWeather 69 · urban 38 · Shape testing 37 · water 28 · vehicles 14 · people 11 · nature 6 · Tatra KT8D5 4 · Tatra T3 4 · landmark 3 · Škoda 15T 3 · Bridge 1 · Czech Republic 1 · Dusk 1 · Historic 1 · Prague 1 · River 1 · Vltava 1 · interior 1
+REBUILD IDENTICAL
+  verify: 366 documents · 366 indexed · missing from index 0 · stale in index 0 → CONSISTENT

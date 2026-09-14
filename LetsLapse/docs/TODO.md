@@ -557,9 +557,38 @@ six edge faults at once behave. **Owed from M1:** the real Mac library's first
 M1 launch and its read-only `lapse audit` after (this session could not point
 `lapse` at the volume); the iPhone 16 Pro launch time at 518 projects (a device
 install — ask first); the banner's "regenerated" wording for an unreadable
-export (a copy change, with M4 when the story goes). **M2 waits on the brief's
-§9 decisions** (search semantics, how long the export stays, the Recovered
-badge, the collections' in-memory shape).
+export (a copy change, with M4 when the story goes). **§9 decided 2026-09-14** (2fc20c0):
+FTS prefix-per-word everywhere; the export stays one release and the Python
+readers move to the index; no Recovered badge; collections stay the in-memory
+document.
+
+**M2 landed 2026-09-14 — the read side moves to the index** (spec
+[data-model-m2-spec-2026-09-14.md](data-model-m2-spec-2026-09-14.md); f7eb131
+the Kit's schema 2 — `category` by the app's own rules with the scanner sidecar
+read once, `edited_at`, the SHAPES counts, tag labels in FTS, `Sort.edited`,
+tie order turning with the sort, `projectIDs`/`categoryCounts`/`tagCounts
+(excludingScans:)`; 298ff6c the list hooks `LL_FILTER` / `LL_QUERY` / `LL_CHIPS`
+/ `LL_DUMP_ORDER`; 00a7513 the Projects list, Gallery and clip picker over
+`ProjectListQuery` → `LibraryIndex` with `capture(id:)` per card and the arrays
+kept as the fallback for a library with no index; 3fc7a85 the 56 by-id lookups
+→ `capture(id:)`/`blend(id:)` and the single-project mutations through
+`updateCapture(_:edited:persist:_:)`, plus `LL_APPLY_PRESET`). Report:
+`data-model-audit-reports/scratch-m2-lists-2026-09-14.txt` — 36 launch-hook
+cases per platform, 33 identical before and after on the Mac and the iPhone 16
+Pro simulator (36/36 simulator = Mac), the three differences the search
+decision's own ("idge" mid-word → 0, "13:49" a dated display title → 0,
+"photo" +34 unnamed interval shoots via `originalName`); a grade settle rewrote
+one document, the export and one index row. Mirrors: desc-only updates to the
+three iOS `projects.*.svg` and `macOS/gallery.svg` + INDEX paragraphs (nothing
+drawn changes) — **Steven's look owed**; if the field should say it searches
+words, that is a design pass. **Owed from M2:** the transfer picker's "Hide
+imported" still walks the arrays (M3, with `projectID(originID:)` ready in the
+Kit); `refreshShapeSummaries` still runs on each Gallery visit (it now also
+keeps the index's counts); the device checks. **M3 next:** no whole-library
+arrays — the loader stops populating `captures`/`blends`, `capture(id:)` reads
+the document through a cache, the storage card / trash line / transfer
+catalogue / export estimates read the index, memory at launch stops scaling
+with project count (a 10k synthetic root is the measure).
 
 ### Asset metadata (IPTC Core), the index at scale, and the Lightroom catalogue
 

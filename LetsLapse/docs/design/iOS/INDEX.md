@@ -96,6 +96,19 @@ library: schema 2 → 3, all 11 backfilled to their folder dates, and both menus
 which is the same gap Edit has always had; showing the sorted-on date when the axis is Added is a design decision,
 not drawn here.
 
+**2026-09-14, the lists read the index (data model M2) — code first, desc-only mirror update, Steven's look owed:**
+the Projects list and the Gallery take their rows, order, filter counts and chip row from the library's SQLite index
+through one question (`App/AppModel+Lists.swift` `ProjectListQuery`), and the search is FTS5 prefix-per-word over the
+record — name, original name, tags + chip labels, elements, and the assets' titles/captions/keywords/creator/place/
+camera (Steven's §9.1 decision, `docs/data-model-switch-brief-2026-09-13.md`). **Nothing drawn changes** — the field
+still says "Search projects", the empty state still names the words — so this is a `desc` update in
+`projects.portrait.svg`, `projects.sharing.portrait.svg`, `projects.scans-filter.portrait.svg` and `macOS/gallery.svg`.
+What a person can notice: a mid-word fragment ("idge") no longer finds bridge, a typed date fragment no longer finds an
+unnamed project's dated title, and "photo" also finds unnamed interval shoots ("1057 photos"). Verified with the new
+`LL_FILTER` / `LL_QUERY` / `LL_CHIPS` / `LL_DUMP_ORDER` hooks: 36 cases identical before and after on the Mac and the
+iPhone 16 Pro simulator, bar those three. If the field should say it searches words (a placeholder or a hint), that is
+a design pass to draw then.
+
 ⚠️ **2026-09-06, White Balance becomes absolute and keyframed — code first, mirrors' `desc` updated, drawn values owed:**
 supersedes yesterday's anchor model. Steven tested it and found the flaw: the readout looked absolute but the
 default stayed relative unless an anchor was picked from a menu, so two keyframes (10328 K/+60 → 2991 K/+5) still
