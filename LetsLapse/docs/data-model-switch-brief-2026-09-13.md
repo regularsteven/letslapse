@@ -165,9 +165,9 @@ cd LetsLapse/Kit && swift test --filter "LibraryIndexTests|LibraryIndexRebuildTe
 
 ---
 
-## 9. Decisions to take with Steven before M2
+## 9. Decisions to take with Steven before M2 — taken 2026-09-14
 
-1. Search semantics: FTS5 prefix-per-word (finds "brid" → bridge; loses mid-word substring hits) versus keeping the substring haystack for names and using FTS only for assets. Affects the search field's design.
-2. How long the generated `library.json` stays after M1 (one release is proposed) and whether the transfer server's catalogue and the seven `tools/*.py` readers move to the index or the documents.
-3. Whether "Recovered · <id>" projects (folder adoption) should carry a visible badge — today they are ordinary projects with a name.
-4. Whether collections stay a document or get their own table as the index's truth-facing view (they stay a document by decision; the question is only the UI's in-memory shape).
+1. Search semantics: FTS5 prefix-per-word (finds "brid" → bridge; loses mid-word substring hits) versus keeping the substring haystack for names and using FTS only for assets. Affects the search field's design. **Decision: FTS prefix-per-word everywhere** — one query path over names, tags, labels, elements and the asset text; the search field's copy and empty state get a design pass with M2.
+2. How long the generated `library.json` stays after M1 (one release is proposed) and whether the transfer server's catalogue and the seven `tools/*.py` readers move to the index or the documents. **Decision: one release, then M4 stops writing it; the Python readers move to `Index/library.sqlite`** (the transfer catalogue already reads the in-memory arrays).
+3. Whether "Recovered · <id>" projects (folder adoption) should carry a visible badge — today they are ordinary projects with a name. **Decision: no badge — the name is enough.**
+4. Whether collections stay a document or get their own table as the index's truth-facing view (they stay a document by decision; the question is only the UI's in-memory shape). **Decision: the small in-memory document, as today.**
