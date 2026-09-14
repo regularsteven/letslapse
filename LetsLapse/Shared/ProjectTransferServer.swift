@@ -274,7 +274,7 @@ final class ProjectTransferServer: ObservableObject {
         txt[ProjectTransferService.TXTKey.deviceName] = Self.deviceName
         txt[ProjectTransferService.TXTKey.model] = Self.deviceModel
         txt[ProjectTransferService.TXTKey.pairingID] = CaptureRemotePairing.pairingID(code: code)
-        txt[ProjectTransferService.TXTKey.projectCount] = String(model?.captures.count ?? 0)
+        txt[ProjectTransferService.TXTKey.projectCount] = String(model?.liveProjectCount ?? 0)
         txt[ProjectTransferService.TXTKey.version] = String(ProjectTransferService.version)
         return txt
     }

@@ -46,11 +46,16 @@ extension AppModel {
     /// person picked, else the most recently edited project's hero. Nil for
     /// an empty library. Scans are not looks and are left out.
     func presetPreviewFrame(preferring id: UUID?) -> PresetPreviewFrame? {
-        let candidates = captures.filter { !$0.isScannerCapture }
-        let chosen = id.flatMap { id in candidates.first { $0.id == id } }
-        let capture = chosen ?? candidates.max {
-            ($0.modifiedAt ?? $0.createdAt) < ($1.modifiedAt ?? $1.createdAt)
-        }
+        // The chosen project, else the most recently edited non-scan — the
+        // index's Modified sort, one row (M3).
+        var chosen: CaptureProject?
+        if let id, let picked = self.capture(id: id), !picked.isScannerCapture { chosen = picked }
+        var query = LibraryIndex.ProjectQuery()
+        query.sort = .modified
+        query.excludeScans = true
+        query.limit = 1
+        let newest: CaptureProject? = ((try? libraryIndex?.projects(query).rows.first) ?? nil).flatMap { row in self.capture(id: row.id) }
+        let capture = chosen ?? newest
         guard let capture, let url = mediaURL(for: capture) else { return nil }
         let source: PresetPreviewFrame.Source = capture.kind == .video ? .movie(url) : .still(url)
         return PresetPreviewFrame(
@@ -216,7 +221,7 @@ struct ManagePresetsView: View {
                 .alert(item: $importNotice) { notice in
                     Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
                 }
-                .task(id: previewCaptureID + "|" + String(model.captures.count)) {
+                .task(id: previewCaptureID + "|" + String(model.allLiveCaptures().count)) {
                     previewFrame = model.presetPreviewFrame(preferring: UUID(uuidString: previewCaptureID))
                 }
                 .task {
@@ -358,7 +363,7 @@ struct ManagePresetsView: View {
 
     private func recount() {
         var counts: [UUID: Int] = [:]
-        for capture in model.captures {
+        for capture in model.allLiveCaptures() {
             if case .named(let id, _) = model.presetState(for: capture) {
                 counts[id, default: 0] += 1
             }
@@ -1116,7 +1121,7 @@ struct PresetPreviewPickerView: View {
     @Binding var path: [PresetRoute]
 
     private var candidates: [AppModel.CaptureProject] {
-        model.captures
+        model.allLiveCaptures()
             .filter { !$0.isScannerCapture }
             .sorted { ($0.modifiedAt ?? $0.createdAt) > ($1.modifiedAt ?? $1.createdAt) }
     }

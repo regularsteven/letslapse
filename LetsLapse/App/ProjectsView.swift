@@ -382,7 +382,7 @@ struct ProjectsView: View {
     /// fallback path's base; the index answers the same question through
     /// `listQuery.listsScans`.
     private var sourceCaptures: [AppModel.CaptureProject] {
-        listsScans ? model.captures : model.libraryCaptures
+        listsScans ? model.allLiveCaptures() : model.libraryCaptures
     }
 
     /// The list's whole question, for the index (M2).
@@ -519,7 +519,7 @@ struct ProjectsView: View {
     /// only by onAppear re-firing on tab switches).
     private func consumeDetailRequest(_ requested: UUID?) {
         guard let requested else { return }
-        guard model.captures.contains(where: { $0.id == requested }) else { return }
+        guard model.allLiveCaptures().contains(where: { $0.id == requested }) else { return }
         path = [requested]
         // Clear once the emission has settled; writing back during it would
         // re-enter the publisher mid-publish.

@@ -762,6 +762,22 @@ public final class LibraryIndex: @unchecked Sendable {
         return try db.query("SELECT folder FROM projects WHERE id = ?", [.text(projectID.uuidString.uppercased())]) { $0.text(0) }.first ?? nil
     }
 
+    /// The row follows its folder into or out of `.trash/` (M3): the
+    /// document did not change, only where it is.
+    public func setFolder(_ folder: String, of projectID: UUID) throws {
+        lock.lock(); defer { lock.unlock() }
+        try db.run("UPDATE projects SET folder = ? WHERE id = ?", [.text(folder), .text(projectID.uuidString.uppercased())])
+    }
+
+    /// Every project id and every blend id in the index, live and deleted
+    /// — what the launch compares the compatibility export against.
+    public func allIDs() throws -> (projects: Set<UUID>, blends: Set<UUID>) {
+        lock.lock(); defer { lock.unlock() }
+        let projects = Set(try db.query("SELECT id FROM projects") { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 })
+        let blends = Set(try db.query("SELECT id FROM blends") { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 })
+        return (projects, blends)
+    }
+
     public struct StorageTotals: Equatable, Sendable {
         /// The sum of the measured sizes of the live projects.
         public var liveBytes: Int64

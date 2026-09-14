@@ -496,8 +496,7 @@ struct CaptureView: View {
         // Keep the recent-capture tile current: a new project (any mode) takes
         // the slot, and a Photo shot's blend replaces its own hero moments after
         // the capture itself lands.
-        .onChange(of: model.captures.first?.id) { _ in refreshRecentCapture() }
-        .onChange(of: model.blends.count) { _ in refreshRecentCapture() }
+        .onChange(of: model.indexRevision) { _ in refreshRecentCapture() }
         .onReceive(tick) { date in
             now = date
             thermalState = ProcessInfo.processInfo.thermalState
@@ -4292,7 +4291,7 @@ struct CaptureView: View {
     /// to call repeatedly: an unchanged hero returns before touching the disk,
     /// and the decode itself goes through the shared cache the grids use.
     private func refreshRecentCapture() {
-        let hero = model.captures.first.flatMap { model.heroAsset(for: $0) }
+        let hero = model.allLiveCaptures().first.flatMap { model.heroAsset(for: $0) }
         guard hero?.url != recentHeroURL else { return }
         recentHeroURL = hero?.url
         recentThumbnail = nil

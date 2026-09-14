@@ -225,7 +225,7 @@ final class ShapeFinder: ObservableObject {
     static func inventory(in model: AppModel) -> (projects: [Candidate], skippedVideo: Int) {
         var out: [Candidate] = []
         var video = 0
-        for capture in model.captures where !capture.isScannerCapture {
+        for capture in model.allLiveCaptures() where !capture.isScannerCapture {
             guard capture.kind == .photos else { video += 1; continue }
             let folder = model.projectFolderURL(for: capture)
             guard let rep = representative(for: capture, in: model) else { continue }
@@ -294,7 +294,7 @@ final class ShapeFinder: ObservableObject {
     /// many registers changed.
     static func removeFoundShapes(in model: AppModel) -> Int {
         var changed = 0
-        for capture in model.captures where !capture.isScannerCapture && capture.kind == .photos {
+        for capture in model.allLiveCaptures() where !capture.isScannerCapture && capture.kind == .photos {
             let folder = model.projectFolderURL(for: capture)
             guard var register = ShapeRegister.load(inProjectFolder: folder),
                   register.isAnalysed || register.shapes.contains(where: { $0.source == .detected }) else { continue }

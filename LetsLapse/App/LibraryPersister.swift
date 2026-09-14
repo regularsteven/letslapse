@@ -1,43 +1,33 @@
 import Foundation
 import LetsLapseKit
 
-/// The one path every write of the library takes (Phase 1 W6).
+/// The one path every write of the library takes (Phase 1 W6; per project
+/// since M3).
 ///
-/// A serial utility queue; every caller snapshots the manifest on the main
-/// actor, mints a monotonically increasing version for it and enqueues.
-/// The queue writes a snapshot only when its version is above the last one
-/// written (`VersionGate`), which is what closes Part 1 R3 — a queued
-/// older snapshot can no longer land after a newer one and resurrect a
-/// deleted blend. `persistAndWait` is for the callers that need the bytes
-/// on disk before they carry on (a delete, a registration, an install);
-/// `persist` is for a grade tick. Every failure is logged through `LLog`
-/// and surfaced once per session through `onFailure`; nothing here is
-/// `try?`-swallowed.
+/// A serial utility queue. A caller mints a monotonically increasing
+/// version for the document it is about to hand over and enqueues; the
+/// queue writes a document only when its version is above the last one
+/// written FOR THAT PROJECT (`VersionGate`, one per project), which is what
+/// closes Part 1 R3 — a queued older state can no longer land after a newer
+/// one. `waiting` is for the callers that need the bytes on disk before
+/// they carry on (a delete, a registration, an install, an export about to
+/// read the file); a grade tick is queued. Every failure is logged through
+/// `LLog` and surfaced once per session through `onFailure`; nothing here
+/// is `try?`-swallowed.
 ///
 /// `refuseWrites` is the W7 guard: while the library on disk could not be
-/// read, no snapshot may overwrite it — the set-aside file is the only
-/// copy of every grade, tag and blend record, and a fresh manifest with one
-/// new capture in it would be the data loss Part 1 R1 described.
+/// read, no write may overwrite it.
 ///
-/// Since M1 (2026-09-14) the **documents are the truth**: an admitted
-/// snapshot goes to the `ProjectDocumentWriter` first, which rewrites the
-/// `project.json` of every project the snapshot changed and their index
-/// rows, and `Projects/library.json` is written after it as the generated
-/// compatibility export (`"generated": true`) an older build, the transfer
-/// catalogue and `lapse audit` still read. A document that cannot be
-/// written fails the persist — it is the record; the export failing is
-/// logged and the next persist regenerates it.
+/// What a persist writes (M3): the project's `project.json`, atomically,
+/// then its index row and — when their files are newer than their rows —
+/// its asset and shape rows. The collections document has its own gate.
+/// `Projects/library.json`, the compatibility export an older build and
+/// `lapse audit` still read, is regenerated from the documents at launch
+/// when it is stale and at quit or background (`regenerateExport`) — not
+/// after every persist, since nothing in memory holds the whole library
+/// to write it from and reading every document per grade tick is not a
+/// trade. M4 retires it.
 final class LibraryPersister: @unchecked Sendable {
-
-    typealias Manifest = AppModel.LibraryManifest
-
-    enum Reason {
-        /// Files were added, converted, rotated or deleted — the size and
-        /// existence caches are stale too.
-        case filesChanged
-        /// Only values changed (a grade, a name, a tag).
-        case valuesChanged
-    }
 
     enum PersistError: LocalizedError {
         case refused(String)
@@ -48,20 +38,10 @@ final class LibraryPersister: @unchecked Sendable {
         }
     }
 
-    /// One or more project documents could not be written (M1). Not a
-    /// `PersistError`, so it is surfaced once per session rather than on
-    /// every tick — the writer logs each file and retries it at the next
-    /// persist.
-    struct DocumentWriteError: LocalizedError {
-        var count: Int
-        var errorDescription: String? {
-            "\(count) project record\(count == 1 ? "" : "s") couldn't be written — see the console log."
-        }
-    }
-
     private let queue = DispatchQueue(label: "com.regularsteven.letslapse.library-persist", qos: .utility)
     private let lock = NSLock()
-    private var gate = VersionGate()
+    private var gates: [UUID: VersionGate] = [:]
+    private var collectionsGate = VersionGate()
     private var counter = VersionCounter()
     private var refusal: String?
     private var surfacedFailure = false
@@ -75,21 +55,29 @@ final class LibraryPersister: @unchecked Sendable {
     /// modification date — what the foreground check compares against.
     var onManifestWritten: (@Sendable (Date?) -> Void)?
 
-    /// Called on the queue whenever the index's rows changed — a persist
-    /// that wrote documents, the launch pass — so the lists re-ask (M2).
+    /// Called on the queue whenever the index's rows changed — a document
+    /// written, a project removed — so the lists re-ask (M2).
     var onIndexChanged: (@Sendable () -> Void)?
 
-    /// The per-project document writer (Phase 2). Used only on `queue`.
-    private let documents: ProjectDocumentWriter
+    /// The per-document writer and indexer. Used on `queue` — and by the
+    /// launch walk, before any persist is queued.
+    let writer: ProjectDocumentWriter
 
     /// The library's SQLite index (Phase 3) — a cache the documents keep
     /// current; nil only when the database could not be opened even after
     /// being thrown away, in which case the app runs without one.
     let index: LibraryIndex?
 
+    let projectsRoot: URL
+    let collectionsURL: URL
+    let exportURL: URL
+
     init(projectsRoot: URL, collectionsURL: URL, indexURL: URL) {
+        self.projectsRoot = projectsRoot
+        self.collectionsURL = collectionsURL
+        exportURL = projectsRoot.appendingPathComponent(LibraryExportFormat.fileName)
         index = Self.openIndex(at: indexURL)
-        documents = ProjectDocumentWriter(projectsRoot: projectsRoot, collectionsURL: collectionsURL, index: index)
+        writer = ProjectDocumentWriter(projectsRoot: projectsRoot, index: index)
     }
 
     /// Opens the index, discarding a database that will not open — it is a
@@ -117,34 +105,72 @@ final class LibraryPersister: @unchecked Sendable {
         set { lock.lock(); refusal = newValue; lock.unlock() }
     }
 
-    /// Mints the version for a snapshot taken now. Main actor: the caller
-    /// snapshots and mints in one breath, which is what makes the order of
+    /// Mints the version for a state taken now. The caller takes the
+    /// state and mints in one breath, which is what makes the order of
     /// versions the order of the model's states.
-    @MainActor func mint() -> Int {
-        counter.mint()
+    func mint() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        return counter.mint()
     }
 
-    /// Queues an encoded snapshot. Returns at once.
-    func persist(_ manifest: Manifest, version: Int, to url: URL) {
-        queue.async { [self] in
-            do {
-                try write(manifest, version: version, to: url)
-            } catch {
-                report(error)
+    // MARK: - Documents
+
+    /// Writes one project's document into `folder` and indexes it.
+    /// `waiting` returns only when it is on disk (or throws); otherwise the
+    /// write is queued and a failure is reported. A state older than the
+    /// newest written for that project is dropped silently — that is not a
+    /// failure, it is the gate doing its job.
+    func persist(_ document: ProjectDocument, in folder: URL, version: Int, waiting: Bool) throws {
+        if waiting {
+            try queue.sync { [self] in
+                do {
+                    try write(document, in: folder, version: version)
+                } catch {
+                    report(error)
+                    throw error
+                }
+            }
+        } else {
+            queue.async { [self] in
+                do {
+                    try write(document, in: folder, version: version)
+                } catch {
+                    report(error)
+                }
             }
         }
     }
 
-    /// Writes the snapshot and returns only when it is on disk (or throws).
-    /// A snapshot older than the newest written is dropped silently — that
-    /// is not a failure, it is the gate doing its job.
-    func persistAndWait(_ manifest: Manifest, version: Int, to url: URL) throws {
-        try queue.sync { [self] in
+    /// The project's rows go (a purge, a rolled-back registration).
+    func removeProject(id: UUID) {
+        queue.async { [self] in
+            guard let index else { return }
             do {
-                try write(manifest, version: version, to: url)
+                try index.removeProject(id: id)
+                onIndexChanged?()
             } catch {
-                report(error)
-                throw error
+                LLog("index: could not remove \(id.uuidString.prefix(8)): \(error)")
+            }
+        }
+    }
+
+    /// The collections document, under its own gate.
+    func persistCollections(_ document: CollectionsDocument, version: Int, waiting: Bool) throws {
+        let body = { [self] in
+            if let why = refuseWrites { throw PersistError.refused(why) }
+            lock.lock()
+            let admitted = collectionsGate.admit(version)
+            lock.unlock()
+            guard admitted else { return }
+            try writer.writeCollections(document, to: collectionsURL)
+        }
+        if waiting {
+            try queue.sync {
+                do { try body() } catch { report(error); throw error }
+            }
+        } else {
+            queue.async {
+                do { try body() } catch { self.report(error) }
             }
         }
     }
@@ -154,71 +180,52 @@ final class LibraryPersister: @unchecked Sendable {
         queue.sync {}
     }
 
-    /// The documents the launch read (M1), handed to the writer as what is
-    /// on disk — queued ahead of every persist, so an adopting launch's
-    /// persist writes the adopted document and not the whole library.
-    func seedDocuments(_ documents: [ProjectDocument]) {
-        queue.async { [self] in
-            self.documents.seed(documents)
-        }
+    /// The launch walk (M3), one block per folder on this queue so a write
+    /// queued meanwhile lands between two of them; `completion` runs on the
+    /// queue after the last.
+    func enqueueWalk(_ steps: [() -> Void], completion: @escaping @Sendable () -> Void) {
+        for step in steps { queue.async(execute: step) }
+        queue.async(execute: completion)
     }
 
-    /// The one-time launch pass over the project documents (Phase 2): every
-    /// project's `project.json` is brought up to `manifest` and remembered,
-    /// so the persists that follow rewrite only what changes. Queued behind
-    /// whatever is already waiting and ahead of whatever comes next, which
-    /// is what keeps a persist from being overtaken by a stale pass. Skipped
-    /// entirely while writes are refused.
-    func reconcileDocuments(_ manifest: Manifest) {
-        queue.async { [self] in
+    // MARK: - The export
+
+    /// `Projects/library.json` regenerated from the documents (M1's
+    /// compatibility export, M3's cadence: at launch when stale, at quit
+    /// and background). Queued behind whatever is waiting, so it describes
+    /// what is on disk; `waiting` for the quit path.
+    func regenerateExport(waiting: Bool = false) {
+        let body = { [self] in
             guard refuseWrites == nil else { return }
-            let started = Date()
-            let outcome = documents.reconcile(manifest)
-            LLog(String(format: "project documents: reconciled %d written · %d current · %d without a folder · %d failed in %.2f s",
-                        outcome.written, outcome.unchanged, outcome.homeless, outcome.failed, Date().timeIntervalSince(started)))
-            if index != nil {
-                LLog(outcome.indexRebuilt
-                     ? "index: rebuilt from the files — \(outcome.indexed) projects"
-                     : "index: \(outcome.indexed) projects re-indexed · \(outcome.assetsReindexed) asset files re-indexed · \(outcome.shapesReindexed) shape registers re-counted")
-                onIndexChanged?()
+            do {
+                let started = Date()
+                let data = try LibraryIndexRebuild.rebuiltManifest(root: projectsRoot)
+                try data.write(to: exportURL, options: .atomic)
+                onManifestWritten?((try? URL(fileURLWithPath: exportURL.path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate)
+                LLog(String(format: "library export: regenerated from the documents in %.2f s (%d bytes)", Date().timeIntervalSince(started), data.count))
+            } catch {
+                LLog("library export: could not regenerate \(exportURL.lastPathComponent): \(error)")
             }
         }
+        if waiting { queue.sync(execute: body) } else { queue.async(execute: body) }
     }
 
     // MARK: - On the queue
 
-    private func write(_ manifest: Manifest, version: Int, to url: URL) throws {
+    private func write(_ document: ProjectDocument, in folder: URL, version: Int) throws {
         if let why = refuseWrites {
             throw PersistError.refused(why)
         }
+        let id = document.capture.id
         lock.lock()
-        let admitted = gate.admit(version)
+        let admitted = gates[id, default: VersionGate()].admit(version)
         lock.unlock()
         guard admitted else { return }
-        // The documents first: they are the record (M1). The writer logs
-        // each file it could not write and tries it again at the next
-        // persist; the count fails this one, below, once the export has
-        // had its turn.
-        let outcome = documents.sync(manifest)
-        if outcome.indexed > 0 || outcome.removed > 0 { onIndexChanged?() }
-        // Then `library.json`, regenerated from the same snapshot as the
-        // compatibility export. Its failure is logged, not thrown: nothing
-        // is lost, and the next persist writes it again.
-        do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            var export = manifest
-            export.generated = true
-            let data = try encoder.encode(export)
-            try data.write(to: url, options: .atomic)
-            onManifestWritten?((try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate)
-        } catch {
-            LLog("library export: could not write \(url.lastPathComponent): \(error) — regenerated by the next persist")
-        }
-        if outcome.failed > 0 {
-            throw DocumentWriteError(count: outcome.failed)
-        }
+        let url = ProjectDocumentFormat.url(inProjectFolder: folder)
+        let data = try writer.write(document, to: url)
+        var outcome = ProjectDocumentWriter.Outcome()
+        writer.index(data, at: url, id: id, outcome: &outcome)
+        if outcome.indexed > 0 { onIndexChanged?() }
     }
 
     private func report(_ error: Error) {

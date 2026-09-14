@@ -310,7 +310,7 @@ struct ProjectDetailView: View {
     /// Recompute storage whenever versions or per-clip encodings change.
     private var storageToken: Int {
         var hasher = Hasher()
-        hasher.combine(model.blends.count)
+        hasher.combine(capture.map { model.blends(for: $0).count } ?? 0)
         if let capture {
             hasher.combine(capture.sourceFileNames.count)
             hasher.combine(capture.clipEncodings?.count ?? 0)

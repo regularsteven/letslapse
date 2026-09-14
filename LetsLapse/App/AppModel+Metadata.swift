@@ -175,7 +175,6 @@ extension AppModel {
             return
         }
         markEdited(capture.id)
-        try? persistLibrary()
         metadataRevision += 1
     }
 
@@ -264,7 +263,7 @@ extension AppModel {
             // The manifest is read on the main actor; the walk that decides
             // which projects need work stats every asset of every project
             // and reads every `assets.ndjson`, so it runs off it.
-            let projects = self.captures.sorted { self.addedAt($0) > self.addedAt($1) }
+            let projects = self.allLiveCaptures().sorted { self.addedAt($0) > self.addedAt($1) }
                 .map { ($0.id, self.projectFolderURL(for: $0), self.assetNames(for: $0)) }
             let store = self.assetStore
             let needing = await Task.detached(priority: .background) { () -> [UUID] in

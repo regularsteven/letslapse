@@ -61,25 +61,21 @@ extension AppModel {
     // MARK: - One record by id
 
     /// One project's record, by id — the one way a screen gets a record it
-    /// was handed the id of (M2). Backed by the loaded arrays for now; M3
-    /// puts the per-project document cache behind the same name.
+    /// was handed the id of (M2): its document, through the store's cache
+    /// (M3).
     func capture(id: UUID) -> CaptureProject? {
-        guard let index = captureIndexByID[id], captures.indices.contains(index), captures[index].id == id else {
-            return captures.first { $0.id == id }
-        }
-        return captures[index]
+        store.capture(id: id)
     }
 
-    /// One blend's record, by id.
+    /// One live blend's record, by id, through its project's document.
     func blend(id: UUID) -> BlendProject? {
-        blends.first { $0.id == id }
+        store.blend(id: id)
     }
 
     // MARK: - The lists
 
     /// The ids a list renders, in order, or nil when the library has no
-    /// index to ask (the screens then sort and filter the arrays as they
-    /// did before M2). Remembered per question until the index changes.
+    /// index to ask. Remembered per question until the index changes.
     func projectIDs(for query: ProjectListQuery) -> [UUID]? {
         guard let index = libraryIndex else { return nil }
         if let cached = listCache[query], cached.revision == indexRevision { return cached.ids }
@@ -88,14 +84,14 @@ extension AppModel {
             listCache[query] = (indexRevision, ids)
             return ids
         } catch {
-            LLog("index: list query failed (\(error)) — falling back to the arrays")
+            LLog("index: list query failed (\(error))")
             return nil
         }
     }
 
     /// The records behind `projectIDs(for:)`, in the same order; a project
-    /// the index lists but the arrays do not know yet (a row landing ahead
-    /// of the model) is skipped rather than shown blank.
+    /// the index lists but whose document cannot be read is skipped rather
+    /// than shown blank.
     func projects(for query: ProjectListQuery) -> [CaptureProject]? {
         projectIDs(for: query)?.compactMap { capture(id: $0) }
     }
@@ -141,6 +137,13 @@ extension AppModel {
             LLog("index: tag query failed (\(error))")
             return nil
         }
+    }
+
+    /// How many live projects the library holds — the index's count (M3),
+    /// the whole-library read for a library without one.
+    var liveProjectCount: Int {
+        if let totals = try? libraryIndex?.storageTotals() { return totals.liveProjects }
+        return allLiveCaptures().count
     }
 
     /// The index changed under the lists: forget every remembered answer.

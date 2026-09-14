@@ -1328,7 +1328,7 @@ private struct LargeOriginalsView: View {
     @State private var failure: String?
 
     private var sorted: [AppModel.CaptureProject] {
-        model.captures.sorted { (sizes[$0.id] ?? 0) > (sizes[$1.id] ?? 0) }
+        model.allLiveCaptures().sorted { (sizes[$0.id] ?? 0) > (sizes[$1.id] ?? 0) }
     }
 
     var body: some View {
@@ -1391,7 +1391,7 @@ private struct LargeOriginalsView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task {
-            for capture in model.captures {
+            for capture in model.allLiveCaptures() {
                 // A library can hold hundreds of projects and each walk touches
                 // every file in one; stop the moment the screen is closed rather
                 // than working through the rest of the list unseen.

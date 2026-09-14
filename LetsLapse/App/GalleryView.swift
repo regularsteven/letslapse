@@ -1009,7 +1009,7 @@ struct GalleryView: View {
 
     private func consumeDetailRequest(_ requested: UUID?) {
         guard let requested else { return }
-        guard model.captures.contains(where: { $0.id == requested }) else { return }
+        guard model.allLiveCaptures().contains(where: { $0.id == requested }) else { return }
         path = [requested]
         DispatchQueue.main.async {
             if model.requestedProjectDetailID == requested {

@@ -907,12 +907,13 @@ final class AppModel: ObservableObject {
     @Published var stage: Stage = .home
     @Published var source: Source?
     @Published var errorMessage: String?
-    @Published private(set) var captures: [CaptureProject] = [] {
-        didSet { captureIndexByID = Dictionary(captures.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }) }
-    }
-    /// `captures` by id — what `capture(id:)` reads (M2). Rebuilt on every
-    /// change of the array; a few microseconds at a few hundred projects.
-    var captureIndexByID: [UUID: Int] = [:]
+    /// The records, one document at a time (M3): `capture(id:)`,
+    /// `blends(for:)` and `blend(id:)` read through it, every change writes
+    /// through it. There is no array of the library any more — the lists
+    /// ask the index which projects to show (M2) and the store for each.
+    let store: ProjectStore = ProjectStore(
+        projectsRoot: StorageRoot.current.appendingPathComponent("Projects", isDirectory: true),
+        index: AppModel.sharedPersister.index, persister: AppModel.sharedPersister)
     /// Bumped on the main actor whenever the index changed — after a
     /// persist's rows landed, after the launch pass, after the asset store
     /// re-indexed a project — so a list re-asks its question (M2).
@@ -920,13 +921,11 @@ final class AppModel: ObservableObject {
     /// The lists' remembered answers, keyed by question, good for one
     /// `indexRevision`. Internal for the extension in `AppModel+Lists.swift`.
     var listCache: [ProjectListQuery: (revision: Int, ids: [UUID])] = [:]
-    /// The tombstoned records (W9): in the manifest, out of every list. Their
-    /// files sit under `Projects/.trash/` until Empty trash or the 30-day
-    /// purge removes both.
-    @Published private(set) var deletedCaptures: [CaptureProject] = []
-    @Published private(set) var deletedBlends: [BlendProject] = []
+    /// The tombstoned collections (W9): in the collections document, out of
+    /// every list, until Empty trash or the 30-day purge. (Tombstoned
+    /// projects and blends live in their documents and are counted by the
+    /// index.)
     @Published private(set) var deletedCollections: [LapseCollection] = []
-    @Published private(set) var blends: [BlendProject] = []
     @Published private(set) var collections: [LapseCollection] = []
     /// Per-project `shapes.json` summaries for the Gallery's Shapes rows,
     /// keyed by capture id; a project with no register has no entry. Filled
@@ -1297,10 +1296,6 @@ final class AppModel: ObservableObject {
         LLog("device id \(DeviceIdentity.id.uuidString)")
         acquireLibraryLock()
         loadLibrary()
-        // Phase 4: folders with no record — a killed install, a project
-        // written straight into the folder — join the library from their
-        // own documents before anything else looks at the list.
-        reconcileFoldersAtLaunch()
         refreshShapeSummaries()
         persister.onFailure = { [weak self] error in
             self?.errorMessage = error.localizedDescription
@@ -1312,6 +1307,16 @@ final class AppModel: ObservableObject {
             self?.metadataRevision += 1
             self?.noteIndexChanged()
         }
+        // A freshly registered project has no preset state yet — every
+        // registration path would otherwise have to remember to set one —
+        // and `presetState(for:)` derives the right answer for it
+        // (`.original`: no preset, no sliders). Stamped on the way to disk,
+        // so the document says what state the project is in even years from
+        // now, when the derivation rules may have moved on.
+        store.beforeWrite = { [weak self] capture in
+            guard capture.presetState == nil, let self else { return }
+            capture.presetState = self.presetState(for: capture)
+        }
         assetStore.index = persister.index
         assetStore.shouldPause = { [weak self] in
             let process = ProcessInfo.processInfo
@@ -1321,18 +1326,7 @@ final class AppModel: ObservableObject {
             // activity brackets keep current.
             return self?.libraryBusyForBackfill ?? false
         }
-        sweepTrashAtLaunch()
         sweepGPSBackups()
-        // Phase 2: every project's `project.json` brought up to the manifest
-        // once per launch — after the trash sweep, so a tombstoned project's
-        // document is written where its folder has ended up.
-        persister.reconcileDocuments(currentManifest())
-        // M1: a missing, unreadable or pre-switch `library.json` is
-        // regenerated as the export once the documents are current — queued
-        // behind the pass above, so it describes what is on disk.
-        if libraryExportStale {
-            persist(reason: .valuesChanged)
-        }
         scheduleAssetBackfill()
         // The Adjust and Guided previews level their source frames the way
         // the render will; they learn the current project's level from here.
@@ -1352,10 +1346,9 @@ final class AppModel: ObservableObject {
         return blend(id: resultBlendID)
     }
 
+    /// The project's live blended clips, newest first.
     func blends(for capture: CaptureProject) -> [BlendProject] {
-        blends
-            .filter { $0.captureID == capture.id }
-            .sorted { $0.createdAt > $1.createdAt }
+        store.blends(for: capture.id)
     }
 
     /// The image that stands for a photo-kind capture: its newest image
@@ -1599,7 +1592,7 @@ final class AppModel: ObservableObject {
     /// The route back in is deliberate and single — "View as timelapse" on the
     /// session's export sheet, which opens `ScannerProjectView` as before.
     var scanSessions: [CaptureProject] {
-        captures.filter(isScannerProject)
+        allLiveCaptures().filter(isScannerProject)
     }
 
     /// Cheap "is there anything in the Scans tab" — the tab bar asks this on
@@ -1607,12 +1600,22 @@ final class AppModel: ObservableObject {
     /// setting is the other half), and it stops at the first scan rather than
     /// building a list.
     var hasScanSessions: Bool {
-        captures.contains(where: isScannerProject)
+        ((try? libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery())[.scan]) ?? nil).map { $0 > 0 }
+            ?? allLiveCaptures().contains(where: isScannerProject)
     }
 
     /// Everything that is not a scan: what Projects and Gallery list.
     var libraryCaptures: [CaptureProject] {
-        captures.filter { !isScannerProject($0) }
+        allLiveCaptures().filter { !isScannerProject($0) }
+    }
+
+    /// Every live record, newest capture first — a whole-library read
+    /// (M3, transitional): the index's live ids through the store, one
+    /// document each. For the few passes that still want the whole library
+    /// in hand; a list never does.
+    func allLiveCaptures() -> [CaptureProject] {
+        guard let index = libraryIndex, let ids = try? index.liveProjectIDs() else { return [] }
+        return ids.compactMap { store.capture(id: $0) }
     }
 
     /// The page numbers a scan actually holds, ascending — read off the
@@ -1836,24 +1839,26 @@ final class AppModel: ObservableObject {
     /// export renumbers from 1 on its way out anyway (`ScanFrameExport`), so
     /// nothing downstream ever sees the hole.
     func deleteScanPage(_ number: Int, from capture: CaptureProject) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        guard store.exists(id: capture.id) else { return }
         let sourceFolder = captureFolderURL(for: capture.id).appendingPathComponent("source")
         let base = String(format: "frame-%05d", number)
-        // Persist first (W9): the manifest stops naming the page before its
+        // Persist first (W9): the record stops naming the page before its
         // files go, so a kill in between leaves an unlisted file, never a
         // listed one that is missing.
-        captures[index].sourceFileNames.removeAll { name in
-            (name as NSString).lastPathComponent.hasPrefix("\(base).")
-        }
-        // A person changed this project — see CaptureProject.modifiedAt.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
         do {
-            try persistLibrary()
+            try store.update(capture.id) { document in
+                document.capture.sourceFileNames.removeAll { name in
+                    (name as NSString).lastPathComponent.hasPrefix("\(base).")
+                }
+                // A person changed this project — see CaptureProject.modifiedAt.
+                document.capture.modifiedAt = Date()
+                document.capture.modifiedBy = DeviceIdentity.id
+            }
         } catch {
             errorMessage = "Couldn't delete that page: \(error.localizedDescription)"
             return
         }
+        noteFilesChanged(for: capture.id)
         var removed: [URL] = []
         for name in ["\(base).heic", "\(base).jpg", "\(base).jpeg", "\(base).dng",
                      "\(base)\(PerspectiveCorrector.correctedSuffix).heic"] {
@@ -1896,49 +1901,34 @@ final class AppModel: ObservableObject {
     }
 
     func deleteCapture(_ capture: CaptureProject) throws {
-        guard captures.contains(where: { $0.id == capture.id }) else { return }
+        guard store.exists(id: capture.id) else { return }
         if currentCaptureID == capture.id && stage == .processing {
             throw LibraryDeletionError.activeCapture
         }
 
         // W9: the record is tombstoned and on disk BEFORE a file moves, and
-        // the folder goes to `.trash` rather than away — reversible, and a
-        // kill between the two leaves a tombstone the launch sweep finishes.
+        // the folder goes to `.trash` rather than away — reversible. Not
+        // saved → not deleted: the store leaves the record as it was.
         let now = Date()
-        var tombstone = self.capture(id: capture.id) ?? capture
-        tombstone.deletedAt = now
-        tombstone.deletedBy = DeviceIdentity.id
-        let removedBlends = blends.filter { $0.captureID == capture.id }.map { blend -> BlendProject in
-            var stamped = blend
-            stamped.deletedAt = now
-            stamped.deletedBy = DeviceIdentity.id
-            return stamped
+        let tombstoned = try store.update(capture.id) { document in
+            document.capture.deletedAt = now
+            document.capture.deletedBy = DeviceIdentity.id
+            for i in document.blends.indices where document.blends[i].deletedAt == nil {
+                document.blends[i].deletedAt = now
+                document.blends[i].deletedBy = DeviceIdentity.id
+            }
         }
-        let previousCollections = collections
-        captures.removeAll { $0.id == capture.id }
-        blends.removeAll { $0.captureID == capture.id }
-        deletedCaptures.append(tombstone)
-        deletedBlends.append(contentsOf: removedBlends)
-        removeCollectionEntries(blendIDs: Set(removedBlends.map(\.id)))
-        do {
-            try persistAndWait(reason: .filesChanged)
-        } catch {
-            // Not saved → not deleted. The lists go back exactly as they were.
-            deletedCaptures.removeAll { $0.id == capture.id }
-            deletedBlends.removeAll { $0.captureID == capture.id }
-            captures.append(tombstone.undeleted)
-            captures.sort { $0.createdAt > $1.createdAt }
-            blends.append(contentsOf: removedBlends.map(\.undeleted))
-            blends.sort { $0.createdAt > $1.createdAt }
-            collections = previousCollections
-            throw error
-        }
+        removeCollectionEntries(blendIDs: Set(tombstoned.blends.map(\.id)))
+        persistCollectionsQuietly()
+        noteFilesChanged(for: capture.id)
 
         let folder = captureFolderURL(for: capture.id)
         if FileManager.default.fileExists(atPath: folder.path) {
             try moveToTrash(folder, as: trashURL.appendingPathComponent(capture.id.uuidString, isDirectory: true))
+            store.noteFolderMoved(id: capture.id, toTrash: true)
         }
         assetStore.forget(projectFolder: folder)
+        noteIndexChanged()
 
         if currentCaptureID == capture.id {
             reset()
@@ -1964,7 +1954,7 @@ final class AppModel: ObservableObject {
     }
 
     func deleteBlend(_ blend: BlendProject) throws {
-        guard blends.contains(where: { $0.id == blend.id }) else { return }
+        guard self.blend(id: blend.id) != nil else { return }
 
         let captureFolder = captureFolderURL(for: blend.captureID).standardizedFileURL
         let output = blendOutputURL(for: blend).standardizedFileURL
@@ -1973,24 +1963,22 @@ final class AppModel: ObservableObject {
             throw LibraryDeletionError.unsafeBlendPath
         }
 
-        // W9: tombstone first, on disk, then the file to `.trash`.
-        var tombstone = self.blend(id: blend.id) ?? blend
-        tombstone.deletedAt = Date()
-        tombstone.deletedBy = DeviceIdentity.id
-        let previousCollections = collections
-        blends.removeAll { $0.id == blend.id }
-        deletedBlends.append(tombstone)
-        markEdited(blend.captureID)
-        removeCollectionEntries(blendIDs: [blend.id])
-        do {
-            try persistAndWait(reason: .filesChanged)
-        } catch {
-            deletedBlends.removeAll { $0.id == blend.id }
-            blends.append(tombstone.undeleted)
-            blends.sort { $0.createdAt > $1.createdAt }
-            collections = previousCollections
-            throw error
+        // W9: tombstone first, on disk, then the file to `.trash`. Not
+        // saved → not deleted.
+        let now = Date()
+        try store.update(blend.captureID) { document in
+            for i in document.blends.indices where document.blends[i].id == blend.id {
+                document.blends[i].deletedAt = now
+                document.blends[i].deletedBy = DeviceIdentity.id
+            }
+            // A person changed this project — see CaptureProject.modifiedAt.
+            document.capture.modifiedAt = now
+            document.capture.modifiedBy = DeviceIdentity.id
         }
+        removeCollectionEntries(blendIDs: [blend.id])
+        persistCollectionsQuietly()
+        noteFilesChanged(for: blend.captureID)
+        noteIndexChanged()
 
         if FileManager.default.fileExists(atPath: output.path) {
             try moveToTrash(output, as: trashURL
@@ -2064,7 +2052,7 @@ final class AppModel: ObservableObject {
         tombstone.deletedBy = DeviceIdentity.id
         deletedCollections.append(tombstone)
         do {
-            try persistAndWait(reason: .filesChanged)
+            try persistCollections(waiting: true)
         } catch {
             deletedCollections.removeAll { $0.id == id }
             collections.insert(tombstone.undeleted, at: min(index, collections.count))
@@ -2081,26 +2069,18 @@ final class AppModel: ObservableObject {
 
     // MARK: - Trash (W9)
 
-    /// Finishes any delete the process did not live to complete: a
-    /// tombstoned project whose folder is still under `Projects/`, or a
-    /// tombstoned blend whose output is still in its live folder. Then the
-    /// 30-day purge. Runs once per launch, after the library loads.
+    /// Finishes any blend delete the process did not live to complete: a
+    /// tombstoned blend of a live project whose output is still in the
+    /// live folder. (A tombstoned project still under `Projects/` is not
+    /// swept — since M1 a document under `Projects/` is live whatever its
+    /// tombstone says; the launch walk restores it.) Then the 30-day purge.
+    /// Runs once per launch, after the walk.
     func sweepTrashAtLaunch() {
-        for capture in deletedCaptures {
-            let folder = captureFolderURL(for: capture.id)
-            guard FileManager.default.fileExists(atPath: folder.path) else { continue }
-            do {
-                try moveToTrash(folder, as: trashURL.appendingPathComponent(capture.id.uuidString, isDirectory: true))
-                LLog("trash: finished moving \(capture.id.uuidString.prefix(8)) (deleted \(capture.deletedAt.map(FrameTimestamps.string(from:)) ?? "?"))")
-            } catch {
-                LLog("trash: could not move \(capture.id.uuidString.prefix(8)): \(error)")
-            }
-        }
-        for blend in deletedBlends where !deletedCaptures.contains(where: { $0.id == blend.captureID }) {
-            let output = blendOutputURL(for: blend)
+        for blend in (try? libraryIndex?.deletedBlendsInLiveProjects()) ?? [] {
+            let output = captureFolderURL(for: blend.projectID).appendingPathComponent(blend.outputFileName)
             guard FileManager.default.fileExists(atPath: output.path) else { continue }
             try? moveToTrash(output, as: trashURL
-                .appendingPathComponent(blend.captureID.uuidString, isDirectory: true)
+                .appendingPathComponent(blend.projectID.uuidString, isDirectory: true)
                 .appendingPathComponent("blends", isDirectory: true)
                 .appendingPathComponent(output.lastPathComponent))
         }
@@ -2133,36 +2113,42 @@ final class AppModel: ObservableObject {
     static let trashRetention: TimeInterval = 30 * 24 * 3600
 
     /// Removes every tombstone older than `trashRetention` together with its
-    /// files, and persists once when anything went.
+    /// files: a project's trash folder and its index row, a blend's trashed
+    /// output and its entry in its project's document, a collection's
+    /// render folder and its record.
     func purgeExpiredTrash() {
         let cutoff = Date().addingTimeInterval(-Self.trashRetention)
-        let expiredCaptures = deletedCaptures.filter { ($0.deletedAt ?? .distantPast) < cutoff }
-        let expiredBlends = deletedBlends.filter { ($0.deletedAt ?? .distantPast) < cutoff }
+        let expiredProjects = ((try? libraryIndex?.deletedProjects()) ?? []).filter { ($0.deletedAt ?? .distantPast) < cutoff }
+        let expiredBlends = ((try? libraryIndex?.deletedBlendsInLiveProjects()) ?? []).filter { ($0.deletedAt ?? .distantPast) < cutoff }
         let expiredCollections = deletedCollections.filter { ($0.deletedAt ?? .distantPast) < cutoff }
-        guard !expiredCaptures.isEmpty || !expiredBlends.isEmpty || !expiredCollections.isEmpty else { return }
-        for capture in expiredCaptures {
-            try? FileManager.default.removeItem(at: trashURL.appendingPathComponent(capture.id.uuidString, isDirectory: true))
+        guard !expiredProjects.isEmpty || !expiredBlends.isEmpty || !expiredCollections.isEmpty else { return }
+        for project in expiredProjects {
+            try? FileManager.default.removeItem(at: trashURL.appendingPathComponent(project.id.uuidString, isDirectory: true))
+            store.remove(id: project.id)
         }
         for blend in expiredBlends {
             let file = (blend.outputFileName as NSString).lastPathComponent
             try? FileManager.default.removeItem(at: trashURL
-                .appendingPathComponent(blend.captureID.uuidString, isDirectory: true)
+                .appendingPathComponent(blend.projectID.uuidString, isDirectory: true)
                 .appendingPathComponent("blends", isDirectory: true)
                 .appendingPathComponent(file))
+        }
+        for (projectID, gone) in Dictionary(grouping: expiredBlends, by: \.projectID) {
+            let ids = Set(gone.map(\.id))
+            try? store.update(projectID, waiting: false) { document in
+                document.blends.removeAll { ids.contains($0.id) }
+            }
         }
         for collection in expiredCollections {
             try? FileManager.default.removeItem(at: trashURL
                 .appendingPathComponent("collections", isDirectory: true)
                 .appendingPathComponent(collection.id.uuidString, isDirectory: true))
         }
-        let goneCaptures = Set(expiredCaptures.map(\.id))
-        let goneBlends = Set(expiredBlends.map(\.id))
         let goneCollections = Set(expiredCollections.map(\.id))
-        deletedCaptures.removeAll { goneCaptures.contains($0.id) }
-        deletedBlends.removeAll { goneBlends.contains($0.id) }
         deletedCollections.removeAll { goneCollections.contains($0.id) }
-        LLog("trash: purged \(expiredCaptures.count) projects, \(expiredBlends.count) blends, \(expiredCollections.count) collections older than 30 days")
-        persist(reason: .filesChanged)
+        LLog("trash: purged \(expiredProjects.count) projects, \(expiredBlends.count) blends, \(expiredCollections.count) collections older than 30 days")
+        persistCollectionsQuietly()
+        noteIndexChanged()
     }
 
     /// Settings ▸ Storage ▸ Empty trash: every file under `.trash` and every
@@ -2172,14 +2158,25 @@ final class AppModel: ObservableObject {
         await MediaWorkQueue.shared.run {
             try? FileManager.default.removeItem(at: trash)
         }
-        deletedCaptures.removeAll()
-        deletedBlends.removeAll()
+        for project in (try? libraryIndex?.deletedProjects()) ?? [] {
+            store.remove(id: project.id)
+        }
+        for (projectID, gone) in Dictionary(grouping: (try? libraryIndex?.deletedBlendsInLiveProjects()) ?? [], by: \.projectID) {
+            let ids = Set(gone.map(\.id))
+            try? store.update(projectID, waiting: false) { document in
+                document.blends.removeAll { ids.contains($0.id) }
+            }
+        }
         deletedCollections.removeAll()
-        persist(reason: .filesChanged)
+        persistCollectionsQuietly()
+        noteIndexChanged()
     }
 
     /// What the trash holds, for the storage card's own line.
-    var trashItemCount: Int { deletedCaptures.count + deletedBlends.count + deletedCollections.count }
+    var trashItemCount: Int {
+        let totals: LibraryIndex.StorageTotals? = (try? libraryIndex?.storageTotals()) ?? nil
+        return (totals?.deletedProjects ?? 0) + (totals?.deletedBlends ?? 0) + deletedCollections.count
+    }
 
     /// Adds blends to a collection in order, skipping any already there —
     /// one appearance per collection (callers pre-check when they want the
@@ -2424,11 +2421,11 @@ final class AppModel: ObservableObject {
     /// local override is deliberate: "replace the default" means this
     /// collection now follows the default it just wrote.
     func setDefaultCrop(blendID: UUID, ratio: CanvasRatio, offset: Double, clearLocalIn collectionID: UUID?) {
-        guard let blendIndex = blends.firstIndex(where: { $0.id == blendID }) else { return }
-        var crops = blends[blendIndex].defaultCrops ?? [:]
-        crops[ratio.rawValue] = min(max(0, offset), 1)
-        blends[blendIndex].defaultCrops = crops
-        markBlendEdited(blendIndex)
+        guard updateBlend(blendID, { blend in
+            var crops = blend.defaultCrops ?? [:]
+            crops[ratio.rawValue] = min(max(0, offset), 1)
+            blend.defaultCrops = crops
+        }) else { return }
         if let collectionID,
            let index = collections.firstIndex(where: { $0.id == collectionID }),
            let entryIndex = collections[index].entries.firstIndex(where: { $0.blendID == blendID }) {
@@ -2724,17 +2721,39 @@ final class AppModel: ObservableObject {
         persistCollectionsQuietly()
     }
 
-    /// W8: a human edit to a blend record — a crop, a canvas, a reframe.
-    private func markBlendEdited(_ index: Int) {
-        blends[index].modifiedAt = Date()
-        blends[index].modifiedBy = DeviceIdentity.id
+    /// W8: a human edit to a blend record — a crop, a canvas, a reframe —
+    /// written into its project's document (M3). False when the blend is
+    /// not in the library or the write failed.
+    @discardableResult
+    func updateBlend(_ blendID: UUID, waiting: Bool = true, _ change: (inout BlendProject) -> Void) -> Bool {
+        guard let owner = store.owner(ofBlend: blendID) else { return false }
+        do {
+            try store.update(owner, waiting: waiting) { document in
+                for i in document.blends.indices where document.blends[i].id == blendID {
+                    change(&document.blends[i])
+                    document.blends[i].modifiedAt = Date()
+                    document.blends[i].modifiedBy = DeviceIdentity.id
+                }
+            }
+            return true
+        } catch {
+            errorMessage = "Couldn't save that change: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    /// The collections document, written under its own gate (M3):
+    /// `waiting` returns once it is on disk or throws.
+    func persistCollections(waiting: Bool) throws {
+        let document = CollectionsDocument(collections: collections + deletedCollections)
+        try persister.persistCollections(document, version: persister.mint(), waiting: waiting)
     }
 
     /// Collection edits are frequent and small; a failed write surfaces like
     /// every other library error rather than throwing out of a drag gesture.
     private func persistCollectionsQuietly() {
         do {
-            try persistLibrary()
+            try persistCollections(waiting: false)
         } catch {
             errorMessage = "Couldn't save the collection: \(error.localizedDescription)"
         }
@@ -2746,7 +2765,7 @@ final class AppModel: ObservableObject {
     /// so repeated launches don't multiply.
     func debugSeedCollections() {
         guard collections.isEmpty else { return }
-        let videoBlends = blends.filter { $0.kind == .video }
+        let videoBlends = allLiveCaptures().flatMap { blends(for: $0) }.filter { $0.kind == .video }
         guard !videoBlends.isEmpty else { return }
         let first = createCollection(named: "Harbour reel")
         addBlends(videoBlends.prefix(3).map(\.id), to: first.id)
@@ -2775,12 +2794,13 @@ final class AppModel: ObservableObject {
             (["people", "event"], ["market stalls", "crowd"]),
             (["water", "skyWeather", "landmark"], ["harbour", "suspension bridge"]),
         ]
-        for (index, capture) in captures.enumerated() where capture.sceneTags == nil {
+        for (index, capture) in allLiveCaptures().enumerated() where capture.sceneTags == nil {
             let sample = samples[index % samples.count]
-            captures[index].sceneTags = sample.tags
-            captures[index].sceneElements = sample.elements
+            updateCapture(capture.id, edited: false) { capture in
+                capture.sceneTags = sample.tags
+                capture.sceneElements = sample.elements
+            }
         }
-        try? persistLibrary()
     }
 
     /// `LL_PROJECT_SCANNER` screenshot hook: a whole Scanner shoot, fabricated.
@@ -2891,12 +2911,12 @@ final class AppModel: ObservableObject {
         guard !urls.isEmpty else { return nil }
 
         setSource(.photos(urls), mode: Self.scannerCaptureMode, captureMode: .scanner)
-        let id = captures.first?.id
-        if let index = captures.firstIndex(where: { $0.id == id }) {
-            captures[index].scannerPaper = paper.rawValue
-            if let createdAt { captures[index].createdAt = createdAt }
-            captures.sort { $0.createdAt > $1.createdAt }
-            try? persistLibrary()
+        let id = currentCaptureID
+        if let id {
+            updateCapture(id, edited: false) { capture in
+                capture.scannerPaper = paper.rawValue
+                if let createdAt { capture.createdAt = createdAt }
+            }
         }
         if corrected, let id, let capture = capture(id: id) {
             let folder = projectFolderURL(for: capture).appendingPathComponent("source")
@@ -2973,7 +2993,7 @@ final class AppModel: ObservableObject {
     /// ruler shows structure without a real burst shoot. Never persisted, and
     /// Create would blend the same file per piece, so screenshots only.
     func debugOpenAdjustDemo() {
-        guard let capture = captures.first(where: { $0.kind == .video }) else { return }
+        guard let capture = allLiveCaptures().first(where: { $0.kind == .video }) else { return }
         openCapture(capture)
         guard let url = mediaURL(for: capture) else { return }
         let name = url.lastPathComponent
@@ -3994,9 +4014,7 @@ final class AppModel: ObservableObject {
     // MARK: - Projects & versions
 
     func versionNumber(for blend: BlendProject) -> Int {
-        let siblings = blends
-            .filter { $0.captureID == blend.captureID }
-            .sorted { $0.createdAt < $1.createdAt }
+        let siblings = store.blends(for: blend.captureID).sorted { $0.createdAt < $1.createdAt }
         return (siblings.firstIndex { $0.id == blend.id } ?? max(0, siblings.count - 1)) + 1
     }
 
@@ -4071,7 +4089,7 @@ final class AppModel: ObservableObject {
 
     /// Every tag already used somewhere in this library, taxonomy first, then hand-typed ones.
     /// The tag picker offers these under YOUR TAGS, so a word is typed once and tapped after that.
-    var libraryTags: [String] { captures.presentSceneTags }
+    var libraryTags: [String] { tagChips(listsScans: true) ?? allLiveCaptures().presentSceneTags }
 
     // MARK: - Automatic tagging
 
@@ -4469,7 +4487,7 @@ final class AppModel: ObservableObject {
     /// order for a project nobody has ever touched rather than to 1970.
     func lastEdited(_ capture: CaptureProject) -> Date {
         if let modifiedAt = capture.modifiedAt { return modifiedAt }
-        let newestBlend = blends.lazy.filter { $0.captureID == capture.id }.map(\.createdAt).max()
+        let newestBlend = store.blends(for: capture.id).map(\.createdAt).max()
         return newestBlend ?? capture.createdAt
     }
 
@@ -4477,9 +4495,10 @@ final class AppModel: ObservableObject {
     /// mutation, before the `persistLibrary()` that saves it — see
     /// `CaptureProject.modifiedAt` for what does and does not count.
     func markEdited(_ captureID: UUID) {
-        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
+        try? store.update(captureID) { document in
+            document.capture.modifiedAt = Date()
+            document.capture.modifiedBy = DeviceIdentity.id
+        }
     }
 
     /// How a single-project change reaches the disk: at once, on this
@@ -4501,8 +4520,7 @@ final class AppModel: ObservableObject {
     @discardableResult
     func updateCapture(_ id: UUID, edited: Bool = true, persist: ProjectPersist = .now,
                        _ change: (inout CaptureProject) -> Void) -> Bool {
-        guard let index = captureIndexByID[id] ?? captures.firstIndex(where: { $0.id == id }) else { return false }
-        let before = captures[index]
+        guard let before = store.capture(id: id) else { return false }
         var record = before
         change(&record)
         guard record != before else { return true }
@@ -4511,12 +4529,13 @@ final class AppModel: ObservableObject {
             record.modifiedAt = Date()
             record.modifiedBy = DeviceIdentity.id
         }
-        captures[index] = record
-        switch persist {
-        case .now: try? persistLibrary()
-        case .queued: persistLibraryOffMain()
+        do {
+            try store.update(id, waiting: persist == .now) { $0.capture = record }
+            if persist == .now { noteFilesChanged(for: id) }
+            return true
+        } catch {
+            return false
         }
-        return true
     }
 
     /// Whether the stored size can still be believed: never measured, or
@@ -4544,30 +4563,24 @@ final class AppModel: ObservableObject {
     /// their last measurement are walked, which on a settled library is none.
     func measureProjectSizes() async {
         guard !isMeasuringSizes else { return }
-        let pending = captures.filter(needsSizeMeasurement).map(\.id)
+        let pending = (try? libraryIndex?.projectsNeedingSizeMeasurement()) ?? nil
+            ?? allLiveCaptures().filter(needsSizeMeasurement).map(\.id)
         guard !pending.isEmpty else { return }
         isMeasuringSizes = true
         defer { isMeasuringSizes = false }
-        LLog("project sizes: measuring \(pending.count) of \(captures.count)")
-        var measuredAny = false
+        LLog("project sizes: measuring \(pending.count)")
         for id in pending {
             let folder = captureFolderURL(for: id)
             guard let bytes = await MediaWorkQueue.shared.run({ Self.directorySize(folder) }) else {
                 continue
             }
             // Re-found by id: the library can have moved under a walk that
-            // took a while, and an index captured before the await is a
-            // different project by the time it returns.
-            guard let index = captures.firstIndex(where: { $0.id == id }) else { continue }
-            captures[index].sizeBytes = bytes
-            captures[index].sizeMeasuredAt = Date()
-            measuredAny = true
-        }
-        guard measuredAny else { return }
-        do {
-            try persistLibrary()
-        } catch {
-            LLog("project sizes: could not persist — \(error.localizedDescription)")
+            // took a while. A measurement is not an edit; each lands in its
+            // own document, queued.
+            updateCapture(id, edited: false, persist: .queued) { capture in
+                capture.sizeBytes = bytes
+                capture.sizeMeasuredAt = Date()
+            }
         }
     }
 
@@ -7277,11 +7290,14 @@ final class AppModel: ObservableObject {
         blend.width = output.width
         blend.height = output.height
 
-        blends.append(blend)
-        // A new blended clip is the most common edit there is.
-        markEdited(blend.captureID)
-        blends.sort { $0.createdAt > $1.createdAt }
-        try persistLibrary()
+        // A new blended clip is the most common edit there is: the blend
+        // joins its project's document, stamped as an edit.
+        try store.update(captureID) { document in
+            document.blends.append(blend)
+            document.capture.modifiedAt = Date()
+            document.capture.modifiedBy = DeviceIdentity.id
+        }
+        noteFilesChanged(for: captureID)
         // The render's hash line. Frames only (no metadata read): a blend
         // output carries no IPTC, and the frames were recorded at registration.
         if let capture = capture(id: captureID) {
@@ -7402,8 +7418,7 @@ final class AppModel: ObservableObject {
             )
         }
 
-        captures.insert(capture, at: 0)
-        try persistRegistration(of: capture.id)
+        try store.insert(ProjectDocument(capture: capture, blends: []))
         // The project owns the material now — and only now, with the manifest
         // written. Everything downstream re-resolves through `source(for:)`, so
         // the staging copy is dead weight from this line on.
@@ -7431,8 +7446,8 @@ final class AppModel: ObservableObject {
     /// never be written into.
     private func usableProjectID(_ runID: UUID?) -> UUID {
         guard let runID,
-              !captures.contains(where: { $0.id == runID }),
-              !deletedCaptures.contains(where: { $0.id == runID }),
+              store.document(id: runID) == nil,
+              !((try? libraryIndex?.projectIDs().contains(runID)) ?? false),
               !FileManager.default.fileExists(atPath: captureFolderURL(for: runID).path)
         else { return UUID() }
         return runID
@@ -7512,8 +7527,7 @@ final class AppModel: ObservableObject {
             originDeviceID: DeviceIdentity.id
         )
 
-        captures.insert(capture, at: 0)
-        try persistRegistration(of: capture.id)
+        try store.insert(ProjectDocument(capture: capture, blends: []))
         // Same as `registerCapture`: the segments and their `sequence.json` are
         // in the project folder and the manifest is on disk, so the staging run
         // in `tmp/` is now a duplicate of a multi-gigabyte shoot.
@@ -7852,9 +7866,7 @@ final class AppModel: ObservableObject {
             originID: id,
             originDeviceID: DeviceIdentity.id)
 
-        captures.insert(capture, at: 0)
-        captures.sort { $0.createdAt > $1.createdAt }
-        try persistRegistration(of: capture.id)
+        try store.insert(ProjectDocument(capture: capture, blends: []))
         Task { [weak self] in
             await self?.refreshStillsMetadata(for: capture.id)
         }
@@ -8054,9 +8066,7 @@ final class AppModel: ObservableObject {
                 clone.sourceWidth = first.width
                 clone.sourceHeight = first.height
             }
-            captures.insert(clone, at: 0)
-            captures.sort { $0.createdAt > $1.createdAt }
-            try persistLibrary()
+            try store.insert(ProjectDocument(capture: clone, blends: []))
             Task { [weak self] in await self?.refreshStillsMetadata(for: clone.id) }
             recordAssets(for: clone)
             return clone
@@ -8128,9 +8138,7 @@ final class AppModel: ObservableObject {
                 sourceFPS: nil,
                 originID: id,
                 originDeviceID: DeviceIdentity.id)
-            captures.insert(capture, at: 0)
-            captures.sort { $0.createdAt > $1.createdAt }
-            try persistRegistration(of: capture.id)
+            try store.insert(ProjectDocument(capture: capture, blends: []))
             // Frame rate, duration and pixel size come from the probe every
             // video project gets — one code path, so an imported clip and a
             // captured one describe themselves the same way.
@@ -8264,14 +8272,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Library-level migration marker, mirrored from the manifest; see
-    /// `stampLegacyDefaultPresetsIfNeeded`.
-    private var gradingSchemaVersion = 0
-
     /// M1: set when `library.json` is missing, could not be read, or is the
-    /// manifest a pre-switch build wrote (no `generated` marker) — the launch
-    /// regenerates the export once the documents are current, and any
-    /// persist before that does it sooner.
+    /// manifest a pre-switch build wrote (no `generated` marker) — or (M3)
+    /// no longer lists what the index says — the launch regenerates the
+    /// export from the documents once they are current.
     private var libraryExportStale = false
 
     /// M1: folders whose `project.json` exists but would not decode. Left
@@ -8292,45 +8296,30 @@ final class AppModel: ObservableObject {
         case manifest(Data, generated: Bool, captureIDs: Set<UUID>, blendIDs: Set<UUID>)
     }
 
-    /// M1: the library is read from the project folders — every
-    /// `Projects/<id>/project.json` (live and in `.trash`) plus the
-    /// collections document — and `library.json` is no longer decoded on
-    /// that path. A library with no documents at all is one a pre-Phase-2
-    /// build wrote: it bootstraps from its manifest exactly as before, the
-    /// launch pass writes every document, and from the next launch on the
-    /// documents are what is read.
+    /// M3: the launch is a walk, not a load. Every `Projects/<id>/project.json`
+    /// (live and in `.trash`) is checked against the index by folder and
+    /// modification date and read only when the index does not know it as
+    /// it is on disk (`LibraryReconciler`); the collections document is read
+    /// whole (it is small); `library.json` is looked at only for what it
+    /// still tells us. A library with no documents at all is one a
+    /// pre-Phase-2 build wrote: it bootstraps from its manifest once — every
+    /// record written as its document — and from then on the documents are
+    /// what is read.
     private func loadLibrary() {
         do {
             try migrateLegacyApplicationSupportFolderIfNeeded()
             try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
-            let started = Date()
-            let loaded = LibraryDocumentLoader.load(projectsRoot: projectsRootURL, collectionsURL: collectionsDocumentURL)
-            unreadableDocumentFolders = loaded.unreadableFolders
-            persister.seedDocuments(loaded.onDisk)
             let export = try readLibraryExport()
-            if loaded.documentsRead == 0 {
-                bootstrapFromManifest(export)
+            if LibraryReconciler.hasAnyDocument(projectsRoot: projectsRootURL) {
+                loadCollections(export: export)
+                let outcome = LibraryReconciler.Outcome()
+                let steps = LibraryReconciler.steps(projectsRoot: projectsRootURL, index: libraryIndex, writer: persister.writer, outcome: outcome)
+                persister.enqueueWalk(steps) { [weak self] in
+                    Task { @MainActor in self?.finishWalk(outcome, export: export) }
+                }
             } else {
-                loadFromDocuments(loaded, export: export, started: started)
-            }
-            for capture in captures
-            where capture.kind == .video
-                && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil
-                    || capture.sourceWidth == nil || capture.sourceSegmentSeconds == nil
-                    || capture.sourceSegmentFPS == nil) {
-                Task { [weak self] in
-                    await self?.refreshVideoMetadata(for: capture.id)
-                }
-            }
-            // One-shot catch-up for stills projects from before they were
-            // probed at all. Gated on dimensions — always derivable, so this
-            // settles in one pass — with the capture span filled in the same
-            // pass wherever a covering sidecar exists.
-            for capture in captures
-            where capture.kind == .photos && capture.sourceWidth == nil {
-                Task { [weak self] in
-                    await self?.refreshStillsMetadata(for: capture.id)
-                }
+                bootstrapFromManifest(export)
+                finishLaunch()
             }
         } catch {
             // Could not even read the bytes (a permission, a volume): the
@@ -8392,70 +8381,110 @@ final class AppModel: ObservableObject {
         return formatter.string(from: Date())
     }
 
-    /// A library with no project documents anywhere — the pre-M1 load path,
-    /// kept whole for the one launch that needs it. The manifest is the
-    /// truth here (a pre-switch build wrote it), so a copy is kept and the
-    /// export is regenerated once the documents exist.
+    /// A library with no project documents anywhere — a pre-Phase-2
+    /// build's, meeting this build for the first time. The manifest is the
+    /// truth here (a pre-switch build wrote it), so a copy is kept, the
+    /// Swift-level stamps run over its records, every record is written as
+    /// its document where its folder is, and the export is regenerated. A
+    /// manifest this build cannot decode is set aside and nothing is saved
+    /// (W7) — there are no documents to rebuild from.
     private func bootstrapFromManifest(_ export: LibraryExport) {
         let loaded: (migration: ManifestMigrations.Outcome, manifest: LibraryManifest)
         switch export {
         case .missing:
             // An empty library: the first launch ever, or a root with
             // nothing in it yet.
+            collections = []
+            deletedCollections = []
             return
         case .unreadable(let error):
-            // W7: a manifest this build cannot decode is set aside, never
-            // overwritten. Phase 4's repair rebuilds from the documents —
-            // there are none here, so the guard stays: an empty library,
-            // every write refused, and a banner naming the file.
             setAsideUnreadableManifest(error)
-            guard let repaired = repairManifestFromDocuments() else { return }
-            loaded = repaired
+            return
         case .manifest(let data, let generated, _, _):
             do {
                 loaded = try decodeManifest(data)
             } catch {
                 setAsideUnreadableManifest(error)
-                guard let repaired = repairManifestFromDocuments() else { return }
-                loaded = repaired
-                break
+                return
             }
             if !generated { keepPreSwitchCopy(data) }
         }
-        let migration = loaded.migration
-        let manifest = loaded.manifest
-        // Tombstoned records (W9) split off here, so the live arrays are
-        // what they always were and every view, export and transfer keeps
-        // excluding the deleted for free.
-        captures = manifest.captures.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
-        deletedCaptures = manifest.captures.filter { $0.deletedAt != nil }
-        blends = manifest.blends.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
-        deletedBlends = manifest.blends.filter { $0.deletedAt != nil }
-        // Oldest first — a collection list reads in creation order.
-        let allCollections = manifest.collections ?? []
+        var records = loaded.manifest.captures
+        var version = loaded.manifest.gradingSchemaVersion ?? 0
+        for line in loaded.migration.log.prefix(12) { LLog("manifest migration: \(line)") }
+        if loaded.migration.log.count > 12 { LLog("manifest migration: … \(loaded.migration.log.count - 12) more") }
+        Self.stampLegacyDefaultPresets(&records, version: &version)
+        stampPresetStates(&records, version: &version)
+        stampAddedDates(&records, version: &version)
+        let allCollections = loaded.manifest.collections ?? []
         collections = allCollections.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
         deletedCollections = allCollections.filter { $0.deletedAt != nil }
-        gradingSchemaVersion = manifest.gradingSchemaVersion ?? 0
+
+        // Every record as its document, where its folder is; a record with
+        // no folder has nowhere to go and stays only in the kept manifest.
+        var blendsByCapture: [UUID: [BlendProject]] = [:]
+        for blend in loaded.manifest.blends { blendsByCapture[blend.captureID, default: []].append(blend) }
+        var written = 0, homeless = 0, failed = 0
+        for capture in records {
+            let document = ProjectDocument(capture: capture, blends: blendsByCapture[capture.id] ?? [])
+            let live = captureFolderURL(for: capture.id)
+            let trashed = trashURL.appendingPathComponent(capture.id.uuidString, isDirectory: true)
+            let folder: URL
+            if FileManager.default.fileExists(atPath: live.path) { folder = live }
+            else if capture.deletedAt != nil, FileManager.default.fileExists(atPath: trashed.path) { folder = trashed }
+            else { homeless += 1; continue }
+            do {
+                try persister.persist(document, in: folder, version: persister.mint(), waiting: true)
+                written += 1
+            } catch {
+                failed += 1
+            }
+        }
+        do { try persistCollections(waiting: true) } catch { LLog("library: could not write the collections document: \(error)") }
         libraryExportStale = true
-        LLog("library: bootstrapped from library.json (\(captures.count) live, \(deletedCaptures.count) deleted, \(blends.count) blends) — no project documents yet; the launch pass writes them")
-        stampLegacyDefaultPresetsIfNeeded()
-        stampPresetStatesIfNeeded()
-        stampAddedDatesIfNeeded()
-        stampManifestVersionIfNeeded(migration)
+        LLog("library: bootstrapped from library.json — \(written) documents written · \(homeless) records without a folder · \(failed) failed; the documents are what is read from here on")
     }
 
-    /// The documents path (M1). The manifest is looked at for what the
-    /// folders cannot say — the record of a live folder that has no document
-    /// yet (a pre-Phase-2 build's last session), the collections of a
-    /// library with no collections document — and, on the launch that
-    /// flips, for the records that have no folder at all, which are logged
-    /// and left in the pre-switch copy.
-    private func loadFromDocuments(_ loaded: LibraryDocumentLoader.Loaded, export: LibraryExport, started: Date) {
-        captures = loaded.captures
-        deletedCaptures = loaded.deletedCaptures
-        blends = loaded.blends
-        deletedBlends = loaded.deletedBlends
-        deletedCollections = loaded.deletedCollections
+    /// The documents path (M3): the walk, then what the folders cannot say
+    /// on their own — the record of a live folder that has no document yet
+    /// (a pre-Phase-2 build's last session), the collections of a library
+    /// with no collections document — and, on the launch that flips, the
+    /// records that have no folder at all, which are logged and left in the
+    /// pre-switch copy.
+    private func loadCollections(export: LibraryExport) {
+        // The collections: their own document, else the manifest's copy.
+        if let data = try? Data(contentsOf: collectionsDocumentURL),
+           let document = try? ProjectDocumentFormat.makeDecoder().decode(CollectionsDocument.self, from: data) {
+            collections = document.collections.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
+            deletedCollections = document.collections.filter { $0.deletedAt != nil }
+        } else {
+            var all: [LapseCollection] = []
+            if case .manifest(let data, _, _, _) = export, let decoded = try? decodeManifest(data).manifest {
+                all = decoded.collections ?? []
+            }
+            collections = all.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
+            deletedCollections = all.filter { $0.deletedAt != nil }
+            LLog("library: no collections document — \(collections.count) collections taken from the manifest")
+            do { try persistCollections(waiting: true) } catch { LLog("library: could not write the collections document: \(error)") }
+        }
+    }
+
+    /// After the walk (M3), on the main actor: what the folders could not
+    /// say on their own, the export's state, the trash sweep, the metadata
+    /// catch-ups.
+    private func finishWalk(_ outcome: LibraryReconciler.Outcome, export: LibraryExport) {
+        unreadableDocumentFolders = outcome.unreadableFolders
+        store.unreadable = unreadableDocumentFolders
+        for id in outcome.restored { LLog("library: \(id.uuidString.prefix(8)) tombstoned but under Projects/ — live (restored from its folder)") }
+        for id in outcome.stamped { LLog("library: \(id.uuidString.prefix(8)) in .trash without a deletedAt — stamped now") }
+        for item in outcome.unreadable { LLog("library: document in \(item.folder) could not be read and was left alone: \(item.reason)") }
+        if !outcome.unreadable.isEmpty {
+            let names = outcome.unreadable.map { String($0.folder.prefix(8)) }.joined(separator: ", ")
+            errorMessage = "\(outcome.unreadable.count) project record\(outcome.unreadable.count == 1 ? "" : "s") couldn't be read and \(outcome.unreadable.count == 1 ? "was" : "were") left alone: \(names). See the console log."
+        }
+        LLog(String(format: "library: walked %d documents in %.3f s — %d current · %d read and indexed · %d rewritten by a rule · %d rows dropped%@ · %d asset files and %d shape registers re-indexed",
+                    outcome.walked, outcome.seconds, outcome.current, outcome.indexed, outcome.rewritten, outcome.removed,
+                    outcome.indexRebuilt ? " · index rebuilt whole" : "", outcome.sidecars.assetsReindexed, outcome.sidecars.shapesReindexed))
 
         // Decoded at most once, and only when something below needs it.
         var manifestData: Data?
@@ -8469,11 +8498,11 @@ final class AppModel: ObservableObject {
             // The export could not be read; the documents were, so the
             // library carries on. The file is set aside rather than
             // overwritten, the banner says what happened (Phase 4's story:
-            // rebuilt from the folders), and the next persist regenerates it.
+            // rebuilt from the folders), and the launch regenerates it.
             let setAside = setAsideManifest(error)
             libraryLoadFailure = LibraryLoadFailure(
                 setAsideName: setAside.name, reason: setAside.reason,
-                rebuiltFromDocuments: loaded.documentsRead, collectionsRecovered: loaded.collections != nil)
+                rebuiltFromDocuments: outcome.walked, collectionsRecovered: FileManager.default.fileExists(atPath: collectionsDocumentURL.path))
             libraryExportStale = true
         case .manifest(let data, let generated, let captureIDs, let blendIDs):
             manifestData = data
@@ -8494,80 +8523,88 @@ final class AppModel: ObservableObject {
             do {
                 decoded = try decodeManifest(manifestData).manifest
             } catch {
-                LLog("library: library.json could not be decoded for its records (\(error)) — folders without a document fall to the folder reconciliation")
+                LLog("library: library.json could not be decoded for its records (\(error)) — folders without a document are recovered from their media")
             }
             return decoded
         }
 
-        // A live folder with no document but a record in the manifest: the
-        // record is taken from there, once — the launch pass writes its
-        // document and the export is regenerated behind it.
-        var filled = 0
-        for id in loaded.liveFoldersWithoutDocument {
-            guard let manifest = manifest(), var record = manifest.captures.first(where: { $0.id == id }) else { continue }
-            record.sourceFileNames.removeAll { $0.hasSuffix(".json") }
-            if record.originID == nil { record.originID = record.importedFromID ?? id }
-            // A folder under `Projects/` is live, whatever the record says.
-            record.deletedAt = nil
-            record.deletedBy = nil
-            captures.append(record)
-            for blend in manifest.blends where blend.captureID == id {
-                if blend.deletedAt == nil { blends.append(blend) } else { deletedBlends.append(blend) }
+        // A live folder with no document: the manifest's record if it has
+        // one, written as the document; else what the media says; else
+        // left alone. Never one whose document exists but would not decode.
+        var filled = 0, recovered = 0, empty: [String] = []
+        for id in outcome.liveFoldersWithoutDocument where !unreadableDocumentFolders.contains(id) {
+            let folder = captureFolderURL(for: id)
+            if let manifest = manifest(), var record = manifest.captures.first(where: { $0.id == id }) {
+                record.sourceFileNames.removeAll { $0.hasSuffix(".json") }
+                if record.originID == nil { record.originID = record.importedFromID ?? id }
+                // A folder under `Projects/` is live, whatever the record says.
+                record.deletedAt = nil
+                record.deletedBy = nil
+                let blends = manifest.blends.filter { $0.captureID == id }
+                do {
+                    try store.insert(ProjectDocument(capture: record, blends: blends))
+                    filled += 1
+                    LLog("library: \(id.uuidString.prefix(8)) had a folder and a manifest record but no document — written from the manifest")
+                } catch {
+                    LLog("library: could not write \(id.uuidString.prefix(8))'s document from the manifest: \(error)")
+                }
+            } else if let capture = recoveredCapture(id: id, folder: folder) {
+                do {
+                    try store.insert(ProjectDocument(capture: capture, blends: []))
+                    recovered += 1
+                    LLog("reconcile: recovered \(id.uuidString.prefix(8)) from its folder (\(capture.sourceFileNames.count) files)")
+                } catch {
+                    LLog("reconcile: could not write the recovered record of \(id.uuidString.prefix(8)): \(error)")
+                }
+            } else {
+                empty.append(String(id.uuidString.prefix(8)))
             }
-            filled += 1
-            LLog("library: \(id.uuidString.prefix(8)) has a folder and a manifest record but no document yet — taken from the manifest")
         }
-        if filled > 0 {
-            captures.sort { $0.createdAt > $1.createdAt }
-            blends.sort { $0.createdAt > $1.createdAt }
+        if !empty.isEmpty {
+            LLog("reconcile: \(empty.count) folders with no record, no document and no media left alone: \(empty.joined(separator: ", "))")
         }
+        if filled + recovered > 0 { libraryExportStale = true }
 
-        if let documented = loaded.collections {
-            collections = documented
-        } else {
-            let all = manifest()?.collections ?? []
-            collections = all.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
-            deletedCollections = all.filter { $0.deletedAt != nil }
-            LLog("library: no collections document — \(collections.count) collections taken from the manifest")
-        }
-
-        if flipping, let manifest = manifest() {
-            let known = Set((captures + deletedCaptures).map(\.id))
+        if flipping, let manifest = manifest(), let known = try? libraryIndex?.projectIDs() {
             let dropped = manifest.captures.filter { !known.contains($0.id) && !unreadableDocumentFolders.contains($0.id) }
             for record in dropped {
                 LLog("library: record \(record.id.uuidString.prefix(8)) (\(record.name ?? record.originalName)) has no folder and no document — not carried across the switch; its record is in the pre-switch copy")
             }
         }
 
-        // An export that no longer lists what the documents say — a record
+        // An export that no longer lists what the index says — a record
         // dropped at the switch, a folder that arrived or went while the app
         // was not running — is regenerated at the end of the launch rather
-        // than at the next edit, so the two agree whenever the app is up.
-        if !libraryExportStale, let exportIDs {
-            let captureIDs = Set((captures + deletedCaptures).map(\.id))
-            let blendIDs = Set((blends + deletedBlends).map(\.id))
-            if exportIDs.captures != captureIDs || exportIDs.blends != blendIDs {
+        // than at the next quit, so the two agree whenever the app is up.
+        if !libraryExportStale, let exportIDs, let indexed = try? libraryIndex?.allIDs() {
+            if exportIDs.captures != indexed.projects || exportIDs.blends != indexed.blends {
                 libraryExportStale = true
-                LLog("library: library.json lists \(exportIDs.captures.subtracting(captureIDs).count) capture(s) and \(exportIDs.blends.subtracting(blendIDs).count) blend(s) the documents don't, and lacks \(captureIDs.subtracting(exportIDs.captures).count) and \(blendIDs.subtracting(exportIDs.blends).count) — the export will be regenerated")
+                LLog("library: library.json lists \(exportIDs.captures.subtracting(indexed.projects).count) capture(s) and \(exportIDs.blends.subtracting(indexed.blends).count) blend(s) the documents don't, and lacks \(indexed.projects.subtracting(exportIDs.captures).count) and \(indexed.blends.subtracting(exportIDs.blends).count) — the export will be regenerated")
             }
         }
+        noteIndexChanged()
+        finishLaunch()
+    }
 
-        // Every document was written by a build at the current schema (the
-        // documents came after the last manifest migration), so the manifest
-        // stamps have nothing to do here.
-        gradingSchemaVersion = ManifestMigrations.current
-
-        for id in loaded.restored { LLog("library: \(id.uuidString.prefix(8)) tombstoned but under Projects/ — live (restored from its folder)") }
-        for id in loaded.stampedInTrash { LLog("library: \(id.uuidString.prefix(8)) in .trash without a deletedAt — stamped now") }
-        for item in loaded.unreadable { LLog("library: document in \(item.folder) could not be read and was left alone: \(item.reason)") }
-        if !loaded.unreadable.isEmpty {
-            let names = loaded.unreadable.map { String($0.folder.prefix(8)) }.joined(separator: ", ")
-            errorMessage = "\(loaded.unreadable.count) project record\(loaded.unreadable.count == 1 ? "" : "s") couldn't be read and \(loaded.unreadable.count == 1 ? "was" : "were") left alone: \(names). See the console log."
+    /// What every launch does once the index is current: the trash sweep
+    /// and the purge, the export when it is stale (queued behind the walk,
+    /// so it describes what is on disk), the metadata catch-ups — videos
+    /// never probed for fps, duration or dimensions, stills from before
+    /// they were probed at all (gated on dimensions, always derivable, so
+    /// this settles in one pass); the index says which (M3).
+    private func finishLaunch() {
+        sweepTrashAtLaunch()
+        if libraryExportStale {
+            libraryExportStale = false
+            persister.regenerateExport()
         }
-        LLog(String(format: "library: read %d documents (%d in .trash) in %.3f s — %d live, %d deleted, %d blends, %d collections%@",
-                    loaded.documentsRead, loaded.documentsInTrash, Date().timeIntervalSince(started),
-                    captures.count, deletedCaptures.count, blends.count, collections.count,
-                    flipping ? " · switched from library.json" : ""))
+        let needing = (try? libraryIndex?.projectsNeedingProbe()) ?? nil ?? ([], [])
+        for id in needing.video {
+            Task { [weak self] in await self?.refreshVideoMetadata(for: id) }
+        }
+        for id in needing.photos {
+            Task { [weak self] in await self?.refreshStillsMetadata(for: id) }
+        }
     }
 
     /// Moves an undecodable `library.json` to `library.json.unreadable-<stamp>`
@@ -8594,121 +8631,6 @@ final class AppModel: ObservableObject {
         libraryLoadFailure = LibraryLoadFailure(setAsideName: setAside.name, reason: setAside.reason)
         persister.refuseWrites = why
         errorMessage = why
-    }
-
-    /// Phase 4: the manifest rebuilt from the project folders — every
-    /// `Projects/<id>/project.json` (live and in `.trash`) plus
-    /// `Collections/collections.json` — run through the same migrations and
-    /// decoder as a manifest read from disk, written as the new
-    /// `library.json`, and the persister unlocked. Nil, with the guard left
-    /// in place, when there are no documents to rebuild from or the result
-    /// does not decode either.
-    private func repairManifestFromDocuments() -> (migration: ManifestMigrations.Outcome, manifest: LibraryManifest)? {
-        guard let failure = libraryLoadFailure else { return nil }
-        let rebuilt = LibraryIndexRebuild.run(root: projectsRootURL)
-        guard rebuilt.documentsRead > 0 else {
-            LLog("library: no project documents to rebuild from")
-            return nil
-        }
-        do {
-            let data = try LibraryIndexRebuild.rebuiltManifest(root: projectsRootURL)
-            let migration = try ManifestMigrations.apply(to: data) { [self] id in
-                UUID(uuidString: id).map { captureFolderURL(for: $0) }
-            }
-            let manifest = try JSONDecoder().decode(LibraryManifest.self, from: migration.data)
-            try migration.data.write(to: manifestURL, options: .atomic)
-            persister.refuseWrites = nil
-            let notice = "The project library couldn't be read (\(failure.reason)) and was rebuilt from \(rebuilt.documentsRead) project folders" +
-                (rebuilt.collectionsDocumentRead ? " and the collections document." : "; the collections could not be recovered.") +
-                " The unreadable file was kept as \(failure.setAsideName)."
-            libraryLoadFailure = LibraryLoadFailure(
-                setAsideName: failure.setAsideName, reason: failure.reason,
-                rebuiltFromDocuments: rebuilt.documentsRead, collectionsRecovered: rebuilt.collectionsDocumentRead)
-            errorMessage = notice
-            LLog("library: rebuilt from \(rebuilt.documentsRead) documents (\(rebuilt.documentsInTrash) in .trash)\(rebuilt.unreadableDocuments.isEmpty ? "" : ", \(rebuilt.unreadableDocuments.count) unreadable"), collections \(rebuilt.collectionsDocumentRead ? "recovered" : "NOT recovered")")
-            return (migration, manifest)
-        } catch {
-            LLog("library: rebuild from documents failed — \(error)")
-            return nil
-        }
-    }
-
-    /// Phase 4: the folders under `Projects/` against the records, once per
-    /// launch, after the manifest has loaded.
-    ///
-    /// A folder with no record but with its own `project.json` is adopted —
-    /// the document IS the record (an install or a transfer killed between
-    /// the folder move and the persist; a project the Lightroom tool wrote
-    /// straight into the folder). A folder with no record and no document
-    /// but media in `source/` is registered as a recovered project, named
-    /// so, with what its files say; an empty folder is only logged. A record
-    /// with no folder is logged — it stays, and the audit counts it — since
-    /// nothing here deletes.
-    private func reconcileFoldersAtLaunch() {
-        guard libraryLoadFailure == nil || libraryLoadFailure?.rebuiltFromDocuments != nil else { return }
-        let fm = FileManager.default
-        guard let names = try? fm.contentsOfDirectory(atPath: projectsRootURL.path) else { return }
-        let known = Set((captures + deletedCaptures).map(\.id))
-        var adopted = 0
-        var recovered = 0
-        var empty: [String] = []
-        for name in names.sorted() {
-            guard !name.hasPrefix("."), let id = UUID(uuidString: name), !known.contains(id) else { continue }
-            // M1: a folder whose document exists but would not decode is
-            // nobody's to re-register — its media would make a "Recovered"
-            // record that the next persist writes over the document.
-            if unreadableDocumentFolders.contains(id) { continue }
-            let folder = captureFolderURL(for: id)
-            var isDirectory: ObjCBool = false
-            guard fm.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else { continue }
-            let documentURL = ProjectDocumentFormat.url(inProjectFolder: folder)
-            if let data = try? Data(contentsOf: documentURL),
-               let document = try? ProjectDocumentFormat.makeDecoder().decode(ProjectDocument.self, from: data),
-               document.capture.id == id {
-                // A folder under `Projects/` is a live project, whatever its
-                // document says: one dragged back out of `.trash` by hand
-                // comes back live, blends and all, rather than being swept
-                // straight back in.
-                var capture = document.capture
-                capture.sourceFileNames.removeAll { $0.hasSuffix(".json") }
-                let restored = capture.deletedAt != nil
-                capture.deletedAt = nil
-                capture.deletedBy = nil
-                captures.append(capture)
-                for blend in document.blends {
-                    if restored {
-                        blends.append(blend.undeleted)
-                    } else if blend.deletedAt == nil {
-                        blends.append(blend)
-                    } else {
-                        deletedBlends.append(blend)
-                    }
-                }
-                adopted += 1
-                LLog("reconcile: \(restored ? "restored" : "adopted") \(name.prefix(8)) from its project.json (\(capture.sourceFileNames.count) files, \(document.blends.count) blends)")
-            } else if let capture = recoveredCapture(id: id, folder: folder) {
-                captures.append(capture)
-                recovered += 1
-                LLog("reconcile: recovered \(name.prefix(8)) from its folder (\(capture.sourceFileNames.count) files)")
-            } else {
-                empty.append(name)
-            }
-        }
-        for capture in captures where !fm.fileExists(atPath: captureFolderURL(for: capture.id).path) {
-            LLog("reconcile: record \(capture.id.uuidString.prefix(8)) has no folder")
-        }
-        if !empty.isEmpty {
-            LLog("reconcile: \(empty.count) folders with no record, no document and no media left alone: \(empty.map { $0.prefix(8) }.joined(separator: ", "))")
-        }
-        guard adopted + recovered > 0 else { return }
-        captures.sort { $0.createdAt > $1.createdAt }
-        blends.sort { $0.createdAt > $1.createdAt }
-        do {
-            try persistLibrary()
-            LLog("reconcile: \(adopted) adopted, \(recovered) recovered, persisted")
-        } catch {
-            LLog("reconcile: could not persist the adopted records — \(error)")
-        }
     }
 
     /// What a folder says about the project it holds, when it has no record
@@ -8744,82 +8666,56 @@ final class AppModel: ObservableObject {
         )
     }
 
+    // MARK: - The manifest's Swift-level stamps (the bootstrap only)
+
     /// One-time migration for the engine rebuild's default flip: projects
     /// that never chose a preset used to *render* Natural (the old implicit
     /// default), so write "Natural" into them explicitly before the default
     /// becomes Original — nothing in the library changes appearance, and only
     /// new captures start clean.
-    private func stampLegacyDefaultPresetsIfNeeded() {
-        guard gradingSchemaVersion < 1 else { return }
-        gradingSchemaVersion = 1
-        for index in captures.indices where captures[index].selectedPreset == nil {
-            captures[index].selectedPreset = PhotoPreset.natural.rawValue
+    private static func stampLegacyDefaultPresets(_ records: inout [CaptureProject], version: inout Int) {
+        guard version < 1 else { return }
+        version = 1
+        for index in records.indices where records[index].selectedPreset == nil {
+            records[index].selectedPreset = PhotoPreset.natural.rawValue
         }
-        try? persistLibrary()
     }
 
     /// One-time stamp for the preset-state model: every project that predates
-    /// it gets the state its own values describe, written into the sidecar so
-    /// the state is a stored fact from here on rather than a derivation.
-    ///
-    /// No look changes — the resolver reads the numbers already on the project.
-    /// A project sitting on a saved preset's exact values comes out `.named`
-    /// with that preset's current definition as its snapshot, which is the best
-    /// available answer for a project that never recorded one.
-    private func stampPresetStatesIfNeeded() {
-        guard gradingSchemaVersion < 2 else { return }
-        gradingSchemaVersion = 2
+    /// it gets the state its own values describe, written into the document
+    /// so the state is a stored fact from here on rather than a derivation.
+    private func stampPresetStates(_ records: inout [CaptureProject], version: inout Int) {
+        guard version < 2 else { return }
+        version = 2
         let customPresets = CustomPresetStore.shared.presets
-        for index in captures.indices where captures[index].presetState == nil {
-            captures[index].presetState = PresetStateResolver.resolve(
-                preset: PhotoPreset.resolve(captures[index].selectedPreset),
-                adjustments: captures[index].adjustments ?? .neutral,
+        for index in records.indices where records[index].presetState == nil {
+            records[index].presetState = PresetStateResolver.resolve(
+                preset: PhotoPreset.resolve(records[index].selectedPreset),
+                adjustments: records[index].adjustments ?? .neutral,
                 anchor: .edited,
                 customPresets: customPresets)
         }
-        try? persistLibrary()
     }
 
     /// One-time stamp for the **Added** axis: every project that predates the
     /// field learns when it arrived here from its own folder's creation date.
-    ///
-    /// The filesystem has been recording this all along — a project folder is
-    /// created at the instant the project is registered, whether it was shot
-    /// here, imported from a file or received off the wire — so the answer for
-    /// an existing library is already on disk and does not have to be guessed.
-    /// A folder that can't be read falls back to the capture date, which is the
-    /// right answer for anything captured on this device anyway.
-    ///
     /// One `stat` per project, once, on the launch that migrates.
-    /// Carries the counter to the current JSON-level version once the
-    /// Swift-level stamps above have run, and persists the migrated content
-    /// once. The content itself was changed by `ManifestMigrations` before
-    /// the decode; a manifest that arrived below v3 had its counter left
-    /// alone there so the stamps above would still fire.
-    private func stampManifestVersionIfNeeded(_ migration: ManifestMigrations.Outcome) {
-        for line in migration.log.prefix(12) { LLog("manifest migration: \(line)") }
-        if migration.log.count > 12 { LLog("manifest migration: … \(migration.log.count - 12) more") }
-        guard gradingSchemaVersion < ManifestMigrations.current || !migration.log.isEmpty else { return }
-        gradingSchemaVersion = max(gradingSchemaVersion, ManifestMigrations.current)
-        try? persistLibrary()
-    }
-
-    private func stampAddedDatesIfNeeded() {
-        guard gradingSchemaVersion < 3 else { return }
-        gradingSchemaVersion = 3
-        for index in captures.indices where captures[index].addedAt == nil {
-            let folder = captureFolderURL(for: captures[index].id)
+    private func stampAddedDates(_ records: inout [CaptureProject], version: inout Int) {
+        guard version < 3 else { return }
+        version = 3
+        for index in records.indices where records[index].addedAt == nil {
+            let folder = captureFolderURL(for: records[index].id)
             let created = (try? folder.resourceValues(forKeys: [.creationDateKey]))?.creationDate
-            captures[index].addedAt = created ?? captures[index].createdAt
+            records[index].addedAt = created ?? records[index].createdAt
         }
-        try? persistLibrary()
     }
 
-    /// The one writer of `library.json` (Phase 1 W6): every snapshot is
-    /// versioned on the main actor and written by one serial queue that
-    /// drops anything older than what is already on disk. See
-    /// `LibraryPersister`.
-    let persister = LibraryPersister(
+    let persister = AppModel.sharedPersister
+
+    /// One persister per process: the model and its store share it, and it
+    /// is made before either (a `let` cannot reach another instance
+    /// property while the instance is being made).
+    private static let sharedPersister = LibraryPersister(
         projectsRoot: StorageRoot.current.appendingPathComponent("Projects", isDirectory: true),
         collectionsURL: ProjectDocumentFormat.collectionsURL(inRoot: StorageRoot.current),
         indexURL: LibraryIndex.url(inRoot: StorageRoot.current))
@@ -8857,85 +8753,14 @@ final class AppModel: ObservableObject {
     /// read it — what the foreground check compares against.
     private var manifestSeenModifiedAt: Date?
 
-    /// Synchronous: the manifest is on disk when this returns, and the size
-    /// and existence caches are dropped first. Every path that adds,
-    /// converts, rotates or deletes a project's files ends here — it is
-    /// `persistAndWait(reason: .filesChanged)` under the name the 70-odd
-    /// call sites already use.
-    func persistLibrary() throws {
-        try persistAndWait(reason: .filesChanged)
-    }
-
-    /// A registration's persist: when the write is refused or fails, the
-    /// record just inserted comes back out of the list, so a project the
-    /// disk never learned about does not sit in the UI as if it had. The
-    /// caller's own catch removes the folder.
-    func persistRegistration(of captureID: UUID) throws {
-        do {
-            try persistLibrary()
-        } catch {
-            captures.removeAll { $0.id == captureID }
-            throw error
-        }
-    }
-
-    /// Queued: returns at once, values only (a grade tick, a tag). It is
-    /// `persist(reason: .valuesChanged)` under its old name.
-    func persistLibraryOffMain() {
-        persist(reason: .valuesChanged)
-    }
-
-    /// Queues a snapshot of the library for the persister.
-    func persist(reason: LibraryPersister.Reason) {
-        let (manifest, version) = snapshotManifest(reason: reason)
-        persister.persist(manifest, version: version, to: manifestURL)
-    }
-
-    /// Writes a snapshot and returns only when it is on disk — deletes,
-    /// registrations and installs need that before they touch the files.
-    func persistAndWait(reason: LibraryPersister.Reason) throws {
-        let (manifest, version) = snapshotManifest(reason: reason)
-        try persister.persistAndWait(manifest, version: version, to: manifestURL)
-    }
-
-    private func snapshotManifest(reason: LibraryPersister.Reason) -> (LibraryManifest, Int) {
-        if reason == .filesChanged {
-            // The size cache and the existence tickets stale under exactly
-            // the edits that change files.
-            projectStorageBytes.removeAll()
-            validatedSourceFrames.removeAll()
-        }
-        // Every persist regenerates the export (M1).
-        libraryExportStale = false
-        return (currentManifest(), persister.mint())
-    }
-
-    /// The library as it would be written now — what every persist snapshots
-    /// and what the launch pass over the project documents reads.
-    private func currentManifest() -> LibraryManifest {
-        var manifest = LibraryManifest(
-            captures: captures.map(stampingPresetState) + deletedCaptures,
-            blends: blends + deletedBlends,
-            collections: collections + deletedCollections)
-        manifest.gradingSchemaVersion = max(gradingSchemaVersion, 1)
-        return manifest
-    }
-
-    /// A capture with its preset state written out explicitly.
-    ///
-    /// A freshly registered project has no state yet — every registration path
-    /// would otherwise have to remember to set one — and `presetState(for:)`
-    /// derives the right answer for it (`.original`: no preset, no sliders).
-    /// This makes that answer a stored fact rather than a derivation, so the
-    /// sidecar says what state the project is in even years from now, when the
-    /// derivation rules may have moved on. Copies rather than mutating
-    /// `captures`: persisting is not a model change, and the in-memory value
-    /// derives identically.
-    private func stampingPresetState(_ capture: CaptureProject) -> CaptureProject {
-        guard capture.presetState == nil else { return capture }
-        var stamped = capture
-        stamped.presetState = presetState(for: capture)
-        return stamped
+    /// The size cache and the existence tickets stale under exactly the
+    /// edits that change a project's files — a registration, a delete, a
+    /// new blend, an encoding, a rotation, a page removed — and not under a
+    /// grade tick, which changes numbers, never files (M3: per project,
+    /// where the manifest's `.filesChanged` persist cleared them for all).
+    func noteFilesChanged(for captureID: UUID) {
+        projectStorageBytes.removeValue(forKey: captureID)
+        validatedSourceFrames.remove(captureID)
     }
 
     private var applicationSupportURL: URL {
@@ -9291,20 +9116,22 @@ final class AppModel: ObservableObject {
         let outputURL = root.appendingPathComponent(newRelName)
         try await Self.transcode(from: sourceURL, to: outputURL, codec: codec)
 
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return outputURL }
-        // Materialise the original as its own (ProRes) encoding the first time.
-        var list = captures[index].clipEncodings?[clipFileName]
-            ?? [ClipEncoding(codec: OutputCodec.prores.rawValue, fileName: clipFileName)]
-        if !list.contains(where: { $0.fileName == newRelName }) {
-            list.append(ClipEncoding(codec: codec.rawValue, fileName: newRelName))
+        guard store.exists(id: capture.id) else { return outputURL }
+        try store.update(capture.id) { document in
+            // Materialise the original as its own (ProRes) encoding the first time.
+            var list = document.capture.clipEncodings?[clipFileName]
+                ?? [ClipEncoding(codec: OutputCodec.prores.rawValue, fileName: clipFileName)]
+            if !list.contains(where: { $0.fileName == newRelName }) {
+                list.append(ClipEncoding(codec: codec.rawValue, fileName: newRelName))
+            }
+            var map = document.capture.clipEncodings ?? [:]
+            map[clipFileName] = list
+            document.capture.clipEncodings = map
+            // A person changed this project — see CaptureProject.modifiedAt.
+            document.capture.modifiedAt = Date()
+            document.capture.modifiedBy = DeviceIdentity.id
         }
-        var map = captures[index].clipEncodings ?? [:]
-        map[clipFileName] = list
-        captures[index].clipEncodings = map
-        // A person changed this project — see CaptureProject.modifiedAt.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
-        try persistLibrary()
+        noteFilesChanged(for: capture.id)
         return outputURL
     }
 
@@ -9315,10 +9142,9 @@ final class AppModel: ObservableObject {
         clip clipFileName: String,
         _ encoding: ClipEncoding
     ) throws {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         // Read the live capture, not the caller's snapshot, so a delete that
         // follows a convert (e.g. bulk purge) sees the newly added encoding.
-        let fresh = captures[index]
+        guard let fresh = self.capture(id: capture.id) else { return }
         let list = encodings(for: fresh, clip: clipFileName)
         let existing = list.filter {
             FileManager.default.fileExists(atPath: encodingURL(for: fresh, $0).path)
@@ -9326,16 +9152,18 @@ final class AppModel: ObservableObject {
         guard existing.count > 1 else { throw EncodingDeletionError.lastEncoding }
 
         // Persist first, then remove (W9): a derived file, so no tombstone —
-        // but the manifest must stop naming it before it goes.
+        // but the record must stop naming it before it goes.
         let url = encodingURL(for: fresh, encoding)
         let newList = list.filter { $0.fileName != encoding.fileName }
-        var map = captures[index].clipEncodings ?? [:]
-        map[clipFileName] = newList
-        captures[index].clipEncodings = map.isEmpty ? nil : map
-        // A person changed this project — see CaptureProject.modifiedAt.
-        captures[index].modifiedAt = Date()
-        captures[index].modifiedBy = DeviceIdentity.id
-        try persistLibrary()
+        try store.update(capture.id) { document in
+            var map = document.capture.clipEncodings ?? [:]
+            map[clipFileName] = newList
+            document.capture.clipEncodings = map.isEmpty ? nil : map
+            // A person changed this project — see CaptureProject.modifiedAt.
+            document.capture.modifiedAt = Date()
+            document.capture.modifiedBy = DeviceIdentity.id
+        }
+        noteFilesChanged(for: capture.id)
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
         }
@@ -9411,22 +9239,24 @@ final class AppModel: ObservableObject {
             for url in media.videos { try await MediaRotator.rotateVideo90CW(at: url) }
         }.value
 
-        // Swap the persisted dimensions so format badges match immediately.
-        if let index = captures.firstIndex(where: { $0.id == capture.id }),
-           let width = captures[index].sourceWidth,
-           let height = captures[index].sourceHeight {
-            captures[index].sourceWidth = height
-            captures[index].sourceHeight = width
-        }
-        for index in blends.indices where blends[index].captureID == capture.id {
-            if let width = blends[index].width, let height = blends[index].height {
-                blends[index].width = height
-                blends[index].height = width
+        // Swap the persisted dimensions so format badges match immediately —
+        // the project's and every blend's, in the one document.
+        try store.update(capture.id) { document in
+            if let width = document.capture.sourceWidth, let height = document.capture.sourceHeight {
+                document.capture.sourceWidth = height
+                document.capture.sourceHeight = width
             }
+            for i in document.blends.indices {
+                if let width = document.blends[i].width, let height = document.blends[i].height {
+                    document.blends[i].width = height
+                    document.blends[i].height = width
+                }
+            }
+            // A person changed this project — see CaptureProject.modifiedAt.
+            document.capture.modifiedAt = Date()
+            document.capture.modifiedBy = DeviceIdentity.id
         }
-        // A person changed this project — see CaptureProject.modifiedAt.
-        markEdited(capture.id)
-        try persistLibrary()
+        noteFilesChanged(for: capture.id)
         if capture.kind == .video {
             // Belt and braces: re-derive video dimensions from the transforms
             // actually on disk (also persists).
@@ -9703,9 +9533,9 @@ final class AppModel: ObservableObject {
     /// projects aren't duplicated on disk first.
     func exportProject(_ capture: CaptureProject) async throws -> URL {
         let folder = captureFolderURL(for: capture.id)
-        // The document on disk is what travels; a persist brings it up to
-        // the record in memory before the archive reads it.
-        try persistAndWait(reason: .valuesChanged)
+        // The document on disk is what travels; the queue drains first so a
+        // grade still in flight has landed before the archive reads it.
+        flushLibraryPersists()
         let documentURL = ProjectDocumentFormat.url(inProjectFolder: folder)
         guard FileManager.default.fileExists(atPath: documentURL.path) else {
             throw ExportError.noProjectDocument
@@ -9768,9 +9598,14 @@ final class AppModel: ObservableObject {
     /// and an archive exported from this Mac finds the project it came from.
     private func existingImport(of originID: UUID) -> CaptureProject? {
         // Origin first — the id that is the same on every device — then the
-        // two legacy threads for records that predate it.
-        captures.first { self.originID(of: $0) == originID }
-            ?? captures.first { $0.id == originID || $0.importedFromID == originID }
+        // two legacy threads for records that predate it; the index answers
+        // all three (M3), the arrays for a library without one.
+        if let index = libraryIndex {
+            return ((try? index.projectID(originID: originID)) ?? nil).flatMap { capture(id: $0) }
+        }
+        let all = allLiveCaptures()
+        return all.first { self.originID(of: $0) == originID }
+            ?? all.first { $0.id == originID || $0.importedFromID == originID }
     }
 
     /// The shoot's identity, for every site that needs one: the stored
@@ -10043,9 +9878,7 @@ final class AppModel: ObservableObject {
             try? assetStore.replace(inProjectFolder: destination, with: rekeyed)
         }
 
-        captures.insert(capture, at: 0)
-        blends.append(contentsOf: importedBlends)
-        try persistLibrary()
+        try store.insert(ProjectDocument(capture: capture, blends: importedBlends))
         // Whatever the sender never hashed or read, this side finishes.
         recordAssets(for: capture)
         // A stills project from a device that predates their probing arrives
@@ -10070,18 +9903,21 @@ final class AppModel: ObservableObject {
     /// has no preview IFD, so generating one costs a full RAW decode, and a
     /// picker row is not worth that on the phone that is about to send 16 GB.
     func projectTransferCatalogue() async -> [PTProjectInfo] {
-        let rows: [(capture: CaptureProject, folder: URL)] = captures.map {
-            ($0, captureFolderURL(for: $0.id))
-        }
+        // The index's rows carry everything the catalogue says (M3); the
+        // bytes are walked, as before, off the main actor.
+        var query = LibraryIndex.ProjectQuery()
+        query.limit = Int(Int32.max)
+        let rows = ((try? libraryIndex?.projects(query).rows) ?? nil) ?? []
+        let entries: [(row: LibraryIndex.ProjectRow, folder: URL)] = rows.map { ($0, captureFolderURL(for: $0.id)) }
         return await Task.detached(priority: .utility) { () -> [PTProjectInfo] in
-            rows.map { row in
+            entries.map { entry in
                 PTProjectInfo(
-                    captureID: row.capture.id,
-                    name: row.capture.name ?? row.capture.originalName,
-                    createdAt: row.capture.createdAt,
-                    frameCount: row.capture.sourceMediaCount,
-                    totalBytes: AppModel.directorySize(row.folder),
-                    originID: row.capture.originID ?? row.capture.importedFromID ?? row.capture.id)
+                    captureID: entry.row.id,
+                    name: entry.row.displayName,
+                    createdAt: entry.row.createdAt,
+                    frameCount: entry.row.frameCount,
+                    totalBytes: AppModel.directorySize(entry.folder),
+                    originID: entry.row.originID ?? entry.row.id)
             }
         }.value
     }
@@ -10118,7 +9954,7 @@ final class AppModel: ObservableObject {
     /// such project — which is what a client asking for one deleted between the
     /// list and the request gets told.
     func projectTransferFolderURL(for captureID: UUID) -> URL? {
-        guard captures.contains(where: { $0.id == captureID }) else { return nil }
+        guard store.exists(id: captureID) else { return nil }
         return captureFolderURL(for: captureID)
     }
 
@@ -10128,12 +9964,11 @@ final class AppModel: ObservableObject {
     /// folder has no document to read, which a persist that just succeeded
     /// should never leave behind.
     func projectTransferManifestData(for captureID: UUID) throws -> Data? {
-        guard let capture = capture(id: captureID) else { return nil }
-        try persistAndWait(reason: .valuesChanged)
+        guard let document = store.document(id: captureID) else { return nil }
+        flushLibraryPersists()
         let url = ProjectDocumentFormat.url(inProjectFolder: captureFolderURL(for: captureID))
         if let data = try? Data(contentsOf: url) { return data }
-        LLog("transfer: no project.json in \(captureID.uuidString.prefix(8)) — sending a synthesised one")
-        let document = ProjectDocument(capture: capture, blends: blends(for: capture))
+        LLog("transfer: no project.json in \(captureID.uuidString.prefix(8)) — sending the record as held")
         return try ProjectDocumentFormat.makeEncoder().encode(document)
     }
 
@@ -10395,7 +10230,6 @@ final class AppModel: ObservableObject {
         timeline: GradeTimeline = .empty,
         for capture: CaptureProject
     ) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         write(
             preset: preset, adjustments: adjustments, state: state, timeline: timeline,
             for: capture.id)
@@ -10520,6 +10354,15 @@ final class AppModel: ObservableObject {
     /// or out of the process, so quitting right after a gesture can't lose it.
     func flushLibraryPersists() {
         persister.flush()
+    }
+
+    /// The app's way out (quit, background): every queued write lands, then
+    /// the compatibility export is regenerated from the documents (M3) so
+    /// an older build or `lapse audit` reads the session's last state.
+    /// Synchronous — the process may be about to go.
+    func flushLibraryPersistsAndExport() {
+        persister.flush()
+        persister.regenerateExport(waiting: true)
     }
 
     // MARK: - The library lock (Phase 4, macOS)
