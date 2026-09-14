@@ -1327,8 +1327,11 @@ private struct LargeOriginalsView: View {
     @State private var pendingDelete: AppModel.CaptureProject?
     @State private var failure: String?
 
+    /// The index's size order first (measured sizes), refined by the walks
+    /// this screen does as they land (M3).
     private var sorted: [AppModel.CaptureProject] {
-        model.allLiveCaptures().sorted { (sizes[$0.id] ?? 0) > (sizes[$1.id] ?? 0) }
+        model.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.sort = .size; return q }())
+            .sorted { (sizes[$0.id] ?? 0) > (sizes[$1.id] ?? 0) }
     }
 
     var body: some View {
@@ -1391,7 +1394,7 @@ private struct LargeOriginalsView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task {
-            for capture in model.allLiveCaptures() {
+            for capture in model.liveCaptures() {
                 // A library can hold hundreds of projects and each walk touches
                 // every file in one; stop the moment the screen is closed rather
                 // than working through the rest of the list unseen.

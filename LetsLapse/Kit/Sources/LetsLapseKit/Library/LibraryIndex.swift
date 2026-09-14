@@ -489,6 +489,9 @@ public final class LibraryIndex: @unchecked Sendable {
         /// The lists' kind (M2): photo / interval / video / scan by the
         /// app's rules, or nil for every category.
         public var category: ProjectCategory?
+        /// Several kinds at once (M3: the Shape-mation builder's photo and
+        /// interval projects); nil for every category.
+        public var categories: Set<ProjectCategory>?
         /// The Projects and Gallery base while the Scans tab exists: no
         /// scans, whatever `category` says.
         public var excludeScans = false
@@ -597,6 +600,11 @@ public final class LibraryIndex: @unchecked Sendable {
             clauses.append(scanner ? "p.capture_mode = 'scanner'" : "(p.capture_mode IS NULL OR p.capture_mode <> 'scanner')")
         }
         if let category = query.category { clauses.append("p.category = ?"); values.append(.text(category.rawValue)) }
+        if let categories = query.categories, !categories.isEmpty {
+            let sorted = categories.map(\.rawValue).sorted()
+            clauses.append("p.category IN (" + sorted.map { _ in "?" }.joined(separator: ",") + ")")
+            values.append(contentsOf: sorted.map { .text($0) })
+        }
         if query.excludeScans { clauses.append("p.category <> 'scan'") }
         if query.withBlends { clauses.append("p.blend_count > 0") }
         for row in query.shapes.sorted(by: { $0.rawValue < $1.rawValue }) {
@@ -849,6 +857,19 @@ public final class LibraryIndex: @unchecked Sendable {
             SELECT id FROM projects WHERE deleted_at IS NULL AND kind = 'photos' AND width IS NULL ORDER BY created_at DESC
             """) { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 }
         return (video, photos)
+    }
+
+    /// How many live projects sit on each named preset — the Presets
+    /// sheet's usage counts, from the stored preset state (M3).
+    public func presetCounts() throws -> [UUID: Int] {
+        lock.lock(); defer { lock.unlock() }
+        var counts: [UUID: Int] = [:]
+        for (id, count) in try db.query("""
+            SELECT preset_id, COUNT(*) FROM projects WHERE deleted_at IS NULL AND preset_kind = 'named' AND preset_id IS NOT NULL GROUP BY preset_id
+            """, [], { (UUID(uuidString: $0.text(0) ?? ""), Int($0.int(1) ?? 0)) }) {
+            if let id { counts[id] = count }
+        }
+        return counts
     }
 
     /// The live projects whose stored size is missing or older than their

@@ -51,7 +51,7 @@ final class ShapemationBuilder: ObservableObject {
     @Published private(set) var isRendering = false
 
     func load(model: AppModel) {
-        let captures = model.allLiveCaptures().filter { !$0.isScannerCapture && $0.kind == .photos }
+        let captures = model.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.categories = [.photo, .interval]; return q }())
         let entries: [(AppModel.CaptureProject, URL)] = captures.map { ($0, model.projectFolderURL(for: $0)) }
         Task.detached(priority: .userInitiated) { [weak self] in
             var out: [ProjectShapes] = []

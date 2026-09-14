@@ -591,7 +591,7 @@ struct ContentView: View {
             exportETASeconds: eta,
             exportTitle: model.stage == .processing ? watchExportTitle : nil,
             exportSubtitle: model.stage == .processing ? "Blended clip · camera unavailable" : nil,
-            lastCaptureAt: model.allLiveCaptures().first?.createdAt
+            lastCaptureAt: model.newestCapture()?.createdAt
         )
     }
 
@@ -657,12 +657,11 @@ struct ContentView: View {
             let limit = environment["LL_DNGARCHIVE_LIMIT"].flatMap(Int.init)
             let inFlight = environment["LL_DNGARCHIVE_INFLIGHT"].flatMap(Int.init) ?? 2
             Task { @MainActor in
-                let candidates = model.allLiveCaptures().filter { model.canArchiveAsDNG($0) }
                 let capture = hook == "latest"
-                    ? candidates.max(by: { $0.createdAt < $1.createdAt })
-                    : candidates.first { $0.id.uuidString.lowercased().hasPrefix(hook.lowercased()) }
+                    ? model.newestCapture(where: { model.canArchiveAsDNG($0) })
+                    : model.newestCapture(where: { $0.id.uuidString.lowercased().hasPrefix(hook.lowercased()) && model.canArchiveAsDNG($0) })
                 guard let capture else {
-                    print("LL_DNGARCHIVE: no archivable project matches \(hook) (\(candidates.count) candidates)")
+                    print("LL_DNGARCHIVE: no archivable project matches \(hook)")
                     return
                 }
                 let strategy = DNGArchive.Strategy.archive(megapixels: megapixels, distance: distance)
@@ -857,10 +856,8 @@ struct ContentView: View {
         // for a headless render of a project that is not the newest.
         if let openHook = environment["LL_OPEN"],
            let capture = openHook == "latest"
-            ? model.allLiveCaptures().first
-            : model.allLiveCaptures().first(where: {
-                $0.id.uuidString.caseInsensitiveCompare(openHook) == .orderedSame
-            }) {
+            ? model.newestCapture()
+            : UUID(uuidString: openHook).flatMap { id in model.capture(id: id) } {
             model.openCapture(capture)
         } else if let seed = environment["LL_SEED"] {
             model.setSource(.video(URL(fileURLWithPath: seed)))
@@ -890,7 +887,7 @@ struct ContentView: View {
         // real path (tombstone → persist → `.trash`), for the W9 checks.
         if let which = environment["LL_DELETE"], !which.isEmpty {
             let capture = which == "latest"
-                ? model.allLiveCaptures().first
+                ? model.newestCapture()
                 : UUID(uuidString: which).flatMap { id in model.capture(id: id) }
             if let capture {
                 do {
@@ -911,7 +908,7 @@ struct ContentView: View {
             let which = String(raw[..<colon])
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 let capture = which == "latest"
-                    ? model.allLiveCaptures().first
+                    ? model.newestCapture()
                     : UUID(uuidString: which).flatMap { id in model.capture(id: id) }
                 guard let capture else { LLog("LL_APPLY_PRESET: no such project \(which)"); return }
                 model.applyPreset(preset, for: capture)
@@ -923,7 +920,7 @@ struct ContentView: View {
         // trip (export → LL_IMPORT_ARCHIVE) needs no Share sheet.
         if let which = environment["LL_EXPORT_ARCHIVE"], !which.isEmpty {
             let capture = which == "latest"
-                ? model.allLiveCaptures().first
+                ? model.newestCapture()
                 : UUID(uuidString: which).flatMap { id in model.capture(id: id) }
             if let capture {
                 Task {
@@ -936,7 +933,7 @@ struct ContentView: View {
                 }
             }
         }
-        if environment["LL_DETAIL"] == "latest", let capture = model.allLiveCaptures().first {
+        if environment["LL_DETAIL"] == "latest", let capture = model.newestCapture() {
             selectedTab = .projects
             model.requestedProjectDetailID = capture.id
         }
@@ -955,17 +952,23 @@ struct ContentView: View {
         if let editorHook = environment["LL_EDITOR"] {
             let capture: AppModel.CaptureProject? = switch editorHook {
             case "latest":
-                model.allLiveCaptures()
-                    .filter { $0.kind == .photos && !$0.isPhotoCapture }
-                    .max(by: { $0.sourceFileNames.count < $1.sourceFileNames.count })
+                // The largest interval shoot: the index's frame counts pick
+                // the row, its document is read once.
+                {
+                    var query = LibraryIndex.ProjectQuery()
+                    query.category = .interval
+                    query.limit = Int(Int32.max)
+                    let rows = ((try? model.libraryIndex?.projects(query).rows) ?? nil) ?? []
+                    return rows.max(by: { $0.frameCount < $1.frameCount }).flatMap { model.capture(id: $0.id) }
+                }()
             case "video":
-                model.allLiveCaptures()
-                    .filter { $0.kind == .video }
-                    .max(by: { $0.createdAt < $1.createdAt })
+                {
+                    var query = LibraryIndex.ProjectQuery()
+                    query.category = .video
+                    return model.newestCapture(query)
+                }()
             default:
-                model.allLiveCaptures().first {
-                    $0.id.uuidString.caseInsensitiveCompare(editorHook) == .orderedSame
-                }
+                UUID(uuidString: editorHook).flatMap { id in model.capture(id: id) }
             }
             if let capture {
                 #if os(macOS)
@@ -1051,14 +1054,12 @@ struct ContentView: View {
         if let hook = environment["LL_ADJUST"] {
             if hook == "demo" {
                 model.debugOpenAdjustDemo()
-            } else if hook == "stills", let capture = model.allLiveCaptures().first(where: { candidate in
-                candidate.kind == .photos && !candidate.isPhotoCapture
-                    && !model.isScannerProject(candidate)
-                    && model.sourceFrameURLs(for: candidate).first
-                        .map { FileManager.default.fileExists(atPath: $0.path) } == true
+            } else if hook == "stills", let capture = model.newestCapture({ var q = LibraryIndex.ProjectQuery(); q.category = .interval; return q }(), where: { candidate in
+                model.sourceFrameURLs(for: candidate).first
+                    .map { FileManager.default.fileExists(atPath: $0.path) } == true
             }) {
                 model.openCapture(capture)
-            } else if hook != "stills", let capture = model.allLiveCaptures().first(where: { $0.kind == .video }) {
+            } else if hook != "stills", let capture = model.newestCapture({ var q = LibraryIndex.ProjectQuery(); q.category = .video; return q }()) {
                 model.openCapture(capture)
             }
             if let overrides = environment["LL_STRETCH"] {
@@ -1141,7 +1142,7 @@ struct ContentView: View {
         // screen's own "Punch-in reframe" row (which simctl can't tap) does.
         // LL_REFRAME_RATIO=9:16 pins the canvas for variant screenshots.
         if environment["LL_REFRAME"] == "latest",
-           let capture = model.allLiveCaptures().first(where: { $0.kind == .video }) {
+           let capture = model.newestCapture({ var q = LibraryIndex.ProjectQuery(); q.category = .video; return q }()) {
             model.openCapture(capture)
             model.reframeLaneFocused = true
             if let ratio = environment["LL_REFRAME_RATIO"].flatMap(CanvasRatio.init(rawValue:)) {
@@ -1178,7 +1179,7 @@ struct ContentView: View {
         // later step, both for variant screenshots — GuidedBuilderView reads
         // LL_STEP itself, since the step index is its own state.
         if environment["LL_GUIDED"] == "latest",
-           let capture = model.allLiveCaptures().first(where: { $0.kind == .video }) {
+           let capture = model.newestCapture({ var q = LibraryIndex.ProjectQuery(); q.category = .video; return q }()) {
             model.openCapture(capture)
             model.guidedBuilderFocused = true
             if let ratio = environment["LL_CANVAS"].flatMap(CanvasRatio.init(rawValue:)) {

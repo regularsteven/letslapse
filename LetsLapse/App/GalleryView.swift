@@ -1,4 +1,5 @@
 import SwiftUI
+import LetsLapseKit
 
 // MARK: - Gallery (main container)
 
@@ -177,8 +178,8 @@ struct GalleryView: View {
             // A focused project that leaves the library (deleted here, or
             // from another tab) takes the item view with it — there is no
             // editor left to ask.
-            .onChange(of: model.libraryCaptures.map(\.id)) { _, ids in
-                if let focus, !ids.contains(focus.captureID) { self.focus = nil }
+            .onChange(of: model.indexRevision) { _, _ in
+                if let focus, model.capture(id: focus.captureID) == nil { self.focus = nil }
             }
             // A filter or search that hides a selected tile drops it from the
             // selection, so "N selected" only ever counts what is on screen.
@@ -222,7 +223,7 @@ struct GalleryView: View {
         // iPhone/compact: preview sheet
         .sheet(isPresented: $showPreviewSheet) {
             if let id = selection.single,
-               let capture = model.libraryCaptures.first(where: { $0.id == id }) {
+               let capture = model.capture(id: id) {
                 NavigationStack {
                     GalleryPreviewPanel(
                         capture: capture,
@@ -299,7 +300,7 @@ struct GalleryView: View {
     /// library, nil once it is gone.
     private var focusedCapture: AppModel.CaptureProject? {
         guard let focus else { return nil }
-        return model.libraryCaptures.first { $0.id == focus.captureID }
+        return model.capture(id: focus.captureID)
     }
 
     /// One `HStack` for both modes, so the columns swap content in place: the
@@ -385,7 +386,7 @@ struct GalleryView: View {
     private var gridEditHandler: ((UUID) -> Void)? {
         #if os(macOS)
         return { id in
-            if let capture = model.libraryCaptures.first(where: { $0.id == id }) {
+            if let capture = model.capture(id: id) {
                 enterItem(capture, page: .editor)
             }
         }
@@ -411,7 +412,7 @@ struct GalleryView: View {
             GalleryBatchPanel(captures: batchCaptures)
                 .frame(width: GalleryColumns.pane)
         } else if let id = selection.single,
-                  let capture = model.libraryCaptures.first(where: { $0.id == id }) {
+                  let capture = model.capture(id: id) {
             Divider()
             GalleryPreviewPanel(
                 capture: capture,
@@ -740,39 +741,15 @@ struct GalleryView: View {
     }
 
     /// The library after filtering by type, search and the sidebar's Shapes
-    /// rows — the index's answer (in the grid's order, which the sidebar's
-    /// chips do not mind), or the arrays filtered here for a library with no
-    /// index.
+    /// rows — the index's answer, in the grid's order (M2; a library with no
+    /// index shows nothing, M3).
     private var visibleCaptures: [AppModel.CaptureProject] {
-        if let indexed = model.projects(for: listQuery) { return indexed }
-        let base = model.libraryCaptures
-            .filtered(by: filter)
-            .matching(query)
-        guard !shapeSelection.isEmpty else { return base }
-        return base.filter { shapeSelection.allows(model.shapeSummaries[$0.id]) }
+        model.projects(for: listQuery) ?? []
     }
 
-    /// Filtered then sorted. The index's answer is already in order; the
-    /// fallback sorts the way the Projects list does.
+    /// Filtered then sorted — the index's answer is already in order.
     private var sortedCaptures: [AppModel.CaptureProject] {
-        if let indexed = model.projects(for: listQuery) { return indexed }
-        let filtered = visibleCaptures
-        let ascending: [AppModel.CaptureProject]
-        switch sortKey {
-        case .capture:
-            ascending = filtered.sorted { $0.createdAt < $1.createdAt }
-        case .added:
-            ascending = filtered.sorted {
-                (model.addedAt($0), $0.createdAt) < (model.addedAt($1), $1.createdAt)
-            }
-        case .edit:
-            ascending = filtered.sorted { model.lastEdited($0) < model.lastEdited($1) }
-        case .size:
-            ascending = filtered.sorted {
-                ($0.sizeBytes ?? -1, $0.createdAt) < ($1.sizeBytes ?? -1, $1.createdAt)
-            }
-        }
-        return sortAscending ? ascending : ascending.reversed()
+        visibleCaptures
     }
 
     // MARK: Actions
@@ -792,7 +769,7 @@ struct GalleryView: View {
     /// project has nothing the editor can open).
     private func open(_ id: UUID) {
         #if os(macOS)
-        if let capture = model.libraryCaptures.first(where: { $0.id == id }),
+        if let capture = model.capture(id: id),
            enterItem(capture, page: .editor) {
             return
         }
@@ -1009,7 +986,7 @@ struct GalleryView: View {
 
     private func consumeDetailRequest(_ requested: UUID?) {
         guard let requested else { return }
-        guard model.allLiveCaptures().contains(where: { $0.id == requested }) else { return }
+        guard model.capture(id: requested) != nil else { return }
         path = [requested]
         DispatchQueue.main.async {
             if model.requestedProjectDetailID == requested {

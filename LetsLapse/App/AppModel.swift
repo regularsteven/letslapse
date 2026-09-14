@@ -1397,6 +1397,12 @@ final class AppModel: ObservableObject {
         captureFolderURL(for: capture.id)
     }
 
+    /// The same folder by id — for a pass that has ids from the index and
+    /// no reason to read the records (M3).
+    func projectFolderURL(for id: UUID) -> URL {
+        captureFolderURL(for: id)
+    }
+
     /// Where all projects live. The fallback for revealing a project whose own
     /// folder has gone missing.
     var projectsFolderURL: URL {
@@ -1592,7 +1598,7 @@ final class AppModel: ObservableObject {
     /// The route back in is deliberate and single — "View as timelapse" on the
     /// session's export sheet, which opens `ScannerProjectView` as before.
     var scanSessions: [CaptureProject] {
-        allLiveCaptures().filter(isScannerProject)
+        liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.category = .scan; return q }())
     }
 
     /// Cheap "is there anything in the Scans tab" — the tab bar asks this on
@@ -1600,22 +1606,14 @@ final class AppModel: ObservableObject {
     /// setting is the other half), and it stops at the first scan rather than
     /// building a list.
     var hasScanSessions: Bool {
-        ((try? libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery())[.scan]) ?? nil).map { $0 > 0 }
-            ?? allLiveCaptures().contains(where: isScannerProject)
+        ((try? libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery())[.scan]) ?? nil).map { $0 > 0 } ?? false
     }
 
-    /// Everything that is not a scan: what Projects and Gallery list.
+    /// Everything that is not a scan: what Projects and Gallery list. A
+    /// whole-library read (M3) — the Gallery's item view and the Shapes
+    /// summaries still ask for it; the lists never do.
     var libraryCaptures: [CaptureProject] {
-        allLiveCaptures().filter { !isScannerProject($0) }
-    }
-
-    /// Every live record, newest capture first — a whole-library read
-    /// (M3, transitional): the index's live ids through the store, one
-    /// document each. For the few passes that still want the whole library
-    /// in hand; a list never does.
-    func allLiveCaptures() -> [CaptureProject] {
-        guard let index = libraryIndex, let ids = try? index.liveProjectIDs() else { return [] }
-        return ids.compactMap { store.capture(id: $0) }
+        liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.excludeScans = true; return q }())
     }
 
     /// The page numbers a scan actually holds, ascending — read off the
@@ -2135,7 +2133,7 @@ final class AppModel: ObservableObject {
         }
         for (projectID, gone) in Dictionary(grouping: expiredBlends, by: \.projectID) {
             let ids = Set(gone.map(\.id))
-            try? store.update(projectID, waiting: false) { document in
+            _ = try? store.update(projectID, waiting: false) { document in
                 document.blends.removeAll { ids.contains($0.id) }
             }
         }
@@ -2163,7 +2161,7 @@ final class AppModel: ObservableObject {
         }
         for (projectID, gone) in Dictionary(grouping: (try? libraryIndex?.deletedBlendsInLiveProjects()) ?? [], by: \.projectID) {
             let ids = Set(gone.map(\.id))
-            try? store.update(projectID, waiting: false) { document in
+            _ = try? store.update(projectID, waiting: false) { document in
                 document.blends.removeAll { ids.contains($0.id) }
             }
         }
@@ -2765,7 +2763,7 @@ final class AppModel: ObservableObject {
     /// so repeated launches don't multiply.
     func debugSeedCollections() {
         guard collections.isEmpty else { return }
-        let videoBlends = allLiveCaptures().flatMap { blends(for: $0) }.filter { $0.kind == .video }
+        let videoBlends = liveCaptures().flatMap { blends(for: $0) }.filter { $0.kind == .video }
         guard !videoBlends.isEmpty else { return }
         let first = createCollection(named: "Harbour reel")
         addBlends(videoBlends.prefix(3).map(\.id), to: first.id)
@@ -2794,7 +2792,7 @@ final class AppModel: ObservableObject {
             (["people", "event"], ["market stalls", "crowd"]),
             (["water", "skyWeather", "landmark"], ["harbour", "suspension bridge"]),
         ]
-        for (index, capture) in allLiveCaptures().enumerated() where capture.sceneTags == nil {
+        for (index, capture) in liveCaptures().enumerated() where capture.sceneTags == nil {
             let sample = samples[index % samples.count]
             updateCapture(capture.id, edited: false) { capture in
                 capture.sceneTags = sample.tags
@@ -2993,7 +2991,7 @@ final class AppModel: ObservableObject {
     /// ruler shows structure without a real burst shoot. Never persisted, and
     /// Create would blend the same file per piece, so screenshots only.
     func debugOpenAdjustDemo() {
-        guard let capture = allLiveCaptures().first(where: { $0.kind == .video }) else { return }
+        guard let capture = newestCapture({ var q = LibraryIndex.ProjectQuery(); q.category = .video; return q }()) else { return }
         openCapture(capture)
         guard let url = mediaURL(for: capture) else { return }
         let name = url.lastPathComponent
@@ -4089,7 +4087,7 @@ final class AppModel: ObservableObject {
 
     /// Every tag already used somewhere in this library, taxonomy first, then hand-typed ones.
     /// The tag picker offers these under YOUR TAGS, so a word is typed once and tapped after that.
-    var libraryTags: [String] { tagChips(listsScans: true) ?? allLiveCaptures().presentSceneTags }
+    var libraryTags: [String] { tagChips(listsScans: true) ?? [] }
 
     // MARK: - Automatic tagging
 
@@ -4495,7 +4493,7 @@ final class AppModel: ObservableObject {
     /// mutation, before the `persistLibrary()` that saves it — see
     /// `CaptureProject.modifiedAt` for what does and does not count.
     func markEdited(_ captureID: UUID) {
-        try? store.update(captureID) { document in
+        _ = try? store.update(captureID) { document in
             document.capture.modifiedAt = Date()
             document.capture.modifiedBy = DeviceIdentity.id
         }
@@ -4563,8 +4561,7 @@ final class AppModel: ObservableObject {
     /// their last measurement are walked, which on a settled library is none.
     func measureProjectSizes() async {
         guard !isMeasuringSizes else { return }
-        let pending = (try? libraryIndex?.projectsNeedingSizeMeasurement()) ?? nil
-            ?? allLiveCaptures().filter(needsSizeMeasurement).map(\.id)
+        let pending = (try? libraryIndex?.projectsNeedingSizeMeasurement()) ?? nil ?? []
         guard !pending.isEmpty else { return }
         isMeasuringSizes = true
         defer { isMeasuringSizes = false }
@@ -9600,12 +9597,8 @@ final class AppModel: ObservableObject {
         // Origin first — the id that is the same on every device — then the
         // two legacy threads for records that predate it; the index answers
         // all three (M3), the arrays for a library without one.
-        if let index = libraryIndex {
-            return ((try? index.projectID(originID: originID)) ?? nil).flatMap { capture(id: $0) }
-        }
-        let all = allLiveCaptures()
-        return all.first { self.originID(of: $0) == originID }
-            ?? all.first { $0.id == originID || $0.importedFromID == originID }
+        guard let index = libraryIndex else { return nil }
+        return ((try? index.projectID(originID: originID)) ?? nil).flatMap { capture(id: $0) }
     }
 
     /// The shoot's identity, for every site that needs one: the stored

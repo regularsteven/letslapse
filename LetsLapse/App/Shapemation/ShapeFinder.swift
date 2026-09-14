@@ -225,8 +225,10 @@ final class ShapeFinder: ObservableObject {
     static func inventory(in model: AppModel) -> (projects: [Candidate], skippedVideo: Int) {
         var out: [Candidate] = []
         var video = 0
-        for capture in model.allLiveCaptures() where !capture.isScannerCapture {
-            guard capture.kind == .photos else { video += 1; continue }
+        // Photo, interval and video projects, scans out (M3: the index's
+        // categories; a video is counted, not inventoried).
+        video = ((try? model.libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery())[.video]) ?? nil) ?? 0
+        for capture in model.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.categories = [.photo, .interval]; return q }()) {
             let folder = model.projectFolderURL(for: capture)
             guard let rep = representative(for: capture, in: model) else { continue }
             let existing = ShapeRegister.load(inProjectFolder: folder)
@@ -294,7 +296,7 @@ final class ShapeFinder: ObservableObject {
     /// many registers changed.
     static func removeFoundShapes(in model: AppModel) -> Int {
         var changed = 0
-        for capture in model.allLiveCaptures() where !capture.isScannerCapture && capture.kind == .photos {
+        for capture in model.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.categories = [.photo, .interval]; return q }()) {
             let folder = model.projectFolderURL(for: capture)
             guard var register = ShapeRegister.load(inProjectFolder: folder),
                   register.isAnalysed || register.shapes.contains(where: { $0.source == .detected }) else { continue }

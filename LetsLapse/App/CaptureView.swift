@@ -4291,7 +4291,7 @@ struct CaptureView: View {
     /// to call repeatedly: an unchanged hero returns before touching the disk,
     /// and the decode itself goes through the shared cache the grids use.
     private func refreshRecentCapture() {
-        let hero = model.allLiveCaptures().first.flatMap { model.heroAsset(for: $0) }
+        let hero = model.newestCapture().flatMap { model.heroAsset(for: $0) }
         guard hero?.url != recentHeroURL else { return }
         recentHeroURL = hero?.url
         recentThumbnail = nil

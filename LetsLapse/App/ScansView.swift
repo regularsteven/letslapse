@@ -126,7 +126,7 @@ struct ScansView: View {
     /// old value and a re-read drops the request.
     private func consumeDetailRequest(_ requested: UUID?) {
         guard let requested else { return }
-        guard model.allLiveCaptures().contains(where: { $0.id == requested }) else { return }
+        guard model.capture(id: requested) != nil else { return }
         if path != [requested] { path = [requested] }
         DispatchQueue.main.async {
             if model.requestedScanDetailID == requested {

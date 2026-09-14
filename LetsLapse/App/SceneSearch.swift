@@ -4,8 +4,9 @@ import SwiftUI
 ///
 /// The on-device analysis already writes two things onto a project — a closed set of subject tags
 /// and the free-form nouns the model named for the frame — and until now neither could be searched
-/// for. This is the query those become useful through: typed words match the project's name, its
-/// tags and its elements; the chips narrow to projects carrying every selected tag.
+/// for. This is the query those become useful through: typed words match the project's record by
+/// prefix (its name, its tags and their labels, its elements, its assets' own words — the index's
+/// full-text search, M2); the chips narrow to projects carrying every selected tag.
 ///
 /// Deliberately a value type with no view or model dependency: the same query drives the Projects
 /// list, its empty state, and the "N of M" count, and all three must agree.
@@ -28,37 +29,13 @@ struct SceneQuery: Hashable {
             .filter { !$0.isEmpty }
     }
 
-    func matches(_ capture: AppModel.CaptureProject) -> Bool {
-        guard tags.isSubset(of: Set(capture.sceneTags ?? [])) else { return false }
-        let tokens = searchTokens
-        guard !tokens.isEmpty else { return true }
-        let haystack = Self.haystack(for: capture)
-        // Every token must land somewhere; a token may land anywhere. Typing more words narrows.
-        return tokens.allSatisfy { token in
-            haystack.contains { $0.contains(token) }
-        }
-    }
-
-    /// Everything a typed word is allowed to match, lowercased once per test.
-    ///
-    /// Tags go in twice — raw and as their human label — because the model speaks `skyWeather`
-    /// while the chip (and therefore the user) says "Sky & weather".
-    private static func haystack(for capture: AppModel.CaptureProject) -> [String] {
-        var terms = [capture.displayTitle.lowercased()]
-        for tag in capture.sceneTags ?? [] {
-            terms.append(tag.lowercased())
-            terms.append(SceneMetadata.label(for: tag).lowercased())
-        }
-        terms.append(contentsOf: (capture.sceneElements ?? []).map { $0.lowercased() })
-        return terms
-    }
+    // The matching itself moved to the library index (M2): every word is a prefix over the
+    // record — name, original name, tags and their labels, elements, the assets' titles,
+    // captions, keywords, creator, place and camera — and every word must land on the same
+    // project. `AppModel.projectIDs(for:)` asks it through `ProjectListQuery`.
 }
 
 extension Array where Element == AppModel.CaptureProject {
-    func matching(_ query: SceneQuery) -> [AppModel.CaptureProject] {
-        query.isActive ? filter { query.matches($0) } : self
-    }
-
     /// The tags actually present in this library: the taxonomy in its own order, then whatever
     /// anyone has typed, alphabetically.
     ///

@@ -1,4 +1,5 @@
 import SwiftUI
+import LetsLapseKit
 
 /// What the Projects list and the Gallery can be ordered by.
 ///
@@ -286,7 +287,7 @@ struct ProjectsView: View {
                     filters: availableFilters,
                     counts: showsCounts ? filterCounts : nil)
 
-                let tags = model.tagChips(listsScans: listsScans) ?? sourceCaptures.presentSceneTags
+                let tags = model.tagChips(listsScans: listsScans) ?? []
                 if !tags.isEmpty {
                     // Bleeds past the row's trailing inset so a long chip row
                     // scrolls out to the screen edge rather than stopping short.
@@ -350,57 +351,21 @@ struct ProjectsView: View {
         }
     }
 
-    /// Search, then the kind filter and tag chips, then this: the order is
-    /// what the human asked of the list, narrowest question last.
-    private func sorted(_ captures: [AppModel.CaptureProject]) -> [AppModel.CaptureProject] {
-        let ascending: [AppModel.CaptureProject]
-        switch sortKey {
-        case .capture:
-            ascending = captures.sorted { $0.createdAt < $1.createdAt }
-        case .added:
-            // Ties broken on the capture date rather than left to `sorted`,
-            // which isn't stable: a library whose Added dates were backfilled
-            // from folder stamps can hold several projects to the same second.
-            ascending = captures.sorted {
-                (model.addedAt($0), $0.createdAt) < (model.addedAt($1), $1.createdAt)
-            }
-        case .edit:
-            ascending = captures.sorted { model.lastEdited($0) < model.lastEdited($1) }
-        case .size:
-            // A project not measured yet sorts as -1 rather than 0, so the
-            // unknowns hold one end of the list and visibly resolve as the
-            // sweep lands instead of pretending to be empty projects.
-            ascending = captures.sorted {
-                ($0.sizeBytes ?? -1, $0.createdAt) < ($1.sizeBytes ?? -1, $1.createdAt)
-            }
-        }
-        return sortAscending ? ascending : ascending.reversed()
-    }
-
-    /// What this list is built from: the scan-free library, or everything —
-    /// whichever the Layout setting leaves without another home. The
-    /// fallback path's base; the index answers the same question through
-    /// `listQuery.listsScans`.
-    private var sourceCaptures: [AppModel.CaptureProject] {
-        listsScans ? model.allLiveCaptures() : model.libraryCaptures
-    }
-
     /// The list's whole question, for the index (M2).
     private var listQuery: ProjectListQuery {
         ProjectListQuery(sort: sortKey, ascending: sortAscending, filter: filter, query: query, listsScans: listsScans)
     }
 
-    /// The records the list renders, in order: the index's answer, or —
-    /// for a library with no index — the arrays sorted and filtered here.
+    /// The records the list renders, in order: the index's answer (M2; a
+    /// library with no index lists nothing, M3).
     private var visibleCaptures: [AppModel.CaptureProject] {
-        model.projects(for: listQuery)
-            ?? sorted(sourceCaptures.filtered(by: filter, isScan: model.isScannerProject).matching(query))
+        model.projects(for: listQuery) ?? []
     }
 
     /// Nothing to list at all — as opposed to nothing left after the
     /// filter, the search or the chips.
     private var libraryIsEmpty: Bool {
-        model.libraryIsEmpty(for: listQuery) ?? sourceCaptures.isEmpty
+        model.libraryIsEmpty(for: listQuery) ?? true
     }
 
     #if DEBUG
@@ -422,13 +387,7 @@ struct ProjectsView: View {
     /// How many projects each filter would show, counted after the search has
     /// had its say so the numbers agree with what tapping one produces.
     private var filterCounts: [CaptureFilter: Int] {
-        if let counted = model.listCounts(for: listQuery, filters: availableFilters) { return counted }
-        let searched = sourceCaptures.matching(query)
-        return availableFilters.reduce(into: [:]) { counts, filter in
-            counts[filter] = searched
-                .filter { filter.matches($0, isScan: model.isScannerProject($0)) }
-                .count
-        }
+        model.listCounts(for: listQuery, filters: availableFilters) ?? [:]
     }
 
     private var emptyState: some View {
@@ -519,7 +478,7 @@ struct ProjectsView: View {
     /// only by onAppear re-firing on tab switches).
     private func consumeDetailRequest(_ requested: UUID?) {
         guard let requested else { return }
-        guard model.allLiveCaptures().contains(where: { $0.id == requested }) else { return }
+        guard model.capture(id: requested) != nil else { return }
         path = [requested]
         // Clear once the emission has settled; writing back during it would
         // re-enter the publisher mid-publish.

@@ -107,7 +107,10 @@ extension AppModel {
     /// Gallery visit: a file whose modification date has not moved keeps its
     /// old summary without being decoded again.
     func refreshShapeSummaries() {
-        let targets = libraryCaptures.map { ($0.id, projectFolderURL(for: $0)) }
+        // The ids and folders alone (M3): no document is read for a
+        // register check.
+        let targets = liveProjectIDs({ var q = LibraryIndex.ProjectQuery(); q.excludeScans = true; return q }())
+            .map { ($0, projectFolderURL(for: $0)) }
         let known = shapeSummaries
         Task.detached(priority: .utility) { [weak self] in
             var next: [UUID: ShapeSummary] = [:]

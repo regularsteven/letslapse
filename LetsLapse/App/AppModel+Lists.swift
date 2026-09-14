@@ -139,11 +139,34 @@ extension AppModel {
         }
     }
 
-    /// How many live projects the library holds — the index's count (M3),
-    /// the whole-library read for a library without one.
+    /// How many live projects the library holds — the index's count (M3).
     var liveProjectCount: Int {
-        if let totals = try? libraryIndex?.storageTotals() { return totals.liveProjects }
-        return allLiveCaptures().count
+        (try? libraryIndex?.storageTotals().liveProjects) ?? 0
+    }
+
+    // MARK: - Whole-library reads that are not lists (M3)
+
+    /// The live project ids the index answers for a query, newest capture
+    /// first unless the query says otherwise. Empty without an index.
+    func liveProjectIDs(_ query: LibraryIndex.ProjectQuery = LibraryIndex.ProjectQuery()) -> [UUID] {
+        (try? libraryIndex?.projectIDs(query)) ?? []
+    }
+
+    /// The records behind `liveProjectIDs`, one document each — for the few
+    /// passes that want several records in hand (a builder's candidates, a
+    /// storage list); a list never does.
+    func liveCaptures(_ query: LibraryIndex.ProjectQuery = LibraryIndex.ProjectQuery()) -> [CaptureProject] {
+        liveProjectIDs(query).compactMap { capture(id: $0) }
+    }
+
+    /// The newest live project that satisfies `test` — documents are read
+    /// newest first until one does, so the common case reads one.
+    func newestCapture(_ query: LibraryIndex.ProjectQuery = LibraryIndex.ProjectQuery(),
+                       where test: (CaptureProject) -> Bool = { _ in true }) -> CaptureProject? {
+        for id in liveProjectIDs(query) {
+            if let capture = capture(id: id), test(capture) { return capture }
+        }
+        return nil
     }
 
     /// The index changed under the lists: forget every remembered answer.

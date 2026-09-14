@@ -263,7 +263,9 @@ extension AppModel {
             // The manifest is read on the main actor; the walk that decides
             // which projects need work stats every asset of every project
             // and reads every `assets.ndjson`, so it runs off it.
-            let projects = self.allLiveCaptures().sorted { self.addedAt($0) > self.addedAt($1) }
+            // Most recently added first — the index's Added sort (M3); each
+            // project's names come from its document, read once here.
+            let projects = self.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.sort = .added; return q }())
                 .map { ($0.id, self.projectFolderURL(for: $0), self.assetNames(for: $0)) }
             let store = self.assetStore
             let needing = await Task.detached(priority: .background) { () -> [UUID] in

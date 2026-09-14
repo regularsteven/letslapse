@@ -286,11 +286,9 @@ struct CollectionClipPicker: View {
     }
 
     private var candidateCaptures: [AppModel.CaptureProject] {
-        guard let index = model.libraryIndex else { return model.allLiveCaptures() }
         var query = LibraryIndex.ProjectQuery()
         query.withBlends = true
-        guard let ids = try? index.projectIDs(query) else { return model.allLiveCaptures() }
-        return ids.compactMap { model.capture(id: $0) }
+        return model.liveCaptures(query)
     }
 
     private var allBlends: [AppModel.BlendProject] {

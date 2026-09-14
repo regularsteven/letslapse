@@ -221,7 +221,7 @@ struct ManagePresetsView: View {
                 .alert(item: $importNotice) { notice in
                     Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
                 }
-                .task(id: previewCaptureID + "|" + String(model.allLiveCaptures().count)) {
+                .task(id: previewCaptureID + "|" + String(model.liveProjectCount)) {
                     previewFrame = model.presetPreviewFrame(preferring: UUID(uuidString: previewCaptureID))
                 }
                 .task {
@@ -362,13 +362,9 @@ struct ManagePresetsView: View {
     }
 
     private func recount() {
-        var counts: [UUID: Int] = [:]
-        for capture in model.allLiveCaptures() {
-            if case .named(let id, _) = model.presetState(for: capture) {
-                counts[id, default: 0] += 1
-            }
-        }
-        usage = counts
+        // The stored preset state of every live project, counted by the
+        // index (M3) — every persisted record carries one.
+        usage = ((try? model.libraryIndex?.presetCounts()) ?? nil) ?? [:]
     }
 
     private func delete(_ offsets: IndexSet, from presets: [CustomPreset]) {
@@ -1121,9 +1117,7 @@ struct PresetPreviewPickerView: View {
     @Binding var path: [PresetRoute]
 
     private var candidates: [AppModel.CaptureProject] {
-        model.allLiveCaptures()
-            .filter { !$0.isScannerCapture }
-            .sorted { ($0.modifiedAt ?? $0.createdAt) > ($1.modifiedAt ?? $1.createdAt) }
+        model.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.sort = .modified; q.excludeScans = true; return q }())
     }
 
     var body: some View {
