@@ -18,8 +18,27 @@ public enum DirectoryArchiveError: LocalizedError {
 /// under `.lapse` project archives. Both ends are LetsLapse builds, so the
 /// platform-native archiver beats adding a zip dependency.
 public enum DirectoryArchive {
+    /// The entry fields an archive records. `.defaultForArchive` keeps
+    /// times, owners and modes — right for a `.lapse` that restores a tree.
+    /// `.contentOnly` keeps type, path and data alone, so the same files
+    /// give the same bytes every time: what a bundle that is hashed and
+    /// compared on a server needs (the PicPlace records bundle), where the
+    /// default set's ctimes changed with every hard link and re-uploaded an
+    /// unchanged bundle on every sync.
+    public enum FieldSet {
+        case defaultForArchive
+        case contentOnly
+
+        var keySet: ArchiveHeader.FieldKeySet {
+            switch self {
+            case .defaultForArchive: return .defaultForArchive
+            case .contentOnly: return ArchiveHeader.FieldKeySet("TYP,PAT,DAT")!
+            }
+        }
+    }
+
     /// Archives `directory`'s contents (not the directory node itself).
-    public static func write(contentsOf directory: URL, to archiveURL: URL) throws {
+    public static func write(contentsOf directory: URL, to archiveURL: URL, fields: FieldSet = .defaultForArchive) throws {
         try? FileManager.default.removeItem(at: archiveURL)
         guard let writeStream = ArchiveByteStream.fileStream(
             path: FilePath(archiveURL.path),
@@ -47,7 +66,7 @@ public enum DirectoryArchive {
         do {
             try encodeStream.writeDirectoryContents(
                 archiveFrom: FilePath(directory.path),
-                keySet: .defaultForArchive)
+                keySet: fields.keySet)
         } catch {
             failure = error
         }

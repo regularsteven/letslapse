@@ -4530,6 +4530,9 @@ final class AppModel: ObservableObject {
             // A person changed this project — see CaptureProject.modifiedAt.
             record.modifiedAt = Date()
             record.modifiedBy = DeviceIdentity.id
+            #if DEBUG
+            LLog("project \(id.uuidString.prefix(8)) edited: \(Self.changedFields(before, record).joined(separator: ", "))")
+            #endif
         }
         do {
             try store.update(id, waiting: persist == .now) { $0.capture = record }
@@ -4539,6 +4542,22 @@ final class AppModel: ObservableObject {
             return false
         }
     }
+
+    #if DEBUG
+    /// The top-level record keys whose values differ — what an edit changed,
+    /// for the log. The records are re-encoded, so Debug only.
+    private static func changedFields(_ a: CaptureProject, _ b: CaptureProject) -> [String] {
+        func keyed(_ record: CaptureProject) -> [String: String] {
+            guard let data = try? JSONEncoder().encode(record),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+            return object.mapValues { value in
+                (try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? "\(value)"
+            }
+        }
+        let x = keyed(a), y = keyed(b)
+        return Set(x.keys).union(y.keys).filter { x[$0] != y[$0] }.sorted()
+    }
+    #endif
 
     /// Whether the stored size can still be believed: never measured, or
     /// measured before the last edit, which is the only thing that can have

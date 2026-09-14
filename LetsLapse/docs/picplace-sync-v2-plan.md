@@ -520,3 +520,88 @@ Library*.
 open …Thumbnails/….jpg" lines on the next launch is expected. A stray
 `Thumbnails/` or `Logs/` can appear at the old root if a background render
 lands during the ~1 s between the renames and the relaunch — caches, harmless.
+
+## 10. Stage 2 — landed 2026-09-14 (uncommitted), awaiting the play-pen push
+
+**What shipped**
+
+- **`PicPlaceSyncPolicy`** (`minimal` · `originals` · `everything`;
+  `App/PicPlace/PicPlaceSyncPolicy.swift`). A Sync runs `.minimal`;
+  `LL_PICPLACE_POLICY` overrides it. The originals' button is stage 5.
+- **Classification by the registry**: `ProjectFileRegistry.entry(forRelativePath:)`
+  governs every file — root records and `source/` sidecars → the bundle;
+  `poster.jpg` → a `preview` object; `luts/` → `lut` objects; `source/` media
+  and `blends/` → the heavy set; `masks/ fonts/ notes/` → the bundle; a file
+  the table does not know → skipped and logged. Pattern entries
+  `source/frame-*.json` (the ramp log) and `source/liveblend-*.json` were
+  registered; `poster.jpg` was registered as a derived root file that
+  travels. `ref/` is **not** registered (it is not written by the app — one
+  project holds hand-dropped reference pictures) and is skipped; register
+  it if you want it carried (open point).
+- **The records bundle** `records.aar`: members hard-linked into
+  `tmp/picplace-records/`, archived with the Kit's `DirectoryArchive` in a
+  new **content-only field set** (`TYP,PAT,DAT`) — the default set stored
+  ctimes, which every hard link bumped, so the same members gave a different
+  archive on every run and would have re-uploaded on every sync. Verified
+  byte-identical across two runs (`07efff3c…`); members restore byte for
+  byte (`aa extract`). Sent as one `records`-kind asset, replaced whole.
+- **The poster** (`App/PicPlace/PicPlacePoster.swift`): the project's
+  `thumbnailURL` rendered through `PhotoGrader.render` / `VideoGrader.gradedFrame`
+  at 1280 px, JPEG 0.7, written to `Projects/<id>/poster.jpg` before the
+  walk; the grade token is kept on the sync record (`posterToken`) and the
+  file is reused while it matches.
+- **`originID` is the server key** (D11): `PUT /projects/{originID}`,
+  `GET` by it too; `origin_uuid` carries `derivedFromOriginID`.
+- **The manifest cap**: `limits.manifest_max_bytes` from `/status` (1 MB
+  until reported); over it the manifest goes up as a `manifest`-kind asset
+  and the PUT carries `{ "manifest_asset": id }` — a stub PUT first, which
+  creates and claims. `LL_PICPLACE_MANIFEST_CAP=<bytes>` forces the path.
+- **Records and captions**: `PicPlaceSyncRecord` gained `policy`,
+  `heavyFiles`, `heavyBytes`, `posterToken`; the card reads *Records +
+  preview · 173 KB · 1,480 originals stay here (86 MB)*.
+- **Dry run**: `LL_PICPLACE_DRYRUN=latest|<uuid>` classifies, bundles and
+  renders with no server, logging the inventory.
+
+**Verified** on the scratch copy of *Perf bench 1480* (1,480 frames): manifest
+48.5 KB inline; bundle = `assets.ndjson` 423 KB + `source/frames.timestamps`
+120 KB + `metadata.json` → `records.aar` 94.6 KB; heavy set 1,480 files /
+86.0 MB left; poster 78 KB, 1280×960; no strays. A minimal sync of that
+project is three objects where v1 sent 1,483.
+
+**Awaiting Steven's hand**: *Sync again* on both play-pen projects — the
+negotiate should send `records.aar` + `poster.jpg` (two uploads) and leave
+the 1,481 source objects v1 uploaded untouched (a push never deletes); a
+second *Sync again* should move nothing. Kit tests: 8/8 in the touched suites.
+
+**Stage 2 follow-ups from the first play-pen run (2026-09-14 night):**
+
+- **Signed out on every relaunch** — a Keychain asymmetry since v1: the Debug
+  build has no keychain entitlement, so `save` fell back to the login
+  keychain, but `load` only fell back on `errSecMissingEntitlement`/`errSecParam`
+  and the data-protection query answered `errSecItemNotFound`. `load` and
+  `save` now fall back on anything short of success. Verified: a scratch
+  library bound to Steven's account signs in silently from the login
+  keychain (Account · This device · On PicPlace · Library · Server ·
+  Disconnect · Sign out).
+- A refused refresh now **re-reads the Keychain before signing out**: refresh
+  tokens rotate, and a second instance (a window, a test run) that refreshed
+  first has stored the newer pair — adopt it rather than clear it.
+- **Scratch roots never borrow the install's session** (Debug, macOS): an
+  unbound root from the launch arguments starts signed out unless
+  `LL_PICPLACE_TOKENS` says otherwise. The controller logs the session
+  resolution at launch (`picplace: session <key> — tokens found …`).
+- Copy: the Library row says *Connected on 14 Sep 2026 at 21:59* (it read
+  "Connected 46 minutes ago" and was taken for the sign-in time); the synced
+  caption ends with *· 2 uploaded* or *· nothing needed uploading*.
+- **"Edited 4 minutes ago" without a human edit**: the record's `modifiedAt`
+  moved at 22:50:00 and the poster re-rendered on the next push (the grade
+  token changed), so a grade write happened — most likely the viewer
+  persisting a normalised default on open. `updateCapture` now logs the
+  changed top-level fields on every stamped edit (Debug) so the next one is
+  attributable. For stage 4 this matters: a derived-field write that stamps
+  `modifiedAt` would read as a conflict; the classification of what counts
+  as an edit (`CaptureProject.modifiedAt`'s own rule) is the thing to hold
+  to.
+- The second push of *China Pics-1849* uploaded 1 object (the poster; the
+  bundle hashed identical and was skipped) — the determinism fix holds on
+  the real server.

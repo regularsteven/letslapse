@@ -61,6 +61,21 @@ public struct ProjectFile: Equatable, Sendable {
         self.isHotPath = isHotPath
     }
 
+    /// True for an entry whose `name` holds one `*` — a family of files the
+    /// run writes with a number or a stamp in the name (`frame-*.json`).
+    /// Patterns classify files (`matches`, `entry(forRelativePath:)`); they
+    /// are not audited for presence and name no single file to copy.
+    public var isPattern: Bool { name.contains("*") }
+
+    /// Whether `fileName` (no directory part) is this entry: equal for a
+    /// plain entry, prefix + suffix around the one `*` for a pattern.
+    public func matches(fileName: String) -> Bool {
+        guard isPattern else { return fileName == name }
+        let parts = name.split(separator: "*", maxSplits: 1, omittingEmptySubsequences: false)
+        let prefix = String(parts[0]), suffix = parts.count > 1 ? String(parts[1]) : ""
+        return fileName.count >= prefix.count + suffix.count && fileName.hasPrefix(prefix) && fileName.hasSuffix(suffix)
+    }
+
     /// The path relative to the project folder.
     public var relativePath: String {
         switch location {
@@ -90,12 +105,21 @@ public enum ProjectFileRegistry {
     /// it out.
     public static let projectDocumentName = "project.json"
 
+    /// `poster.jpg` — the project's graded poster frame (v2 plan §3.5).
+    public static let posterName = "poster.jpg"
+
     public static let all: [ProjectFile] = [
         // Capture-time records, beside the media.
         ProjectFile("frames.timestamps", at: .source, class: .captureFact, travels: true, isHotPath: true),
         ProjectFile("frames.exposure", at: .source, class: .captureFact, travels: true, isHotPath: true),
         ProjectFile("capture_log.json", at: .source, class: .captureFact, travels: true),
         ProjectFile("sequence.json", at: .source, class: .captureFact, travels: true),
+        // The ramp engine's legacy experiment document, named for the last
+        // frame (`frame-05661.json`, up to 8 MB), and the live-blend logs —
+        // written once at finish; carried by the PicPlace records bundle
+        // (v2 plan §3.4) like the other capture sidecars.
+        ProjectFile("frame-*.json", at: .source, class: .captureFact, travels: true),
+        ProjectFile("liveblend-*.json", at: .source, class: .captureFact, travels: true),
         // Derived measurements beside the media. `framing.json` also carries
         // the `stabilisation` block, which is user intent.
         ProjectFile("framing.json", at: .source, class: .derived, travels: true),
@@ -107,6 +131,11 @@ public enum ProjectFileRegistry {
         ProjectFile(assetRecordsName, at: .root, class: .edit, travels: true),
         ProjectFile(projectMetadataName, at: .root, class: .edit, travels: true),
         ProjectFile(projectDocumentName, at: .root, class: .edit, travels: true),
+        // The project's graded poster frame (~1280 px JPEG), rendered by the
+        // device that pushes the project to PicPlace (v2 plan §3.5) and the
+        // tile a fresh device shows before the sources are on it. Derived:
+        // any device holding the sources can render it again.
+        ProjectFile(posterName, at: .root, class: .derived, travels: true),
         ProjectFile("notes/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("masks/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("fonts/", at: .root, class: .edit, isDirectory: true, travels: true),
@@ -139,8 +168,27 @@ public enum ProjectFileRegistry {
     }
 
     /// The sidecars the audit reports presence for, per project — every
-    /// registered file that is not a media folder.
+    /// registered file that is not a media folder and names one file.
     public static var auditedSidecars: [ProjectFile] {
-        all.filter { !($0.isDirectory && ["source/", "blends/", "masks/", "fonts/", "luts/"].contains($0.name)) }
+        all.filter { !($0.isDirectory && ["source/", "blends/", "masks/", "fonts/", "luts/"].contains($0.name)) && !$0.isPattern }
+    }
+
+    /// The entry that governs a file at `relativePath` inside a project
+    /// folder: an exact root name or pattern; a `source/` sidecar's own
+    /// entry; otherwise the folder entry the path sits under — `masks/sky.png`
+    /// → `masks/`, and a media frame or anything deeper under `source/` →
+    /// `source/` itself, a render → `blends/`. nil for a stray: a root file
+    /// or a folder the table does not know.
+    public static func entry(forRelativePath relativePath: String) -> ProjectFile? {
+        let parts = relativePath.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard let first = parts.first, !first.isEmpty else { return nil }
+        if parts.count == 1 {
+            return all.first { $0.location == .root && !$0.isDirectory && $0.matches(fileName: first) }
+        }
+        if first == "source", parts.count == 2,
+           let sidecar = all.first(where: { $0.location == .source && $0.matches(fileName: parts[1]) }) {
+            return sidecar
+        }
+        return all.first { $0.location == .root && $0.isDirectory && $0.name == first + "/" }
     }
 }

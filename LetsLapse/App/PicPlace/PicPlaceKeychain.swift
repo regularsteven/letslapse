@@ -25,13 +25,20 @@ enum PicPlaceKeychain {
 
     private static let legacyAccount = "tokens"
 
+    /// The data-protection keychain first, the login keychain when that has
+    /// nothing. An unentitled build (the Debug app on the Mac) cannot use the
+    /// data-protection keychain: its SAVE fell back to the login keychain,
+    /// but its LOAD answered "not found" rather than "missing entitlement"
+    /// and never looked there — so every relaunch started signed out
+    /// (2026-09-14). Whatever the data-protection query says short of
+    /// success, the login keychain is asked.
     static func load(account: String) -> PicPlaceTokens? {
         var query = baseQuery(account: account, dataProtection: true)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         var status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecMissingEntitlement || status == errSecParam {
+        if status != errSecSuccess {
             var legacy = baseQuery(account: account, dataProtection: false)
             legacy[kSecReturnData as String] = true
             legacy[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -44,7 +51,7 @@ enum PicPlaceKeychain {
     static func save(_ tokens: PicPlaceTokens, account: String) throws {
         let data = try JSONEncoder().encode(tokens)
         var status = write(data, account: account, dataProtection: true)
-        if status == errSecMissingEntitlement || status == errSecParam {
+        if status != errSecSuccess {
             status = write(data, account: account, dataProtection: false)
         }
         guard status == errSecSuccess else {

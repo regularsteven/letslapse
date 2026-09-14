@@ -94,6 +94,13 @@ struct PPNegotiation: Decodable {
     var upload: PPUpload?
 }
 
+/// `GET /projects[?updated_since=]` — the account's index. `server_time` is
+/// the watermark the next `updated_since` should send (server-asks §8).
+struct PPProjectIndex: Decodable {
+    var projects: [PPProject]
+    var serverTime: Date?
+}
+
 /// `GET /projects/{uuid}` — the registry row beside the manifest and the asset list.
 struct PPProjectDetail: Decodable {
     var project: PPProject
@@ -283,7 +290,15 @@ actor PicPlaceClient {
                 if let key { try? PicPlaceKeychain.save(fresh, account: key) }
                 return fresh
             } catch let error as PicPlaceAPIError where error.status == 400 || error.status == 401 {
-                // invalid_grant: the refresh token was revoked or already used.
+                // invalid_grant: the refresh token was revoked or already
+                // used. Refresh tokens rotate, so "already used" can mean
+                // another instance of the app (a second Mac window, a test
+                // run) refreshed first and stored the newer pair — adopt it
+                // rather than sign this one out and delete theirs.
+                if let key, let stored = PicPlaceKeychain.load(account: key), stored.refreshToken != current.refreshToken {
+                    LLog("picplace: refresh refused; another instance rotated the tokens — adopting the stored pair")
+                    return stored
+                }
                 if let key { PicPlaceKeychain.clear(account: key) }
                 throw error
             }

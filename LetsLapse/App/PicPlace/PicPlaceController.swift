@@ -41,13 +41,22 @@ final class PicPlaceController: ObservableObject {
     }
 
     struct Usage: Equatable {
+        /// The account's projects on the server and their bytes.
         var projects: Int
         var bytes: Int64
+        /// Server projects whose origin id this library does not hold — what
+        /// a merge (stage 3) would bring here. The card names the count so
+        /// "4 projects" beside a two-project library is not a mystery.
+        var notInLibrary: Int = 0
     }
 
     struct FolderSummary: Equatable {
+        /// Objects the policy sends (the records bundle counts as one) and their bytes.
         var files: Int
         var bytes: Int64
+        /// The heavy set the policy leaves on this device.
+        var heavyFiles = 0
+        var heavyBytes: Int64 = 0
     }
 
     /// How the open library relates to the session.
@@ -93,9 +102,21 @@ final class PicPlaceController: ObservableObject {
     @Published private(set) var lastSignInError: String?
     @Published private(set) var lastConnectError: String?
     @Published private(set) var serverString = PicPlaceConfiguration.serverString
+    /// `limits.manifest_max_bytes` from the last `/status`; 1 MB until then.
+    private(set) var manifestMaxBytes: Int64 = 1 << 20
     /// The "Connect this library?" question, raised after a sign-in on an
     /// unbound library and by the cards' Connect buttons.
     @Published var isOfferingConnect = false
+
+    /// What a Sync sends. Stage 2: the minimal set; the originals follow per
+    /// project in stage 5. `LL_PICPLACE_POLICY=minimal|originals|everything`
+    /// overrides it for a run.
+    var policy: PicPlaceSyncPolicy {
+        #if DEBUG
+        if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_POLICY"], let forced = PicPlaceSyncPolicy(rawValue: raw) { return forced }
+        #endif
+        return .minimal
+    }
 
     private unowned let model: AppModel
     private var client: PicPlaceClient!
@@ -122,8 +143,20 @@ final class PicPlaceController: ObservableObject {
         Self.migrateLegacyTokens()
 
         // The session follows the library (v2 plan §3.1).
-        let sessionKey = binding?.accountKey ?? UserDefaults.standard.string(forKey: Self.sessionKey)
+        var sessionKey = binding?.accountKey ?? UserDefaults.standard.string(forKey: Self.sessionKey)
+        #if DEBUG && os(macOS)
+        // A scratch root (`-storage.libraryRootPath …`) that is not bound is
+        // not the person's library and must not borrow their session: a
+        // test run refreshing their tokens would rotate the pair under
+        // their own instance. Bound scratch roots and `LL_PICPLACE_TOKENS`
+        // are the deliberate ways in.
+        if binding == nil, StorageRoot.rootCameFromArguments, sessionKey != nil {
+            LLog("picplace: scratch root — not using the install's session")
+            sessionKey = nil
+        }
+        #endif
         var tokens = sessionKey.flatMap { PicPlaceKeychain.load(account: $0) }
+        LLog("picplace: session \(sessionKey ?? "none") — \(tokens == nil ? "no tokens" : "tokens found")\(binding == nil ? "" : ", library bound to @\(binding!.user.displayHandle) on \(binding!.server.host)")")
         var tokensKey = tokens == nil ? nil : sessionKey
         profile = Self.loadProfile().flatMap { $0.accountKey == sessionKey ? $0 : nil }
         #if DEBUG
@@ -172,6 +205,15 @@ final class PicPlaceController: ObservableObject {
         } else if let signInHook {
             signInFlow.opensBrowser = signInHook != "silent"
             Task { @MainActor in self.signIn() }
+        }
+        // `LL_PICPLACE_DRYRUN=latest|<uuid>` runs the file side of a sync
+        // with no server: classifies the folder, builds the records bundle
+        // (left under `tmp/`), renders the poster, logs the inventory.
+        if let target = ProcessInfo.processInfo.environment["LL_PICPLACE_DRYRUN"] {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)   // after the launch walk
+                self.dryRun(target)
+            }
         }
         #if os(macOS)
         // `LL_PICPLACE_NEST=<host>:<username>` binds an unbound library to a
@@ -355,7 +397,16 @@ final class PicPlaceController: ObservableObject {
         Self.saveProfile(profile)
         UserDefaults.standard.set(key, forKey: Self.sessionKey)
         upgradeBindingIfServerReportsItself(status)
+        noteLimits(status)
         await refreshUsage(status: status)
+    }
+
+    private func noteLimits(_ status: PPStatus) {
+        if let cap = status.limits?.manifestMaxBytes, cap > 0 { manifestMaxBytes = cap }
+        #if DEBUG
+        // `LL_PICPLACE_MANIFEST_CAP=<bytes>` forces the overflow path.
+        if let forced = ProcessInfo.processInfo.environment["LL_PICPLACE_MANIFEST_CAP"].flatMap(Int64.init) { manifestMaxBytes = forced }
+        #endif
     }
 
     /// A binding made before the server reported an instance id takes the
@@ -379,18 +430,35 @@ final class PicPlaceController: ObservableObject {
         guard isSignedIn else { return }
         Task {
             if let status: PPStatus = try? await client.get("status") {
+                noteLimits(status)
                 await refreshUsage(status: status)
             }
         }
     }
 
     private func refreshUsage(status: PPStatus) async {
-        if let projects = status.projects {
-            usage = Usage(projects: projects.count, bytes: status.storage.usedBytes)
-            return
+        // The index, not just the count: which of the account's projects are
+        // NOT in this library is the number that explains the total.
+        var rows: [PPProject] = []
+        do {
+            let index: PPProjectIndex = try await client.get("projects")
+            rows = index.projects
+        } catch {
+            LLog("picplace: could not read the account's index: \(error)")
         }
-        let projects: [String: [PPProject]]? = try? await client.get("projects")
-        usage = Usage(projects: projects?["projects"]?.count ?? 0, bytes: status.storage.usedBytes)
+        let count = status.projects?.count ?? rows.count
+        var missing: [PPProject] = []
+        if let index = model.libraryIndex {
+            missing = rows.filter { row in
+                guard let uuid = UUID(uuidString: row.uuid) else { return true }
+                return ((try? index.projectID(originID: uuid)) ?? nil) == nil
+            }
+        }
+        if !missing.isEmpty {
+            LLog("picplace: \(missing.count) of the account's \(count) project(s) are not in this library: "
+                 + missing.map { "\($0.name) (\($0.uuid.prefix(8)), \($0.type))" }.joined(separator: "; "))
+        }
+        usage = Usage(projects: count, bytes: status.storage.usedBytes, notInLibrary: missing.count)
     }
 
     private func handleSignedOutByServer() {
@@ -516,7 +584,7 @@ final class PicPlaceController: ObservableObject {
         guard records[key] != nil else { return }
         Task {
             do {
-                let detail: PPProjectDetail = try await client.get("projects/\(captureID.uuidString.lowercased())")
+                let detail: PPProjectDetail = try await client.get("projects/\(key.uuidString.lowercased())")
                 let project = detail.project
                 guard var record = records[key] else { return }
                 record.alsoOn = project.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name)
@@ -532,17 +600,22 @@ final class PicPlaceController: ObservableObject {
         }
     }
 
-    /// The "341 files · 4.9 MB" line for a project that has never been
-    /// synced — a folder walk, once per project, off the main actor.
+    /// The caption's numbers for a project that has never been synced —
+    /// what the policy would send, and what it would leave: a folder walk,
+    /// once per project, off the main actor.
     func summary(for capture: AppModel.CaptureProject) -> FolderSummary? {
         if let summary = summaries[capture.id] { return summary }
         guard summaryTasks[capture.id] == nil else { return nil }
         let folder = model.projectFolderURL(for: capture)
         let id = capture.id
+        let policy = self.policy
         summaryTasks[id] = Task { [weak self] in
             let summary = await Task.detached(priority: .utility) { () -> FolderSummary in
                 let entries = (try? PicPlaceSyncRun.listFiles(in: folder)) ?? []
-                return FolderSummary(files: entries.count, bytes: entries.reduce(0) { $0 + $1.bytes })
+                let counted = PicPlaceSyncInventory.summary(of: PicPlaceSyncInventory.classify(entries), policy: policy)
+                return FolderSummary(files: counted.objects, bytes: counted.bytes,
+                                     heavyFiles: policy.sendsHeavy ? 0 : counted.heavyFiles,
+                                     heavyBytes: policy.sendsHeavy ? 0 : counted.heavyBytes)
             }.value
             self?.summaries[id] = summary
             self?.summaryTasks[id] = nil
@@ -555,28 +628,46 @@ final class PicPlaceController: ObservableObject {
     func sync(_ capture: AppModel.CaptureProject) {
         guard canSync, syncTasks[capture.id] == nil else { return }
         let key = model.originID(of: capture)
+        let policy = self.policy
+        let folder = model.projectFolderURL(for: capture)
         let project = PicPlaceSyncRun.Project(
-            id: capture.id,
-            folder: model.projectFolderURL(for: capture),
+            serverID: key,
+            folder: folder,
             name: capture.displayTitle,
             type: capture.isPhotoCapture ? "photo" : (capture.kind == .video ? "video" : "interval"),
             revision: Int(model.lastEdited(capture).timeIntervalSince1970 * 1000),
-            capturedAt: capture.createdAt)
+            capturedAt: capture.createdAt,
+            policy: policy,
+            originUUID: capture.derivedFromOriginID,
+            manifestMaxBytes: manifestMaxBytes)
         let run = PicPlaceSyncRun(client: client, project: project, thisDeviceID: profile?.deviceID) { [weak self] progress in
             self?.progress[capture.id] = progress
         }
         progress[capture.id] = PicPlaceSyncProgress()
         summaries[capture.id] = nil
         let server = profile?.server ?? serverString
+        // The poster is rendered before the run walks the folder, so the
+        // walk finds it (v2 plan §3.5); the grade token says whether the one
+        // on disk is current.
+        let grade = model.photoGrade(for: capture)
+        let posterToken = grade.cacheToken
+        let posterSource = model.thumbnailURL(for: capture)
+        let posterKind = model.mediaKind(for: capture)
+        let lastPosterToken = records[key]?.posterToken
         syncTasks[capture.id] = Task {
             do {
-                let record = try await run.run()
+                if policy.sendsRecords, let posterSource {
+                    _ = await PicPlacePoster.ensure(sourceURL: posterSource, kind: posterKind, grade: grade, token: posterToken,
+                                                    lastToken: lastPosterToken, in: folder)
+                }
+                var record = try await run.run()
+                record.posterToken = posterToken
                 records[key] = record
             } catch is CancellationError {
                 // Cancelled by the user: the card goes back to what it was.
             } catch {
                 LLog("picplace: sync of \(capture.id) failed: \(error)")
-                var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil)
+                var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: policy.rawValue)
                 record.lastError = (error as? PicPlaceAPIError)?.cardCaption
                     ?? (error as? LocalizedError)?.errorDescription
                     ?? error.localizedDescription
@@ -679,9 +770,60 @@ final class PicPlaceController: ObservableObject {
     }
 
     #if DEBUG
+    private func dryRun(_ target: String) {
+        let capture: AppModel.CaptureProject?
+        if target == "latest" {
+            capture = (try? model.libraryIndex?.projects(LibraryIndex.ProjectQuery()).rows.first)??.flatMap { model.capture(id: $0.id) }
+        } else {
+            capture = UUID(uuidString: target).flatMap { model.capture(id: $0) }
+        }
+        guard let capture else { LLog("picplace dry-run: no project for \(target)"); return }
+        let folder = model.projectFolderURL(for: capture)
+        let policy = self.policy
+        let grade = model.photoGrade(for: capture)
+        let source = model.thumbnailURL(for: capture)
+        let kind = model.mediaKind(for: capture)
+        Task.detached(priority: .utility) {
+            let entries = (try? PicPlaceSyncRun.listFiles(in: folder)) ?? []
+            let items = PicPlaceSyncInventory.classify(entries)
+            let summary = PicPlaceSyncInventory.summary(of: items, policy: policy)
+            var byRole: [String: (Int, Int64)] = [:]
+            for item in items {
+                let label: String
+                switch item.role {
+                case .manifest: label = "manifest"
+                case .bundle: label = "bundle"
+                case .object(let kind): label = "object:\(kind)"
+                case .heavy(let kind): label = "heavy:\(kind)"
+                case .skipped(let why): label = "skipped:\(why)"
+                }
+                byRole[label, default: (0, 0)].0 += 1
+                byRole[label, default: (0, 0)].1 += item.bytes
+            }
+            for (label, count) in byRole.sorted(by: { $0.key < $1.key }) {
+                LLog("picplace dry-run: \(label) — \(count.0) file(s), \(count.1) bytes")
+            }
+            LLog("picplace dry-run: policy \(policy.rawValue) → \(summary.objects) object(s), \(summary.bytes) bytes; bundle \(summary.bundleMembers) member(s) \(summary.bundleBytes) bytes; heavy \(summary.heavyFiles) file(s) \(summary.heavyBytes) bytes; strays \(summary.strays)")
+            for item in items where item.role == .bundle { LLog("picplace dry-run: bundle member \(item.relativePath) (\(item.bytes) bytes)") }
+            do {
+                let archive = try PicPlaceSyncInventory.buildBundle(members: items.filter { $0.role == .bundle }, in: folder)
+                let bytes = (try? archive.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                LLog("picplace dry-run: bundle written at \(archive.path) — \(bytes) bytes, sha256 \((try? PicPlaceSyncRun.sha256(of: archive)) ?? "?")")
+            } catch {
+                LLog("picplace dry-run: bundle failed: \(error)")
+            }
+            if let source {
+                let poster = await PicPlacePoster.ensure(sourceURL: source, kind: kind, grade: grade, token: grade.cacheToken, lastToken: nil, in: folder)
+                LLog("picplace dry-run: poster \(poster?.path ?? "none")")
+            }
+            LLog("picplace dry-run: done")
+        }
+    }
+
     private static func stagedState(from value: String?) -> ProjectState? {
-        let demo = PicPlaceSyncRecord(syncedAt: Date().addingTimeInterval(-5 * 60), revision: 1, files: 341, bytes: 4_900_000,
-                                      uploaded: 341, alsoOn: ["iPad Air"], server: PicPlaceConfiguration.serverString, lastError: nil)
+        let demo = PicPlaceSyncRecord(syncedAt: Date().addingTimeInterval(-5 * 60), revision: 1, files: 3, bytes: 2_300_000,
+                                      uploaded: 3, alsoOn: ["iPad Air"], server: PicPlaceConfiguration.serverString, lastError: nil,
+                                      policy: "minimal", heavyFiles: 341, heavyBytes: 4_900_000_000)
         switch value {
         case "signed-out": return .signedOut
         case "not-connected": return .notConnected

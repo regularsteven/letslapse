@@ -17,30 +17,51 @@ struct PicPlaceSyncProgress: Equatable {
     }
 }
 
-/// What a finished sync recorded — the device-local truth behind the card.
+/// What a finished sync recorded — the library's truth behind the card
+/// (v2: `PicPlace/sync-state.json`, keyed by origin id). `revision` is the
+/// merge base; the optional fields arrived with the minimal policy and are
+/// absent on v1 records.
 struct PicPlaceSyncRecord: Codable, Equatable {
     var syncedAt: Date
     var revision: Int
+    /// Objects the sync accounted for (the bundle counts as one) and their bytes.
     var files: Int
     var bytes: Int64
     var uploaded: Int
     var alsoOn: [String]
     var server: String
     var lastError: String?
+    /// The policy that produced the record (`minimal` · `originals` · `everything`).
+    var policy: String?
+    /// The heavy set — source frames and blends — that stayed on this device
+    /// under the minimal policy, for the card's "originals stay here" line.
+    var heavyFiles: Int?
+    var heavyBytes: Int64?
+    /// The grade token `poster.jpg` was rendered at; a different token means
+    /// the poster is stale and is rendered again before the next push.
+    var posterToken: String?
 }
 
-/// One push of one project (docs/picplace-sync-v1.md §2): claim → manifest →
-/// negotiate every file → PUT straight to storage → confirm → presence →
-/// release. Runs off the main actor; reports progress back to it.
+/// One push of one project (docs/picplace-sync-v1.md §2, v2 plan §4.2):
+/// claim → manifest → negotiate what the policy sends → PUT straight to
+/// storage → confirm → presence → release. Runs off the main actor; reports
+/// progress back to it.
 struct PicPlaceSyncRun {
 
     struct Project {
-        var id: UUID
+        /// The project's identity on the server — its `originID` (v2 plan D11).
+        var serverID: UUID
         var folder: URL
         var name: String
         var type: String          // photo · interval · video
         var revision: Int
         var capturedAt: Date
+        var policy: PicPlaceSyncPolicy
+        /// `derivedFromOriginID`, for the server's `origin_uuid` (a fork's provenance).
+        var originUUID: UUID?
+        /// The server's inline-manifest cap (`limits.manifest_max_bytes`);
+        /// 1 MB until a `/status` has reported one.
+        var manifestMaxBytes: Int64
     }
 
     struct Failed: LocalizedError {
@@ -48,12 +69,20 @@ struct PicPlaceSyncRun {
         var errorDescription: String? { caption }
     }
 
-    private struct FileItem {
+    struct FileItem {
         var name: String          // path within the project
         var kind: String
         var url: URL
         var bytes: Int64
         var sha256: String
+    }
+
+    /// What the policy sends, and what it counted on the way.
+    private struct Inventory {
+        var files: [FileItem]
+        var summary: PicPlaceSyncInventory.Summary
+        /// The records bundle under `tmp/`, to remove when the run ends.
+        var bundleURL: URL?
     }
 
     private struct PendingUpload {
@@ -80,7 +109,7 @@ struct PicPlaceSyncRun {
         return URLSession(configuration: config)
     }()
 
-    private var uuid: String { project.id.uuidString.lowercased() }
+    private var uuid: String { project.serverID.uuidString.lowercased() }
 
     func run() async throws -> PicPlaceSyncRecord {
         var state = PicPlaceSyncProgress()
@@ -89,6 +118,8 @@ struct PicPlaceSyncRun {
             let snapshot = state
             await progress(snapshot)
         }
+        var bundleURL: URL?
+        defer { if let bundleURL { try? FileManager.default.removeItem(at: bundleURL) } }
 
         // 1. The write claim. Held elsewhere → the card says who until when.
         // A project the server has never seen has nothing to claim yet: the
@@ -102,25 +133,54 @@ struct PicPlaceSyncRun {
         }
 
         do {
-            // 2. What is in the folder, with hashes (assets.ndjson first, computed otherwise).
+            // 2. What the policy sends, with hashes (assets.ndjson first,
+            // computed otherwise); the records bundle is built here.
             await report { $0.phase = .preparing }
-            let files = try await Self.inventory(of: project.folder)
+            let inventory = try await Self.inventory(of: project.folder, policy: project.policy)
+            bundleURL = inventory.bundleURL
+            let files = inventory.files
             try Task.checkCancellation()
             let totalBytes = files.reduce(Int64(0)) { $0 + $1.bytes }
             await report { $0.filesTotal = files.count; $0.bytesTotal = totalBytes }
 
-            // 3. The manifest: project.json verbatim, with the index fields beside it.
+            // 3. The manifest: project.json verbatim, with the index fields
+            // beside it — inline under the server's cap, as a `manifest`
+            // asset over it (the server's own overflow shape).
             await report { $0.phase = .manifest }
             let manifestURL = project.folder.appendingPathComponent(ProjectFileRegistry.projectDocumentName)
-            let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL))
-            let body: [String: Any] = [
+            let manifestData = try Data(contentsOf: manifestURL)
+            let manifest = try JSONSerialization.jsonObject(with: manifestData)
+            var body: [String: Any] = [
                 "name": project.name,
                 "type": project.type,
                 "revision": project.revision,
                 "captured_at": ISO8601DateFormatter().string(from: project.capturedAt),
-                "manifest": manifest,
             ]
-            let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
+            if let origin = project.originUUID { body["origin_uuid"] = origin.uuidString.lowercased() }
+            let compactBytes = Int64((try? JSONSerialization.data(withJSONObject: manifest, options: [.withoutEscapingSlashes]).count) ?? manifestData.count)
+            if compactBytes <= project.manifestMaxBytes {
+                body["manifest"] = manifest
+                let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
+            } else {
+                // A first PUT (a stub) creates the project and grants the
+                // claim the upload needs; the second carries the asset's id.
+                LLog("picplace: manifest of \(uuid) is \(compactBytes) bytes, over the \(project.manifestMaxBytes)-byte cap — sending it as an asset")
+                body["manifest"] = ["manifest_asset": NSNull()]
+                let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
+                let item = FileItem(name: ProjectFileRegistry.projectDocumentName, kind: "manifest", url: manifestURL,
+                                    bytes: Int64(manifestData.count), sha256: try Self.sha256(of: manifestURL))
+                let negotiated: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: ["assets": [Self.negotiateFields(item)]])
+                guard let result = negotiated["assets"]?.first else { throw Failed(caption: "PicPlace did not negotiate the manifest.") }
+                if let upload = result.upload {
+                    _ = try await self.upload(PendingUpload(item: item, assetID: result.asset.id, upload: upload))
+                    let confirmed: [String: [PPConfirmResult]] = try await client.post("projects/\(uuid)/assets/confirm", json: ["assets": [["id": result.asset.id, "sha256": item.sha256]]])
+                    if let failure = (confirmed["assets"] ?? []).first(where: { $0.error != nil }) {
+                        throw Failed(caption: failure.message ?? failure.error!)
+                    }
+                }
+                body["manifest"] = ["manifest_asset": result.asset.id]
+                let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
+            }
 
             // 4. Negotiate in batches; unchanged files come back without an upload.
             await report { $0.phase = .negotiating }
@@ -129,11 +189,7 @@ struct PicPlaceSyncRun {
             for batch in files.chunked(Self.batchSize) {
                 try Task.checkCancellation()
                 lastClaim = try await reclaimIfStale(lastClaim)
-                let request: [String: Any] = ["assets": batch.map { item -> [String: Any] in
-                    let fields: [String: Any?] = ["kind": item.kind, "name": item.name, "bytes": item.bytes, "sha256": item.sha256,
-                                                  "content_type": Self.contentType(for: item.url)]
-                    return fields.compactMapValues { $0 }
-                }]
+                let request: [String: Any] = ["assets": batch.map(Self.negotiateFields)]
                 let response: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: request)
                 let results = response["assets"] ?? []
                 for (item, result) in zip(batch, results) {
@@ -194,7 +250,11 @@ struct PicPlaceSyncRun {
             let _: [String: PPClaim?] = try await client.delete("projects/\(uuid)/claim")
 
             return PicPlaceSyncRecord(syncedAt: Date(), revision: project.revision, files: files.count, bytes: totalBytes,
-                                      uploaded: pending.count, alsoOn: alsoOn, server: (try? await client.currentTokens().server) ?? PicPlaceConfiguration.serverString, lastError: nil)
+                                      uploaded: pending.count, alsoOn: alsoOn,
+                                      server: (try? await client.currentTokens().server) ?? PicPlaceConfiguration.serverString, lastError: nil,
+                                      policy: project.policy.rawValue,
+                                      heavyFiles: project.policy.sendsHeavy ? 0 : inventory.summary.heavyFiles,
+                                      heavyBytes: project.policy.sendsHeavy ? 0 : inventory.summary.heavyBytes)
         } catch {
             // Whatever happened, do not leave the project locked for the next device.
             let _: [String: PPClaim?]? = try? await client.delete("projects/\(uuid)/claim")
@@ -224,9 +284,7 @@ struct PicPlaceSyncRun {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if (200 ..< 300).contains(status) { return pending.item.bytes }
         if status == 403, !retrying, Date() >= pending.upload.expiresAt.addingTimeInterval(-60) {
-            let fresh: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: ["assets": [[
-                "kind": pending.item.kind, "name": pending.item.name, "bytes": pending.item.bytes, "sha256": pending.item.sha256,
-            ] as [String: Any]]])
+            let fresh: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: ["assets": [Self.negotiateFields(pending.item)]])
             if let upload = fresh["assets"]?.first?.upload {
                 return try await self.upload(PendingUpload(item: pending.item, assetID: pending.assetID, upload: upload), retrying: true)
             }
@@ -237,37 +295,77 @@ struct PicPlaceSyncRun {
 
     // MARK: The folder
 
-    /// Every regular file under the project folder except the manifest, dot
-    /// files and `tmp/`, keyed by its path within the project and kinded by
-    /// its top-level folder. Hashes come from `assets.ndjson` where it has
-    /// the file at that size; the rest are computed here.
-    private static func inventory(of folder: URL) async throws -> [FileItem] {
+    static func negotiateFields(_ item: FileItem) -> [String: Any] {
+        let fields: [String: Any?] = ["kind": item.kind, "name": item.name, "bytes": item.bytes, "sha256": item.sha256,
+                                      "content_type": item.name == PicPlaceSyncInventory.bundleName
+                                          ? PicPlaceSyncInventory.bundleContentType : contentType(for: item.url)]
+        return fields.compactMapValues { $0 }
+    }
+
+    /// The objects the policy sends (v2 plan §3.4): every regular file under
+    /// the project folder, classified by `ProjectFileRegistry` — the records
+    /// and sidecars into one `records.aar`, the poster and the LUTs as their
+    /// own objects, the source frames and the blends as the heavy set —
+    /// hashed from `assets.ndjson` where it has the file at that size and
+    /// computed otherwise. Strays (files the table does not know) are logged
+    /// and left.
+    private static func inventory(of folder: URL, policy: PicPlaceSyncPolicy) async throws -> Inventory {
         let records = AssetRecords.load(inProjectFolder: folder)
-        var items: [FileItem] = []
-        for entry in try listFiles(in: folder) {
+        let items = PicPlaceSyncInventory.classify(try listFiles(in: folder))
+        let summary = PicPlaceSyncInventory.summary(of: items, policy: policy)
+        for stray in summary.strays { LLog("picplace: \(folder.lastPathComponent)/\(stray) is not a registered project file — left out") }
+
+        func hashed(_ item: PicPlaceSyncItem, kind: String) async throws -> FileItem {
             let sha: String
-            if let record = records[entry.name], let hash = record.hash, hash.hasPrefix("sha256:"), record.bytes == entry.bytes {
+            if let record = records[item.relativePath], let hash = record.hash, hash.hasPrefix("sha256:"), record.bytes == item.bytes {
                 sha = String(hash.dropFirst("sha256:".count))
             } else {
-                let url = entry.url
+                let url = item.url
                 sha = try await Task.detached(priority: .utility) { try sha256(of: url) }.value
             }
-            items.append(FileItem(name: entry.name, kind: entry.kind, url: entry.url, bytes: entry.bytes, sha256: sha))
+            return FileItem(name: item.relativePath, kind: kind, url: item.url, bytes: item.bytes, sha256: sha)
+        }
+
+        var files: [FileItem] = []
+        var bundleURL: URL?
+        for item in items {
+            switch item.role {
+            case .object(let kind) where policy.sendsRecords:
+                files.append(try await hashed(item, kind: kind))
+            case .heavy(let kind) where policy.sendsHeavy:
+                files.append(try await hashed(item, kind: kind))
+            default:
+                continue
+            }
             try Task.checkCancellation()
         }
-        return items.sorted { $0.name < $1.name }
+        if policy.sendsRecords {
+            let members = items.filter { $0.role == .bundle }
+            if !members.isEmpty {
+                let archive = try await Task.detached(priority: .utility) {
+                    try PicPlaceSyncInventory.buildBundle(members: members, in: folder)
+                }.value
+                let bytes = Int64((try? archive.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+                let sha = try await Task.detached(priority: .utility) { try sha256(of: archive) }.value
+                files.append(FileItem(name: PicPlaceSyncInventory.bundleName, kind: PicPlaceSyncInventory.bundleKind,
+                                      url: archive, bytes: bytes, sha256: sha))
+                bundleURL = archive
+                LLog("picplace: records bundle for \(folder.lastPathComponent): \(members.count) members → \(bytes) bytes")
+            }
+        }
+        return Inventory(files: files.sorted { $0.name < $1.name }, summary: summary, bundleURL: bundleURL)
     }
 
     struct FolderEntry {
         var name: String
-        var kind: String
         var url: URL
         var bytes: Int64
     }
 
     /// The project folder's regular files, keyed by their path within it —
     /// synchronous, because `DirectoryEnumerator` cannot be driven from an
-    /// async context. Shared with the controller's folder summary.
+    /// async context. Shared with the controller's folder summary. What each
+    /// file IS is `PicPlaceSyncInventory.classify`'s to say.
     static func listFiles(in folder: URL) throws -> [FolderEntry] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey]
         guard let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { return [] }
@@ -278,26 +376,13 @@ struct PicPlaceSyncRun {
             let relative = String(url.standardizedFileURL.path.dropFirst(base.count + 1))
             let top = relative.split(separator: "/").first.map(String.init) ?? relative
             if top == "tmp" || top == ".trash" { enumerator.skipDescendants(); continue }
-            guard values.isRegularFile == true, relative != ProjectFileRegistry.projectDocumentName else { continue }
-            entries.append(FolderEntry(name: relative, kind: kind(forTopLevel: top, isNested: relative.contains("/")),
-                                       url: url, bytes: Int64(values.fileSize ?? 0)))
+            guard values.isRegularFile == true else { continue }
+            entries.append(FolderEntry(name: relative, url: url, bytes: Int64(values.fileSize ?? 0)))
         }
         return entries
     }
 
-    private static func kind(forTopLevel top: String, isNested: Bool) -> String {
-        guard isNested else { return "note" }          // top-level sidecars: assets.ndjson, metadata.json, shapes.json…
-        switch top {
-        case "source": return "source"
-        case "blends": return "blend"
-        case "luts": return "lut"
-        case "ref": return "ref"
-        case "masks": return "mask"
-        default: return "note"                          // notes/, fonts/, anything new
-        }
-    }
-
-    private static func sha256(of url: URL) throws -> String {
+    static func sha256(of url: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var hasher = SHA256()
@@ -319,6 +404,7 @@ struct PicPlaceSyncRun {
         case "mov": return "video/quicktime"
         case "mp4": return "video/mp4"
         case "json", "ndjson": return "application/json"
+        case "aar": return "application/octet-stream"
         case "cube", "timestamps", "exposure", "whitebalance", "log", "txt", "gpx", "xmp": return "text/plain"
         default: return nil
         }

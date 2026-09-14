@@ -174,7 +174,7 @@ struct PicPlaceStatusCard: View {
             }
         case .notSynced:
             if let summary = picplace.summary(for: capture) {
-                return "\(summary.files) file\(summary.files == 1 ? "" : "s") · \(LLFormat.bytes(summary.bytes))"
+                return Self.objectsLine(files: summary.files, bytes: summary.bytes, heavyFiles: summary.heavyFiles, heavyBytes: summary.heavyBytes)
             }
             return "Reading the project…"
         case .changes(let record):
@@ -190,10 +190,24 @@ struct PicPlaceStatusCard: View {
             case .finishing: return "Finishing…"
             }
         case .synced(let record):
-            return "Synced \(record.syncedAt.formatted(.relative(presentation: .named))) · \(record.files) file\(record.files == 1 ? "" : "s") · \(LLFormat.bytes(record.bytes))"
+            return "Synced \(record.syncedAt.formatted(.relative(presentation: .named))) · "
+                + Self.objectsLine(files: record.files, bytes: record.bytes, heavyFiles: record.heavyFiles ?? 0, heavyBytes: record.heavyBytes ?? 0)
+                + (record.uploaded == 0 ? " · nothing needed uploading" : " · \(record.uploaded) uploaded")
         case .failed(let record):
             return record.lastError ?? "Something went wrong"
         }
+    }
+
+    /// "Records + preview · 118 KB · 1,481 originals stay here (86 MB)" under
+    /// the minimal policy; "6 files · 1.9 MB" when everything went.
+    private static func objectsLine(files: Int, bytes: Int64, heavyFiles: Int, heavyBytes: Int64) -> String {
+        var line = heavyFiles > 0
+            ? "Records + preview · \(LLFormat.bytes(bytes))"
+            : "\(files) file\(files == 1 ? "" : "s") · \(LLFormat.bytes(bytes))"
+        if heavyFiles > 0 {
+            line += " · \(heavyFiles.formatted()) original\(heavyFiles == 1 ? "" : "s") stay\(heavyFiles == 1 ? "s" : "") here (\(LLFormat.bytes(heavyBytes)))"
+        }
+        return line
     }
 
     private func alsoOnText(_ record: PicPlaceSyncRecord) -> String {
@@ -270,7 +284,7 @@ struct PicPlaceSettingsCard: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                LLRow(title: "On PicPlace") {
+                LLRow(title: "On PicPlace", subtitle: usageSubtitle) {
                     Text(usageText)
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
@@ -413,7 +427,7 @@ struct PicPlaceSettingsCard: View {
             .buttonStyle(.plain)
             .disabled(picplace.isConnecting)
         case .bound:
-            LLRow(title: "Library", subtitle: picplace.binding.map { "Connected \($0.boundAt.formatted(.relative(presentation: .named)))" }) {
+            LLRow(title: "Library", subtitle: picplace.binding.map { "Connected on \($0.boundAt.formatted(date: .abbreviated, time: .shortened))" }) {
                 Text("@\(picplace.binding?.user.displayHandle ?? "") on \(picplace.binding?.server.host ?? "")")
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
@@ -443,6 +457,13 @@ struct PicPlaceSettingsCard: View {
     private var usageText: String {
         guard let usage = picplace.usage else { return "…" }
         return "\(usage.projects) project\(usage.projects == 1 ? "" : "s") · \(LLFormat.bytes(usage.bytes))"
+    }
+
+    /// "2 not in this library yet" — the account's total is not the
+    /// library's; the difference is what a later merge brings here.
+    private var usageSubtitle: String? {
+        guard let usage = picplace.usage, usage.notInLibrary > 0 else { return nil }
+        return "\(usage.notInLibrary) not in this library yet"
     }
 }
 

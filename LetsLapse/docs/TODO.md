@@ -55,8 +55,11 @@ one-by-one for now, auto-sync later; a thumbnail goes up so the second device
 sees the gallery; S3 holds only sources and blends; sign-out before sync needs
 care) · **plan agreed 2026-09-14; stage 1 LANDED the same evening** (plan §9:
 binding file, state homes, Keychain per account, the guards, Mac nest by
-rename + marker + relaunch, root-relative thumbnail keys; verified on scratch
-roots, Steven's play-pen sign-in owed) · **code-first by
+rename + marker + relaunch, root-relative thumbnail keys; verified on the
+play-pen: signed in, connected, two projects synced) · **stage 2 built
+2026-09-14 late** (plan §10: `SyncPolicy.minimal`, registry-classified
+inventory, deterministic `records.aar`, `poster.jpg`, originID as the server
+key, the manifest cap; dry-run verified, the play-pen push owed) · **code-first by
 decision** — mirrors follow per screen once the sync logic holds · **Size:**
 large (five stages) · seams: `App/PicPlace/*` (binding, sync state, Keychain
 per account, `SyncPolicy`, the pull, the merge), `App/StorageLocation.swift`
