@@ -734,6 +734,118 @@ public final class LibraryIndex: @unchecked Sendable {
         return Set(try db.query("SELECT id FROM projects") { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 })
     }
 
+    // MARK: - The whole-library questions (M3)
+
+    /// The live project ids, newest capture first — what a whole-library
+    /// pass (the size sweep, the transfer catalogue) walks instead of an
+    /// array.
+    public func liveProjectIDs() throws -> [UUID] {
+        lock.lock(); defer { lock.unlock() }
+        return try db.query("SELECT id FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC, id DESC") {
+            UUID(uuidString: $0.text(0) ?? "")
+        }.compactMap { $0 }
+    }
+
+    /// The project a blend belongs to — a blend lives inside its project's
+    /// document — or nil when the blend is not indexed.
+    public func projectID(forBlend blendID: UUID) throws -> UUID? {
+        lock.lock(); defer { lock.unlock() }
+        return try db.query("SELECT project_id FROM blends WHERE id = ?", [.text(blendID.uuidString.uppercased())]) {
+            UUID(uuidString: $0.text(0) ?? "")
+        }.first ?? nil
+    }
+
+    /// Where the project's folder is, relative to `Projects/` — `<id>` or
+    /// `.trash/<id>` — or nil when the project is not indexed.
+    public func folder(of projectID: UUID) throws -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return try db.query("SELECT folder FROM projects WHERE id = ?", [.text(projectID.uuidString.uppercased())]) { $0.text(0) }.first ?? nil
+    }
+
+    public struct StorageTotals: Equatable, Sendable {
+        /// The sum of the measured sizes of the live projects.
+        public var liveBytes: Int64
+        /// Live projects whose size has never been measured.
+        public var unmeasured: Int
+        public var liveProjects: Int
+        public var deletedProjects: Int
+        /// Every tombstoned blend, whether its project is live or deleted.
+        public var deletedBlends: Int
+    }
+
+    /// The storage card's and the trash line's numbers.
+    public func storageTotals() throws -> StorageTotals {
+        lock.lock(); defer { lock.unlock() }
+        return StorageTotals(
+            liveBytes: try db.scalar("SELECT COALESCE(SUM(size_bytes), 0) FROM projects WHERE deleted_at IS NULL") ?? 0,
+            unmeasured: Int(try db.scalar("SELECT COUNT(*) FROM projects WHERE deleted_at IS NULL AND size_bytes IS NULL") ?? 0),
+            liveProjects: Int(try db.scalar("SELECT COUNT(*) FROM projects WHERE deleted_at IS NULL") ?? 0),
+            deletedProjects: Int(try db.scalar("SELECT COUNT(*) FROM projects WHERE deleted_at IS NOT NULL") ?? 0),
+            deletedBlends: Int(try db.scalar("SELECT COUNT(*) FROM blends WHERE deleted_at IS NOT NULL") ?? 0))
+    }
+
+    public struct DeletedProject: Equatable, Sendable {
+        public var id: UUID
+        public var folder: String
+        public var deletedAt: Date?
+    }
+
+    /// The tombstoned projects, with where their folder is.
+    public func deletedProjects() throws -> [DeletedProject] {
+        lock.lock(); defer { lock.unlock() }
+        return try db.query("SELECT id, folder, deleted_at FROM projects WHERE deleted_at IS NOT NULL ORDER BY deleted_at, id") { cursor in
+            DeletedProject(id: UUID(uuidString: cursor.text(0) ?? "") ?? UUID(), folder: cursor.text(1) ?? "",
+                           deletedAt: cursor.real(2).map { Date(timeIntervalSinceReferenceDate: $0) })
+        }
+    }
+
+    public struct DeletedBlend: Equatable, Sendable {
+        public var id: UUID
+        public var projectID: UUID
+        public var outputFileName: String
+        public var deletedAt: Date?
+    }
+
+    /// The tombstoned blends of LIVE projects — the ones whose output the
+    /// trash sweep moves and the purge removes; a deleted project's blends
+    /// went with its folder.
+    public func deletedBlendsInLiveProjects() throws -> [DeletedBlend] {
+        lock.lock(); defer { lock.unlock() }
+        return try db.query("""
+            SELECT b.id, b.project_id, b.output_file_name, b.deleted_at FROM blends b
+            JOIN projects p ON p.id = b.project_id
+            WHERE b.deleted_at IS NOT NULL AND p.deleted_at IS NULL ORDER BY b.deleted_at, b.id
+            """) { cursor in
+            DeletedBlend(id: UUID(uuidString: cursor.text(0) ?? "") ?? UUID(), projectID: UUID(uuidString: cursor.text(1) ?? "") ?? UUID(),
+                         outputFileName: cursor.text(2) ?? "", deletedAt: cursor.real(3).map { Date(timeIntervalSinceReferenceDate: $0) })
+        }
+    }
+
+    /// The live projects the launch's metadata catch-ups probe: videos
+    /// lacking fps, duration or dimensions; stills lacking dimensions.
+    public func projectsNeedingProbe() throws -> (video: [UUID], photos: [UUID]) {
+        lock.lock(); defer { lock.unlock() }
+        let video = try db.query("""
+            SELECT id FROM projects WHERE deleted_at IS NULL AND kind = 'video'
+            AND (fps IS NULL OR duration_seconds IS NULL OR width IS NULL) ORDER BY created_at DESC
+            """) { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 }
+        let photos = try db.query("""
+            SELECT id FROM projects WHERE deleted_at IS NULL AND kind = 'photos' AND width IS NULL ORDER BY created_at DESC
+            """) { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 }
+        return (video, photos)
+    }
+
+    /// The live projects whose stored size is missing or older than their
+    /// last edit — what the size sweep measures.
+    public func projectsNeedingSizeMeasurement() throws -> [UUID] {
+        lock.lock(); defer { lock.unlock() }
+        return try db.query("""
+            SELECT id FROM projects WHERE deleted_at IS NULL
+            AND (size_bytes IS NULL OR size_measured_at IS NULL OR size_measured_at < COALESCE(edited_at, created_at))
+            ORDER BY created_at DESC
+            """) { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 }
+    }
+
     public struct Verification: Equatable {
         public var documents: Int
         public var indexed: Int

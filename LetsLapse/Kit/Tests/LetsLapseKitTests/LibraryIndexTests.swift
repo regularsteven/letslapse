@@ -436,6 +436,35 @@ final class LibraryIndexTests: XCTestCase {
         XCTAssertEqual(try index.projects(LibraryIndex.ProjectQuery()).rows.map(\.id), try index.projectIDs(LibraryIndex.ProjectQuery()), "the page and the ids agree")
     }
 
+    /// M3: the whole-library questions the app used to answer by walking
+    /// its arrays.
+    func testWholeLibraryQuestions() throws {
+        try writeProject(1, kind: "video", created: 100, size: 30, blends: 2)   // fps/duration absent → probe
+        try writeProject(2, created: 200, modified: 250, size: 20)              // photos, has width
+        try writeProject(3, created: 300)                                      // unmeasured
+        try writeProject(4, created: 400, size: 5, deleted: 900, blends: 1, inTrash: true)
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+
+        XCTAssertEqual(try index.liveProjectIDs().map(\.uuidString), [id(3), id(2), id(1)])
+        XCTAssertEqual(try index.projectID(forBlend: UUID(uuidString: String(format: "%08X-%04X-4000-8000-000000000000", 1, 1))!), uuid(1))
+        XCTAssertNil(try index.projectID(forBlend: uuid(9)))
+        XCTAssertEqual(try index.folder(of: uuid(4)), ".trash/\(id(4))")
+        XCTAssertEqual(try index.folder(of: uuid(2)), id(2))
+        XCTAssertNil(try index.folder(of: uuid(9)))
+
+        let totals = try index.storageTotals()
+        XCTAssertEqual(totals, LibraryIndex.StorageTotals(liveBytes: 50, unmeasured: 1, liveProjects: 3, deletedProjects: 1, deletedBlends: 0))
+        XCTAssertEqual(try index.deletedProjects().map { ($0.id, $0.folder) }.map { "\($0.0.uuidString):\($0.1)" }, ["\(id(4)):.trash/\(id(4))"])
+        XCTAssertEqual(try index.deletedBlendsInLiveProjects(), [])
+
+        let probe = try index.projectsNeedingProbe()
+        XCTAssertEqual(probe.video.map(\.uuidString), [id(1)], "a video with no fps or duration")
+        XCTAssertEqual(probe.photos, [], "every still has its dimensions")
+        // Unmeasured, and measured before the last edit.
+        XCTAssertEqual(Set(try index.projectsNeedingSizeMeasurement().map(\.uuidString)), [id(3), id(2), id(1)], "no size_measured_at anywhere yet")
+    }
+
     func testFTSQueryShape() {
         XCTAssertNil(LibraryIndex.ftsQuery(""))
         XCTAssertEqual(LibraryIndex.ftsQuery("night bridge"), "\"night\"* AND \"bridge\"*")
