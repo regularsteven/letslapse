@@ -24,13 +24,13 @@ final class LibraryIndexTests: XCTestCase {
 
     @discardableResult
     private func writeProject(
-        _ n: Int, kind: String = "photos", name: String? = nil, created: Double, added: Double? = nil,
+        _ n: Int, kind: String = "photos", mode: String? = nil, name: String? = nil, created: Double, added: Double? = nil,
         modified: Double? = nil, frames: Int = 3, size: Int? = nil, tags: [String]? = nil, elements: [String]? = nil,
-        deleted: Double? = nil, blends: Int = 0, captureMode: String? = nil, inTrash: Bool = false
+        deleted: Double? = nil, blends: Int = 0, blendCreated: [Double]? = nil, captureMode: String? = nil, inTrash: Bool = false
     ) throws -> URL {
         var capture: [String: Any] = [
             "id": id(n), "kind": kind, "createdAt": ProjectDocumentFormat.documentDate(fromManifestSeconds: created),
-            "originalName": "\(frames) photos", "mode": kind == "video" ? "Video" : "Photo",
+            "originalName": "\(frames) photos", "mode": mode ?? (kind == "video" ? "Video" : "Photo"),
             "sourceFileNames": (1...frames).map { "source/frame-\($0).dng" }, "originID": id(n),
             "sourceWidth": 4032, "sourceHeight": 3024, "presetState": ["kind": "original"],
         ]
@@ -44,7 +44,7 @@ final class LibraryIndexTests: XCTestCase {
         if let captureMode { capture["captureMode"] = captureMode }
         let blendRecords: [[String: Any]] = (0..<blends).map { b in
             ["id": String(format: "%08X-%04X-4000-8000-000000000000", n, b), "captureID": id(n), "kind": "video",
-             "createdAt": ProjectDocumentFormat.documentDate(fromManifestSeconds: created + Double(b)),
+             "createdAt": ProjectDocumentFormat.documentDate(fromManifestSeconds: blendCreated?[b] ?? created + Double(b)),
              "outputFileName": "blends/\(b).mp4", "summary": "\(b)", "linearLight": true, "useRamp": false,
              "rampStart": 0, "rampEnd": 0, "curve": "linear", "warp": ["bounds": [], "speeds": [], "seams": []]]
         }
@@ -267,6 +267,171 @@ final class LibraryIndexTests: XCTestCase {
         XCTAssertEqual(outcome.projects, 5)
         XCTAssertEqual(outcome.unreadableDocuments.count, 1)
         XCTAssertTrue(outcome.unreadableDocuments[0].hasPrefix(id(9)))
+    }
+
+    // MARK: - M2: what the lists ask
+
+    private func uuid(_ n: Int) -> UUID { UUID(uuidString: id(n))! }
+
+    /// One project per category, the four ways a scan can be one included.
+    private func writeCategories() throws {
+        try writeProject(1, mode: ProjectModes.photo, created: 100, tags: ["skyWeather"])
+        try writeProject(2, mode: ProjectModes.importedPhoto, created: 200)
+        try writeProject(3, mode: "Interval · DNG", created: 300, tags: ["lightTrails", "skyWeather"])
+        try writeProject(4, kind: "video", mode: ProjectModes.importedVideo, created: 400)
+        try writeProject(5, mode: "Interval · DNG", created: 500, tags: ["water"], captureMode: ProjectModes.scannerCaptureMode)
+        try writeProject(6, mode: ProjectModes.scanner, created: 600)
+        // Older than both markers: only its sidecar says what it is.
+        let folder = try writeProject(7, mode: "Interval · JPEG", created: 700, tags: ["water"])
+        let source = folder.appendingPathComponent("source", isDirectory: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        let writer = try XCTUnwrap(FrameTimestampWriter(directory: source))
+        let quad = NormalizedQuad(topLeft: .init(x: 0.1, y: 0.1), topRight: .init(x: 0.9, y: 0.1),
+                                  bottomLeft: .init(x: 0.1, y: 0.9), bottomRight: .init(x: 0.9, y: 0.9), confidence: 0.9)
+        writer.append(FrameTimestamps.Entry(frame: 1, captureTime: Date(), shutter: 0.01, iso: 100))
+        writer.append(FrameTimestamps.Entry(frame: 2, captureTime: Date(), shutter: 0.01, iso: 100, rectangle: quad))
+        writer.close()
+    }
+
+    func testCategoriesFollowTheAppsRules() throws {
+        try writeCategories()
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        let categories = try (1...7).map { try XCTUnwrap(try index.project(id: uuid($0))).category }
+        XCTAssertEqual(categories, [.photo, .photo, .interval, .video, .scan, .scan, .scan])
+
+        var query = LibraryIndex.ProjectQuery()
+        XCTAssertEqual(try index.categoryCounts(query), [.photo: 2, .interval: 1, .video: 1, .scan: 3])
+        query.category = .scan
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(7), id(6), id(5)])
+        query = LibraryIndex.ProjectQuery(); query.excludeScans = true
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(4), id(3), id(2), id(1)])
+        XCTAssertEqual(try index.categoryCounts(query), [.photo: 2, .interval: 1, .video: 1])
+        query.category = .interval
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(3)])
+        // The chips: a tag only scans carry has no chip when scans are out.
+        XCTAssertEqual(try index.tagCounts().map(\.tag), ["skyWeather", "water", "lightTrails"])
+        XCTAssertEqual(try index.tagCounts(excludingScans: true).map(\.tag), ["skyWeather", "lightTrails"])
+
+        // The sidecar verdict is kept on the row: a re-index of the document
+        // without the folder keeps the scan a scan.
+        let data = try Data(contentsOf: ProjectDocumentFormat.url(inProjectFolder: projects.appendingPathComponent(id(7))))
+        try index.upsertProject(documentData: data, folder: id(7))
+        XCTAssertEqual(try index.project(id: uuid(7))?.category, .scan)
+        // And a project that never had the folder passed stays what its
+        // document says until it does.
+        let data3 = try Data(contentsOf: ProjectDocumentFormat.url(inProjectFolder: projects.appendingPathComponent(id(3))))
+        try index.removeProject(id: uuid(3))
+        try index.upsertProject(documentData: data3, folder: id(3))
+        XCTAssertEqual(try index.project(id: uuid(3))?.category, .interval)
+    }
+
+    func testEditSortFallsBackToTheNewestBlendThenTheCapture() throws {
+        try writeProject(1, created: 100, modified: 150)            // edited 150
+        try writeProject(2, created: 200, blends: 2, blendCreated: [210, 900]) // edited 900 — the newest blend
+        try writeProject(3, created: 300)                           // edited 300 — the capture
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        var query = LibraryIndex.ProjectQuery(); query.sort = .edited
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(2), id(3), id(1)])
+        XCTAssertEqual(try index.project(id: uuid(2))?.editedAt?.timeIntervalSinceReferenceDate, 900)
+        query.ascending = true
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(1), id(3), id(2)])
+    }
+
+    func testSizeSortsUnmeasuredBelowMeasuredAndTiesTurnWithTheSort() throws {
+        try writeProject(1, created: 100, size: 0)
+        try writeProject(2, created: 200)          // unmeasured: −1
+        try writeProject(3, created: 300, size: 5)
+        try writeProject(4, created: 300, size: 5) // a twin: same size, same capture date
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        var query = LibraryIndex.ProjectQuery(); query.sort = .size
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(4), id(3), id(1), id(2)], "descending: twins by id descending, unmeasured last")
+        query.ascending = true
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(2), id(1), id(3), id(4)], "ascending: the mirror image")
+        query = LibraryIndex.ProjectQuery(); query.sort = .created
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(4), id(3), id(2), id(1)])
+        query.ascending = true
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(1), id(2), id(3), id(4)])
+        // Edit ties: the capture order runs against the sort.
+        try writeProject(5, created: 500, modified: 1000)
+        try writeProject(6, created: 600, modified: 1000)
+        try index.rebuild(fromProjectsFolder: projects)
+        query = LibraryIndex.ProjectQuery(); query.sort = .edited
+        XCTAssertEqual(Array(try index.projectIDs(query).map(\.uuidString).prefix(2)), [id(5), id(6)], "descending Edit, equal dates: older capture first")
+        query.ascending = true
+        XCTAssertEqual(Array(try index.projectIDs(query).map(\.uuidString).suffix(2)), [id(6), id(5)], "ascending Edit, equal dates: newer capture first")
+    }
+
+    func testTagLabelsAreSearchableAndPrefixesMatch() throws {
+        try writeProject(1, name: "Charles Bridge", created: 100, tags: ["skyWeather", "lightTrails"], elements: ["bridge"])
+        try writeProject(2, name: "Tram", created: 200, tags: ["urban"])
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        func found(_ text: String) throws -> [String] {
+            var query = LibraryIndex.ProjectQuery(); query.text = text
+            return try index.projectIDs(query).map(\.uuidString)
+        }
+        XCTAssertEqual(try found("weather"), [id(1)], "the chip label's second word")
+        XCTAssertEqual(try found("sky"), [id(1)])
+        XCTAssertEqual(try found("light trails"), [id(1)])
+        XCTAssertEqual(try found("skyWeather"), [id(1)], "the raw value still works")
+        XCTAssertEqual(try found("brid"), [id(1)], "a prefix")
+        XCTAssertEqual(try found("idge"), [], "a mid-word substring no longer matches — by decision")
+        XCTAssertEqual(try found("urb charles"), [], "every word must land on the same project")
+        XCTAssertEqual(try found("urban"), [id(2)])
+    }
+
+    func testShapeRowsCountTheRegister() throws {
+        let one = try writeProject(1, created: 100)
+        try writeProject(2, created: 200)
+        let three = try writeProject(3, created: 300)
+        func shape(_ kind: DetectedShape.Kind, aspect: Double = 1) -> DetectedShape {
+            let corners = kind == .quad ? [CGPoint(x: 0.2, y: 0.2), CGPoint(x: 0.2 + 0.4 * aspect, y: 0.2),
+                                           CGPoint(x: 0.2 + 0.4 * aspect, y: 0.6), CGPoint(x: 0.2, y: 0.6)] : nil
+            return DetectedShape(kind: kind, centre: CGPoint(x: 0.5, y: 0.5), majorAxis: 0.4 * aspect, minorAxis: 0.4,
+                                 rotation: 0, corners: corners, confidence: 1, nativeDiameterPx: 400, source: .manual)
+        }
+        let representative = ShapeRegister.Representative(relativePath: "source/frame-1.dng", source: .sourceFrame, width: 1000, height: 1000)
+        try ShapeRegister(representative: representative, shapes: [shape(.ellipse), shape(.quad, aspect: 1), shape(.quad, aspect: 2.5)])
+            .save(inProjectFolder: one)
+        try ShapeRegister(representative: representative, shapes: []).save(inProjectFolder: three)
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        func rows(_ shapes: Set<ShapeRow>) throws -> [String] {
+            var query = LibraryIndex.ProjectQuery(); query.shapes = shapes; query.ascending = true
+            return try index.projectIDs(query).map(\.uuidString)
+        }
+        XCTAssertEqual(try rows([.ellipse]), [id(1)])
+        XCTAssertEqual(try rows([.square]), [id(1)])
+        XCTAssertEqual(try rows([.rectangle]), [id(1)])
+        XCTAssertEqual(try rows([.ellipse, .rectangle]), [id(1)], "rows narrow")
+        XCTAssertEqual(try rows([.none]), [id(2), id(3)], "no register, or an empty one")
+        XCTAssertNotNil(index.shapesIndexedAt(projectID: uuid(1)))
+        // The editor removes every shape: the one project is re-counted.
+        try ShapeRegister(representative: representative, shapes: []).save(inProjectFolder: one)
+        try index.reindexShapes(projectID: uuid(1), inProjectFolder: one)
+        XCTAssertEqual(try rows([.none]), [id(1), id(2), id(3)])
+        // A document re-index keeps the counts.
+        try index.reindexShapes(projectID: uuid(3), inProjectFolder: three)
+        try ShapeRegister(representative: representative, shapes: [shape(.ellipse)]).save(inProjectFolder: three)
+        try index.reindexShapes(projectID: uuid(3), inProjectFolder: three)
+        let data = try Data(contentsOf: ProjectDocumentFormat.url(inProjectFolder: three))
+        try index.upsertProject(documentData: data, folder: id(3))
+        XCTAssertEqual(try rows([.ellipse]), [id(3)])
+    }
+
+    func testWithBlendsAndOriginLookup() throws {
+        try writeProject(1, created: 100, blends: 1)
+        try writeProject(2, created: 200)
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        var query = LibraryIndex.ProjectQuery(); query.withBlends = true
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(1)])
+        XCTAssertEqual(try index.projectID(originID: uuid(2)), uuid(2), "its own origin")
+        XCTAssertNil(try index.projectID(originID: uuid(9)))
+        XCTAssertEqual(try index.projects(LibraryIndex.ProjectQuery()).rows.map(\.id), try index.projectIDs(LibraryIndex.ProjectQuery()), "the page and the ids agree")
     }
 
     func testFTSQueryShape() {

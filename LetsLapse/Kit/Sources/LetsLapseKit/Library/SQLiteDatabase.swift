@@ -189,6 +189,8 @@ extension SQLiteDatabase.Value {
     init(_ number: Int?) { self = number.map { .int(Int64($0)) } ?? .null }
     init(_ number: Int64?) { self = number.map { .int($0) } ?? .null }
     init(_ flag: Bool) { self = .int(flag ? 1 : 0) }
+    /// A three-valued flag: null when not yet known.
+    init(_ flag: Bool?) { self = flag.map { .int($0 ? 1 : 0) } ?? .null }
     /// A list as a JSON array text, or null when absent.
     init(list: [String]?) {
         guard let list, let data = try? JSONSerialization.data(withJSONObject: list),

@@ -26,7 +26,10 @@ import Foundation
 /// read the file while the app writes it.
 public final class LibraryIndex: @unchecked Sendable {
 
-    public static let schemaVersion = 1
+    /// 2 (M2): `category`, `scanner_sidecar`, `edited_at`, the shape counts
+    /// and `shapes_indexed_at` on the project row; tag labels in the search
+    /// table. A v1 database is dropped and rebuilt from the files.
+    public static let schemaVersion = 2
     public static let folderName = "Index"
     public static let fileName = "library.sqlite"
 
@@ -77,12 +80,21 @@ public final class LibraryIndex: @unchecked Sendable {
                 city TEXT, country TEXT,
                 folder TEXT NOT NULL,
                 document_modified_at REAL,
-                assets_indexed_at REAL
+                assets_indexed_at REAL,
+                category TEXT NOT NULL DEFAULT 'interval',
+                scanner_sidecar INTEGER,
+                edited_at REAL,
+                shape_ellipses INTEGER NOT NULL DEFAULT 0,
+                shape_rectangles INTEGER NOT NULL DEFAULT 0,
+                shape_squares INTEGER NOT NULL DEFAULT 0,
+                shapes_indexed_at REAL
             );
             CREATE INDEX IF NOT EXISTS projects_created ON projects(deleted_at, created_at);
             CREATE INDEX IF NOT EXISTS projects_added ON projects(deleted_at, added_at);
             CREATE INDEX IF NOT EXISTS projects_modified ON projects(deleted_at, modified_at);
+            CREATE INDEX IF NOT EXISTS projects_edited ON projects(deleted_at, edited_at);
             CREATE INDEX IF NOT EXISTS projects_size ON projects(deleted_at, size_bytes);
+            CREATE INDEX IF NOT EXISTS projects_category ON projects(deleted_at, category);
             CREATE INDEX IF NOT EXISTS projects_origin ON projects(origin_id);
             CREATE TABLE IF NOT EXISTS blends (
                 id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
@@ -157,10 +169,11 @@ public final class LibraryIndex: @unchecked Sendable {
                 let folderURL = projects.appendingPathComponent(folderPath, isDirectory: true)
                 let documentURL = ProjectDocumentFormat.url(inProjectFolder: folderURL)
                 let modified = (try? documentURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-                try upsertProject(document.capture, blends: document.blends, folder: folderPath, documentModifiedAt: modified)
+                try upsertProject(document.capture, blends: document.blends, folder: folderPath, documentModifiedAt: modified, projectFolderURL: folderURL)
                 outcome.projects += 1
                 outcome.blends += document.blends.count
                 outcome.assets += try upsertAssets(projectID: document.captureID, inProjectFolder: folderURL)
+                try upsertShapes(projectID: document.captureID, inProjectFolder: folderURL)
             }
             try setMeta("builtAt", FrameTimestamps.string(from: Date()))
             try setMeta("source", projects.path)
@@ -173,16 +186,37 @@ public final class LibraryIndex: @unchecked Sendable {
 
     /// Indexes one project from the bytes of its `project.json` — what the
     /// app hands over right after writing the file. `folder` is the
-    /// project's folder relative to `Projects/` (`<id>` or `.trash/<id>`).
-    public func upsertProject(documentData data: Data, folder: String, documentModifiedAt: Date? = nil) throws {
+    /// project's folder relative to `Projects/` (`<id>` or `.trash/<id>`);
+    /// `projectFolderURL` is where the folder is, for the one classification
+    /// the document cannot settle alone (the scanner sidecar, read once).
+    public func upsertProject(documentData data: Data, folder: String, documentModifiedAt: Date? = nil, projectFolderURL: URL? = nil) throws {
         lock.lock(); defer { lock.unlock() }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let capture = object["capture"] as? [String: Any] else {
             throw CocoaError(.fileReadCorruptFile)
         }
         try db.transaction {
-            try upsertProject(capture, blends: object["blends"] as? [[String: Any]] ?? [], folder: folder, documentModifiedAt: documentModifiedAt)
+            try upsertProject(capture, blends: object["blends"] as? [[String: Any]] ?? [], folder: folder,
+                              documentModifiedAt: documentModifiedAt, projectFolderURL: projectFolderURL)
         }
+    }
+
+    /// Re-counts one project's shapes from its `shapes.json` (M2) — the
+    /// Gallery's SHAPES rows. A missing or empty register counts as no
+    /// shapes; either way `shapesIndexedAt` moves to now.
+    public func reindexShapes(projectID: UUID, inProjectFolder folder: URL) throws {
+        lock.lock(); defer { lock.unlock() }
+        try db.transaction {
+            try upsertShapes(projectID: projectID.uuidString.uppercased(), inProjectFolder: folder)
+        }
+    }
+
+    /// When the project's shape counts were last written — nil when never.
+    public func shapesIndexedAt(projectID: UUID) -> Date? {
+        lock.lock(); defer { lock.unlock() }
+        let rows = try? db.query("SELECT shapes_indexed_at FROM projects WHERE id = ?", [.text(projectID.uuidString.uppercased())]) { $0.real(0) }
+        guard let seconds = rows?.first ?? nil else { return nil }
+        return Date(timeIntervalSinceReferenceDate: seconds)
     }
 
     /// Re-indexes one project's assets from its `assets.ndjson` and
@@ -223,7 +257,7 @@ public final class LibraryIndex: @unchecked Sendable {
         return Date(timeIntervalSinceReferenceDate: seconds)
     }
 
-    private func upsertProject(_ capture: [String: Any], blends: [[String: Any]], folder: String, documentModifiedAt: Date?) throws {
+    private func upsertProject(_ capture: [String: Any], blends: [[String: Any]], folder: String, documentModifiedAt: Date?, projectFolderURL: URL?) throws {
         guard let id = (capture["id"] as? String)?.uppercased() else { return }
         func text(_ key: String) -> SQLiteDatabase.Value { .init((capture[key] as? String)?.uppercased()) }
         func plain(_ key: String) -> SQLiteDatabase.Value { .init(capture[key] as? String) }
@@ -238,7 +272,25 @@ public final class LibraryIndex: @unchecked Sendable {
         }
         let names = (capture["sourceFileNames"] as? [String] ?? []).filter { !$0.hasSuffix(".json") }
         let preset = capture["presetState"] as? [String: Any]
-        let liveBlends = blends.filter { $0["deletedAt"] == nil }.count
+        let liveBlendRecords = blends.filter { $0["deletedAt"] == nil }
+        let liveBlends = liveBlendRecords.count
+        let kind = capture["kind"] as? String ?? ""
+        let mode = capture["mode"] as? String ?? ""
+        let captureMode = capture["captureMode"] as? String
+        // The scanner sidecar's verdict is read at most once per project:
+        // kept from the row across upserts, and read from the file only for
+        // a project whose document cannot settle its category, when the
+        // caller said where the folder is.
+        var sidecar: Bool? = (try db.query("SELECT scanner_sidecar FROM projects WHERE id = ?", [.text(id)]) { $0.int(0) }.first ?? nil).map { $0 != 0 }
+        if sidecar == nil, ProjectCategory.needsSidecar(kind: kind, mode: mode, captureMode: captureMode), let projectFolderURL {
+            sidecar = ProjectCategory.sidecarHasRectangle(inProjectFolder: projectFolderURL)
+        }
+        let category = ProjectCategory.classify(kind: kind, mode: mode, captureMode: captureMode, scannerSidecar: sidecar ?? false)
+        // The app's Edit date: a human edit, else the newest live blend,
+        // else the capture — the same rule as `AppModel.lastEdited`.
+        let editedAt = Self.seconds(capture["modifiedAt"])
+            ?? liveBlendRecords.compactMap { Self.seconds($0["createdAt"]) }.max()
+            ?? Self.seconds(capture["createdAt"])
         try db.run("""
             INSERT OR REPLACE INTO projects (
                 id, origin_id, origin_device_id, derived_from_origin_id, imported_from_id,
@@ -247,16 +299,23 @@ public final class LibraryIndex: @unchecked Sendable {
                 frame_count, width, height, duration_seconds, fps, size_bytes, size_measured_at,
                 preset_kind, preset_id, scene_tags, scene_elements, blend_count, revision, modified_by,
                 title, caption, rating, creator, keywords, city, country,
-                folder, document_modified_at, assets_indexed_at
+                folder, document_modified_at, assets_indexed_at,
+                category, scanner_sidecar, edited_at,
+                shape_ellipses, shape_rectangles, shape_squares, shapes_indexed_at
             ) VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?,?,
                 (SELECT title FROM projects WHERE id = ?), (SELECT caption FROM projects WHERE id = ?),
                 (SELECT rating FROM projects WHERE id = ?), (SELECT creator FROM projects WHERE id = ?),
                 (SELECT keywords FROM projects WHERE id = ?), (SELECT city FROM projects WHERE id = ?),
                 (SELECT country FROM projects WHERE id = ?),
-                ?, ?, (SELECT assets_indexed_at FROM projects WHERE id = ?))
+                ?, ?, (SELECT assets_indexed_at FROM projects WHERE id = ?),
+                ?, ?, ?,
+                COALESCE((SELECT shape_ellipses FROM projects WHERE id = ?), 0),
+                COALESCE((SELECT shape_rectangles FROM projects WHERE id = ?), 0),
+                COALESCE((SELECT shape_squares FROM projects WHERE id = ?), 0),
+                (SELECT shapes_indexed_at FROM projects WHERE id = ?))
             """, [
                 .text(id), text("originID"), text("originDeviceID"), text("derivedFromOriginID"), text("importedFromID"),
-                plain("kind"), plain("captureMode"), plain("name"), .init(capture["originalName"] as? String ?? ""), .init(capture["mode"] as? String ?? ""),
+                plain("kind"), plain("captureMode"), plain("name"), .init(capture["originalName"] as? String ?? ""), .init(mode),
                 date("createdAt"), date("addedAt"), date("modifiedAt"), date("deletedAt"),
                 .int(Int64(names.count)), integer("sourceWidth"), integer("sourceHeight"), number("sourceDurationSeconds"), number("sourceFPS"),
                 integer("sizeBytes"), date("sizeMeasuredAt"),
@@ -265,6 +324,8 @@ public final class LibraryIndex: @unchecked Sendable {
                 .int(Int64(liveBlends)), integer("revision"), text("modifiedBy"),
                 .text(id), .text(id), .text(id), .text(id), .text(id), .text(id), .text(id),
                 .text(folder), .init(documentModifiedAt?.timeIntervalSinceReferenceDate), .text(id),
+                .text(category.rawValue), .init(sidecar), .init(editedAt),
+                .text(id), .text(id), .text(id), .text(id),
             ])
         try db.run("DELETE FROM blends WHERE project_id = ?", [.text(id)])
         for blend in blends {
@@ -289,8 +350,9 @@ public final class LibraryIndex: @unchecked Sendable {
 
     /// The project's own FTS row: its display name, the project-level
     /// metadata's title and caption, and every word a person might search
-    /// for — the metadata keywords, the scene tags (raw values; the chip
-    /// labels are the app's), the model's elements, the creator and the
+    /// for — the metadata keywords, the scene tags as their raw values AND
+    /// their chip labels (the words a person reads and types: "weather"
+    /// must find `skyWeather`), the model's elements, the creator and the
     /// place (Part 2 §4.4's searchable subset).
     private func refreshProjectSearchRow(_ id: String) throws {
         let rows = try db.query("""
@@ -299,7 +361,12 @@ public final class LibraryIndex: @unchecked Sendable {
             """, [.text(id)]) { cursor -> (String, String?, String?, String) in
             let name = cursor.text(0) ?? cursor.text(1) ?? ""
             var words: [String] = []
-            for column in 4...6 { words.append(contentsOf: Self.list(cursor.text(column))) }
+            words.append(contentsOf: Self.list(cursor.text(4)))
+            for tag in Self.list(cursor.text(5)) {
+                words.append(tag)
+                words.append(SceneTagLabel.label(for: tag))
+            }
+            words.append(contentsOf: Self.list(cursor.text(6)))
             for column in 7...9 { if let word = cursor.text(column) { words.append(word) } }
             return (name, cursor.text(2), cursor.text(3), words.joined(separator: " "))
         }
@@ -374,10 +441,32 @@ public final class LibraryIndex: @unchecked Sendable {
         return count
     }
 
+    /// One project's shape counts from its register, the way the Gallery's
+    /// rows count them: ellipses one row whatever their obliquity, quads
+    /// split square / rectangle by family.
+    private func upsertShapes(projectID: String, inProjectFolder folder: URL) throws {
+        var ellipses = 0, rectangles = 0, squares = 0
+        if let register = ShapeRegister.load(inProjectFolder: folder) {
+            for shape in register.shapes {
+                switch shape.kind {
+                case .ellipse: ellipses += 1
+                case .quad: if shape.family == .square { squares += 1 } else { rectangles += 1 }
+                }
+            }
+        }
+        try db.run("""
+            UPDATE projects SET shape_ellipses = ?, shape_rectangles = ?, shape_squares = ?, shapes_indexed_at = ? WHERE id = ?
+            """, [.int(Int64(ellipses)), .int(Int64(rectangles)), .int(Int64(squares)),
+                   .real(Date().timeIntervalSinceReferenceDate), .text(projectID)])
+    }
+
     // MARK: - Queries
 
     public enum Sort: String, CaseIterable, Sendable {
         case created, added, modified, size, name
+        /// The app's Edit sort: a human edit, else the newest live blend,
+        /// else the capture (`edited_at`).
+        case edited
     }
 
     public struct ProjectQuery: Equatable, Sendable {
@@ -394,6 +483,17 @@ public final class LibraryIndex: @unchecked Sendable {
         /// project or one of its assets. Prefix matching, so "brid" finds
         /// "bridge".
         public var text: String = ""
+        /// The lists' kind (M2): photo / interval / video / scan by the
+        /// app's rules, or nil for every category.
+        public var category: ProjectCategory?
+        /// The Projects and Gallery base while the Scans tab exists: no
+        /// scans, whatever `category` says.
+        public var excludeScans = false
+        /// The Gallery's SHAPES rows: every lit row must hold (`none`
+        /// alone means an empty or missing register).
+        public var shapes: Set<ShapeRow> = []
+        /// Projects with at least one live blend (the clip picker).
+        public var withBlends = false
         public var offset = 0
         public var limit = 60
         public init() {}
@@ -421,6 +521,8 @@ public final class LibraryIndex: @unchecked Sendable {
         public var title: String?
         public var rating: Int?
         public var folder: String
+        public var category: ProjectCategory
+        public var editedAt: Date?
 
         public var displayName: String { name ?? originalName }
     }
@@ -434,12 +536,73 @@ public final class LibraryIndex: @unchecked Sendable {
     /// A page of projects, and the total the query matches.
     public func projects(_ query: ProjectQuery) throws -> Page<ProjectRow> {
         lock.lock(); defer { lock.unlock() }
+        let (whereSQL, values) = Self.whereClause(query)
+        let total = Int(try db.scalar("SELECT COUNT(*) FROM projects p \(whereSQL)", values) ?? 0)
+        let rows = try db.query("""
+            SELECT \(Self.projectColumns) FROM projects p \(whereSQL)
+            ORDER BY \(Self.orderClause(query)) LIMIT ? OFFSET ?
+            """, values + [.int(Int64(query.limit)), .int(Int64(query.offset))], Self.projectRow)
+        return Page(rows: rows, total: total, offset: query.offset)
+    }
+
+    /// Every id the query matches, in the query's order — what a list
+    /// renders from, one record at a time, without the row payload. Ignores
+    /// `offset` and `limit`: ids are sixteen bytes each.
+    public func projectIDs(_ query: ProjectQuery) throws -> [UUID] {
+        lock.lock(); defer { lock.unlock() }
+        let (whereSQL, values) = Self.whereClause(query)
+        return try db.query("SELECT p.id FROM projects p \(whereSQL) ORDER BY \(Self.orderClause(query))", values) {
+            UUID(uuidString: $0.text(0) ?? "")
+        }.compactMap { $0 }
+    }
+
+    /// How many projects each category holds under the query's other terms
+    /// (its text, tags, scans rule and shapes; not its own `category`) — the
+    /// filter bar's counts, which must agree with what tapping a filter shows.
+    public func categoryCounts(_ query: ProjectQuery) throws -> [ProjectCategory: Int] {
+        lock.lock(); defer { lock.unlock() }
+        var base = query
+        base.category = nil
+        let (whereSQL, values) = Self.whereClause(base)
+        var counts: [ProjectCategory: Int] = [:]
+        for (category, count) in try db.query("SELECT p.category, COUNT(*) FROM projects p \(whereSQL) GROUP BY p.category", values, {
+            (ProjectCategory(rawValue: $0.text(0) ?? ""), Int($0.int(1) ?? 0))
+        }) {
+            if let category { counts[category] = count }
+        }
+        return counts
+    }
+
+    /// The live project holding `originID` — as its origin, its own id or
+    /// its one-hop import id, the three threads `AppModel.existingImport`
+    /// follows — or nil.
+    public func projectID(originID: UUID) throws -> UUID? {
+        lock.lock(); defer { lock.unlock() }
+        let key = originID.uuidString.uppercased()
+        return try db.query("""
+            SELECT id FROM projects WHERE deleted_at IS NULL AND (origin_id = ? OR id = ? OR imported_from_id = ?)
+            ORDER BY CASE WHEN origin_id = ? THEN 0 ELSE 1 END LIMIT 1
+            """, [.text(key), .text(key), .text(key), .text(key)]) { UUID(uuidString: $0.text(0) ?? "") }.first ?? nil
+    }
+
+    private static func whereClause(_ query: ProjectQuery) -> (String, [SQLiteDatabase.Value]) {
         var clauses: [String] = []
         var values: [SQLiteDatabase.Value] = []
         if !query.includeDeleted { clauses.append("p.deleted_at IS NULL") }
         if let kind = query.kind { clauses.append("p.kind = ?"); values.append(.text(kind)) }
         if let scanner = query.scanner {
             clauses.append(scanner ? "p.capture_mode = 'scanner'" : "(p.capture_mode IS NULL OR p.capture_mode <> 'scanner')")
+        }
+        if let category = query.category { clauses.append("p.category = ?"); values.append(.text(category.rawValue)) }
+        if query.excludeScans { clauses.append("p.category <> 'scan'") }
+        if query.withBlends { clauses.append("p.blend_count > 0") }
+        for row in query.shapes.sorted(by: { $0.rawValue < $1.rawValue }) {
+            switch row {
+            case .ellipse: clauses.append("p.shape_ellipses > 0")
+            case .rectangle: clauses.append("p.shape_rectangles > 0")
+            case .square: clauses.append("p.shape_squares > 0")
+            case .none: clauses.append("p.shape_ellipses + p.shape_rectangles + p.shape_squares = 0")
+            }
         }
         for tag in query.tags {
             // The tags column is a JSON array; `json_each` makes it a set.
@@ -450,23 +613,27 @@ public final class LibraryIndex: @unchecked Sendable {
             clauses.append("p.id IN (SELECT project_id FROM search WHERE search MATCH ?)")
             values.append(.text(match))
         }
-        let whereSQL = clauses.isEmpty ? "" : "WHERE " + clauses.joined(separator: " AND ")
-        let column: String
-        switch query.sort {
-        case .created: column = "p.created_at"
-        case .added: column = "COALESCE(p.added_at, p.created_at)"
-        case .modified: column = "COALESCE(p.modified_at, p.created_at)"
-        case .size: column = "COALESCE(p.size_bytes, 0)"
-        case .name: column = "LOWER(COALESCE(p.name, p.original_name))"
-        }
+        return (clauses.isEmpty ? "" : "WHERE " + clauses.joined(separator: " AND "), values)
+    }
+
+    /// The app's own order for each sort, ties included (M2): the key in
+    /// the sort's direction, then the capture date and the id — in that
+    /// direction too, because the lists sorted ascending and reversed, so
+    /// every tie-break turns with the sort. Edit is the one exception: its
+    /// ties held the array's capture order (newest first) when ascending
+    /// and turned it when descending, so its capture tie-break runs against
+    /// the sort. Unmeasured sizes sort as −1, below any measured project.
+    private static func orderClause(_ query: ProjectQuery) -> String {
         let direction = query.ascending ? "ASC" : "DESC"
-        let total = Int(try db.scalar("SELECT COUNT(*) FROM projects p \(whereSQL)", values) ?? 0)
-        let rows = try db.query("""
-            SELECT \(Self.projectColumns) FROM projects p \(whereSQL)
-            ORDER BY \(column) \(direction), p.created_at DESC, p.id
-            LIMIT ? OFFSET ?
-            """, values + [.int(Int64(query.limit)), .int(Int64(query.offset))], Self.projectRow)
-        return Page(rows: rows, total: total, offset: query.offset)
+        let opposite = query.ascending ? "DESC" : "ASC"
+        switch query.sort {
+        case .created: return "p.created_at \(direction), p.id \(direction)"
+        case .added: return "COALESCE(p.added_at, p.created_at) \(direction), p.created_at \(direction), p.id \(direction)"
+        case .modified: return "COALESCE(p.modified_at, p.created_at) \(direction), p.created_at \(direction), p.id \(direction)"
+        case .edited: return "COALESCE(p.edited_at, p.created_at) \(direction), p.created_at \(opposite), p.id \(direction)"
+        case .size: return "COALESCE(p.size_bytes, -1) \(direction), p.created_at \(direction), p.id \(direction)"
+        case .name: return "LOWER(COALESCE(p.name, p.original_name)) \(direction), p.created_at \(direction), p.id \(direction)"
+        }
     }
 
     /// One project's row, live or deleted, or nil when it is not indexed.
@@ -480,7 +647,7 @@ public final class LibraryIndex: @unchecked Sendable {
         p.id, p.origin_id, p.kind, p.capture_mode, p.name, p.original_name, p.mode,
         p.created_at, p.added_at, p.modified_at, p.deleted_at,
         p.frame_count, p.width, p.height, p.duration_seconds, p.size_bytes,
-        p.scene_tags, p.blend_count, p.title, p.rating, p.folder
+        p.scene_tags, p.blend_count, p.title, p.rating, p.folder, p.category, p.edited_at
         """
 
     private static func projectRow(_ cursor: SQLiteDatabase.Cursor) -> ProjectRow {
@@ -498,7 +665,9 @@ public final class LibraryIndex: @unchecked Sendable {
             durationSeconds: cursor.real(14), sizeBytes: cursor.int(15),
             sceneTags: list(cursor.text(16)), blendCount: Int(cursor.int(17) ?? 0),
             title: cursor.text(18), rating: cursor.int(19).map(Int.init),
-            folder: cursor.text(20) ?? "")
+            folder: cursor.text(20) ?? "",
+            category: ProjectCategory(rawValue: cursor.text(21) ?? "") ?? .interval,
+            editedAt: cursor.real(22).map { Date(timeIntervalSinceReferenceDate: $0) })
     }
 
     public struct SearchHit: Equatable, Sendable {
@@ -524,12 +693,15 @@ public final class LibraryIndex: @unchecked Sendable {
         }
     }
 
-    /// The tags present on live projects, with how many carry each.
-    public func tagCounts() throws -> [(tag: String, count: Int)] {
+    /// The tags present on live projects, with how many carry each —
+    /// without the scans' when the lists exclude them, so no chip can only
+    /// ever find nothing.
+    public func tagCounts(excludingScans: Bool = false) throws -> [(tag: String, count: Int)] {
         lock.lock(); defer { lock.unlock() }
         return try db.query("""
             SELECT json_each.value, COUNT(*) FROM projects p, json_each(p.scene_tags)
-            WHERE p.deleted_at IS NULL GROUP BY json_each.value ORDER BY COUNT(*) DESC, json_each.value
+            WHERE p.deleted_at IS NULL \(excludingScans ? "AND p.category <> 'scan'" : "")
+            GROUP BY json_each.value ORDER BY COUNT(*) DESC, json_each.value
             """) { (tag: $0.text(0) ?? "", count: Int($0.int(1) ?? 0)) }
     }
 

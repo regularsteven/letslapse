@@ -123,11 +123,17 @@ USAGE:
                             on disk; exit 1 when they differ
       --search TEXT         Full-text hits (projects and assets, best first)
       --list                A page of projects
-      --sort KEY            created | added | modified | size | name (default created)
+      --sort KEY            created | added | edited | modified | size | name
+                            (default created; edited is the app's Edit sort)
       --asc                 Ascending (default: descending)
       --kind K              video | photos
+      --category C          photo | interval | video | scan — the lists' kinds
+      --no-scans            Leave scanner runs out (the Projects/Gallery base)
+      --categories          Print how many projects each category holds, and
+                            the tag chips with their counts
       --tag T               Only projects carrying tag T (repeatable)
-      --offset N --limit N  The page (default 0, 30)
+      --offset N --limit N  The page (default 0, 30); with --list, --search
+                            narrows the page instead of listing hits
       --json                Machine-readable output
 
   lapse import-lightroom <catalog.lrcat> --library <root> [options]
@@ -473,6 +479,9 @@ do {
         let searchText = takeOption(["--search"])
         let sortName = takeOption(["--sort"]) ?? "created"
         let kind = takeOption(["--kind"])
+        let categoryName = takeOption(["--category"])
+        let noScans = takeFlag(["--no-scans"])
+        let categories = takeFlag(["--categories"])
         var tags: [String] = []
         while let tag = takeOption(["--tag"]) { tags.append(tag) }
         let offset = Int(takeOption(["--offset"]) ?? "0") ?? 0
@@ -499,6 +508,17 @@ do {
             print("index: \(index.url.path)")
             print("  built \(index.meta("builtAt") ?? "incrementally by the app") · projects \(counts.projects) (+\(counts.deletedProjects) deleted) · blends \(counts.blends) · assets \(counts.assets) (\(counts.hashedAssets) hashed) · search rows \(counts.searchRows)")
         }
+        if categories {
+            var query = LibraryIndex.ProjectQuery()
+            query.excludeScans = noScans
+            let counts = try index.categoryCounts(query)
+            payload["categories"] = Dictionary(uniqueKeysWithValues: counts.map { ($0.key.rawValue, $0.value) })
+            if !asJSON {
+                print("  categories: " + ProjectCategory.allCases.map { "\($0.rawValue) \(counts[$0] ?? 0)" }.joined(separator: " · "))
+                let tags = try index.tagCounts(excludingScans: noScans)
+                print("  tags: " + (tags.isEmpty ? "none" : tags.map { "\($0.tag) \($0.count)" }.joined(separator: " · ")))
+            }
+        }
         var consistent = true
         if verify {
             let verification = try index.verify(againstProjectsFolder: projects)
@@ -524,16 +544,26 @@ do {
             }
             var query = LibraryIndex.ProjectQuery()
             query.sort = sort; query.ascending = ascending; query.kind = kind; query.tags = tags
+            query.excludeScans = noScans
+            if let categoryName {
+                guard let category = ProjectCategory(rawValue: categoryName) else {
+                    fail("unknown category '\(categoryName)' — choose from: \(ProjectCategory.allCases.map(\.rawValue).joined(separator: ", "))")
+                }
+                query.category = category
+            }
+            if let searchText { query.text = searchText }
             query.offset = offset; query.limit = limit
             let page = try index.projects(query)
             payload["page"] = ["total": page.total, "offset": page.offset,
                                "rows": page.rows.map { ["id": $0.id.uuidString, "name": $0.displayName, "kind": $0.kind, "mode": $0.mode,
+                                                        "category": $0.category.rawValue,
                                                         "frames": $0.frameCount, "blends": $0.blendCount, "createdAt": FrameTimestamps.string(from: $0.createdAt),
+                                                        "editedAt": $0.editedAt.map(FrameTimestamps.string(from:)) ?? "",
                                                         "sizeBytes": $0.sizeBytes ?? 0, "tags": $0.sceneTags, "title": $0.title ?? "", "folder": $0.folder] }]
             if !asJSON {
                 print("  page \(page.offset)…\(page.offset + page.rows.count) of \(page.total) by \(sort.rawValue) \(ascending ? "asc" : "desc")")
                 for row in page.rows {
-                    print("    \(row.id.uuidString.prefix(8))  \(FrameTimestamps.string(from: row.createdAt).prefix(10))  \(row.kind.padding(toLength: 6, withPad: " ", startingAt: 0)) \(String(row.frameCount).padding(toLength: 5, withPad: " ", startingAt: 0)) \(row.displayName)\(row.blendCount > 0 ? " · \(row.blendCount) blends" : "")\(row.sceneTags.isEmpty ? "" : " · " + row.sceneTags.joined(separator: ", "))")
+                    print("    \(row.id.uuidString.prefix(8))  \(FrameTimestamps.string(from: row.createdAt).prefix(10))  \(row.category.rawValue.padding(toLength: 8, withPad: " ", startingAt: 0)) \(String(row.frameCount).padding(toLength: 5, withPad: " ", startingAt: 0)) \(row.displayName)\(row.blendCount > 0 ? " · \(row.blendCount) blends" : "")\(row.sceneTags.isEmpty ? "" : " · " + row.sceneTags.joined(separator: ", "))")
                 }
             }
         }
