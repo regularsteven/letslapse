@@ -53,6 +53,14 @@ enum PicPlaceSyncInventory {
         }
     }
 
+    /// Whether a path names an original — a source frame or a blend — by
+    /// the registry's role, not by the server's kind (a v1 push kinded the
+    /// sidecars under source/ as `source`, and they are not originals).
+    static func isHeavy(_ relativePath: String) -> Bool {
+        if case .heavy = role(for: relativePath) { return true }
+        return false
+    }
+
     static func role(for relativePath: String) -> PicPlaceSyncItem.Role {
         if relativePath == ProjectFileRegistry.projectDocumentName { return .manifest }
         guard let entry = ProjectFileRegistry.entry(forRelativePath: relativePath) else {

@@ -75,6 +75,12 @@ struct PicPlaceStatusCard: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
+            if let action = picplace.originalsAction(for: capture), !isPreviewOnly(state) {
+                Divider().padding(.leading, 16)
+                originalsRow(for: capture, action: action, size: 16)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+            }
             if case .synced(let record) = state {
                 Divider().padding(.leading, 16)
                 HStack {
@@ -114,6 +120,11 @@ struct PicPlaceStatusCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .padding(.leading, 24)
+            if let action = picplace.originalsAction(for: capture), !isPreviewOnly(state) {
+                originalsRow(for: capture, action: action, size: 12)
+                    .padding(.leading, 24)
+                    .padding(.top, 6)
+            }
             if case .synced(let record) = state {
                 HStack(alignment: .top, spacing: 10) {
                     Text("Also on")
@@ -130,6 +141,37 @@ struct PicPlaceStatusCard: View {
             }
         }
         .padding(.vertical, 6)
+    }
+
+    private func isPreviewOnly(_ state: PicPlaceController.ProjectState) -> Bool {
+        if case .previewOnly = state { return true }
+        return false
+    }
+
+    /// Stage 5: the originals' own line — upload them, or note they are on
+    /// both sides. (A preview-only project's main button is the download.)
+    private func originalsRow(for capture: AppModel.CaptureProject, action: PicPlaceController.OriginalsAction, size: CGFloat) -> some View {
+        HStack {
+            switch action {
+            case .upload(let files, let bytes):
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Originals").font(.system(size: size))
+                    Text("\(files.formatted()) file\(files == 1 ? "" : "s") · \(LLFormat.bytes(bytes)) · only on this device")
+                        .font(.system(size: size * 0.72)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Upload") { picplace.uploadOriginals(capture) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: size * 0.8, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+            case .onBothSides:
+                Text("Originals").font(.system(size: size))
+                Spacer()
+                Text("Here and on PicPlace").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
+            case .download:
+                EmptyView()
+            }
+        }
     }
 
     // MARK: Pieces
@@ -167,7 +209,7 @@ struct PicPlaceStatusCard: View {
         case .notConnected: return "Library not connected"
         case .notSynced: return "Not on PicPlace"
         case .changes: return "Changes to sync"
-        case .syncing: return "Syncing to PicPlace"
+        case .syncing(let progress): return progress.phase == .downloading ? "Downloading originals" : "Syncing to PicPlace"
         case .synced: return "On PicPlace"
         case .failed: return "Sync failed"
         }
@@ -183,10 +225,13 @@ struct PicPlaceStatusCard: View {
             case .deletedHereEditedThere: return "Deleted here, but PicPlace changed it since"
             }
         case .previewOnly(let record):
-            if let record, let heavy = record.heavyFiles, heavy > 0 {
-                return "The originals — \(heavy.formatted()) file\(heavy == 1 ? "" : "s") · \(LLFormat.bytes(record.heavyBytes ?? 0)) — are on PicPlace, not on this device. Downloading them comes in a later stage."
+            if let error = record?.lastError { return error }
+            let files = record?.serverHeavyFiles ?? record?.heavyFiles ?? 0
+            let bytes = record?.serverHeavyBytes ?? record?.heavyBytes ?? 0
+            if files > 0 {
+                return "The originals — \(files.formatted()) file\(files == 1 ? "" : "s") · \(LLFormat.bytes(bytes)) — are on PicPlace, not on this device"
             }
-            return "The originals are on PicPlace, not on this device. Downloading them comes in a later stage."
+            return "The originals are on PicPlace, not on this device"
         case .signedOut:
             return "Sign in with PicPlace to sync this project"
         case .notConnected:
@@ -211,6 +256,9 @@ struct PicPlaceStatusCard: View {
             case .negotiating: return "Comparing \(progress.filesTotal) files with the server…"
             case .uploading, .confirming:
                 return "\(progress.filesDone) of \(progress.filesTotal) files · \(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
+            case .downloading:
+                return progress.filesTotal == 0 ? "Listing the originals…"
+                    : "Downloading \(progress.filesDone) of \(progress.filesTotal) files · \(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
             case .finishing: return "Finishing…"
             }
         case .synced(let record):
@@ -242,7 +290,7 @@ struct PicPlaceStatusCard: View {
         let (label, isCancel): (String, Bool) = {
             switch state {
             case .conflict: return ("Review…", false)
-            case .previewOnly: return ("Download originals", false)
+            case .previewOnly: return (picplace.originalsAction(for: capture) == nil ? "Preview only" : "Download originals", false)
             case .signedOut: return (picplace.isSigningIn ? "Signing in…" : "Sign in", false)
             case .notConnected: return (picplace.libraryLink == .mismatch ? "Settings" : "Connect…", false)
             case .notSynced: return ("Sync to PicPlace", false)
@@ -255,7 +303,7 @@ struct PicPlaceStatusCard: View {
         return Button {
             switch state {
             case .conflict: picplace.isReviewingConflicts = true
-            case .previewOnly: break                       // stage 5
+            case .previewOnly: picplace.downloadOriginals(capture)
             case .signedOut: picplace.signIn()
             case .notConnected: if picplace.libraryLink == .unbound { picplace.offerConnect() } else { model.requestedTab = .settings }
             case .syncing: picplace.cancelSync(capture.id)
@@ -267,7 +315,7 @@ struct PicPlaceStatusCard: View {
                 .foregroundStyle(LL.accent)
         }
         .buttonStyle(.plain)
-        .disabled((picplace.isSigningIn && !isCancel) || { if case .previewOnly = state { return true } else { return false } }())
+        .disabled((picplace.isSigningIn && !isCancel) || { if case .previewOnly = state { return picplace.originalsAction(for: capture) == nil } else { return false } }())
     }
 
     private func progressBar(_ progress: PicPlaceSyncProgress, height: CGFloat) -> some View {

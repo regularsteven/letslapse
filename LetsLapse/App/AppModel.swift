@@ -10029,6 +10029,16 @@ final class AppModel: ObservableObject {
         return newID
     }
 
+    /// Files landed under `source/` or `blends/` from PicPlace (stage 5):
+    /// the existence ticket is dropped so the next look re-walks, the
+    /// caches that key on the files are cleared, the hashes recorded.
+    func noteOriginalsArrived(for captureID: UUID) {
+        validatedSourceFrames.remove(captureID)
+        noteFilesChanged(for: captureID)
+        if let capture = capture(id: captureID) { recordAssets(for: capture) }
+        noteIndexChanged()
+    }
+
     /// `Projects/<id>/poster.jpg` when the project has one (v2 plan §3.5).
     func posterURL(for capture: CaptureProject) -> URL? {
         let url = captureFolderURL(for: capture.id).appendingPathComponent(ProjectFileRegistry.posterName)

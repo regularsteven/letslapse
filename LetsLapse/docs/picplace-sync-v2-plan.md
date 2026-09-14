@@ -740,3 +740,45 @@ the rate limiter's cache store.
 
 **Not exercised**: `uuid_taken` (needs a second account), the *unrelated*
 kind (the same branch as both-edited).
+
+## 13. Stage 5 — landed 2026-09-15 (the originals, per project)
+
+**What shipped**
+
+- **Upload originals**: `sync(capture, policy: .originals)` — v1's walk
+  restricted to `source/` media and `blends/` by the registry's role, by
+  hash, four PUTs at a time. The record notes `originalsMovedAt` and what
+  the server now holds (`serverHeavyFiles/Bytes`, also refreshed from the
+  project detail whenever the card appears).
+- **Download originals** (`App/PicPlace/PicPlaceDownloadRun.swift`): the
+  server's asset list filtered by role (a v1 push kinded the sidecars under
+  `source/` as `source`; they are not originals), files already here at
+  the listed size skipped, storage headroom checked, URLs minted in pages
+  of 100 as the download goes, four transfers at a time straight from
+  object storage into the project folder (temp file, then a move); on
+  completion `AppModel.noteOriginalsArrived` drops the existence ticket,
+  clears the file-keyed caches and records the hashes, and the project
+  leaves preview-only by rule. Cancel keeps what landed; the next run
+  skips it. Progress on the card: *Downloading originals · 120 of 1,480
+  files · 12 MB of 86 MB*.
+- **Presence tiers**: every push posts `tier` — `original` when the
+  sources are here, `preview` when only the poster is; a download posts
+  `original`.
+- **The card**: an *Originals* line — *1,480 files · 86 MB · only on this
+  device — Upload*, or *Here and on PicPlace*; a preview-only project's
+  main button is *Download originals*, enabled, with the size it will cost.
+  `originalsAction(for:)` decides from the folder walk and the record.
+
+**Verified between the two scratch devices on `picplace.test`**: a fresh
+project with its source pushed minimal (bundle + poster) then its original
+uploaded (1 file · 1.9 MB, the record naming it on the server); pulled on
+the other device as preview-only and its original downloaded; China Pics'
+original downloaded (1 file, the bundle's sidecars skipped); Perf bench's
+**1,480 files / 86 MB in 8 s**, a second run finding them all present and
+moving nothing. Cards screenshotted for both sides. Mac + Simulator build.
+Throwaway projects tombstoned.
+
+**Not done, by design**: no automatic originals (§4.7); no multipart (no
+object over 5 GB exists; the server refuses one at negotiate); per-blend
+posters; eviction ("free up space") — the presence tier now says what each
+device holds, which is the input it needs.

@@ -4,7 +4,7 @@ import LetsLapseKit
 
 /// Where a sync is: the card's caption and bar come from this.
 struct PicPlaceSyncProgress: Equatable {
-    enum Phase: Equatable { case claiming, preparing, manifest, negotiating, uploading, confirming, finishing }
+    enum Phase: Equatable { case claiming, preparing, manifest, negotiating, uploading, confirming, finishing, downloading }
     var phase: Phase = .claiming
     var filesDone = 0
     var filesTotal = 0
@@ -40,6 +40,12 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     /// The grade token `poster.jpg` was rendered at; a different token means
     /// the poster is stale and is rendered again before the next push.
     var posterToken: String?
+    /// Stage 5: the originals — source media and blends — this device last
+    /// knew to be on the server (from the project detail), and when this
+    /// device last uploaded or downloaded them.
+    var serverHeavyFiles: Int?
+    var serverHeavyBytes: Int64?
+    var originalsMovedAt: Date?
 }
 
 /// One push of one project (docs/picplace-sync-v1.md §2, v2 plan §4.2):
@@ -62,6 +68,9 @@ struct PicPlaceSyncRun {
         /// The server's inline-manifest cap (`limits.manifest_max_bytes`);
         /// 1 MB until a `/status` has reported one.
         var manifestMaxBytes: Int64
+        /// What this device holds of the project, for presence: `original`
+        /// when the sources are here, `preview` when only the poster is.
+        var tier: String
     }
 
     struct Failed: LocalizedError {
@@ -246,7 +255,7 @@ struct PicPlaceSyncRun {
 
             // 7. Presence, then let go of the claim.
             await report { $0.phase = .finishing }
-            let presence: [String: [PPPresence]] = try await client.post("projects/\(uuid)/presence", json: ["revision": project.revision])
+            let presence: [String: [PPPresence]] = try await client.post("projects/\(uuid)/presence", json: ["revision": project.revision, "tier": project.tier])
             let alsoOn = (presence["presence"] ?? [])
                 .compactMap(\.device)
                 .filter { $0.id != thisDeviceID }
@@ -415,8 +424,4 @@ struct PicPlaceSyncRun {
     }
 }
 
-private extension Array {
-    func chunked(_ size: Int) -> [[Element]] {
-        stride(from: 0, to: count, by: size).map { Array(self[$0 ..< Swift.min($0 + size, count)]) }
-    }
-}
+

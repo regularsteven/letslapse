@@ -253,7 +253,7 @@ extension PicPlaceController {
                 files += 1; bytes += Int64(data.count)
             }
             let capture = try model.registerPulledProject(capture: document.capture, blends: document.blends, originID: originID)
-            let heavy = assets.filter { $0.kind == "source" || $0.kind == "blend" }
+            let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
             records[originID] = PicPlaceSyncRecord(
                 syncedAt: Date(), revision: row.revision, files: files, bytes: bytes, uploaded: 0,
                 alsoOn: row.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name),

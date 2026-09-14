@@ -665,6 +665,9 @@ final class PicPlaceController: ObservableObject {
                 let project = detail.project
                 guard var record = records[key] else { return }
                 record.alsoOn = project.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name)
+                let heavy = (detail.assets ?? []).filter { $0.status == "confirmed" && PicPlaceSyncInventory.isHeavy($0.name) }
+                record.serverHeavyFiles = heavy.count
+                record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }
                 records[key] = record
                 saveSyncState()
             } catch let error as PicPlaceAPIError where error.status == 404 {
@@ -702,11 +705,12 @@ final class PicPlaceController: ObservableObject {
 
     // MARK: Sync
 
-    func sync(_ capture: AppModel.CaptureProject) {
+    func sync(_ capture: AppModel.CaptureProject, policy override: PicPlaceSyncPolicy? = nil) {
         guard canSync, syncTasks[capture.id] == nil else { return }
         let key = model.originID(of: capture)
-        let policy = self.policy
+        let policy = override ?? self.policy
         let folder = model.projectFolderURL(for: capture)
+        let tier = model.sourcesMissing(capture) ? "preview" : "original"
         let project = PicPlaceSyncRun.Project(
             serverID: key,
             folder: folder,
@@ -716,7 +720,8 @@ final class PicPlaceController: ObservableObject {
             capturedAt: capture.createdAt,
             policy: policy,
             originUUID: capture.derivedFromOriginID,
-            manifestMaxBytes: manifestMaxBytes)
+            manifestMaxBytes: manifestMaxBytes,
+            tier: tier)
         let run = PicPlaceSyncRun(client: client, project: project, thisDeviceID: profile?.deviceID) { [weak self] progress in
             self?.progress[capture.id] = progress
         }
@@ -741,6 +746,20 @@ final class PicPlaceController: ObservableObject {
                 }
                 var record = try await run.run()
                 record.posterToken = posterToken
+                if let previous = records[key] {
+                    // A push of one policy keeps what the other recorded.
+                    record.serverHeavyFiles = previous.serverHeavyFiles
+                    record.serverHeavyBytes = previous.serverHeavyBytes
+                    record.originalsMovedAt = previous.originalsMovedAt
+                    if policy == .minimal { record.posterToken = posterToken }
+                }
+                if policy.sendsHeavy {
+                    record.originalsMovedAt = Date()
+                    record.serverHeavyFiles = record.files
+                    record.serverHeavyBytes = record.bytes
+                    record.heavyFiles = 0
+                    record.heavyBytes = 0
+                }
                 records[key] = record
             } catch is CancellationError {
                 // Cancelled by the user: the card goes back to what it was.
@@ -776,6 +795,78 @@ final class PicPlaceController: ObservableObject {
 
     func cancelSync(_ id: UUID) {
         syncTasks[id]?.cancel()
+    }
+
+    // MARK: Originals (stage 5, §4.5)
+
+    /// What the card offers for a project's originals.
+    enum OriginalsAction: Equatable {
+        /// This device holds them; PicPlace does not (or not all of them).
+        case upload(files: Int, bytes: Int64)
+        /// PicPlace holds them; this device does not.
+        case download(files: Int, bytes: Int64)
+        /// Both hold them.
+        case onBothSides
+    }
+
+    func originalsAction(for capture: AppModel.CaptureProject) -> OriginalsAction? {
+        guard canSync, progress[capture.id] == nil else { return nil }
+        let record = records[model.originID(of: capture)]
+        if isPreviewOnly(capture) {
+            let files = record?.serverHeavyFiles ?? record?.heavyFiles ?? 0
+            let bytes = record?.serverHeavyBytes ?? record?.heavyBytes ?? 0
+            return files > 0 ? .download(files: files, bytes: bytes) : nil
+        }
+        guard let record, record.lastError == nil else { return nil }
+        // What this device holds comes from the folder walk (cached per
+        // project); the record only knows what a push left behind.
+        guard let local = summary(for: capture), local.heavyFiles > 0 else { return nil }
+        if let onServer = record.serverHeavyFiles, onServer >= local.heavyFiles { return .onBothSides }
+        if record.originalsMovedAt != nil { return .onBothSides }
+        return .upload(files: local.heavyFiles, bytes: local.heavyBytes)
+    }
+
+    /// The `source/` media and `blends/` up, by hash (`SyncPolicy.originals`).
+    func uploadOriginals(_ capture: AppModel.CaptureProject) {
+        sync(capture, policy: .originals)
+    }
+
+    /// The `source/` media and `blends/` down, in pages of presigned URLs;
+    /// the project stops being preview-only when the last listed frame is
+    /// on disk. Cancel keeps what landed; a second run skips it.
+    func downloadOriginals(_ capture: AppModel.CaptureProject) {
+        guard canSync, syncTasks[capture.id] == nil else { return }
+        let key = model.originID(of: capture)
+        let folder = model.projectFolderURL(for: capture)
+        let run = PicPlaceDownloadRun(client: client, projectUUID: key.uuidString.lowercased(), folder: folder) { [weak self] progress in
+            self?.progress[capture.id] = progress
+        }
+        progress[capture.id] = PicPlaceSyncProgress(phase: .downloading)
+        let server = profile?.server ?? serverString
+        syncTasks[capture.id] = Task {
+            do {
+                let got = try await run.run()
+                var record = records[key] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: revision(of: capture), files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: "pull")
+                record.lastError = nil
+                record.originalsMovedAt = Date()
+                records[key] = record
+                summaries[capture.id] = nil
+                model.noteOriginalsArrived(for: capture.id)
+                let _: [String: [PPPresence]]? = try? await client.post("projects/\(key.uuidString.lowercased())/presence", json: ["revision": record.revision, "tier": "original"])
+                LLog("picplace: downloaded the originals of \(capture.displayTitle): \(got.files) file(s), \(got.bytes) bytes")
+            } catch is CancellationError {
+                model.noteOriginalsArrived(for: capture.id)
+            } catch {
+                LLog("picplace: download of \(capture.displayTitle)'s originals failed: \(error)")
+                var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: "pull")
+                record.lastError = (error as? PicPlaceAPIError)?.cardCaption ?? (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                records[key] = record
+                model.noteOriginalsArrived(for: capture.id)
+            }
+            saveSyncState()
+            progress[capture.id] = nil
+            syncTasks[capture.id] = nil
+        }
     }
 
     /// A sync the caller waits for — the first connection pushes one

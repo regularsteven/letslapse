@@ -189,6 +189,14 @@ extension PicPlaceController {
             }
             refreshUsage()
             #if DEBUG
+            // `LL_PICPLACE_DOWNLOAD=<uuid>` / `LL_PICPLACE_UPLOAD=<uuid>` move a
+            // project's originals after the check (stage 5).
+            if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_DOWNLOAD"], let id = UUID(uuidString: raw), let capture = model.capture(id: id) {
+                downloadOriginals(capture)
+            }
+            if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_UPLOAD"], let id = UUID(uuidString: raw), let capture = model.capture(id: id) {
+                uploadOriginals(capture)
+            }
             // `LL_PICPLACE_REVIEW=1` opens the conflicts sheet after the check.
             if ProcessInfo.processInfo.environment["LL_PICPLACE_REVIEW"] != nil, !conflicts.isEmpty { isReviewingConflicts = true }
             // `LL_PICPLACE_RESOLVE=newest|local|server|both` decides every
