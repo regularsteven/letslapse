@@ -21,16 +21,17 @@ struct CollectionsDocument: Codable, Equatable {
     var collections: [LapseCollection]
 }
 
-/// Writes `project.json` for every project a persisted manifest changed.
+/// Writes `project.json` for every project a persisted snapshot changed.
 ///
-/// Runs on the `LibraryPersister`'s queue, after `library.json` has landed:
-/// the persister hands it the manifest it just wrote, and it compares every
-/// project's document against the last one it wrote (`Equatable`, cheap —
-/// the snapshots share their arrays) and rewrites only those that differ.
-/// That is what "every persist that touches a project also writes its
-/// document" means without threading project ids through the seventy
-/// persist sites: a grade tick rewrites one small file, a persist that
-/// changed nothing rewrites none.
+/// Runs on the `LibraryPersister`'s queue, before the export (M1: the
+/// documents are the record, `library.json` follows as a generated
+/// compatibility copy): the persister hands it the snapshot it admitted,
+/// and it compares every project's document against the last one it wrote
+/// (`Equatable`, cheap — the snapshots share their arrays) and rewrites
+/// only those that differ. That is what "every persist that touches a
+/// project also writes its document" means without threading project ids
+/// through the seventy persist sites: a grade tick rewrites one small file,
+/// a persist that changed nothing rewrites none.
 ///
 /// A document goes where its folder is: `Projects/<id>/` for a live
 /// project, `Projects/.trash/<id>/` for a tombstoned one whose folder has
@@ -82,6 +83,16 @@ final class ProjectDocumentWriter {
         for blend in manifest.blends { blendsByCapture[blend.captureID, default: []].append(blend) }
         return manifest.captures.map { capture in
             ProjectDocument(capture: capture, blends: blendsByCapture[capture.id] ?? [])
+        }
+    }
+
+    /// What the launch read from disk (M1), remembered as if this writer
+    /// had written it: a persist before the launch pass then rewrites only
+    /// the documents that differ from the files, not every one. Called on
+    /// the persister's queue, ahead of any persist.
+    func seed(_ documents: [ProjectDocument]) {
+        for document in documents where lastWritten[document.capture.id] == nil {
+            lastWritten[document.capture.id] = document
         }
     }
 

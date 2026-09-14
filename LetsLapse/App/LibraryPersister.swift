@@ -1,7 +1,7 @@
 import Foundation
 import LetsLapseKit
 
-/// The one path every write of `Projects/library.json` takes (Phase 1 W6).
+/// The one path every write of the library takes (Phase 1 W6).
 ///
 /// A serial utility queue; every caller snapshots the manifest on the main
 /// actor, mints a monotonically increasing version for it and enqueues.
@@ -14,15 +14,19 @@ import LetsLapseKit
 /// and surfaced once per session through `onFailure`; nothing here is
 /// `try?`-swallowed.
 ///
-/// `refuseWrites` is the W7 guard: while the manifest on disk could not be
-/// decoded, no snapshot may overwrite it — the set-aside file is the only
+/// `refuseWrites` is the W7 guard: while the library on disk could not be
+/// read, no snapshot may overwrite it — the set-aside file is the only
 /// copy of every grade, tag and blend record, and a fresh manifest with one
 /// new capture in it would be the data loss Part 1 R1 described.
 ///
-/// Since Phase 2 every admitted snapshot is also handed to the
-/// `ProjectDocumentWriter`, on this same queue, right after `library.json`
-/// has landed: the per-project `project.json` documents follow the
-/// manifest, which stays authoritative until Phase 3 makes it an index.
+/// Since M1 (2026-09-14) the **documents are the truth**: an admitted
+/// snapshot goes to the `ProjectDocumentWriter` first, which rewrites the
+/// `project.json` of every project the snapshot changed and their index
+/// rows, and `Projects/library.json` is written after it as the generated
+/// compatibility export (`"generated": true`) an older build, the transfer
+/// catalogue and `lapse audit` still read. A document that cannot be
+/// written fails the persist — it is the record; the export failing is
+/// logged and the next persist regenerates it.
 final class LibraryPersister: @unchecked Sendable {
 
     typealias Manifest = AppModel.LibraryManifest
@@ -44,6 +48,17 @@ final class LibraryPersister: @unchecked Sendable {
         }
     }
 
+    /// One or more project documents could not be written (M1). Not a
+    /// `PersistError`, so it is surfaced once per session rather than on
+    /// every tick — the writer logs each file and retries it at the next
+    /// persist.
+    struct DocumentWriteError: LocalizedError {
+        var count: Int
+        var errorDescription: String? {
+            "\(count) project record\(count == 1 ? "" : "s") couldn't be written — see the console log."
+        }
+    }
+
     private let queue = DispatchQueue(label: "com.regularsteven.letslapse.library-persist", qos: .utility)
     private let lock = NSLock()
     private var gate = VersionGate()
@@ -56,7 +71,7 @@ final class LibraryPersister: @unchecked Sendable {
     /// every slider tick.
     var onFailure: (@MainActor (Error) -> Void)?
 
-    /// Called on the queue after every manifest write with the file's new
+    /// Called on the queue after every export write with the file's new
     /// modification date — what the foreground check compares against.
     var onManifestWritten: (@Sendable (Date?) -> Void)?
 
@@ -135,6 +150,15 @@ final class LibraryPersister: @unchecked Sendable {
         queue.sync {}
     }
 
+    /// The documents the launch read (M1), handed to the writer as what is
+    /// on disk — queued ahead of every persist, so an adopting launch's
+    /// persist writes the adopted document and not the whole library.
+    func seedDocuments(_ documents: [ProjectDocument]) {
+        queue.async { [self] in
+            self.documents.seed(documents)
+        }
+    }
+
     /// The one-time launch pass over the project documents (Phase 2): every
     /// project's `project.json` is brought up to `manifest` and remembered,
     /// so the persists that follow rewrite only what changes. Queued behind
@@ -166,16 +190,29 @@ final class LibraryPersister: @unchecked Sendable {
         let admitted = gate.admit(version)
         lock.unlock()
         guard admitted else { return }
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(manifest)
-        try data.write(to: url, options: .atomic)
-        onManifestWritten?((try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate)
-        // The documents follow the manifest. A document that fails to
-        // write is logged by the writer and tried again at the next
-        // persist; it does not fail the persist, whose file is the truth.
-        documents.sync(manifest)
+        // The documents first: they are the record (M1). The writer logs
+        // each file it could not write and tries it again at the next
+        // persist; the count fails this one, below, once the export has
+        // had its turn.
+        let outcome = documents.sync(manifest)
+        // Then `library.json`, regenerated from the same snapshot as the
+        // compatibility export. Its failure is logged, not thrown: nothing
+        // is lost, and the next persist writes it again.
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            var export = manifest
+            export.generated = true
+            let data = try encoder.encode(export)
+            try data.write(to: url, options: .atomic)
+            onManifestWritten?((try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate)
+        } catch {
+            LLog("library export: could not write \(url.lastPathComponent): \(error) — regenerated by the next persist")
+        }
+        if outcome.failed > 0 {
+            throw DocumentWriteError(count: outcome.failed)
+        }
     }
 
     private func report(_ error: Error) {

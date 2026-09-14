@@ -609,6 +609,13 @@ final class AppModel: ObservableObject {
     /// `Projects/library.json` as one document. Internal rather than private
     /// so the persister and the project-document writer (Phase 2) can take
     /// a snapshot of it by type.
+    ///
+    /// Since M1 (2026-09-14) this is a **generated compatibility export**:
+    /// the app loads the project documents, not this, and the persister
+    /// regenerates it from the same snapshot that writes them so an older
+    /// build, the transfer catalogue and `lapse audit` keep reading what they
+    /// always read. It is still decoded for one thing — a library with no
+    /// documents at all (a pre-Phase-2 build's) bootstraps from it once.
     struct LibraryManifest: Codable {
         var captures: [CaptureProject] = []
         var blends: [BlendProject] = []
@@ -618,6 +625,11 @@ final class AppModel: ObservableObject {
         /// before any existed. 1 = the Natural stamp, 2 = preset states,
         /// 3 = the `addedAt` backfill (all three run from `loadLibrary`).
         var gradingSchemaVersion: Int?
+        /// `true` on every export the persister writes (M1,
+        /// `LibraryExportFormat.generatedKey`); absent on a manifest a
+        /// pre-switch build wrote — the last truth of that build's session,
+        /// which the first post-switch launch keeps a copy of.
+        var generated: Bool?
     }
 
     private struct ProcessingOutput {
@@ -1297,6 +1309,12 @@ final class AppModel: ObservableObject {
         // once per launch — after the trash sweep, so a tombstoned project's
         // document is written where its folder has ended up.
         persister.reconcileDocuments(currentManifest())
+        // M1: a missing, unreadable or pre-switch `library.json` is
+        // regenerated as the export once the documents are current — queued
+        // behind the pass above, so it describes what is on disk.
+        if libraryExportStale {
+            persist(reason: .valuesChanged)
+        }
         scheduleAssetBackfill()
         // The Adjust and Guided previews level their source frames the way
         // the render will; they learn the current project's level from here.
@@ -8227,52 +8245,51 @@ final class AppModel: ObservableObject {
     /// `stampLegacyDefaultPresetsIfNeeded`.
     private var gradingSchemaVersion = 0
 
+    /// M1: set when `library.json` is missing, could not be read, or is the
+    /// manifest a pre-switch build wrote (no `generated` marker) — the launch
+    /// regenerates the export once the documents are current, and any
+    /// persist before that does it sooner.
+    private var libraryExportStale = false
+
+    /// M1: folders whose `project.json` exists but would not decode. Left
+    /// exactly as they are and kept out of every launch pass — the folder
+    /// reconciliation would otherwise register one from its media and the
+    /// next persist would overwrite the document.
+    private var unreadableDocumentFolders: Set<UUID> = []
+
+    /// What `Projects/library.json` is at launch, read once.
+    private enum LibraryExport {
+        case missing
+        /// Bytes that are not a JSON object.
+        case unreadable(Error)
+        /// A manifest — marked `generated` when this build's persister (or a
+        /// later one) wrote it as the export; unmarked when a pre-switch
+        /// build wrote it as the truth. The ids it lists, so a launch can
+        /// tell whether the export still describes what the documents say.
+        case manifest(Data, generated: Bool, captureIDs: Set<UUID>, blendIDs: Set<UUID>)
+    }
+
+    /// M1: the library is read from the project folders — every
+    /// `Projects/<id>/project.json` (live and in `.trash`) plus the
+    /// collections document — and `library.json` is no longer decoded on
+    /// that path. A library with no documents at all is one a pre-Phase-2
+    /// build wrote: it bootstraps from its manifest exactly as before, the
+    /// launch pass writes every document, and from the next launch on the
+    /// documents are what is read.
     private func loadLibrary() {
         do {
             try migrateLegacyApplicationSupportFolderIfNeeded()
             try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
-            guard FileManager.default.fileExists(atPath: manifestURL.path) else { return }
-            let data = try Data(contentsOf: manifestURL)
-            // The JSON-level migrations run BEFORE the decoder sees the bytes
-            // (Phase 1 W4): a repair that has to survive a strict decoder
-            // cannot be made after it. Step 4 backfills `originID`, links DNG
-            // clones to their parent's origin and drops the `.json` names
-            // misregistered as frames.
-            let loaded: (migration: ManifestMigrations.Outcome, manifest: LibraryManifest)
-            do {
-                let migration = try ManifestMigrations.apply(to: data) { [self] id in
-                    UUID(uuidString: id).map { captureFolderURL(for: $0) }
-                }
-                loaded = (migration, try JSONDecoder().decode(LibraryManifest.self, from: migration.data))
-            } catch {
-                // W7: a manifest this build cannot decode is set aside, never
-                // overwritten. Phase 4 adds the repair: the manifest is
-                // rebuilt from every project's own `project.json` and the
-                // collections document, and the library carries on. Only
-                // when that fails too is it the guard alone — an empty
-                // library, every write refused, and a banner naming the file.
-                setAsideUnreadableManifest(error)
-                guard let repaired = repairManifestFromDocuments() else { return }
-                loaded = repaired
+            let started = Date()
+            let loaded = LibraryDocumentLoader.load(projectsRoot: projectsRootURL, collectionsURL: collectionsDocumentURL)
+            unreadableDocumentFolders = loaded.unreadableFolders
+            persister.seedDocuments(loaded.onDisk)
+            let export = try readLibraryExport()
+            if loaded.documentsRead == 0 {
+                bootstrapFromManifest(export)
+            } else {
+                loadFromDocuments(loaded, export: export, started: started)
             }
-            let migration = loaded.migration
-            let manifest = loaded.manifest
-            // Tombstoned records (W9) split off here, so the live arrays are
-            // what they always were and every view, export and transfer keeps
-            // excluding the deleted for free.
-            captures = manifest.captures.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
-            deletedCaptures = manifest.captures.filter { $0.deletedAt != nil }
-            blends = manifest.blends.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
-            deletedBlends = manifest.blends.filter { $0.deletedAt != nil }
-            // Oldest first — a collection list reads in creation order.
-            let allCollections = manifest.collections ?? []
-            collections = allCollections.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
-            deletedCollections = allCollections.filter { $0.deletedAt != nil }
-            gradingSchemaVersion = manifest.gradingSchemaVersion ?? 0
-            stampLegacyDefaultPresetsIfNeeded()
-            stampPresetStatesIfNeeded()
-            stampAddedDatesIfNeeded()
-            stampManifestVersionIfNeeded(migration)
             for capture in captures
             where capture.kind == .video
                 && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil
@@ -8302,27 +8319,258 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Moves an undecodable `library.json` to `library.json.unreadable-<stamp>`
-    /// and locks the persister. The set-aside file is the only copy of every
-    /// grade, tag, blend record and collection; the next persist of an empty
-    /// library would have been the R1 data loss.
-    private func setAsideUnreadableManifest(_ error: Error) {
+    /// `library.json`'s bytes, parsed only far enough to tell a generated
+    /// export from a pre-switch manifest. Throws only when the bytes cannot
+    /// be read at all.
+    private func readLibraryExport() throws -> LibraryExport {
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else { return .missing }
+        let data = try Data(contentsOf: manifestURL)
+        do {
+            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw ManifestMigrations.MigrationError.notAManifest
+            }
+            func ids(_ key: String) -> Set<UUID> {
+                Set((object[key] as? [[String: Any]] ?? []).compactMap { ($0["id"] as? String).flatMap(UUID.init) })
+            }
+            return .manifest(data, generated: LibraryExportFormat.isGenerated(object), captureIDs: ids("captures"), blendIDs: ids("blends"))
+        } catch {
+            return .unreadable(error)
+        }
+    }
+
+    /// The manifest's bytes decoded the way every launch decoded them before
+    /// M1: the JSON-level migrations first (Phase 1 W4), then the strict
+    /// decoder.
+    private func decodeManifest(_ data: Data) throws -> (migration: ManifestMigrations.Outcome, manifest: LibraryManifest) {
+        let migration = try ManifestMigrations.apply(to: data) { [self] id in
+            UUID(uuidString: id).map { captureFolderURL(for: $0) }
+        }
+        return (migration, try JSONDecoder().decode(LibraryManifest.self, from: migration.data))
+    }
+
+    /// The last manifest a pre-switch build wrote, kept beside the export
+    /// before the first persist overwrites it: `library.json.pre-switch-<stamp>`.
+    /// The per-record diff between it and the export is M1's acceptance
+    /// test, and it is the only copy of a record that has no folder.
+    private func keepPreSwitchCopy(_ data: Data) {
+        let name = LibraryExportFormat.preSwitchPrefix + Self.fileStamp()
+        do {
+            try data.write(to: projectsRootURL.appendingPathComponent(name), options: .atomic)
+            LLog("library: pre-switch manifest kept as \(name)")
+        } catch {
+            LLog("library: could not keep the pre-switch manifest as \(name): \(error)")
+        }
+    }
+
+    private static func fileStamp() -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let name = "library.json.unreadable-\(formatter.string(from: Date()))"
+        return formatter.string(from: Date())
+    }
+
+    /// A library with no project documents anywhere — the pre-M1 load path,
+    /// kept whole for the one launch that needs it. The manifest is the
+    /// truth here (a pre-switch build wrote it), so a copy is kept and the
+    /// export is regenerated once the documents exist.
+    private func bootstrapFromManifest(_ export: LibraryExport) {
+        let loaded: (migration: ManifestMigrations.Outcome, manifest: LibraryManifest)
+        switch export {
+        case .missing:
+            // An empty library: the first launch ever, or a root with
+            // nothing in it yet.
+            return
+        case .unreadable(let error):
+            // W7: a manifest this build cannot decode is set aside, never
+            // overwritten. Phase 4's repair rebuilds from the documents —
+            // there are none here, so the guard stays: an empty library,
+            // every write refused, and a banner naming the file.
+            setAsideUnreadableManifest(error)
+            guard let repaired = repairManifestFromDocuments() else { return }
+            loaded = repaired
+        case .manifest(let data, let generated, _, _):
+            do {
+                loaded = try decodeManifest(data)
+            } catch {
+                setAsideUnreadableManifest(error)
+                guard let repaired = repairManifestFromDocuments() else { return }
+                loaded = repaired
+                break
+            }
+            if !generated { keepPreSwitchCopy(data) }
+        }
+        let migration = loaded.migration
+        let manifest = loaded.manifest
+        // Tombstoned records (W9) split off here, so the live arrays are
+        // what they always were and every view, export and transfer keeps
+        // excluding the deleted for free.
+        captures = manifest.captures.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
+        deletedCaptures = manifest.captures.filter { $0.deletedAt != nil }
+        blends = manifest.blends.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
+        deletedBlends = manifest.blends.filter { $0.deletedAt != nil }
+        // Oldest first — a collection list reads in creation order.
+        let allCollections = manifest.collections ?? []
+        collections = allCollections.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
+        deletedCollections = allCollections.filter { $0.deletedAt != nil }
+        gradingSchemaVersion = manifest.gradingSchemaVersion ?? 0
+        libraryExportStale = true
+        LLog("library: bootstrapped from library.json (\(captures.count) live, \(deletedCaptures.count) deleted, \(blends.count) blends) — no project documents yet; the launch pass writes them")
+        stampLegacyDefaultPresetsIfNeeded()
+        stampPresetStatesIfNeeded()
+        stampAddedDatesIfNeeded()
+        stampManifestVersionIfNeeded(migration)
+    }
+
+    /// The documents path (M1). The manifest is looked at for what the
+    /// folders cannot say — the record of a live folder that has no document
+    /// yet (a pre-Phase-2 build's last session), the collections of a
+    /// library with no collections document — and, on the launch that
+    /// flips, for the records that have no folder at all, which are logged
+    /// and left in the pre-switch copy.
+    private func loadFromDocuments(_ loaded: LibraryDocumentLoader.Loaded, export: LibraryExport, started: Date) {
+        captures = loaded.captures
+        deletedCaptures = loaded.deletedCaptures
+        blends = loaded.blends
+        deletedBlends = loaded.deletedBlends
+        deletedCollections = loaded.deletedCollections
+
+        // Decoded at most once, and only when something below needs it.
+        var manifestData: Data?
+        var flipping = false
+        var exportIDs: (captures: Set<UUID>, blends: Set<UUID>)?
+        switch export {
+        case .missing:
+            libraryExportStale = true
+            LLog("library: no library.json — the export will be regenerated")
+        case .unreadable(let error):
+            // The export could not be read; the documents were, so the
+            // library carries on. The file is set aside rather than
+            // overwritten, the banner says what happened (Phase 4's story:
+            // rebuilt from the folders), and the next persist regenerates it.
+            let setAside = setAsideManifest(error)
+            libraryLoadFailure = LibraryLoadFailure(
+                setAsideName: setAside.name, reason: setAside.reason,
+                rebuiltFromDocuments: loaded.documentsRead, collectionsRecovered: loaded.collections != nil)
+            libraryExportStale = true
+        case .manifest(let data, let generated, let captureIDs, let blendIDs):
+            manifestData = data
+            exportIDs = (captureIDs, blendIDs)
+            if !generated {
+                flipping = true
+                keepPreSwitchCopy(data)
+                libraryExportStale = true
+            }
+        }
+
+        var decoded: LibraryManifest?
+        var decodeTried = false
+        func manifest() -> LibraryManifest? {
+            if decodeTried { return decoded }
+            decodeTried = true
+            guard let manifestData else { return nil }
+            do {
+                decoded = try decodeManifest(manifestData).manifest
+            } catch {
+                LLog("library: library.json could not be decoded for its records (\(error)) — folders without a document fall to the folder reconciliation")
+            }
+            return decoded
+        }
+
+        // A live folder with no document but a record in the manifest: the
+        // record is taken from there, once — the launch pass writes its
+        // document and the export is regenerated behind it.
+        var filled = 0
+        for id in loaded.liveFoldersWithoutDocument {
+            guard let manifest = manifest(), var record = manifest.captures.first(where: { $0.id == id }) else { continue }
+            record.sourceFileNames.removeAll { $0.hasSuffix(".json") }
+            if record.originID == nil { record.originID = record.importedFromID ?? id }
+            // A folder under `Projects/` is live, whatever the record says.
+            record.deletedAt = nil
+            record.deletedBy = nil
+            captures.append(record)
+            for blend in manifest.blends where blend.captureID == id {
+                if blend.deletedAt == nil { blends.append(blend) } else { deletedBlends.append(blend) }
+            }
+            filled += 1
+            LLog("library: \(id.uuidString.prefix(8)) has a folder and a manifest record but no document yet — taken from the manifest")
+        }
+        if filled > 0 {
+            captures.sort { $0.createdAt > $1.createdAt }
+            blends.sort { $0.createdAt > $1.createdAt }
+        }
+
+        if let documented = loaded.collections {
+            collections = documented
+        } else {
+            let all = manifest()?.collections ?? []
+            collections = all.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
+            deletedCollections = all.filter { $0.deletedAt != nil }
+            LLog("library: no collections document — \(collections.count) collections taken from the manifest")
+        }
+
+        if flipping, let manifest = manifest() {
+            let known = Set((captures + deletedCaptures).map(\.id))
+            let dropped = manifest.captures.filter { !known.contains($0.id) && !unreadableDocumentFolders.contains($0.id) }
+            for record in dropped {
+                LLog("library: record \(record.id.uuidString.prefix(8)) (\(record.name ?? record.originalName)) has no folder and no document — not carried across the switch; its record is in the pre-switch copy")
+            }
+        }
+
+        // An export that no longer lists what the documents say — a record
+        // dropped at the switch, a folder that arrived or went while the app
+        // was not running — is regenerated at the end of the launch rather
+        // than at the next edit, so the two agree whenever the app is up.
+        if !libraryExportStale, let exportIDs {
+            let captureIDs = Set((captures + deletedCaptures).map(\.id))
+            let blendIDs = Set((blends + deletedBlends).map(\.id))
+            if exportIDs.captures != captureIDs || exportIDs.blends != blendIDs {
+                libraryExportStale = true
+                LLog("library: library.json lists \(exportIDs.captures.subtracting(captureIDs).count) capture(s) and \(exportIDs.blends.subtracting(blendIDs).count) blend(s) the documents don't, and lacks \(captureIDs.subtracting(exportIDs.captures).count) and \(blendIDs.subtracting(exportIDs.blends).count) — the export will be regenerated")
+            }
+        }
+
+        // Every document was written by a build at the current schema (the
+        // documents came after the last manifest migration), so the manifest
+        // stamps have nothing to do here.
+        gradingSchemaVersion = ManifestMigrations.current
+
+        for id in loaded.restored { LLog("library: \(id.uuidString.prefix(8)) tombstoned but under Projects/ — live (restored from its folder)") }
+        for id in loaded.stampedInTrash { LLog("library: \(id.uuidString.prefix(8)) in .trash without a deletedAt — stamped now") }
+        for item in loaded.unreadable { LLog("library: document in \(item.folder) could not be read and was left alone: \(item.reason)") }
+        if !loaded.unreadable.isEmpty {
+            let names = loaded.unreadable.map { String($0.folder.prefix(8)) }.joined(separator: ", ")
+            errorMessage = "\(loaded.unreadable.count) project record\(loaded.unreadable.count == 1 ? "" : "s") couldn't be read and \(loaded.unreadable.count == 1 ? "was" : "were") left alone: \(names). See the console log."
+        }
+        LLog(String(format: "library: read %d documents (%d in .trash) in %.3f s — %d live, %d deleted, %d blends, %d collections%@",
+                    loaded.documentsRead, loaded.documentsInTrash, Date().timeIntervalSince(started),
+                    captures.count, deletedCaptures.count, blends.count, collections.count,
+                    flipping ? " · switched from library.json" : ""))
+    }
+
+    /// Moves an undecodable `library.json` to `library.json.unreadable-<stamp>`
+    /// — never overwritten, whatever it turns out to hold.
+    private func setAsideManifest(_ error: Error) -> (name: String, reason: String) {
+        let name = LibraryExportFormat.unreadablePrefix + Self.fileStamp()
         let destination = projectsRootURL.appendingPathComponent(name)
         do {
             try FileManager.default.moveItem(at: manifestURL, to: destination)
         } catch {
             LLog("library: could not set the unreadable manifest aside: \(error)")
         }
-        let reason = error.localizedDescription
-        let why = "The project library couldn't be read (\(reason)). It was set aside as \(name); nothing will be saved until it is repaired."
-        libraryLoadFailure = LibraryLoadFailure(setAsideName: name, reason: reason)
+        LLog("library: manifest undecodable, set aside as \(name) — \(error)")
+        return (name, error.localizedDescription)
+    }
+
+    /// The W7 guard, for a library that has nothing but its manifest: set
+    /// aside and lock the persister. The set-aside file is then the only
+    /// copy of every grade, tag, blend record and collection; the next
+    /// persist of an empty library would have been the R1 data loss.
+    private func setAsideUnreadableManifest(_ error: Error) {
+        let setAside = setAsideManifest(error)
+        let why = "The project library couldn't be read (\(setAside.reason)). It was set aside as \(setAside.name); nothing will be saved until it is repaired."
+        libraryLoadFailure = LibraryLoadFailure(setAsideName: setAside.name, reason: setAside.reason)
         persister.refuseWrites = why
         errorMessage = why
-        LLog("library: manifest undecodable, set aside as \(name) — \(error)")
     }
 
     /// Phase 4: the manifest rebuilt from the project folders — every
@@ -8383,6 +8631,10 @@ final class AppModel: ObservableObject {
         var empty: [String] = []
         for name in names.sorted() {
             guard !name.hasPrefix("."), let id = UUID(uuidString: name), !known.contains(id) else { continue }
+            // M1: a folder whose document exists but would not decode is
+            // nobody's to re-register — its media would make a "Recovered"
+            // record that the next persist writes over the document.
+            if unreadableDocumentFolders.contains(id) { continue }
             let folder = captureFolderURL(for: id)
             var isDirectory: ObjCBool = false
             guard fm.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else { continue }
@@ -8630,6 +8882,8 @@ final class AppModel: ObservableObject {
             projectStorageBytes.removeAll()
             validatedSourceFrames.removeAll()
         }
+        // Every persist regenerates the export (M1).
+        libraryExportStale = false
         return (currentManifest(), persister.mint())
     }
 
@@ -8687,8 +8941,14 @@ final class AppModel: ObservableObject {
         applicationSupportURL.appendingPathComponent("Projects", isDirectory: true)
     }
 
+    /// `Projects/library.json` — the generated compatibility export (M1).
     private var manifestURL: URL {
-        projectsRootURL.appendingPathComponent("library.json")
+        projectsRootURL.appendingPathComponent(LibraryExportFormat.fileName)
+    }
+
+    /// `Collections/collections.json` — the collections' own document.
+    private var collectionsDocumentURL: URL {
+        ProjectDocumentFormat.collectionsURL(inRoot: applicationSupportURL)
     }
 
     private func captureFolderURL(for id: UUID) -> URL {
