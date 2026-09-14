@@ -15,12 +15,9 @@ struct GallerySidebar: View {
     @Binding var filter: CaptureFilter
     @Binding var tagSelection: Set<String>
     @Binding var shapeSelection: Set<ShapeFilter>
-    /// The captures already filtered by type — used to derive which tags appear.
-    var allCaptures: [AppModel.CaptureProject]
-
-    private var presentTags: [String] {
-        allCaptures.presentSceneTags
-    }
+    /// The tags present among the projects the grid's question matches —
+    /// the index's answer (M3), in the taxonomy's order, custom after.
+    var presentTags: [String]
 
     var body: some View {
         ScrollView {

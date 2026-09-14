@@ -1,6 +1,6 @@
 # Data model — the switch: documents as the truth, SQLite as the index, `library.json` retired
 
-**Date:** 2026-09-13 · **Status:** M1 landed 2026-09-14 (538dbb1, 77116f1; report `data-model-audit-reports/scratch-m1-switch-2026-09-14.txt`); §9 decided 2026-09-14 (2fc20c0); M2 landed 2026-09-14 (spec `data-model-m2-spec-2026-09-14.md`, f7eb131 → 3fc7a85, report `scratch-m2-lists-2026-09-14.txt`); M3 next · **Branch:** `ios-app` at 6ca7c64 when written · **Builds on:** Phases 1–4 and the Lightroom tool, all landed 2026-09-13 (commits 7fd0a0a → 6ca7c64, one per work item)
+**Date:** 2026-09-13 · **Status:** M1 landed 2026-09-14 (538dbb1, 77116f1; report `data-model-audit-reports/scratch-m1-switch-2026-09-14.txt`); §9 decided 2026-09-14 (2fc20c0); M2 landed 2026-09-14 (spec `data-model-m2-spec-2026-09-14.md`, f7eb131 → 3fc7a85, report `scratch-m2-lists-2026-09-14.txt`); M3 landed 2026-09-14 (spec `data-model-m3-spec-2026-09-14.md`, d6b40e7 → W4, report `scratch-m3-arrays-2026-09-14.txt`); M4 next, one release after M1 by decision · **Branch:** `ios-app` at 6ca7c64 when written · **Builds on:** Phases 1–4 and the Lightroom tool, all landed 2026-09-13 (commits 7fd0a0a → 6ca7c64, one per work item)
 
 This is the handover for the milestone the audit programme has been building towards: the app stops treating `Projects/library.json` as the library and starts treating each project's own files as the truth and the SQLite index as the way it finds them. Everything below the fold is either done and verified, or named here as work with an acceptance test.
 

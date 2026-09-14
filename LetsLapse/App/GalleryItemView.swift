@@ -1,4 +1,5 @@
 import SwiftUI
+import LetsLapseKit
 
 // MARK: - The Gallery's item view (macOS, 2026-09-13)
 //
@@ -54,7 +55,8 @@ struct GalleryItemEditor: View {
 /// one place a strip can go without the editors having to know about it.
 struct GalleryFilmstrip: View {
     @EnvironmentObject var model: AppModel
-    var captures: [AppModel.CaptureProject]
+    /// The grid's rows (M3): a tile reads its record as it scrolls in.
+    var rows: [LibraryIndex.ProjectRow]
     var focusedID: UUID
     var onSelect: (UUID) -> Void
 
@@ -67,9 +69,11 @@ struct GalleryFilmstrip: View {
         ScrollViewReader { scroller in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 8) {
-                    ForEach(captures) { capture in
-                        tile(capture)
-                            .id(capture.id)
+                    ForEach(rows) { row in
+                        if let capture = model.capture(id: row.id) {
+                            tile(capture)
+                                .id(capture.id)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)

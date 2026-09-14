@@ -56,6 +56,8 @@ struct ProjectListQuery: Hashable {
     }
 }
 
+extension LibraryIndex.ProjectRow: Identifiable {}
+
 extension AppModel {
 
     // MARK: - One record by id
@@ -74,17 +76,43 @@ extension AppModel {
 
     // MARK: - The lists
 
-    /// The ids a list renders, in order, or nil when the library has no
-    /// index to ask. Remembered per question until the index changes.
-    func projectIDs(for query: ProjectListQuery) -> [UUID]? {
+    /// The rows a list renders, in order — id, name, kind, dates, counts:
+    /// what a grid or a timeline needs to lay itself out without a record
+    /// (M3) — or nil when the library has no index to ask. Remembered per
+    /// question until the index changes.
+    func listRows(for query: ProjectListQuery) -> [LibraryIndex.ProjectRow]? {
         guard let index = libraryIndex else { return nil }
-        if let cached = listCache[query], cached.revision == indexRevision { return cached.ids }
+        if let cached = listCache[query], cached.revision == indexRevision { return cached.rows }
         do {
-            let ids = try index.projectIDs(query.indexQuery)
-            listCache[query] = (indexRevision, ids)
-            return ids
+            var indexQuery = query.indexQuery
+            indexQuery.limit = Int(Int32.max)
+            let rows = try index.projects(indexQuery).rows
+            listCache[query] = (indexRevision, rows)
+            return rows
         } catch {
             LLog("index: list query failed (\(error))")
+            return nil
+        }
+    }
+
+    /// The ids a list renders, in order, or nil when the library has no
+    /// index to ask.
+    func projectIDs(for query: ProjectListQuery) -> [UUID]? {
+        listRows(for: query)?.map(\.id)
+    }
+
+    /// The tag chips present among the projects a list question matches —
+    /// the Gallery sidebar's chips, which narrow with the filter, the words
+    /// and the rows — in the taxonomy's order, custom tags after.
+    func tagChips(for query: ProjectListQuery) -> [String]? {
+        guard let index = libraryIndex else { return nil }
+        do {
+            let present = Set(try index.tagCounts(query.indexQuery).map(\.tag))
+            let custom = present.filter(SceneMetadata.isCustom)
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            return SceneMetadata.orderedTaxonomy.filter(present.contains) + custom
+        } catch {
+            LLog("index: tag query failed (\(error))")
             return nil
         }
     }

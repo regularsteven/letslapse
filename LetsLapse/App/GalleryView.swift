@@ -120,7 +120,7 @@ struct GalleryView: View {
         #if DEBUG
         guard selection.isEmpty, !selection.isSelecting,
               let raw = ProcessInfo.processInfo.environment["LL_SELECT"] else { return }
-        let visible = sortedCaptures.map(\.id)
+        let visible = sortedIDs
         for token in raw.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) {
             switch token {
             case "all": selection.selectAll(visible)
@@ -171,7 +171,7 @@ struct GalleryView: View {
                 if let text = ListDebugHooks.queryText { query.text = text }
                 if let chips = ListDebugHooks.chips { query.tags = chips }
             }
-            .onChange(of: sortedCaptures.map(\.id), initial: true) { _, ids in
+            .onChange(of: sortedIDs, initial: true) { _, ids in
                 ListDebugHooks.dump(screen: "gallery", sort: sortKey.rawValue, ascending: sortAscending, filter: filter, query: query, ids: ids)
             }
             #endif
@@ -183,7 +183,7 @@ struct GalleryView: View {
             }
             // A filter or search that hides a selected tile drops it from the
             // selection, so "N selected" only ever counts what is on screen.
-            .onChange(of: sortedCaptures.map(\.id)) { _, visible in
+            .onChange(of: sortedIDs) { _, visible in
                 selection.keepOnly(visible)
             }
             #if os(macOS)
@@ -199,7 +199,7 @@ struct GalleryView: View {
                     filter: $filter,
                     tagSelection: $query.tags,
                     shapeSelection: $shapeSelection,
-                    allCaptures: visibleCaptures
+                    presentTags: presentTags
                 )
                 .navigationTitle("Library")
                 .toolbar {
@@ -255,7 +255,7 @@ struct GalleryView: View {
                 galleryHeader
                 Divider()
                 GalleryGridContent(
-                    captures:     sortedCaptures,
+                    rows:         sortedRows,
                     columnCount:  columnCount,
                     timelineMode: timelineMode,
                     selection:    $selection,
@@ -279,7 +279,7 @@ struct GalleryView: View {
     /// The selected projects in the grid's order — what the batch panel
     /// edits and what its preset tiles are previewed on (the first).
     private var batchCaptures: [AppModel.CaptureProject] {
-        sortedCaptures.filter { selection.ids.contains($0.id) }
+        sortedIDs.filter { selection.ids.contains($0) }.compactMap { model.capture(id: $0) }
     }
 
     // MARK: Wide layout (grid mode and the item view)
@@ -331,7 +331,7 @@ struct GalleryView: View {
             if let focus, focusedCapture != nil {
                 Divider()
                 GalleryFilmstrip(
-                    captures: sortedCaptures,
+                    rows: sortedRows,
                     focusedID: focus.captureID,
                     onSelect: { move(to: $0) })
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -358,7 +358,7 @@ struct GalleryView: View {
                 filter: $filter,
                 tagSelection: $query.tags,
                 shapeSelection: $shapeSelection,
-                allCaptures: visibleCaptures
+                presentTags: presentTags
             )
             .transition(.opacity)
         }
@@ -369,7 +369,7 @@ struct GalleryView: View {
             galleryHeader
             Divider()
             GalleryGridContent(
-                captures:     sortedCaptures,
+                rows:         sortedRows,
                 columnCount:  columnCount,
                 timelineMode: timelineMode,
                 selection:    $selection,
@@ -485,9 +485,9 @@ struct GalleryView: View {
     /// "3 of 48": where the focused project sits in the grid's order.
     private var filmstripPosition: (index: Int, count: Int)? {
         guard let focus,
-              let index = sortedCaptures.firstIndex(where: { $0.id == focus.captureID })
+              let index = sortedIDs.firstIndex(of: focus.captureID)
         else { return nil }
-        return (index + 1, sortedCaptures.count)
+        return (index + 1, sortedIDs.count)
     }
 
     // MARK: Header
@@ -519,7 +519,7 @@ struct GalleryView: View {
     /// one order, and re-sorting or re-filtering under it would change what
     /// "N selected" means.
     private var selectionHeader: some View {
-        let all = sortedCaptures.map(\.id)
+        let all = sortedIDs
         let allSelected = !all.isEmpty && selection.ids.count == all.count
         return HStack(spacing: 10) {
             Button("Done") {
@@ -741,15 +741,18 @@ struct GalleryView: View {
     }
 
     /// The library after filtering by type, search and the sidebar's Shapes
-    /// rows — the index's answer, in the grid's order (M2; a library with no
-    /// index shows nothing, M3).
-    private var visibleCaptures: [AppModel.CaptureProject] {
-        model.projects(for: listQuery) ?? []
+    /// rows — the index's rows, in the grid's order (M2; a library with no
+    /// index shows nothing, M3). A tile reads its own record.
+    private var sortedRows: [LibraryIndex.ProjectRow] {
+        model.listRows(for: listQuery) ?? []
     }
 
-    /// Filtered then sorted — the index's answer is already in order.
-    private var sortedCaptures: [AppModel.CaptureProject] {
-        visibleCaptures
+    /// The ids as drawn.
+    private var sortedIDs: [UUID] { sortedRows.map(\.id) }
+
+    /// The chips the sidebar offers: the tags among what the grid shows.
+    private var presentTags: [String] {
+        model.tagChips(for: listQuery) ?? []
     }
 
     // MARK: Actions
@@ -806,7 +809,7 @@ struct GalleryView: View {
     /// Masks page, so that one falls back to Editor.
     private func move(to id: UUID) {
         guard let focus, id != focus.captureID, itemTransition == nil,
-              let capture = sortedCaptures.first(where: { $0.id == id }) else { return }
+              sortedIDs.contains(id), let capture = model.capture(id: id) else { return }
         let page: RailTab = (capture.kind == .video && focus.page == .masks) ? .editor : focus.page
         guard let request = model.stageEditor(for: capture, page: page) else { return }
         itemTransition = .move(GalleryFocus(request: request, page: page))
@@ -816,11 +819,11 @@ struct GalleryView: View {
     /// ← / → in the item view: the neighbour in the grid's order.
     private func step(_ delta: Int) {
         guard let focus,
-              let index = sortedCaptures.firstIndex(where: { $0.id == focus.captureID })
+              let index = sortedIDs.firstIndex(of: focus.captureID)
         else { return }
         let next = index + delta
-        guard sortedCaptures.indices.contains(next) else { return }
-        move(to: sortedCaptures[next].id)
+        guard sortedIDs.indices.contains(next) else { return }
+        move(to: sortedIDs[next])
     }
 
     /// The editor has left. Go where the transition said.
@@ -849,9 +852,9 @@ struct GalleryView: View {
         let page = parts.count > 1 ? (RailTab(rawValue: parts[1].capitalized) ?? .editor) : .editor
         let capture: AppModel.CaptureProject?
         if parts[0] == "latest" {
-            capture = sortedCaptures.first
+            capture = sortedIDs.first.flatMap { model.capture(id: $0) }
         } else {
-            capture = UUID(uuidString: parts[0]).flatMap { id in sortedCaptures.first { $0.id == id } }
+            capture = UUID(uuidString: parts[0]).flatMap { id in sortedIDs.contains(id) ? model.capture(id: id) : nil }
         }
         if let capture { enterItem(capture, page: page) }
         #endif
@@ -899,7 +902,7 @@ struct GalleryView: View {
                     return true
                 }
                 if flags == .command, key == "a" {
-                    selection.selectAll(sortedCaptures.map(\.id))
+                    selection.selectAll(sortedIDs)
                     return true
                 }
                 if flags == .command, key == "d" {
@@ -945,11 +948,11 @@ struct GalleryView: View {
     /// column count, the timeline by its day groups five across.
     private var gridRows: [[UUID]] {
         if timelineMode {
-            return timelineGroups(sortedCaptures).flatMap {
-                GallerySelection.rows($0.captures.map(\.id), columns: timelineColumnCount)
+            return timelineGroups(sortedRows).flatMap {
+                GallerySelection.rows($0.rows.map(\.id), columns: timelineColumnCount)
             }
         }
-        return GallerySelection.rows(sortedCaptures.map(\.id), columns: max(2, columnCount))
+        return GallerySelection.rows(sortedIDs, columns: max(2, columnCount))
     }
 
     /// An arrow: from the anchor (or the first tile, with nothing selected)
@@ -973,7 +976,7 @@ struct GalleryView: View {
     /// 1–5 stars on every selected project, 0 none — the same write the
     /// panels' star rows make, project scope.
     private func rateSelection(_ stars: Int) {
-        for capture in sortedCaptures where selection.ids.contains(capture.id) {
+        for capture in batchCaptures {
             model.setMetadata(.integer(stars), for: .rating, on: capture, scope: .project)
         }
     }

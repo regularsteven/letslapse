@@ -1,6 +1,6 @@
 # Data model M3 — no whole-library arrays
 
-**Date:** 2026-09-14 · **Status:** spec, agreed scope (Steven: "go on to M3 now, same rules"), in build · **Implements:** [the switch brief](data-model-switch-brief-2026-09-13.md) §4 M3 · **After:** M1 (538dbb1 → 6cd07b3), M2 ([spec](data-model-m2-spec-2026-09-14.md), f7eb131 → 76e503e) · **Branch:** `claude/ios-app-data-model-a4ffdd`
+**Date:** 2026-09-14 · **Status:** landed 2026-09-14 — d6b40e7 (W1), a5fdebc (W2), 283fd0a (W3), W4 (the export's trailer, the lists by row, the measure); report `data-model-audit-reports/scratch-m3-arrays-2026-09-14.txt` · **Implements:** [the switch brief](data-model-switch-brief-2026-09-13.md) §4 M3 · **After:** M1 (538dbb1 → 6cd07b3), M2 ([spec](data-model-m2-spec-2026-09-14.md), f7eb131 → 76e503e) · **Branch:** `claude/ios-app-data-model-a4ffdd`
 
 M2 made the index what the lists read; the records still came from three arrays the launch filled from every document. M3 removes the arrays: `AppModel` holds no `[CaptureProject]` and no `[BlendProject]`. A record is read from its document when a screen asks for it, through a bounded cache; a change writes that one document and its index row; everything that used to walk the library — the storage card, the trash line, the transfer catalogue, the export estimates, the size sweep, the metadata probes, the launch hooks — asks the index. Memory at launch stops scaling with project count, which is the cliff Part 2 §5 measured.
 
@@ -14,7 +14,7 @@ M2 made the index what the lists read; the records still came from three arrays 
 4. The launch is a **walk, not a load**: one `stat` per project folder against the index's `document_modified_at`; only a changed or unknown document is read (and the M1 rules applied to it); the index loses rows for folders that have gone. A fresh or discarded index is rebuilt whole. A manifest-only library still bootstraps once.
 5. The compatibility export is regenerated **at launch when stale and at quit / background** from the documents (`LibraryIndexRebuild.rebuiltManifest`), not after every persist — with nothing in memory to write it from, per-persist would mean reading every document on every grade tick. `lapse audit --rebuild-index` reads IDENTICAL after a clean quit; after a crash it reads DIFFERS until the next launch, which regenerates it. M4 retires it.
 6. The storage card's bytes, the trash line, the transfer catalogue, the export estimates, the size sweep, the metadata catch-ups and the `LL_*` hooks read the index.
-7. Memory at launch on a 10k-project synthetic root is flat against project count (measured).
+7. Memory at launch on a 10k-project synthetic root is flat against project count (measured — see §5).
 
 ---
 
@@ -65,6 +65,12 @@ Acceptance: the build with no `captures`/`blends` stored anywhere; the M2 rig; t
 A 10k-project synthetic root (`lapse`-free: the M1 scratch documents cloned under fresh ids, no media): launch time and resident memory of the Debug Mac app at 366 and at 10,000 — the memory must not scale; the launch walk's time may (10k stats). The record in `docs/data-model-audit-reports/`, TODO, the brief, the overview.
 
 ---
+
+## 5. What the measure found (2026-09-14)
+
+Resident memory of the Debug Mac app, steady state, 366 versus 10,000 projects: Create 117 → 140 MB, Gallery 123 → 183 MB — flat. Two things had to change to get there and are part of W4: `readLibraryExport` parsed the whole export for the marker and the id sets (73 MB of JSON at 10k, +270 MB resident); the marker and — new — the record counts are now read from the file's last kilobyte (`LibraryExportFormat.readTrailer`; the Kit's rebuilt manifest writes `generatedCaptures` / `generatedBlends` beside `generated`), and staleness is decided by counts. And the lists resolved every id's record into one array; they now take the index's rows (id, dates, counts — `AppModel.listRows(for:)`) and each row or tile reads its own record as it comes on screen; the Gallery's sidebar chips come from `tagCounts(query)` rather than from the visible records.
+
+Not flat: the Projects tab at 10k holds 1 GB, because macOS SwiftUI `List` instantiates every row's card and thumbnail eagerly whatever the ids cost (the Gallery's `LazyVGrid` on the same records proves the store is not the reason). The fix is the brief's M2 wording, "lists take pages" — a paged `ForEach` that renders the first N rows and extends on scroll — which is a visible behaviour change past N projects and so a design call, left for Steven. The 10k walk itself is 1.3–1.6 s on the persister's queue.
 
 ## 3. What is allowed to differ
 

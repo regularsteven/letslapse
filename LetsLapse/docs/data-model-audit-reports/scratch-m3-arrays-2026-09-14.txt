@@ -1,0 +1,49 @@
+M3 · no whole-library arrays — verification, 2026-09-14
+build: ios-app @ d6b40e7 (W1) → a5fdebc (W2) → 283fd0a (W3) → W4 (the export's trailer, the lists by row), Debug Mac app on
+       -storage.libraryRootPath <root>; the iPhone 16 Pro simulator with the same tree in its container. The volume was not touched.
+roots: lib-full (the volume's manifest + 366 documents, sizes settled, no media) · lib-bootstrap (manifest + 365 folder skeletons, no
+       documents) · lib-edge (lib-full with six faults) · lib-grade (two projects, one with its 6 MB of media) · lib-10k (the 366 documents
+       cloned under fresh ids to 10,000, no media, no asset records; index built by `lapse index --rebuild` in 27 s).
+
+== the launch is a walk ==
+  lib-full, everything current:        walked 366 documents in 0.25 s — 366 current · 0 read · 0 rewritten · 0 rows dropped
+  lib-10k, everything current:         walked 10000 documents in 1.3–1.6 s — 10000 current · 0 read (one stat + two row reads each)
+  lib-bootstrap, launch 1:             bootstrapped from library.json — 365 documents written · 1 record without a folder; export regenerated
+                                       from the documents in 0.12 s; REBUILD IDENTICAL and index CONSISTENT at once
+  lib-bootstrap, launch 2:             walked 365 in 0.05 s — 365 current
+  lib-edge (six faults, mtimes kept):  walked 364 in 0.11 s — 360 current · 2 read and indexed (the live tombstone restored, the
+                                       unstamped trash document stamped — both rewritten) · 2 rows dropped (the two unreadable documents,
+                                       left byte-identical); the gap folder written from the manifest's record; the recordless folder
+                                       recovered from its media; REBUILD IDENTICAL; `index --verify` names the unknown-enum document as
+                                       missing from the index — the tool can parse what the app cannot decode, the honest state
+  the walk off the main thread:        the same edge root with fresh mtimes re-read and re-indexed all 362 (57 k asset rows) in 15 s —
+                                       on the persister's queue as one block per folder, the lists rendering from the index meanwhile
+
+== every write is one document ==
+  lib-grade: LL_IMPORT_STILLS (a registration) → the new project's project.json, assets.ndjson, metadata.json; index CONSISTENT
+             LL_APPLY_PRESET (a grade settle)   → that project's project.json and one index row; the export untouched (its cadence is
+                                                  launch when stale and quit/background)
+             LL_DELETE                          → the document tombstoned in place, the folder moved to .trash, the row's folder
+                                                  updated; index CONSISTENT; REBUILD IDENTICAL once the launch regenerated the export
+
+== the lists (36 launch-hook cases, both platforms, the M2 rig) ==
+  W2:  Mac 36/36 identical to M2 (before and after the walk moved off the main thread)
+  W3:  Mac 36/36, simulator 36/36 identical to M2
+  W4:  Mac 36/36, simulator 36/36 identical to M2 (the lists driven by the index's rows, one record per visible row or tile)
+
+== memory at launch (Debug Mac app, resident set after 12 s, steady state) ==
+                       366 projects   10,000 projects
+  Create tab             117 MB          140 MB      flat: the walk, the index, the collections
+  Gallery (LazyVGrid)    123 MB          183 MB      the index's rows in hand (id + dates + counts), one record per visible tile
+  Projects (List)        175 MB        1,049 MB      NOT flat — see below
+  A first launch on a 10k root with no export regenerates it once: 3.2 s on the queue, a 73 MB JSON tree in flight (340 MB peak).
+
+  The Projects list: macOS SwiftUI `List` instantiates every row's card — and its thumbnail — eagerly, whatever the ids cost (a
+  search narrowed to 55 rows after the first pass still held 419 MB, because the first pass had built 10,000). The store and index
+  side is flat (the Gallery proves it: the same records, a LazyVGrid). The fix is the brief's own M2 wording, "lists take pages": a
+  paged ForEach that renders the first N rows and extends on scroll — a visible behaviour change past N projects, so a design call,
+  not done here.
+
+  What the export cost before W4: `readLibraryExport` parsed the whole file for the marker and the id sets — 73 MB at 10k, +270 MB
+  resident on the Create tab. Now the marker and the record counts are read from the file's last kilobyte
+  (`LibraryExportFormat.readTrailer`), and staleness is decided by counts against the index.

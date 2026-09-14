@@ -105,8 +105,45 @@ public enum LibraryExportFormat {
     /// could not be decoded (Phase 1 W7).
     public static let unreadablePrefix = "library.json.unreadable-"
 
+    /// The root keys a generated export carries beside the marker (M3):
+    /// how many capture and blend records it lists, so a launch can tell
+    /// whether it still describes the library without parsing it.
+    public static let generatedCapturesKey = "generatedCaptures"
+    public static let generatedBlendsKey = "generatedBlends"
+
     /// True when the manifest object carries the marker.
     public static func isGenerated(_ manifest: [String: Any]) -> Bool {
         (manifest[generatedKey] as? Bool) == true
+    }
+
+    /// What an export's tail says (M3). Both writers of `library.json` —
+    /// the app's `JSONEncoder` and the Kit's `JSONSerialization`, sorted
+    /// keys and pretty-printed — put the root's `g…` keys last, so the
+    /// marker and the counts sit in the file's final bytes: a 73 MB export
+    /// (10,000 projects) answers from its last kilobyte rather than from a
+    /// parse that costs hundreds of megabytes.
+    public struct Trailer: Equatable, Sendable {
+        public var generated: Bool
+        /// Nil on an export written before the counts existed (M1, M2).
+        public var captures: Int?
+        public var blends: Int?
+    }
+
+    /// Reads the trailer from the last `bytes` of the file at `url`; nil
+    /// when the file cannot be read.
+    public static func readTrailer(at url: URL, bytes: Int = 1024) -> Trailer? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd() else { return nil }
+        let start = size > UInt64(bytes) ? size - UInt64(bytes) : 0
+        guard (try? handle.seek(toOffset: start)) != nil, let data = try? handle.readToEnd(),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        func number(_ key: String) -> Int? {
+            guard let range = text.range(of: "\"\(key)\" : ") else { return nil }
+            let digits = text[range.upperBound...].prefix { $0.isNumber }
+            return Int(digits)
+        }
+        return Trailer(generated: text.contains("\"\(generatedKey)\" : true"),
+                       captures: number(generatedCapturesKey), blends: number(generatedBlendsKey))
     }
 }

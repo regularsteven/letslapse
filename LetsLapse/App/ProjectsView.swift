@@ -109,13 +109,16 @@ struct ProjectsView: View {
                     // and each card from its record by id. The arrays are
                     // sorted and filtered here only for a library with no
                     // index to ask.
-                    let visible = visibleCaptures
+                    let visible = visibleIDs
                     if libraryIsEmpty {
                         emptyState
                     } else if visible.isEmpty {
                         filteredEmptyState
                     } else {
-                        ForEach(visible) { capture in
+                        // One record per row, read as the row comes on
+                        // screen (M3): the list holds ids, never the library.
+                        ForEach(visible, id: \.self) { id in
+                            if let capture = model.capture(id: id) {
                             ProjectCard(
                                 capture: capture,
                                 onOpen: { path.append(capture.id) },
@@ -129,6 +132,7 @@ struct ProjectsView: View {
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
+                            }
                             }
                         }
                     }
@@ -356,10 +360,11 @@ struct ProjectsView: View {
         ProjectListQuery(sort: sortKey, ascending: sortAscending, filter: filter, query: query, listsScans: listsScans)
     }
 
-    /// The records the list renders, in order: the index's answer (M2; a
-    /// library with no index lists nothing, M3).
-    private var visibleCaptures: [AppModel.CaptureProject] {
-        model.projects(for: listQuery) ?? []
+    /// The ids the list renders, in order: the index's answer (M2; a
+    /// library with no index lists nothing, M3). Each row reads its own
+    /// record.
+    private var visibleIDs: [UUID] {
+        model.projectIDs(for: listQuery) ?? []
     }
 
     /// Nothing to list at all — as opposed to nothing left after the
@@ -371,7 +376,7 @@ struct ProjectsView: View {
     #if DEBUG
     /// The ids the list renders, in order — what `LL_DUMP_ORDER` logs.
     private var renderedOrder: [UUID] {
-        visibleCaptures.map(\.id)
+        visibleIDs
     }
     #endif
 

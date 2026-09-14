@@ -199,8 +199,11 @@ public struct LibraryIndexRebuild {
             "blends": ordered(blends),
             "collections": collections,
             "gradingSchemaVersion": schema,
-            // A rebuilt manifest is by definition a generated one (M1).
+            // A rebuilt manifest is by definition a generated one (M1), and
+            // says how many records it lists (M3) — readable from its tail.
             LibraryExportFormat.generatedKey: true,
+            LibraryExportFormat.generatedCapturesKey: captures.count,
+            LibraryExportFormat.generatedBlendsKey: blends.count,
         ]
         return try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
     }

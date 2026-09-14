@@ -584,11 +584,41 @@ drawn changes) — **Steven's look owed**; if the field should say it searches
 words, that is a design pass. **Owed from M2:** the transfer picker's "Hide
 imported" still walks the arrays (M3, with `projectID(originID:)` ready in the
 Kit); `refreshShapeSummaries` still runs on each Gallery visit (it now also
-keeps the index's counts); the device checks. **M3 next:** no whole-library
-arrays — the loader stops populating `captures`/`blends`, `capture(id:)` reads
-the document through a cache, the storage card / trash line / transfer
-catalogue / export estimates read the index, memory at launch stops scaling
-with project count (a 10k synthetic root is the measure).
+keeps the index's counts); the device checks. **M3 landed 2026-09-14 — no whole-library arrays** (spec
+[data-model-m3-spec-2026-09-14.md](data-model-m3-spec-2026-09-14.md); d6b40e7
+the Kit's whole-library queries; a5fdebc `App/ProjectStore.swift` — an LRU of
+512 documents behind `capture(id:)` / `blends(for:)` / `blend(id:)`, every
+write one document through `store.update` / `insert` / `remove`, the
+persister per project with a `VersionGate` per id, `library.json` regenerated
+from the documents at launch when stale and at quit / background rather than
+per persist, `App/LibraryReconciler.swift` — the launch as one block per
+folder on the persister's queue (a stat against the row, a read only when the
+index does not know the document as it is on disk, M1's rules applied and
+written back, an unreadable document dropped from the index, a fresh index
+rebuilt whole first), the trash sweep / purge / Empty trash / `existingImport`
+/ transfer catalogue / probes over the index; 283fd0a every screen off the
+arrays, the pre-M2 array pipelines and `SceneQuery`'s substring matcher gone;
+W4 the export's marker and record counts read from the file's last kilobyte
+(`LibraryExportFormat.readTrailer`) and the lists driven by the index's rows
+with one record per visible row or tile). Report:
+`data-model-audit-reports/scratch-m3-arrays-2026-09-14.txt` — the walk: 366
+in 0.25 s, 10,000 in 1.5 s; bootstrap, six faults, registration / grade /
+delete each one document; 36/36 identical to M2 on the Mac and the simulator;
+resident memory 117→140 MB (Create) and 123→183 MB (Gallery) from 366 to
+10,000 projects. **Owed from M3:** the Projects tab's macOS `List` instantiates
+every row eagerly (1 GB at 10k) — a paged ForEach ("lists take pages") is the
+fix and a visible change past N rows, so a design call; a "Preparing the
+library…" state for the one launch that rebuilds a fresh index (the lists show
+the empty state for those seconds — pre-existing since M2, a design call); the
+export's one-time regeneration on a big library builds a 73 MB JSON tree in
+memory (M4 retires the export); `refreshShapeSummaries` still stats every
+register on each Gallery visit; the real library's first launch (walk + the
+schema-2 index rebuild, ~8 s on the queue) and audit; the device timing.
+**M4 next** (one release after M1, by decision): stop writing the export,
+retire `LibraryManifest` and the manifest-level migrations, per-document
+`formatVersion` migrations, `lapse audit` over documents, the Python readers
+to the index. **M5:** the `apply(change)` funnel and the journal —
+`updateCapture` / `store.update` is its seed.
 
 ### Asset metadata (IPTC Core), the index at scale, and the Lightroom catalogue
 

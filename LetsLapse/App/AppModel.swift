@@ -920,7 +920,7 @@ final class AppModel: ObservableObject {
     @Published var indexRevision = 0
     /// The lists' remembered answers, keyed by question, good for one
     /// `indexRevision`. Internal for the extension in `AppModel+Lists.swift`.
-    var listCache: [ProjectListQuery: (revision: Int, ids: [UUID])] = [:]
+    var listCache: [ProjectListQuery: (revision: Int, rows: [LibraryIndex.ProjectRow])] = [:]
     /// The tombstoned collections (W9): in the collections document, out of
     /// every list, until Empty trash or the 30-day purge. (Tombstoned
     /// projects and blends live in their documents and are counted by the
@@ -8286,11 +8286,14 @@ final class AppModel: ObservableObject {
         case missing
         /// Bytes that are not a JSON object.
         case unreadable(Error)
-        /// A manifest — marked `generated` when this build's persister (or a
-        /// later one) wrote it as the export; unmarked when a pre-switch
-        /// build wrote it as the truth. The ids it lists, so a launch can
-        /// tell whether the export still describes what the documents say.
-        case manifest(Data, generated: Bool, captureIDs: Set<UUID>, blendIDs: Set<UUID>)
+        /// A generated export (M1's marker in its tail), with the record
+        /// counts it wrote there (M3) — nil on an export from before the
+        /// counts — so a launch can tell whether it still describes the
+        /// library without parsing it.
+        case generated(captures: Int?, blends: Int?)
+        /// A manifest a pre-switch build wrote as the truth — its bytes, for
+        /// the records a folder may still need.
+        case preSwitch(Data)
     }
 
     /// M3: the launch is a walk, not a load. Every `Projects/<id>/project.json`
@@ -8328,20 +8331,25 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// `library.json`'s bytes, parsed only far enough to tell a generated
-    /// export from a pre-switch manifest. Throws only when the bytes cannot
-    /// be read at all.
+    /// What `library.json` is, from its last kilobyte (M3): a generated
+    /// export says so in its tail, with its counts. A file without the
+    /// marker is read whole only when it is small enough to be a pre-switch
+    /// manifest worth decoding (a 366-project one is 2.7 MB; a generated
+    /// export of 10,000 is 73 MB and would cost hundreds of megabytes to
+    /// parse) — bigger, it is treated as pre-switch unparsed. Throws only
+    /// when the bytes cannot be read at all.
     private func readLibraryExport() throws -> LibraryExport {
         guard FileManager.default.fileExists(atPath: manifestURL.path) else { return .missing }
+        if let trailer = LibraryExportFormat.readTrailer(at: manifestURL), trailer.generated {
+            return .generated(captures: trailer.captures, blends: trailer.blends)
+        }
         let data = try Data(contentsOf: manifestURL)
+        guard data.count <= 32 * 1024 * 1024 else { return .preSwitch(data) }
         do {
             guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 throw ManifestMigrations.MigrationError.notAManifest
             }
-            func ids(_ key: String) -> Set<UUID> {
-                Set((object[key] as? [[String: Any]] ?? []).compactMap { ($0["id"] as? String).flatMap(UUID.init) })
-            }
-            return .manifest(data, generated: LibraryExportFormat.isGenerated(object), captureIDs: ids("captures"), blendIDs: ids("blends"))
+            return LibraryExportFormat.isGenerated(object) ? .generated(captures: nil, blends: nil) : .preSwitch(data)
         } catch {
             return .unreadable(error)
         }
@@ -8397,14 +8405,22 @@ final class AppModel: ObservableObject {
         case .unreadable(let error):
             setAsideUnreadableManifest(error)
             return
-        case .manifest(let data, let generated, _, _):
+        case .generated:
+            // An export with no documents behind it: nothing to bootstrap
+            // from that the folders do not already lack. It is regenerated.
+            collections = []
+            deletedCollections = []
+            libraryExportStale = true
+            LLog("library: a generated export but no project documents — an empty library")
+            return
+        case .preSwitch(let data):
             do {
                 loaded = try decodeManifest(data)
             } catch {
                 setAsideUnreadableManifest(error)
                 return
             }
-            if !generated { keepPreSwitchCopy(data) }
+            keepPreSwitchCopy(data)
         }
         var records = loaded.manifest.captures
         var version = loaded.manifest.gradingSchemaVersion ?? 0
@@ -8456,7 +8472,7 @@ final class AppModel: ObservableObject {
             deletedCollections = document.collections.filter { $0.deletedAt != nil }
         } else {
             var all: [LapseCollection] = []
-            if case .manifest(let data, _, _, _) = export, let decoded = try? decodeManifest(data).manifest {
+            if case .preSwitch(let data) = export, let decoded = try? decodeManifest(data).manifest {
                 all = decoded.collections ?? []
             }
             collections = all.filter { $0.deletedAt == nil }.sorted { $0.createdAt < $1.createdAt }
@@ -8486,7 +8502,7 @@ final class AppModel: ObservableObject {
         // Decoded at most once, and only when something below needs it.
         var manifestData: Data?
         var flipping = false
-        var exportIDs: (captures: Set<UUID>, blends: Set<UUID>)?
+        var exportCounts: (captures: Int?, blends: Int?)?
         switch export {
         case .missing:
             libraryExportStale = true
@@ -8501,14 +8517,13 @@ final class AppModel: ObservableObject {
                 setAsideName: setAside.name, reason: setAside.reason,
                 rebuiltFromDocuments: outcome.walked, collectionsRecovered: FileManager.default.fileExists(atPath: collectionsDocumentURL.path))
             libraryExportStale = true
-        case .manifest(let data, let generated, let captureIDs, let blendIDs):
+        case .generated(let captures, let blends):
+            exportCounts = (captures, blends)
+        case .preSwitch(let data):
             manifestData = data
-            exportIDs = (captureIDs, blendIDs)
-            if !generated {
-                flipping = true
-                keepPreSwitchCopy(data)
-                libraryExportStale = true
-            }
+            flipping = true
+            keepPreSwitchCopy(data)
+            libraryExportStale = true
         }
 
         var decoded: LibraryManifest?
@@ -8569,14 +8584,15 @@ final class AppModel: ObservableObject {
             }
         }
 
-        // An export that no longer lists what the index says — a record
+        // An export that no longer counts what the index counts — a record
         // dropped at the switch, a folder that arrived or went while the app
-        // was not running — is regenerated at the end of the launch rather
-        // than at the next quit, so the two agree whenever the app is up.
-        if !libraryExportStale, let exportIDs, let indexed = try? libraryIndex?.allIDs() {
-            if exportIDs.captures != indexed.projects || exportIDs.blends != indexed.blends {
+        // was not running, an export from before the counts — is regenerated
+        // at the end of the launch rather than at the next quit, so the two
+        // agree whenever the app is up.
+        if !libraryExportStale, let exportCounts, let indexed = try? libraryIndex?.allIDs() {
+            if exportCounts.captures != indexed.projects.count || exportCounts.blends != indexed.blends.count {
                 libraryExportStale = true
-                LLog("library: library.json lists \(exportIDs.captures.subtracting(indexed.projects).count) capture(s) and \(exportIDs.blends.subtracting(indexed.blends).count) blend(s) the documents don't, and lacks \(indexed.projects.subtracting(exportIDs.captures).count) and \(indexed.blends.subtracting(exportIDs.blends).count) — the export will be regenerated")
+                LLog("library: library.json lists \(exportCounts.captures.map(String.init) ?? "?") captures and \(exportCounts.blends.map(String.init) ?? "?") blends, the index \(indexed.projects.count) and \(indexed.blends.count) — the export will be regenerated")
             }
         }
         noteIndexChanged()

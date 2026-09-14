@@ -1,4 +1,5 @@
 import SwiftUI
+import LetsLapseKit
 
 // MARK: - Gallery grid
 
@@ -15,7 +16,9 @@ struct GalleryGridContent: View {
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
-    var captures: [AppModel.CaptureProject]
+    /// The index's rows for the grid's question, in order (M3): a tile
+    /// reads its own record as it comes on screen.
+    var rows: [LibraryIndex.ProjectRow]
     var columnCount: Int
     var timelineMode: Bool
     @Binding var selection: GallerySelection
@@ -37,11 +40,11 @@ struct GalleryGridContent: View {
 
     var body: some View {
         Group {
-            if captures.isEmpty {
+            if rows.isEmpty {
                 emptyState
             } else if timelineMode {
                 TimelineGalleryGrid(
-                    captures: captures,
+                    rows: rows,
                     selection: $selection,
                     scrollTarget: $scrollTarget,
                     onTap: { capture, order in tap(capture, order: order) },
@@ -67,18 +70,20 @@ struct GalleryGridContent: View {
                         columns: columns,
                         spacing: 12
                     ) {
-                        ForEach(captures) { capture in
-                            GalleryTile(
-                                capture: capture,
-                                isSelected: selection.ids.contains(capture.id),
-                                showsCircle: selection.showsCircles,
-                                onTap:       { tap(capture, order: captures.map(\.id)) },
-                                onToggle:    { selection.toggle(capture.id) },
-                                onOpen:      { onOpen(capture.id) },
-                                onOutsideTap: { deselectAllFromBackground() }
-                            )
-                            .id(capture.id)
-                            .contextMenu { tileContextMenu(for: capture) }
+                        ForEach(rows) { row in
+                            if let capture = model.capture(id: row.id) {
+                                GalleryTile(
+                                    capture: capture,
+                                    isSelected: selection.ids.contains(capture.id),
+                                    showsCircle: selection.showsCircles,
+                                    onTap:       { tap(capture, order: rows.map(\.id)) },
+                                    onToggle:    { selection.toggle(capture.id) },
+                                    onOpen:      { onOpen(capture.id) },
+                                    onOutsideTap: { deselectAllFromBackground() }
+                                )
+                                .id(capture.id)
+                                .contextMenu { tileContextMenu(for: capture) }
+                            }
                         }
                     }
                     .padding(.horizontal, 14)
@@ -206,11 +211,11 @@ struct GalleryGridContent: View {
             }
         }
         Button {
-            selection.selectAll(captures.map(\.id))
+            selection.selectAll(rows.map(\.id))
         } label: {
             Label("Select All", systemImage: "checkmark.circle.fill")
         }
-        .disabled(selection.ids.count == captures.count)
+        .disabled(selection.ids.count == rows.count)
 
         Divider()
 
@@ -258,7 +263,7 @@ struct GalleryGridContent: View {
 /// month-scrubber rail on the trailing edge.
 private struct TimelineGalleryGrid<Menu: View>: View {
     @EnvironmentObject var model: AppModel
-    var captures: [AppModel.CaptureProject]
+    var rows: [LibraryIndex.ProjectRow]
     @Binding var selection: GallerySelection
     @Binding var scrollTarget: UUID?
     /// The tap, with the timeline's own order for a ⇧-click run.
@@ -268,13 +273,13 @@ private struct TimelineGalleryGrid<Menu: View>: View {
 
     @State private var scrollProxy: ScrollViewProxy?
 
-    // Group captures by calendar day (in user's timezone).
-    private var groups: [(day: Date, captures: [AppModel.CaptureProject])] {
-        timelineGroups(captures)
+    // Group rows by calendar day (in user's timezone).
+    private var groups: [(day: Date, rows: [LibraryIndex.ProjectRow])] {
+        timelineGroups(rows)
     }
 
     /// The tiles as drawn, top to bottom — what a ⇧-click run walks.
-    private var order: [UUID] { groups.flatMap { $0.captures.map(\.id) } }
+    private var order: [UUID] { groups.flatMap { $0.rows.map(\.id) } }
 
     private func deselectAll() {
         guard !selection.isEmpty else { return }
@@ -299,22 +304,24 @@ private struct TimelineGalleryGrid<Menu: View>: View {
                                     columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: timelineColumnCount),
                                     spacing: 10
                                 ) {
-                                    ForEach(group.captures) { capture in
-                                        GalleryTile(
-                                            capture: capture,
-                                            isSelected: selection.ids.contains(capture.id),
-                                            showsCircle: selection.showsCircles,
-                                            onTap:  { onTap(capture, order) },
-                                            onToggle: { selection.toggle(capture.id) },
-                                            onOpen: { onOpen(capture.id) },
-                                            onOutsideTap: { deselectAll() }
-                                        )
-                                        .id(capture.id)
-                                        .contextMenu { menu(capture) }
+                                    ForEach(group.rows) { row in
+                                        if let capture = model.capture(id: row.id) {
+                                            GalleryTile(
+                                                capture: capture,
+                                                isSelected: selection.ids.contains(capture.id),
+                                                showsCircle: selection.showsCircles,
+                                                onTap:  { onTap(capture, order) },
+                                                onToggle: { selection.toggle(capture.id) },
+                                                onOpen: { onOpen(capture.id) },
+                                                onOutsideTap: { deselectAll() }
+                                            )
+                                            .id(capture.id)
+                                            .contextMenu { menu(capture) }
+                                        }
                                     }
                                 }
                             } header: {
-                                TimelineDayHeader(day: group.day, count: group.captures.count)
+                                TimelineDayHeader(day: group.day, count: group.rows.count)
                                     .id(group.day)
                             }
                         }
@@ -348,13 +355,13 @@ private struct TimelineGalleryGrid<Menu: View>: View {
 /// The timeline's grouping — by shoot day, newest day first, newest capture
 /// first within a day — shared with the keyboard's row geometry so an arrow
 /// walks the tiles as they are drawn.
-func timelineGroups(_ captures: [AppModel.CaptureProject]) -> [(day: Date, captures: [AppModel.CaptureProject])] {
+func timelineGroups(_ rows: [LibraryIndex.ProjectRow]) -> [(day: Date, rows: [LibraryIndex.ProjectRow])] {
     let cal = Calendar.current
-    let dict = Dictionary(grouping: captures) { capture in
-        cal.startOfDay(for: capture.createdAt)
+    let dict = Dictionary(grouping: rows) { row in
+        cal.startOfDay(for: row.createdAt)
     }
     return dict.keys.sorted(by: >).map { day in
-        (day: day, captures: dict[day]!.sorted { $0.createdAt > $1.createdAt })
+        (day: day, rows: dict[day]!.sorted { $0.createdAt > $1.createdAt })
     }
 }
 

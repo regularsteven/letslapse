@@ -708,12 +708,21 @@ public final class LibraryIndex: @unchecked Sendable {
     /// without the scans' when the lists exclude them, so no chip can only
     /// ever find nothing.
     public func tagCounts(excludingScans: Bool = false) throws -> [(tag: String, count: Int)] {
+        var query = ProjectQuery()
+        query.excludeScans = excludingScans
+        return try tagCounts(query)
+    }
+
+    /// The tags present among the projects a query matches (the Gallery's
+    /// sidebar chips narrow with its filter, search and rows — M3), with
+    /// how many carry each.
+    public func tagCounts(_ query: ProjectQuery) throws -> [(tag: String, count: Int)] {
         lock.lock(); defer { lock.unlock() }
+        let (whereSQL, values) = Self.whereClause(query)
         return try db.query("""
             SELECT json_each.value, COUNT(*) FROM projects p, json_each(p.scene_tags)
-            WHERE p.deleted_at IS NULL \(excludingScans ? "AND p.category <> 'scan'" : "")
-            GROUP BY json_each.value ORDER BY COUNT(*) DESC, json_each.value
-            """) { (tag: $0.text(0) ?? "", count: Int($0.int(1) ?? 0)) }
+            \(whereSQL) GROUP BY json_each.value ORDER BY COUNT(*) DESC, json_each.value
+            """, values) { (tag: $0.text(0) ?? "", count: Int($0.int(1) ?? 0)) }
     }
 
     public struct Counts: Equatable {
