@@ -10,6 +10,11 @@ import UniformTypeIdentifiers
 
 /// Screens Settings can push. Value-based so ContentView can own the
 /// navigation path and pop it when the Settings tab is reselected.
+/// Cards a launch hook can scroll the Settings list to (`LL_SCROLL`).
+enum SettingsAnchor: String, Hashable {
+    case picplace
+}
+
 enum SettingsDestination: String, Hashable {
     case layout
     case largeOriginals
@@ -93,6 +98,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        ScrollViewReader { scroller in
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Settings")
@@ -137,6 +143,7 @@ struct SettingsView: View {
                 LLSectionHeader("PicPlace")
                 PicPlaceSettingsCard(picplace: model.picplace)
                     .padding(.bottom, 12)
+                    .id(SettingsAnchor.picplace)
 
                 LLSectionHeader("Advanced")
                 advancedCard
@@ -150,6 +157,17 @@ struct SettingsView: View {
                 Spacer(minLength: 96)
             }
             .padding(.horizontal, 16)
+        }
+        #if DEBUG
+        // `LL_SCROLL=picplace` lands the list on a card below the fold — how a
+        // headless screenshot reaches the PICPLACE card on the Mac without a
+        // scroll event, which would go to whatever window is under the point.
+        .onAppear {
+            guard let raw = ProcessInfo.processInfo.environment["LL_SCROLL"],
+                  let anchor = SettingsAnchor(rawValue: raw) else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { scroller.scrollTo(anchor, anchor: .top) }
+        }
+        #endif
         }
         .background(LL.screenBackground)
         .navigationDestination(for: SettingsDestination.self) { destination in

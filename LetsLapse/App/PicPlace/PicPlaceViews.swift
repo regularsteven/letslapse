@@ -34,6 +34,7 @@ struct PicPlaceStatusCard: View {
                 picplace.refreshProject(captureID)
                 if case .notSynced = state { _ = picplace.summary(for: capture) }
             }
+            .picplaceConnectAlert(picplace)
         }
     }
 
@@ -137,6 +138,8 @@ struct PicPlaceStatusCard: View {
         switch state {
         case .signedOut, .notSynced:
             Image(systemName: "icloud").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
+        case .notConnected:
+            Image(systemName: "icloud.slash").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
         case .changes, .syncing:
             Image(systemName: "icloud.and.arrow.up").font(.system(size: size * 0.85)).foregroundStyle(LL.accent)
         case .synced:
@@ -149,6 +152,7 @@ struct PicPlaceStatusCard: View {
     private func title(for state: PicPlaceController.ProjectState) -> String {
         switch state {
         case .signedOut: return "Keep a copy on PicPlace"
+        case .notConnected: return "Library not connected"
         case .notSynced: return "Not on PicPlace"
         case .changes: return "Changes to sync"
         case .syncing: return "Syncing to PicPlace"
@@ -161,6 +165,13 @@ struct PicPlaceStatusCard: View {
         switch state {
         case .signedOut:
             return "Sign in with PicPlace to sync this project"
+        case .notConnected:
+            switch picplace.libraryLink {
+            case .mismatch:
+                return "This library belongs to @\(picplace.binding?.user.displayHandle ?? "someone else") on \(picplace.binding?.server.host ?? "PicPlace")"
+            default:
+                return "Connect this library to \(picplace.sessionHost) to sync its projects"
+            }
         case .notSynced:
             if let summary = picplace.summary(for: capture) {
                 return "\(summary.files) file\(summary.files == 1 ? "" : "s") · \(LLFormat.bytes(summary.bytes))"
@@ -193,6 +204,7 @@ struct PicPlaceStatusCard: View {
         let (label, isCancel): (String, Bool) = {
             switch state {
             case .signedOut: return (picplace.isSigningIn ? "Signing in…" : "Sign in", false)
+            case .notConnected: return (picplace.libraryLink == .mismatch ? "Settings" : "Connect…", false)
             case .notSynced: return ("Sync to PicPlace", false)
             case .changes: return ("Sync now", false)
             case .syncing: return ("Cancel", true)
@@ -203,6 +215,7 @@ struct PicPlaceStatusCard: View {
         return Button {
             switch state {
             case .signedOut: picplace.signIn()
+            case .notConnected: if picplace.libraryLink == .unbound { picplace.offerConnect() } else { model.requestedTab = .settings }
             case .syncing: picplace.cancelSync(capture.id)
             default: picplace.sync(capture)
             }
@@ -231,12 +244,16 @@ struct PicPlaceStatusCard: View {
 // MARK: - Settings card (components/picplace-account.<state>.phone.svg)
 
 /// The PICPLACE card in Settings: sign in and the server while signed out;
-/// the account, this device, what is on the server and sign out once in.
+/// the account, this device, what is on the server and sign out once in —
+/// and, since v2 stage 1, the LIBRARY: connect it to the account, or see
+/// whose it is and disconnect it. Copy-only changes for now (v2 plan D12:
+/// code first, the mirrors follow once the flows hold).
 struct PicPlaceSettingsCard: View {
     @ObservedObject var picplace: PicPlaceController
     @State private var isEditingServer = false
     @State private var serverDraft = ""
     @State private var isConfirmingSignOut = false
+    @State private var isConfirmingDisconnect = false
     @State private var serverRejected = false
 
     var body: some View {
@@ -258,11 +275,15 @@ struct PicPlaceSettingsCard: View {
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
                 }
-                LLRow(title: "Server") {
-                    Text(PicPlaceConfiguration.serverHost)
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
+                libraryRow
+                if PicPlaceConfiguration.showsServerSetting {
+                    LLRow(title: "Server") {
+                        Text(profile.host)
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                if picplace.binding != nil { disconnectRow }
                 Button {
                     isConfirmingSignOut = true
                 } label: {
@@ -277,11 +298,12 @@ struct PicPlaceSettingsCard: View {
                     if picplace.isSigningIn { picplace.cancelSignIn() } else { picplace.signIn() }
                 } label: {
                     LLRow(
-                        title: picplace.isSigningIn ? "Signing in…" : "Sign in with PicPlace",
+                        title: picplace.isSigningIn ? "Signing in…" : signInTitle,
                         subtitle: picplace.isSigningIn
                             ? "Finish in your browser, or tap to cancel"
-                            : (picplace.lastSignInError ?? "Keep a copy of your projects on \(PicPlaceConfiguration.serverHost)"),
-                        titleColor: LL.accent
+                            : (picplace.lastSignInError ?? signInSubtitle),
+                        titleColor: LL.accent,
+                        showsDivider: picplace.binding != nil || PicPlaceConfiguration.showsServerSetting
                     ) {
                         EmptyView()
                     }
@@ -289,28 +311,40 @@ struct PicPlaceSettingsCard: View {
                 }
                 .buttonStyle(.plain)
 
-                Button {
-                    serverDraft = picplace.serverString
-                    serverRejected = false
-                    isEditingServer = true
-                } label: {
-                    LLRow(title: "Server", showsDivider: false) {
-                        HStack(spacing: 6) {
-                            Text(PicPlaceConfiguration.serverHost)
+                if let binding = picplace.binding {
+                    if PicPlaceConfiguration.showsServerSetting {
+                        LLRow(title: "Server") {
+                            Text(binding.server.host)
                                 .font(.system(size: 15))
                                 .foregroundStyle(.secondary)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.tertiary)
                         }
                     }
-                    .contentShape(Rectangle())
+                    disconnectRow
+                } else if PicPlaceConfiguration.showsServerSetting {
+                    Button {
+                        serverDraft = picplace.serverString
+                        serverRejected = false
+                        isEditingServer = true
+                    } label: {
+                        LLRow(title: "Server", showsDivider: false) {
+                            HStack(spacing: 6) {
+                                Text(PicPlaceConfiguration.serverHost)
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .llCard()
         .onAppear { picplace.refreshUsage() }
+        .picplaceConnectAlert(picplace)
         .alert("PicPlace server", isPresented: $isEditingServer) {
             TextField("https://picplace.co", text: $serverDraft)
                 #if os(iOS)
@@ -334,13 +368,108 @@ struct PicPlaceSettingsCard: View {
             Button("Sign out", role: .destructive) { picplace.signOut() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your projects stay on PicPlace and on this device; this device just stops syncing until you sign in again.")
+            Text(picplace.binding == nil
+                 ? "Your projects stay on PicPlace and on this device; this device just stops syncing until you sign in again."
+                 : "Your projects stay on PicPlace and on this device. The library stays @\(picplace.binding?.user.displayHandle ?? "")'s; sign in again to keep syncing it.")
         }
+        .confirmationDialog("Disconnect this library from PicPlace?", isPresented: $isConfirmingDisconnect, titleVisibility: .visible) {
+            Button("Disconnect", role: .destructive) { picplace.disconnectLibrary() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The library forgets which account it belongs to and what it has synced. Every project stays on this device and on PicPlace; nothing is deleted anywhere.")
+        }
+    }
+
+    private var signInTitle: String {
+        if let binding = picplace.binding { return "Sign in as @\(binding.user.displayHandle)" }
+        return "Sign in with PicPlace"
+    }
+
+    private var signInSubtitle: String {
+        if let binding = picplace.binding { return "This library belongs to @\(binding.user.displayHandle) on \(binding.server.host)" }
+        return "Keep a copy of your projects on \(PicPlaceConfiguration.serverHost)"
+    }
+
+    @ViewBuilder
+    private var libraryRow: some View {
+        switch picplace.libraryLink {
+        case .unbound:
+            Button {
+                picplace.offerConnect()
+            } label: {
+                LLRow(
+                    title: picplace.isConnecting ? "Connecting…" : "Connect this library",
+                    subtitle: picplace.lastConnectError
+                        ?? ([
+                            "Keep this library's projects on \(picplace.sessionHost) as @\(picplace.profile?.username ?? "")",
+                            picplace.connectDestinationDescription,
+                        ].compactMap { $0 }.joined(separator: ". ")),
+                    titleColor: LL.accent
+                ) {
+                    EmptyView()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(picplace.isConnecting)
+        case .bound:
+            LLRow(title: "Library", subtitle: picplace.binding.map { "Connected \($0.boundAt.formatted(.relative(presentation: .named)))" }) {
+                Text("@\(picplace.binding?.user.displayHandle ?? "") on \(picplace.binding?.server.host ?? "")")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        case .mismatch:
+            LLRow(title: "Library",
+                  subtitle: "This library belongs to @\(picplace.binding?.user.displayHandle ?? "") on \(picplace.binding?.server.host ?? ""). Sign in as them to sync it, or disconnect it.",
+                  titleColor: LL.levelOff) {
+                EmptyView()
+            }
+        }
+    }
+
+    private var disconnectRow: some View {
+        Button {
+            isConfirmingDisconnect = true
+        } label: {
+            LLRow(title: "Disconnect this library…", titleColor: .red) {
+                EmptyView()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var usageText: String {
         guard let usage = picplace.usage else { return "…" }
         return "\(usage.projects) project\(usage.projects == 1 ? "" : "s") · \(LLFormat.bytes(usage.bytes))"
+    }
+}
+
+// MARK: - The connect question
+
+/// "Connect this library to PicPlace?" — raised by the controller after a
+/// sign-in on an unbound library and by the cards' Connect buttons; every
+/// card that can show it attaches this, so it appears wherever the person is.
+private struct PicPlaceConnectAlert: ViewModifier {
+    @ObservedObject var picplace: PicPlaceController
+
+    func body(content: Content) -> some View {
+        content.alert("Connect this library to PicPlace?", isPresented: $picplace.isOfferingConnect) {
+            Button("Connect") { picplace.connectLibrary() }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text([
+                "This library's projects will be kept on \(picplace.sessionHost) as @\(picplace.profile?.username ?? "")",
+                picplace.connectDestinationDescription,
+            ].compactMap { $0 }.joined(separator: ". "))
+        }
+    }
+}
+
+extension View {
+    func picplaceConnectAlert(_ picplace: PicPlaceController) -> some View {
+        modifier(PicPlaceConnectAlert(picplace: picplace))
     }
 }
 

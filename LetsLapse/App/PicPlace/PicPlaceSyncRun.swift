@@ -194,7 +194,7 @@ struct PicPlaceSyncRun {
             let _: [String: PPClaim?] = try await client.delete("projects/\(uuid)/claim")
 
             return PicPlaceSyncRecord(syncedAt: Date(), revision: project.revision, files: files.count, bytes: totalBytes,
-                                      uploaded: pending.count, alsoOn: alsoOn, server: PicPlaceConfiguration.serverString, lastError: nil)
+                                      uploaded: pending.count, alsoOn: alsoOn, server: (try? await client.currentTokens().server) ?? PicPlaceConfiguration.serverString, lastError: nil)
         } catch {
             // Whatever happened, do not leave the project locked for the next device.
             let _: [String: PPClaim?]? = try? await client.delete("projects/\(uuid)/claim")

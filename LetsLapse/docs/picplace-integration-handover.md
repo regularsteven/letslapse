@@ -4,6 +4,13 @@
 product flows below are the owner's to design · **Server:** PicPlace
 (`picplace.co` live, `picplace.test` for local dev)
 
+> **Decided 2026-09-14:** the flows this handover leaves open are answered in
+> [picplace-sync-v2-plan.md](picplace-sync-v2-plan.md) (twelve decisions,
+> the minimal dataset, the merge, five stages) with the server's answers of
+> the same day condensed there; the asks that fall out of it are in
+> [picplace-sync-v2-server-asks.md](picplace-sync-v2-server-asks.md). Read
+> this file for what v1 built and why the questions arose.
+
 This document hands the PicPlace integration to the LetsLapse repo owner. The
 plumbing is built and proven — a device can sign in and push a nominated
 project to the cloud — but the *flows* that make it a LetsLapse feature (how a

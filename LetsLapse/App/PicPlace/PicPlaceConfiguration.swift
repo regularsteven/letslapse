@@ -37,12 +37,37 @@ enum PicPlaceConfiguration {
 
     static let keychainService = "com.regularsteven.letslapse.picplace"
 
+    /// Debug on a Mac or in the iOS Simulator talks to the Valet site on
+    /// this Mac; everything else — Release, and any build on a physical
+    /// iPhone or iPad — talks to production. Physical devices never test
+    /// against `.test` (v2 plan D3): they resolve neither the domain nor
+    /// the certificate.
     static var defaultServer: String {
-        #if DEBUG
+        #if DEBUG && (os(macOS) || targetEnvironment(simulator))
         "https://picplace.test"
         #else
         "https://picplace.co"
         #endif
+    }
+
+    /// Whether the Settings card shows the Server row at all: the Mac
+    /// configures its server (and its library location); iOS and iPadOS
+    /// have neither, bar a Debug build on the Simulator, which needs it to
+    /// reach the local server (v2 plan D3).
+    static var showsServerSetting: Bool {
+        #if os(macOS)
+        return true
+        #elseif DEBUG && targetEnvironment(simulator)
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    /// The host of a normalised server string — the folder name on the Mac
+    /// and half of an account key.
+    static func host(of serverString: String) -> String {
+        URL(string: serverString)?.host?.lowercased() ?? serverString.lowercased()
     }
 
     /// The server as a string, for the Settings row.
@@ -89,5 +114,6 @@ enum PicPlaceConfiguration {
     }
 
     /// What the Settings rows and the card subtitle show: the host alone.
+    /// The SETTING's host — a bound library's is `PicPlaceController.sessionHost`.
     static var serverHost: String { server.host ?? serverString }
 }

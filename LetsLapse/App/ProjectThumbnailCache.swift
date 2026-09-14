@@ -294,11 +294,28 @@ enum DiskThumbnailStore {
     /// of one generated before it is a green wash and must not survive.
     private static let generatorVersion = 3
 
+    /// A file under the library root is keyed by its path RELATIVE to the
+    /// root (v2 plan §3.3): the tiles survive the library moving — the Mac
+    /// nest into its PicPlace folder, a change of location — where a key
+    /// holding the absolute path would have thrown every one away and
+    /// decoded every DNG again on the next launch. Files outside the root
+    /// (an import being previewed) keep the home-relative rule.
     static func key(for url: URL) -> String {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970
+        // Compared unstandardised on both sides: every library URL is built
+        // from `StorageRoot.current` as it is, and `standardizedFileURL`
+        // would rewrite a `/private/tmp` scratch root to `/tmp` on one side only.
+        let root = StorageRoot.current.path
         let home = NSHomeDirectory()
-        let path = url.path.hasPrefix(home) ? String(url.path.dropFirst(home.count)) : url.path
+        let path: String
+        if url.path.hasPrefix(root + "/") {
+            path = "~lib/" + String(url.path.dropFirst(root.count + 1))
+        } else if url.path.hasPrefix(home) {
+            path = String(url.path.dropFirst(home.count))
+        } else {
+            path = url.path
+        }
         return "v\(generatorVersion)|\(path)|\(modified.map { String($0) } ?? "missing")"
     }
 

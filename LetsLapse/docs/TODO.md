@@ -21,7 +21,7 @@ end to end; picplace.co is live (Hetzner storage, scheduler, APP_DEBUG=false).
 The transport is done; the LetsLapse product flows (first-time connection,
 accounts across libraries, auto-sync, restore, sign-out, presence/eviction) are
 handed to the repo owner in [picplace-integration-handover.md](picplace-integration-handover.md).
-Owed on this side: close the Mac inspector mirror (🟡). · medium · seams:
+The flows are now planned as v2 (next entry). Owed on this side: close the Mac inspector mirror (🟡). · medium · seams:
 `App/SettingsView.swift` (a PICPLACE card between Storage and Advanced),
 `App/ProjectDetailView.swift` + `App/GalleryPreviewPanel.swift` (the status
 card / inspector group), `App/ProjectsView.swift` (a thumbnail pill),
@@ -41,6 +41,58 @@ detail and the Mac inspector, plus a media pill on the Projects thumbnail.
 Nothing touches a record, a file format or the index; a device that never
 signs in sees no difference. Out of v1: downloads, multi-project or automatic
 sync, force-taking a claim, background transfers, production hosting.
+
+### PicPlace sync v2 — the library binds to an account, the minimal dataset syncs, libraries merge
+
+**Detail:** [picplace-sync-v2-plan.md](picplace-sync-v2-plan.md) (the model,
+the flows, the stages, the test rig, the traps) · the asks handed to the
+PicPlace developer: [picplace-sync-v2-server-asks.md](picplace-sync-v2-server-asks.md)
+· **Raised:** 2026-09-14 (Steven: self storage is always the starting point;
+after Sign in, a clean account is offered "centralise your gallery", a fresh
+device retrieves, a non-fresh device merges; the minimal dataset — everything
+except the assets, above all the sources — syncs first, heavy assets
+one-by-one for now, auto-sync later; a thumbnail goes up so the second device
+sees the gallery; S3 holds only sources and blends; sign-out before sync needs
+care) · **plan agreed 2026-09-14; stage 1 LANDED the same evening** (plan §9:
+binding file, state homes, Keychain per account, the guards, Mac nest by
+rename + marker + relaunch, root-relative thumbnail keys; verified on scratch
+roots, Steven's play-pen sign-in owed) · **code-first by
+decision** — mirrors follow per screen once the sync logic holds · **Size:**
+large (five stages) · seams: `App/PicPlace/*` (binding, sync state, Keychain
+per account, `SyncPolicy`, the pull, the merge), `App/StorageLocation.swift`
+(the nest by rename + marker + relaunch; `PicPlace` in `libraryItemNames`),
+`App/ProjectThumbnailCache.swift` (root-relative keys; the poster),
+`Kit/…/Library/ProjectFileRegistry.swift` (register the ramp and live-blend
+logs; the bundle derives from the table), `Kit/…/DirectoryArchive.swift` (the
+records bundle), `App/SettingsView.swift` (Server row macOS-only; the
+first-bind and conflict screens), the Projects/Gallery tiles and detail cards
+(the `previewOnly` state).
+
+The twelve decisions are in the plan's §1; the ones that shape the code:
+the library binds to `(server.id, user.uuid)` through a file in the library
+(`<root>/PicPlace/account.json`), never the path or `UserDefaults`; the Mac
+nests by rename into `<root>/<host>/<username>/` and relaunches, iOS binds in
+place; sync state moves into the library keyed by `originID` and doubles as
+the merge base; the server key becomes `originID`; per project the server
+holds the manifest, one records bundle (Apple Archive of the registry's
+edit-class files and capture sidecars), one poster (`Projects/<id>/poster.jpg`)
+and hash-deduped LUT/ref objects — sources and blends later, per project;
+`previewOnly` is a rule over files (listed source frames missing on disk),
+not a field; merge is three-way per project with auto / manual / Keep both
+and a fresh revision for the winner; replace-local and replace-server wait
+for presence tiers (in the minimal era they always destroy originals that
+exist nowhere else); sign-out keeps the binding and every file, the hard
+gate ships with eviction.
+
+Stages: **1** binding + state homes + nest + thumbnail keys (no server
+change) → **2** `SyncPolicy.minimal` (needs a `records` kind, `origin_uuid`)
+→ **3** first-bind decision, fresh pull, `previewOnly` → **4** merge (needs
+tombstones) → **5** originals up/down per project (needs batch URLs). Test on
+`picplace.test` + Garage with the play-pen (the default location) and scratch
+roots through `-storage.libraryRootPath` / `-letslapse.deviceID`; the
+Simulator is device 2; `/Volumes/letslapse` is never a target; physical
+devices only against `picplace.co` after confidence. Server-side status of
+each ask is tracked in the asks file.
 
 ### Post-crop vignette centring — the still and blend paths centre the vignette on the whole frame
 
@@ -648,7 +700,12 @@ schema-2 index rebuild, ~8 s on the queue) and audit; the device timing.
 **M4 next** (one release after M1, by decision): stop writing the export,
 retire `LibraryManifest` and the manifest-level migrations, per-document
 `formatVersion` migrations, `lapse audit` over documents, the Python readers
-to the index. **M5:** the `apply(change)` funnel and the journal —
+to the index. **M4 trap (2026-09-14):** `StorageRoot.check(destination:)`
+recognises a library to ADOPT by `Projects/library.json`; once the export is
+gone, re-nominating `/Volumes/letslapse` would be offered as a *move* — a
+431 GB copy onto the internal disk. Teach `check` that a `Projects/` folder
+holding documents is a library BEFORE `library.json` stops being written
+(the PicPlace v2 plan's §7 records it too). **M5:** the `apply(change)` funnel and the journal —
 `updateCapture` / `store.update` is its seed.
 
 ### Asset metadata (IPTC Core), the index at scale, and the Lightroom catalogue

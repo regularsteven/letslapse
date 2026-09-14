@@ -5,6 +5,14 @@ import Foundation
 struct PPStatus: Decodable {
     struct User: Decodable { var uuid: String; var username: String?; var name: String? }
     struct Storage: Decodable { var quotaBytes: Int64?; var usedBytes: Int64; var downloadUrlTtlSeconds: Int; var uploadUrlTtlSeconds: Int }
+    /// The instance block the v2 asks request (server-asks §1): absent until
+    /// the server ships it, then the authoritative half of a library binding.
+    struct Server: Decodable { var id: String; var environment: String?; var url: String? }
+    /// "Has this account synced anything?" without an index pull (asks §7).
+    struct Projects: Decodable { var count: Int; var byType: [String: Int]?; var deleted: Int? }
+    /// The caps the app checks before sending (asks §4, §12): absent on a
+    /// server that predates them, in which case the app assumes 1 MB.
+    struct Limits: Decodable { var manifestMaxBytes: Int64?; var objectMaxBytes: Int64?; var assetBatch: Int?; var tombstoneDays: Int? }
     var apiVersion: Int
     var serverTime: Date
     var user: User
@@ -12,6 +20,9 @@ struct PPStatus: Decodable {
     var scopes: [String]
     var storage: Storage
     var features: [String: Bool]
+    var server: Server?
+    var projects: Projects?
+    var limits: Limits?
 }
 
 struct PPDevice: Decodable, Equatable {
@@ -61,7 +72,11 @@ struct PPAsset: Decodable {
     var id: String
     var kind: String
     var name: String
-    var bytes: Int64
+    /// nil while the asset is pending: the server has nothing to say about
+    /// bytes it has not received (the negotiated size is on the upload).
+    /// The contract says `0`; a freshly created row comes back `null` —
+    /// either way it is not a value the app acts on.
+    var bytes: Int64?
     var sha256: String?
     var status: String
 }
@@ -133,13 +148,18 @@ struct PicPlaceOfflineError: LocalizedError {
 actor PicPlaceClient {
 
     private var tokens: PicPlaceTokens?
+    /// The Keychain account a refreshed pair is written back under — the
+    /// session's `PicPlaceBindingRecord.accountKey`. nil for tokens that
+    /// were never stored (a hook's injected pair).
+    private var accountKey: String?
     private var refreshTask: Task<PicPlaceTokens, Error>?
     private let session: URLSession
     /// Called once when a refresh is refused — the tokens are gone for good.
     private let signedOut: @Sendable () -> Void
 
-    init(tokens: PicPlaceTokens?, signedOut: @escaping @Sendable () -> Void) {
+    init(tokens: PicPlaceTokens?, accountKey: String?, signedOut: @escaping @Sendable () -> Void) {
         self.tokens = tokens
+        self.accountKey = accountKey
         self.signedOut = signedOut
         let config = URLSessionConfiguration.default
         config.waitsForConnectivity = false
@@ -149,8 +169,23 @@ actor PicPlaceClient {
 
     var isSignedIn: Bool { tokens != nil }
 
-    func setTokens(_ newTokens: PicPlaceTokens?) {
+    /// The pair in hand — what `establishProfile` stores under the account
+    /// once `/status` has named it.
+    func currentTokens() throws -> PicPlaceTokens {
+        guard let tokens else { throw PicPlaceAPIError(status: 401, code: "signed_out", message: "Not signed in to PicPlace.", claim: nil) }
+        return tokens
+    }
+
+    func setTokens(_ newTokens: PicPlaceTokens?, accountKey newKey: String?) {
         tokens = newTokens
+        accountKey = newKey
+    }
+
+    /// The server the current tokens name — every request goes there, never
+    /// to the Settings value, so a bound library talks to ITS server while
+    /// the setting only seeds the next sign-in (v2 plan §3.2).
+    private func apiBase(for tokens: PicPlaceTokens) -> URL {
+        URL(string: tokens.server)!.appendingPathComponent("api/letslapse/v1", isDirectory: false)
     }
 
     /// ISO8601DateFormatter is thread-safe; the box only says so to the compiler.
@@ -237,6 +272,7 @@ actor PicPlaceClient {
     private func refresh() async throws -> PicPlaceTokens {
         if let refreshTask { return try await refreshTask.value }
         guard let current = tokens else { throw PicPlaceAPIError(status: 401, code: "signed_out", message: "Not signed in to PicPlace.", claim: nil) }
+        let key = accountKey
         let task = Task<PicPlaceTokens, Error> {
             do {
                 let fresh = try await Self.tokenRequest(server: URL(string: current.server)!, form: [
@@ -244,11 +280,11 @@ actor PicPlaceClient {
                     "client_id": PicPlaceConfiguration.clientID,
                     "refresh_token": current.refreshToken,
                 ])
-                try? PicPlaceKeychain.save(fresh)
+                if let key { try? PicPlaceKeychain.save(fresh, account: key) }
                 return fresh
             } catch let error as PicPlaceAPIError where error.status == 400 || error.status == 401 {
                 // invalid_grant: the refresh token was revoked or already used.
-                PicPlaceKeychain.clear()
+                if let key { PicPlaceKeychain.clear(account: key) }
                 throw error
             }
         }
@@ -287,7 +323,7 @@ actor PicPlaceClient {
 
     private func send<T: Decodable>(_ method: String, _ path: String, query: [String: String], body: Any?, retrying: Bool = false) async throws -> T {
         let current = try await validTokens()
-        var components = URLComponents(url: PicPlaceConfiguration.apiBase.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: apiBase(for: current).appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) } }
         var request = URLRequest(url: components.url!)
         request.httpMethod = method

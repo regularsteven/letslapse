@@ -46,6 +46,9 @@ enum StorageRoot {
         "luts", "luts.json",
         // The shape detectors' score sheet (`ShapeDetectorFeedback`).
         ShapeDetectorFeedback.fileName,
+        // The PicPlace binding and this library's sync records (v2 plan §3.2):
+        // which account the library IS travels with it.
+        PicPlaceBindingRecord.folderName,
     ]
 
     /// True when a nominated location could not be reached at launch (drive
@@ -64,28 +67,52 @@ enum StorageRoot {
     /// Resolved at first touch — which is `AppModel.init` loading the library,
     /// before any view exists.
     static let current: URL = {
-        guard let path = customPath else { return defaultRootURL }
-        var isDirectory: ObjCBool = false
-        let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue,
-            fileManager.isWritableFile(atPath: path) {
-            return URL(fileURLWithPath: path, isDirectory: true)
+        let nominated: URL
+        if let path = customPath {
+            var isDirectory: ObjCBool = false
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue,
+                fileManager.isWritableFile(atPath: path) {
+                nominated = URL(fileURLWithPath: path, isDirectory: true)
+            } else {
+                customRootUnavailable = true
+                LLog("storage: nominated root \(path) unreachable — using the default location this session")
+                return defaultRootURL
+            }
+        } else {
+            nominated = defaultRootURL
         }
-        customRootUnavailable = true
-        LLog("storage: nominated root \(path) unreachable — using the default location this session")
-        return defaultRootURL
+        return followNestMarker(from: nominated)
     }()
+
+    /// True when this launch's root came from the launch arguments
+    /// (`-storage.libraryRootPath <path>`, the scratch-root recipe): the
+    /// setting must then never be written, or a test run would point the
+    /// person's own app at a scratch folder. `commit` becomes a log line
+    /// and a relaunch re-passes the root (v2 plan §6).
+    static var rootCameFromArguments: Bool {
+        UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)[customPathKey] != nil
+    }
 
     /// Make `destination` the root from the next launch on. Choosing the
     /// default location clears the setting rather than storing the default's
     /// absolute path, which would go stale if the home folder ever moved.
     static func commit(destination: URL) {
+        if rootCameFromArguments {
+            LLog("storage: root came from the launch arguments — not persisting \(destination.path)")
+            argumentRootOverride = destination
+            return
+        }
         if destination.standardizedFileURL.path == defaultRootURL.standardizedFileURL.path {
             UserDefaults.standard.removeObject(forKey: customPathKey)
         } else {
             UserDefaults.standard.set(destination.standardizedFileURL.path, forKey: customPathKey)
         }
     }
+
+    /// The root a relaunch must be handed when the setting was not written
+    /// (`rootCameFromArguments`).
+    private(set) static var argumentRootOverride: URL?
 
     /// Forget an unreachable nominated location and stay on the default —
     /// Settings offers this when a launch fell back (`customRootUnavailable`),
@@ -171,6 +198,91 @@ extension StorageRoot {
             return .collision(name)
         }
         return .move
+    }
+}
+
+// MARK: - Nesting the library under its PicPlace account (v2 plan §3.3)
+
+extension StorageRoot {
+    /// `<root>/.letslapse-nested` — written before the folders move, removed
+    /// after the setting is committed. A launch that finds it (the app died
+    /// in between) follows it, so a half-done nest is never an empty gallery.
+    static let nestMarkerName = ".letslapse-nested"
+
+    private struct NestMarker: Codable { var to: String }
+
+    /// Where a library bound to `username` on `host` lives: inside the
+    /// current root, named for humans (the binding file is the identity).
+    static func nestedRoot(host: String, username: String) -> URL {
+        current.appendingPathComponent(host, isDirectory: true).appendingPathComponent(username, isDirectory: true)
+    }
+
+    /// Already `…/<host>/<username>`: nothing to move, the binding is
+    /// written in place.
+    static func isNested(host: String, username: String) -> Bool {
+        let root = current.standardizedFileURL
+        return root.lastPathComponent == username && root.deletingLastPathComponent().lastPathComponent == host
+    }
+
+    enum NestError: LocalizedError {
+        case destinationOccupied(String)
+        var errorDescription: String? {
+            switch self {
+            case .destinationOccupied(let path): return "\(path) already exists and is not empty."
+            }
+        }
+    }
+
+    /// Moves the library items into `<root>/<host>/<username>/`, writes the
+    /// binding there and commits the new root. Same volume by construction,
+    /// so every item is a rename. Call with the persister refusing writes
+    /// and the lock released; relaunch right after.
+    static func nest(host: String, username: String, binding: PicPlaceBindingRecord) throws {
+        let fileManager = FileManager.default
+        let source = current
+        let destination = nestedRoot(host: host, username: username)
+        if fileManager.fileExists(atPath: destination.path) {
+            let contents = (try? fileManager.contentsOfDirectory(atPath: destination.path)) ?? []
+            if !contents.filter({ $0 != ".DS_Store" }).isEmpty { throw NestError.destinationOccupied(destination.path) }
+        }
+        try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+        let marker = source.appendingPathComponent(nestMarkerName)
+        try JSONEncoder().encode(NestMarker(to: destination.path)).write(to: marker, options: .atomic)
+        for name in libraryItemNames {
+            let from = source.appendingPathComponent(name)
+            guard fileManager.fileExists(atPath: from.path) else { continue }
+            let to = destination.appendingPathComponent(name)
+            if fileManager.fileExists(atPath: to.path) { try fileManager.removeItem(at: to) }
+            try fileManager.moveItem(at: from, to: to)
+        }
+        try binding.write(inRoot: destination)
+        commit(destination: destination)
+        try? fileManager.removeItem(at: marker)
+        LLog("storage: library nested at \(destination.path)")
+    }
+
+    /// The launch half: a marker at `root` whose destination holds a
+    /// `Projects/` folder means the move finished and the commit did not.
+    private static func followNestMarker(from root: URL) -> URL {
+        let fileManager = FileManager.default
+        let marker = root.appendingPathComponent(nestMarkerName)
+        guard let data = try? Data(contentsOf: marker),
+              let record = try? JSONDecoder().decode(NestMarker.self, from: data) else { return root }
+        let destination = URL(fileURLWithPath: record.to, isDirectory: true)
+        let projects = destination.appendingPathComponent("Projects", isDirectory: true)
+        guard fileManager.fileExists(atPath: projects.path) else {
+            // Nothing moved: the marker is stale.
+            try? fileManager.removeItem(at: marker)
+            return root
+        }
+        // The setting is written directly: `commit` is for a running session,
+        // and this is the resolution of one.
+        if !rootCameFromArguments {
+            UserDefaults.standard.set(destination.standardizedFileURL.path, forKey: customPathKey)
+        }
+        try? fileManager.removeItem(at: marker)
+        LLog("storage: followed the nest marker at \(root.path) → \(destination.path)")
+        return destination
     }
 }
 
@@ -398,11 +510,19 @@ enum AppRelaunch {
         UserDefaults.standard.synchronize()
         let bundlePath = Bundle.main.bundlePath
         let pid = ProcessInfo.processInfo.processIdentifier
+        // A scratch-root run (`-storage.libraryRootPath …`) never wrote the
+        // setting, so the new instance is handed its root the same way — the
+        // moved one when a nest just happened, else the one this run had.
+        var open = "/usr/bin/open \"\(bundlePath)\""
+        if StorageRoot.rootCameFromArguments {
+            let root = (StorageRoot.argumentRootOverride ?? StorageRoot.current).path
+            open += " --args -\(StorageRoot.customPathKey) \"\(root)\" -ApplePersistenceIgnoreState YES"
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [
             "-c",
-            "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.1; done; /usr/bin/open \"\(bundlePath)\"",
+            "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.1; done; \(open)",
         ]
         try? process.run()
         NSApplication.shared.terminate(nil)

@@ -13,20 +13,26 @@ struct PicPlaceTokens: Codable, Equatable {
     var isExpiringSoon: Bool { expiresAt.timeIntervalSinceNow < 60 }
 }
 
-/// One generic-password item in the Keychain, this device only (never
-/// synced to other devices — a token names an install, like `DeviceIdentity`).
+/// Generic-password items in the Keychain, this device only (never synced
+/// to other devices — a token names an install, like `DeviceIdentity`).
+///
+/// **One item per account** (v2 plan §3.2): the item's account attribute is
+/// `PicPlaceBindingRecord.accountKey` — `<host>|<user uuid>` — so a Mac
+/// with a `picplace.test` library and a `picplace.co` library switches
+/// sessions with its libraries without a second sign-in. v1 kept a single
+/// item under `"tokens"`; `loadLegacy`/`clearLegacy` migrate it once.
 enum PicPlaceKeychain {
 
-    private static let account = "tokens"
+    private static let legacyAccount = "tokens"
 
-    static func load() -> PicPlaceTokens? {
-        var query = baseQuery(dataProtection: true)
+    static func load(account: String) -> PicPlaceTokens? {
+        var query = baseQuery(account: account, dataProtection: true)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         var status = SecItemCopyMatching(query as CFDictionary, &item)
         if status == errSecMissingEntitlement || status == errSecParam {
-            var legacy = baseQuery(dataProtection: false)
+            var legacy = baseQuery(account: account, dataProtection: false)
             legacy[kSecReturnData as String] = true
             legacy[kSecMatchLimit as String] = kSecMatchLimitOne
             status = SecItemCopyMatching(legacy as CFDictionary, &item)
@@ -35,11 +41,11 @@ enum PicPlaceKeychain {
         return try? JSONDecoder().decode(PicPlaceTokens.self, from: data)
     }
 
-    static func save(_ tokens: PicPlaceTokens) throws {
+    static func save(_ tokens: PicPlaceTokens, account: String) throws {
         let data = try JSONEncoder().encode(tokens)
-        var status = write(data, dataProtection: true)
+        var status = write(data, account: account, dataProtection: true)
         if status == errSecMissingEntitlement || status == errSecParam {
-            status = write(data, dataProtection: false)
+            status = write(data, account: account, dataProtection: false)
         }
         guard status == errSecSuccess else {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(status),
@@ -47,13 +53,17 @@ enum PicPlaceKeychain {
         }
     }
 
-    static func clear() {
-        SecItemDelete(baseQuery(dataProtection: true) as CFDictionary)
-        SecItemDelete(baseQuery(dataProtection: false) as CFDictionary)
+    static func clear(account: String) {
+        SecItemDelete(baseQuery(account: account, dataProtection: true) as CFDictionary)
+        SecItemDelete(baseQuery(account: account, dataProtection: false) as CFDictionary)
     }
 
-    private static func write(_ data: Data, dataProtection: Bool) -> OSStatus {
-        let query = baseQuery(dataProtection: dataProtection)
+    /// v1's single item, if this install still has one.
+    static func loadLegacy() -> PicPlaceTokens? { load(account: legacyAccount) }
+    static func clearLegacy() { clear(account: legacyAccount) }
+
+    private static func write(_ data: Data, account: String, dataProtection: Bool) -> OSStatus {
+        let query = baseQuery(account: account, dataProtection: dataProtection)
         let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
@@ -67,7 +77,7 @@ enum PicPlaceKeychain {
         return status
     }
 
-    private static func baseQuery(dataProtection: Bool) -> [String: Any] {
+    private static func baseQuery(account: String, dataProtection: Bool) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: PicPlaceConfiguration.keychainService,

@@ -10409,6 +10409,25 @@ final class AppModel: ObservableObject {
         #endif
     }
 
+    #if os(macOS)
+    /// Before the PicPlace nest moves the library's folders (v2 plan §3.3):
+    /// every queued write lands, no further write may start — the paths
+    /// every store holds are about to be wrong until the relaunch — and the
+    /// lock goes before `Projects/` does. The export is not regenerated:
+    /// the relaunch does that on the nested root.
+    func prepareForLibraryNest(reason: String) {
+        persister.flush()
+        persister.refuseWrites = reason
+        releaseLibraryLock()
+    }
+
+    /// The nest failed before anything moved: back to a writable library.
+    func abandonLibraryNest() {
+        persister.refuseWrites = nil
+        acquireLibraryLock()
+    }
+    #endif
+
     /// On return to the foreground: has `library.json` changed under this
     /// instance? With the lock in place it should never have, so a change
     /// is worth a sentence — another tool, a hand edit, or a stale-lock
