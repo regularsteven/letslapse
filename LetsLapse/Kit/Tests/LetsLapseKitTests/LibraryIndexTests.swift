@@ -376,6 +376,8 @@ final class LibraryIndexTests: XCTestCase {
         XCTAssertEqual(try found("weather"), [id(1)], "the chip label's second word")
         XCTAssertEqual(try found("sky"), [id(1)])
         XCTAssertEqual(try found("light trails"), [id(1)])
+        XCTAssertEqual(try found("Sky & weather"), [id(1)], "the chip label as typed — '&' is not a term")
+        XCTAssertNil(LibraryIndex.ftsQuery("& — ·"), "nothing to search for")
         XCTAssertEqual(try found("skyWeather"), [id(1)], "the raw value still works")
         XCTAssertEqual(try found("brid"), [id(1)], "a prefix")
         XCTAssertEqual(try found("idge"), [], "a mid-word substring no longer matches — by decision")

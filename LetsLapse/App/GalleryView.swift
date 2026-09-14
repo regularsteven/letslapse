@@ -164,6 +164,16 @@ struct GalleryView: View {
             .onAppear   { model.refreshShapeSummaries() }
             .onAppear   { consumeSelectHook() }
             .onAppear   { consumeItemHook() }
+            #if DEBUG
+            .onAppear {
+                if let hooked = ListDebugHooks.filter { filter = hooked }
+                if let text = ListDebugHooks.queryText { query.text = text }
+                if let chips = ListDebugHooks.chips { query.tags = chips }
+            }
+            .onChange(of: sortedCaptures.map(\.id), initial: true) { _, ids in
+                ListDebugHooks.dump(screen: "gallery", sort: sortKey.rawValue, ascending: sortAscending, filter: filter, query: query, ids: ids)
+            }
+            #endif
             // A focused project that leaves the library (deleted here, or
             // from another tab) takes the item view with it — there is no
             // editor left to ask.

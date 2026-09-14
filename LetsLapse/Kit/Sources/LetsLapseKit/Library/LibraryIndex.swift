@@ -759,11 +759,14 @@ public final class LibraryIndex: @unchecked Sendable {
     // MARK: - Helpers
 
     /// A person's words as an FTS5 query: each word quoted and prefix-
-    /// matched, all required. Nil when there is nothing to search for.
+    /// matched, all required. A word with no letter or digit in it ("&",
+    /// "·", "—") is not a word to the tokeniser and would match nothing, so
+    /// it is dropped: "Sky & weather" asks for sky and weather. Nil when
+    /// there is nothing to search for.
     static func ftsQuery(_ text: String) -> String? {
         let words = text.split(whereSeparator: { $0.isWhitespace || $0 == "," })
             .map { $0.replacingOccurrences(of: "\"", with: "") }
-            .filter { !$0.isEmpty }
+            .filter { $0.contains { $0.isLetter || $0.isNumber } }
         guard !words.isEmpty else { return nil }
         return words.map { "\"\($0)\"*" }.joined(separator: " AND ")
     }

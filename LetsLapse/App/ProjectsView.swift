@@ -182,6 +182,16 @@ struct ProjectsView: View {
         .onReceive(model.$requestedProjectDetailID) { requested in
             consumeDetailRequest(requested)
         }
+        #if DEBUG
+        .onAppear {
+            if let hooked = ListDebugHooks.filter { filter = hooked }
+            if let text = ListDebugHooks.queryText { query.text = text }
+            if let chips = ListDebugHooks.chips { query.tags = chips }
+        }
+        .onChange(of: renderedOrder, initial: true) { _, ids in
+            ListDebugHooks.dump(screen: "projects", sort: sortKey.rawValue, ascending: sortAscending, filter: filter, query: query, ids: ids)
+        }
+        #endif
         .onAppear {
             transferServer.attach(model: model)
             if sharingEnabled { transferServer.start() }
@@ -370,6 +380,13 @@ struct ProjectsView: View {
     private var sourceCaptures: [AppModel.CaptureProject] {
         listsScans ? model.captures : model.libraryCaptures
     }
+
+    #if DEBUG
+    /// The ids the list renders, in order — what `LL_DUMP_ORDER` logs.
+    private var renderedOrder: [UUID] {
+        sorted(sourceCaptures.filtered(by: filter, isScan: model.isScannerProject).matching(query)).map(\.id)
+    }
+    #endif
 
     /// Scans belong to this list exactly when they have no tab of their own.
     /// Deliberately not conditional on any scan existing: an empty Scans filter
