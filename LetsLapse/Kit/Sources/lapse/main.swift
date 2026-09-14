@@ -97,6 +97,9 @@ USAGE:
                             coverage. <root> is the storage root (the folder
                             holding Projects/) or the Projects folder itself — a
                             devicectl copy of a phone's container works too.
+                            Since M1 the manifest is a generated export of the
+                            project documents (reported as such); the audit
+                            still reads it as the list of records.
                             Exit 0 when consistent, 1 otherwise. Never writes.
       --json                Machine-readable report
       --plist FILE          A preferences plist copy to read the device id from
@@ -106,7 +109,8 @@ USAGE:
                             canonical form (dates to the millisecond). Exit 0
                             when identical. The Phase 2 dual-write check.
       --out FILE            With --rebuild-index: also write the rebuilt
-                            manifest here (never into the library)
+                            manifest here (never into the library), marked
+                            "generated": true like the app's own export
 
   lapse index <root> [options]                  The library's SQLite index (Index/library.sqlite,
                             a cache rebuilt from every project.json, assets.ndjson

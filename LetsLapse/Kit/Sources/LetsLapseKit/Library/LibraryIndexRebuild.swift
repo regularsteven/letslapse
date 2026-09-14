@@ -161,8 +161,11 @@ public struct LibraryIndexRebuild {
 
     /// The manifest the documents describe, encoded the way the app encodes
     /// `library.json` (sorted keys, seconds-since-2001 dates): what a Phase 4
-    /// repair would put in place of an unreadable index. Collections and the
-    /// schema counter come from the real index when it is readable.
+    /// repair would put in place of an unreadable index, and what
+    /// `--rebuild-index --out` hands an older build or a tool. Marked
+    /// `"generated": true` like every export the app writes since M1.
+    /// Collections come from their own document; the schema counter from
+    /// the real index when it is readable.
     public static func rebuiltManifest(root: URL) throws -> Data {
         let projects = projectsFolder(under: root)
         var report = Report(root: root.path)
@@ -196,6 +199,8 @@ public struct LibraryIndexRebuild {
             "blends": ordered(blends),
             "collections": collections,
             "gradingSchemaVersion": schema,
+            // A rebuilt manifest is by definition a generated one (M1).
+            LibraryExportFormat.generatedKey: true,
         ]
         return try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
     }

@@ -199,6 +199,8 @@ final class LibraryIndexRebuildTests: XCTestCase {
         XCTAssertNotNil(captures[1]["deletedAt"])
         XCTAssertEqual(object["gradingSchemaVersion"] as? Int, 4)
         XCTAssertEqual((object["blends"] as? [[String: Any]])?.count, 2)
+        // A rebuilt manifest is a generated export (M1).
+        XCTAssertTrue(LibraryExportFormat.isGenerated(object))
         // The rebuilt manifest, put in place of the real one, is identical
         // to the documents it came from.
         try data.write(to: projects.appendingPathComponent("library.json"))

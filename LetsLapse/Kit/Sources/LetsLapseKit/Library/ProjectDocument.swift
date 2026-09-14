@@ -84,3 +84,29 @@ public enum ProjectDocumentFormat {
             .timeIntervalSinceReferenceDate
     }
 }
+
+/// `Projects/library.json` after the switch (data model M1, 2026-09-14): no
+/// longer what the app loads, but a **generated compatibility export** — the
+/// same manifest as before, regenerated from the documents at the end of
+/// every persist so an older build, the transfer server's catalogue and
+/// `lapse audit` keep reading what they always read. The export is marked at
+/// its root with `"generated": true`; a manifest without the marker is one a
+/// pre-switch build wrote and still holds the truth of that build's session,
+/// so the app keeps a copy of it (`preSwitchPrefix`) before the first export
+/// overwrites it. It is retired one release later (M4).
+public enum LibraryExportFormat {
+    public static let fileName = "library.json"
+    /// The root key whose `true` marks a generated export.
+    public static let generatedKey = "generated"
+    /// `library.json.pre-switch-<stamp>`: the last manifest a pre-switch
+    /// build wrote, kept beside the export by the first launch that flipped.
+    public static let preSwitchPrefix = "library.json.pre-switch-"
+    /// `library.json.unreadable-<stamp>`: a manifest set aside because it
+    /// could not be decoded (Phase 1 W7).
+    public static let unreadablePrefix = "library.json.unreadable-"
+
+    /// True when the manifest object carries the marker.
+    public static func isGenerated(_ manifest: [String: Any]) -> Bool {
+        (manifest[generatedKey] as? Bool) == true
+    }
+}

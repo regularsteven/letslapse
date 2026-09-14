@@ -23,8 +23,15 @@ public struct LibraryAudit {
         public var manifestBytes: Int64 = 0
         public var manifestDecoded = false
         public var manifestError: String?
+        /// True when the manifest is a generated compatibility export (M1:
+        /// `"generated": true` at its root) rather than the truth a
+        /// pre-switch build wrote.
+        public var manifestGenerated = false
         /// `library.json.unreadable-<stamp>` files set aside by the guard (W7).
         public var unreadableManifests: [String] = []
+        /// `library.json.pre-switch-<stamp>` copies the first post-switch
+        /// launch kept (M1). Informational, never an inconsistency.
+        public var preSwitchManifests: [String] = []
 
         public var captureCount = 0
         public var blendCount = 0
@@ -131,6 +138,7 @@ public struct LibraryAudit {
                 blends = object["blends"] as? [[String: Any]] ?? []
                 collections = object["collections"] as? [[String: Any]] ?? []
                 report.gradingSchemaVersion = object["gradingSchemaVersion"] as? Int
+                report.manifestGenerated = LibraryExportFormat.isGenerated(object)
                 report.manifestDecoded = true
             } catch {
                 report.manifestError = error.localizedDescription
@@ -140,7 +148,8 @@ public struct LibraryAudit {
         }
 
         let entries = (try? fm.contentsOfDirectory(atPath: projects.path)) ?? []
-        report.unreadableManifests = entries.filter { $0.hasPrefix("library.json.unreadable") }.sorted()
+        report.unreadableManifests = entries.filter { $0.hasPrefix(LibraryExportFormat.unreadablePrefix) }.sorted()
+        report.preSwitchManifests = entries.filter { $0.hasPrefix(LibraryExportFormat.preSwitchPrefix) }.sorted()
         report.stagingLeftovers = entries.filter { $0.hasPrefix(".dng-archive-") }.sorted()
 
         // 2. Folders vs records.
@@ -319,8 +328,10 @@ public struct LibraryAudit {
     public static func text(_ r: Report) -> String {
         var lines: [String] = []
         lines.append("lapse audit · \(r.root)")
-        lines.append("  manifest: \(r.manifestDecoded ? "decoded" : "UNREADABLE (\(r.manifestError ?? "?"))") · \(r.manifestBytes) bytes · schema \(r.gradingSchemaVersion.map(String.init) ?? "—")")
+        lines.append("  manifest: \(r.manifestDecoded ? "decoded" : "UNREADABLE (\(r.manifestError ?? "?"))") · \(r.manifestBytes) bytes · schema \(r.gradingSchemaVersion.map(String.init) ?? "—")"
+                     + (r.manifestDecoded ? (r.manifestGenerated ? " · generated export" : " · pre-switch (not generated)") : ""))
         if !r.unreadableManifests.isEmpty { lines.append("  set-aside manifests: \(r.unreadableManifests.joined(separator: ", "))") }
+        if !r.preSwitchManifests.isEmpty { lines.append("  pre-switch manifests kept: \(r.preSwitchManifests.joined(separator: ", "))") }
         lines.append("  captures \(r.captureCount) · blends \(r.blendCount) · collections \(r.collectionCount) · project folders \(r.projectFolderCount) · \(bytes(r.totalBytes))")
         if let deviceID = r.deviceID { lines.append("  deviceID: \(deviceID)") }
         lines.append("")
@@ -370,6 +381,7 @@ public struct LibraryAudit {
                 "path": r.manifestPath, "bytes": r.manifestBytes, "decoded": r.manifestDecoded,
                 "error": r.manifestError ?? "", "setAside": r.unreadableManifests,
                 "gradingSchemaVersion": r.gradingSchemaVersion ?? 0,
+                "generated": r.manifestGenerated, "preSwitchKept": r.preSwitchManifests,
             ] as [String: Any],
             "counts": [
                 "captures": r.captureCount, "blends": r.blendCount, "collections": r.collectionCount,

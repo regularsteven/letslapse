@@ -142,4 +142,27 @@ final class LibraryAuditTests: XCTestCase {
         XCTAssertEqual(report.unreadableManifests, ["library.json.unreadable-2026-09-13"])
         XCTAssertFalse(report.consistent)
     }
+
+    /// M1: the manifest is a generated export, and the copy of the last
+    /// pre-switch manifest is listed as kept — neither is an inconsistency.
+    func testGeneratedExportAndPreSwitchCopyAreReported() throws {
+        let id = "11111111-1111-1111-1111-111111111111"
+        _ = try makeProject(id, files: ["source/frame-00001.dng"])
+        let captures: [[String: Any]] = [["id": id, "kind": "photos", "sourceFileNames": ["source/frame-00001.dng"]]]
+        try writeManifest(["captures": captures, "blends": [], "collections": []])
+        var report = LibraryAudit.run(root: root)
+        XCTAssertFalse(report.manifestGenerated, "a manifest without the marker is a pre-switch one")
+        XCTAssertTrue(report.consistent)
+
+        try writeManifest(["captures": captures, "blends": [], "collections": [], "generated": true])
+        try Data("{}".utf8).write(to: projects.appendingPathComponent("library.json.pre-switch-20260914-070000"))
+        report = LibraryAudit.run(root: root)
+        XCTAssertTrue(report.manifestGenerated)
+        XCTAssertEqual(report.preSwitchManifests, ["library.json.pre-switch-20260914-070000"])
+        XCTAssertEqual(report.unreadableManifests, [])
+        XCTAssertTrue(report.consistent, LibraryAudit.text(report))
+        XCTAssertTrue(LibraryAudit.text(report).contains("generated export"))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: LibraryAudit.json(report)) as? [String: Any])
+        XCTAssertEqual((json["manifest"] as? [String: Any])?["generated"] as? Bool, true)
+    }
 }
