@@ -121,8 +121,28 @@ extension AppModel {
                 next[id] = ShapeSummary(register: register, modified: modified)
             }
             let result = next
+            // The index's SHAPES counts (M2) follow the same modification
+            // dates: a register that changed since it was counted, or one
+            // that has gone, is re-counted here, off the main actor.
+            var recounted = 0
+            if let index = await self?.libraryIndex {
+                for (id, folder) in targets {
+                    let file = ShapeSummary.modificationDate(ofRegisterIn: folder)
+                    let counted = index.shapesIndexedAt(projectID: id)
+                    switch (file, counted) {
+                    case (nil, nil): continue
+                    case (let file?, let at?) where at >= file: continue
+                    default:
+                        do { try index.reindexShapes(projectID: id, inProjectFolder: folder); recounted += 1 }
+                        catch { LLog("index: could not re-count shapes of \(id.uuidString.prefix(8)): \(error)") }
+                    }
+                }
+            }
+            let changed = recounted
             await MainActor.run {
-                guard let self, self.shapeSummaries != result else { return }
+                guard let self else { return }
+                if changed > 0 { self.noteIndexChanged() }
+                guard self.shapeSummaries != result else { return }
                 self.shapeSummaries = result
             }
         }
@@ -137,6 +157,15 @@ extension AppModel {
                                                       modified: ShapeSummary.modificationDate(ofRegisterIn: folder))
         } else {
             shapeSummaries[capture.id] = nil
+        }
+        // And the index's row (M2), so the Gallery's rows agree at once.
+        if let index = libraryIndex {
+            do {
+                try index.reindexShapes(projectID: capture.id, inProjectFolder: folder)
+                noteIndexChanged()
+            } catch {
+                LLog("index: could not re-count shapes of \(capture.id.uuidString.prefix(8)): \(error)")
+            }
         }
     }
 }

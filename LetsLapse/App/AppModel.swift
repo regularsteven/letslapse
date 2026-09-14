@@ -37,14 +37,16 @@ final class AppModel: ObservableObject {
     /// `mode` marker for a one-tap Photo-mode capture — the burst that was
     /// auto-blended into a single image with no Adjust step. Detects photo
     /// captures across launches (persisted in the manifest via `mode`).
-    static let photoCaptureMode = "Photo"
+    /// The string itself lives in the Kit (`ProjectModes`, M2): the index
+    /// classifies projects by it.
+    static let photoCaptureMode = ProjectModes.photo
 
     /// The `mode` line a Scanner shoot registers with — written by
     /// `CaptureView.intervalSourceModeName`, and the back-stop that identifies
     /// Scanner projects registered before `CaptureProject.captureMode` existed.
     /// If the display string is ever reworded, the stored mode carries on
     /// working and only pre-existing projects fall through to the sidecar.
-    static let scannerCaptureMode = "Interval · Scanner"
+    static let scannerCaptureMode = ProjectModes.scanner
 
     enum CaptureKind: String, Codable {
         case video
@@ -905,7 +907,19 @@ final class AppModel: ObservableObject {
     @Published var stage: Stage = .home
     @Published var source: Source?
     @Published var errorMessage: String?
-    @Published private(set) var captures: [CaptureProject] = []
+    @Published private(set) var captures: [CaptureProject] = [] {
+        didSet { captureIndexByID = Dictionary(captures.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }) }
+    }
+    /// `captures` by id — what `capture(id:)` reads (M2). Rebuilt on every
+    /// change of the array; a few microseconds at a few hundred projects.
+    var captureIndexByID: [UUID: Int] = [:]
+    /// Bumped on the main actor whenever the index changed — after a
+    /// persist's rows landed, after the launch pass, after the asset store
+    /// re-indexed a project — so a list re-asks its question (M2).
+    @Published var indexRevision = 0
+    /// The lists' remembered answers, keyed by question, good for one
+    /// `indexRevision`. Internal for the extension in `AppModel+Lists.swift`.
+    var listCache: [ProjectListQuery: (revision: Int, ids: [UUID])] = [:]
     /// The tombstoned records (W9): in the manifest, out of every list. Their
     /// files sit under `Projects/.trash/` until Empty trash or the 30-day
     /// purge removes both.
@@ -1292,8 +1306,12 @@ final class AppModel: ObservableObject {
             self?.errorMessage = error.localizedDescription
         }
         persister.onManifestWritten = { [weak self] date in self?.noteManifestWritten(at: date) }
+        persister.onIndexChanged = { [weak self] in Task { @MainActor in self?.noteIndexChanged() } }
         manifestSeenModifiedAt = (try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        assetStore.onChange = { [weak self] _ in self?.metadataRevision += 1 }
+        assetStore.onChange = { [weak self] _ in
+            self?.metadataRevision += 1
+            self?.noteIndexChanged()
+        }
         assetStore.index = persister.index
         assetStore.shouldPause = { [weak self] in
             let process = ProcessInfo.processInfo
@@ -7579,11 +7597,11 @@ final class AppModel: ObservableObject {
     /// naming for the same reason, and the string `isPhotoCapture` reads to
     /// treat it as one asset everywhere. An import is not required to be a
     /// sequence: one photo is a photo, and this is what it registers as.
-    static let importedPhotoMode = "Photo · Imported"
+    static let importedPhotoMode = ProjectModes.importedPhoto
 
     /// The `mode` line an imported video registers with. Long-standing value,
     /// named here so the two import paths are readable side by side.
-    static let importedVideoMode = "Import"
+    static let importedVideoMode = ProjectModes.importedVideo
 
     /// Brings stills shot on another camera in: a set of them as an interval
     /// project, a single one as a photo project.

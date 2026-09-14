@@ -202,8 +202,8 @@ public final class LibraryIndex: @unchecked Sendable {
     }
 
     /// Re-counts one project's shapes from its `shapes.json` (M2) — the
-    /// Gallery's SHAPES rows. A missing or empty register counts as no
-    /// shapes; either way `shapesIndexedAt` moves to now.
+    /// Gallery's SHAPES rows. An empty register counts as no shapes and
+    /// stamps `shapesIndexedAt`; a missing one counts as none and clears it.
     public func reindexShapes(projectID: UUID, inProjectFolder folder: URL) throws {
         lock.lock(); defer { lock.unlock() }
         try db.transaction {
@@ -443,10 +443,13 @@ public final class LibraryIndex: @unchecked Sendable {
 
     /// One project's shape counts from its register, the way the Gallery's
     /// rows count them: ellipses one row whatever their obliquity, quads
-    /// split square / rectangle by family.
+    /// split square / rectangle by family. A project with no register at
+    /// all counts zero and keeps `shapes_indexed_at` null — "no file, never
+    /// counted" is its steady state, not something to re-check each launch.
     private func upsertShapes(projectID: String, inProjectFolder folder: URL) throws {
         var ellipses = 0, rectangles = 0, squares = 0
-        if let register = ShapeRegister.load(inProjectFolder: folder) {
+        let exists = FileManager.default.fileExists(atPath: ShapeRegister.url(inProjectFolder: folder).path)
+        if exists, let register = ShapeRegister.load(inProjectFolder: folder) {
             for shape in register.shapes {
                 switch shape.kind {
                 case .ellipse: ellipses += 1
@@ -457,7 +460,7 @@ public final class LibraryIndex: @unchecked Sendable {
         try db.run("""
             UPDATE projects SET shape_ellipses = ?, shape_rectangles = ?, shape_squares = ?, shapes_indexed_at = ? WHERE id = ?
             """, [.int(Int64(ellipses)), .int(Int64(rectangles)), .int(Int64(squares)),
-                   .real(Date().timeIntervalSinceReferenceDate), .text(projectID)])
+                   .init(exists ? Date().timeIntervalSinceReferenceDate : nil), .text(projectID)])
     }
 
     // MARK: - Queries

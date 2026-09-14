@@ -75,6 +75,10 @@ final class LibraryPersister: @unchecked Sendable {
     /// modification date — what the foreground check compares against.
     var onManifestWritten: (@Sendable (Date?) -> Void)?
 
+    /// Called on the queue whenever the index's rows changed — a persist
+    /// that wrote documents, the launch pass — so the lists re-ask (M2).
+    var onIndexChanged: (@Sendable () -> Void)?
+
     /// The per-project document writer (Phase 2). Used only on `queue`.
     private let documents: ProjectDocumentWriter
 
@@ -175,7 +179,8 @@ final class LibraryPersister: @unchecked Sendable {
             if index != nil {
                 LLog(outcome.indexRebuilt
                      ? "index: rebuilt from the files — \(outcome.indexed) projects"
-                     : "index: \(outcome.indexed) projects re-indexed · \(outcome.assetsReindexed) asset files re-indexed")
+                     : "index: \(outcome.indexed) projects re-indexed · \(outcome.assetsReindexed) asset files re-indexed · \(outcome.shapesReindexed) shape registers re-counted")
+                onIndexChanged?()
             }
         }
     }
@@ -195,6 +200,7 @@ final class LibraryPersister: @unchecked Sendable {
         // persist; the count fails this one, below, once the export has
         // had its turn.
         let outcome = documents.sync(manifest)
+        if outcome.indexed > 0 || outcome.removed > 0 { onIndexChanged?() }
         // Then `library.json`, regenerated from the same snapshot as the
         // compatibility export. Its failure is logged, not thrown: nothing
         // is lost, and the next persist writes it again.

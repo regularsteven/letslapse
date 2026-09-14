@@ -9,7 +9,7 @@ import SwiftUI
 ///
 /// Deliberately a value type with no view or model dependency: the same query drives the Projects
 /// list, its empty state, and the "N of M" count, and all three must agree.
-struct SceneQuery: Equatable {
+struct SceneQuery: Hashable {
     var text: String = ""
     /// Tags the user has switched on. A capture must carry **all** of them — chips narrow, the way
     /// a filter is expected to. (Union would mean each extra tap showed *more* projects.)

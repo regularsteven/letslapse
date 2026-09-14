@@ -1,4 +1,5 @@
 import Foundation
+import LetsLapseKit
 
 /// What one on-device vision pass says about a capture.
 ///
@@ -31,11 +32,9 @@ struct SceneMetadata: Codable, Equatable, Sendable {
     /// A hand-typed tag falls through to the default and is shown as it was stored, first letter
     /// raised: the taxonomy's two camel-cased values are the only ones that need translating.
     static func label(for tag: String) -> String {
-        switch tag {
-        case "skyWeather": return "Sky & weather"
-        case "lightTrails": return "Light trails"
-        default: return tag.prefix(1).uppercased() + tag.dropFirst()
-        }
+        // The words live in the Kit (M2): the index puts the label beside
+        // the raw tag in its search table.
+        SceneTagLabel.label(for: tag)
     }
 
     /// What to store for something a person typed.

@@ -1,4 +1,5 @@
 import SwiftUI
+import LetsLapseKit
 
 /// The "Add clips" sheet: every blended clip in the library, two shapes —
 /// By project (sections with horizontal reels) or All clips (one flat grid).
@@ -272,14 +273,24 @@ struct CollectionClipPicker: View {
     }
 
     /// Interval and Video projects with at least one blended clip, newest
-    /// first — Photo captures are one asset and have nothing to place.
+    /// first — Photo captures are one asset and have nothing to place. The
+    /// candidates come from the index (M2: the projects with a live blend,
+    /// newest capture first); each section's record and blends by id.
     private var sectionedCaptures: [Section] {
-        model.captures.compactMap { capture in
+        candidateCaptures.compactMap { capture in
             guard !capture.isPhotoCapture else { return nil }
             let blends = model.blends(for: capture)
             guard !blends.isEmpty else { return nil }
             return Section(capture: capture, blends: blends)
         }
+    }
+
+    private var candidateCaptures: [AppModel.CaptureProject] {
+        guard let index = model.libraryIndex else { return model.captures }
+        var query = LibraryIndex.ProjectQuery()
+        query.withBlends = true
+        guard let ids = try? index.projectIDs(query) else { return model.captures }
+        return ids.compactMap { model.capture(id: $0) }
     }
 
     private var allBlends: [AppModel.BlendProject] {

@@ -70,9 +70,12 @@ final class ProjectDocumentWriter {
         /// Records with no folder to write into.
         var homeless = 0
         var failed = 0
-        /// Index rows written (projects) and re-indexed asset files.
+        /// Index rows written (projects), removed, and re-indexed asset
+        /// files and shape registers.
         var indexed = 0
+        var removed = 0
         var assetsReindexed = 0
+        var shapesReindexed = 0
         var indexRebuilt = false
     }
 
@@ -126,7 +129,10 @@ final class ProjectDocumentWriter {
         // A purged project's entry would otherwise live on in memory for
         // the rest of the session — and its rows in the index.
         for id in lastWritten.keys where !seen.contains(id) {
-            do { try index?.removeProject(id: id) } catch { LLog("index: could not remove \(id.uuidString.prefix(8)): \(error)") }
+            do {
+                try index?.removeProject(id: id)
+                outcome.removed += 1
+            } catch { LLog("index: could not remove \(id.uuidString.prefix(8)): \(error)") }
         }
         lastWritten = lastWritten.filter { seen.contains($0.key) }
         syncCollections(manifest, outcome: &outcome)
@@ -214,13 +220,17 @@ final class ProjectDocumentWriter {
     // MARK: - The index
 
     /// A document that just landed goes into the index as it is, with the
-    /// file's modification date so the next launch can tell it is current.
+    /// file's modification date so the next launch can tell it is current,
+    /// and its folder so the one classification the document cannot settle
+    /// (the scanner sidecar) can be read once.
     private func index(_ data: Data, at url: URL, id: UUID, outcome: inout Outcome) {
         guard let index else { return }
+        let folder = url.deletingLastPathComponent()
         do {
-            try index.upsertProject(documentData: data, folder: relativeFolder(of: url), documentModifiedAt: modificationDate(url))
+            try index.upsertProject(documentData: data, folder: relativeFolder(of: url), documentModifiedAt: modificationDate(url), projectFolderURL: folder)
             outcome.indexed += 1
-            reindexAssetsIfStale(id: id, folder: url.deletingLastPathComponent(), outcome: &outcome)
+            reindexAssetsIfStale(id: id, folder: folder, outcome: &outcome)
+            reindexShapesIfStale(id: id, folder: folder, outcome: &outcome)
         } catch {
             LLog("index: could not index \(id.uuidString.prefix(8)): \(error)")
         }
@@ -233,9 +243,29 @@ final class ProjectDocumentWriter {
         let onDisk = modificationDate(url)
         if let indexed = index.documentModifiedAt(projectID: id), let onDisk, abs(indexed.timeIntervalSince(onDisk)) < 0.001 {
             reindexAssetsIfStale(id: id, folder: url.deletingLastPathComponent(), outcome: &outcome)
+            reindexShapesIfStale(id: id, folder: url.deletingLastPathComponent(), outcome: &outcome)
             return
         }
         self.index(data, at: url, id: id, outcome: &outcome)
+    }
+
+    /// The shape counts follow `shapes.json` by date (M2): re-counted when
+    /// the register is newer than the count, or when it has gone since.
+    private func reindexShapesIfStale(id: UUID, folder: URL, outcome: inout Outcome) {
+        guard let index else { return }
+        let register = modificationDate(ShapeRegister.url(inProjectFolder: folder))
+        let counted = index.shapesIndexedAt(projectID: id)
+        switch (register, counted) {
+        case (nil, nil): return
+        case (let file?, let at?) where at >= file: return
+        default: break
+        }
+        do {
+            try index.reindexShapes(projectID: id, inProjectFolder: folder)
+            outcome.shapesReindexed += 1
+        } catch {
+            LLog("index: could not re-count shapes of \(id.uuidString.prefix(8)): \(error)")
+        }
     }
 
     /// The asset rows follow `assets.ndjson` and `metadata.json` by date.

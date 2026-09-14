@@ -732,8 +732,19 @@ struct GalleryView: View {
 
     // MARK: Data pipeline
 
-    /// The library after filtering by type, search and the sidebar's Shapes rows.
+    /// The grid's whole question, for the index (M2): the Gallery never
+    /// lists scans, and its sidebar's Shapes rows ride along.
+    private var listQuery: ProjectListQuery {
+        ProjectListQuery(sort: sortKey, ascending: sortAscending, filter: filter, query: query,
+                         listsScans: false, shapes: shapeSelection)
+    }
+
+    /// The library after filtering by type, search and the sidebar's Shapes
+    /// rows — the index's answer (in the grid's order, which the sidebar's
+    /// chips do not mind), or the arrays filtered here for a library with no
+    /// index.
     private var visibleCaptures: [AppModel.CaptureProject] {
+        if let indexed = model.projects(for: listQuery) { return indexed }
         let base = model.libraryCaptures
             .filtered(by: filter)
             .matching(query)
@@ -741,8 +752,10 @@ struct GalleryView: View {
         return base.filter { shapeSelection.allows(model.shapeSummaries[$0.id]) }
     }
 
-    /// Filtered then sorted.
+    /// Filtered then sorted. The index's answer is already in order; the
+    /// fallback sorts the way the Projects list does.
     private var sortedCaptures: [AppModel.CaptureProject] {
+        if let indexed = model.projects(for: listQuery) { return indexed }
         let filtered = visibleCaptures
         let ascending: [AppModel.CaptureProject]
         switch sortKey {

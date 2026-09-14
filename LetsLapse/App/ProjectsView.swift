@@ -102,12 +102,14 @@ struct ProjectsView: View {
                     // the project itself is still reachable from that tab's
                     // "View as timelapse". With the tab off they come back
                     // here, because otherwise nothing lists them.
-                    let library = sourceCaptures
-                    let visible = sorted(
-                        library
-                            .filtered(by: filter, isScan: model.isScannerProject)
-                            .matching(query))
-                    if library.isEmpty {
+                    //
+                    // The rows, their order and the two empty states come
+                    // from the index (M2) — one question, `listQuery` —
+                    // and each card from its record by id. The arrays are
+                    // sorted and filtered here only for a library with no
+                    // index to ask.
+                    let visible = visibleCaptures
+                    if libraryIsEmpty {
                         emptyState
                     } else if visible.isEmpty {
                         filteredEmptyState
@@ -265,7 +267,7 @@ struct ProjectsView: View {
 
             // Same segmented filter the Gallery grid uses, so the two tabs
             // narrow a library the same way.
-            if sourceCaptures.isEmpty {
+            if libraryIsEmpty {
                 // Nothing to filter — stand in for the bar's bottom padding so
                 // the empty-state card doesn't butt against the title.
                 Color.clear.frame(height: 8)
@@ -284,7 +286,7 @@ struct ProjectsView: View {
                     filters: availableFilters,
                     counts: showsCounts ? filterCounts : nil)
 
-                let tags = sourceCaptures.presentSceneTags
+                let tags = model.tagChips(listsScans: listsScans) ?? sourceCaptures.presentSceneTags
                 if !tags.isEmpty {
                     // Bleeds past the row's trailing inset so a long chip row
                     // scrolls out to the screen edge rather than stopping short.
@@ -376,15 +378,35 @@ struct ProjectsView: View {
     }
 
     /// What this list is built from: the scan-free library, or everything —
-    /// whichever the Layout setting leaves without another home.
+    /// whichever the Layout setting leaves without another home. The
+    /// fallback path's base; the index answers the same question through
+    /// `listQuery.listsScans`.
     private var sourceCaptures: [AppModel.CaptureProject] {
         listsScans ? model.captures : model.libraryCaptures
+    }
+
+    /// The list's whole question, for the index (M2).
+    private var listQuery: ProjectListQuery {
+        ProjectListQuery(sort: sortKey, ascending: sortAscending, filter: filter, query: query, listsScans: listsScans)
+    }
+
+    /// The records the list renders, in order: the index's answer, or —
+    /// for a library with no index — the arrays sorted and filtered here.
+    private var visibleCaptures: [AppModel.CaptureProject] {
+        model.projects(for: listQuery)
+            ?? sorted(sourceCaptures.filtered(by: filter, isScan: model.isScannerProject).matching(query))
+    }
+
+    /// Nothing to list at all — as opposed to nothing left after the
+    /// filter, the search or the chips.
+    private var libraryIsEmpty: Bool {
+        model.libraryIsEmpty(for: listQuery) ?? sourceCaptures.isEmpty
     }
 
     #if DEBUG
     /// The ids the list renders, in order — what `LL_DUMP_ORDER` logs.
     private var renderedOrder: [UUID] {
-        sorted(sourceCaptures.filtered(by: filter, isScan: model.isScannerProject).matching(query)).map(\.id)
+        visibleCaptures.map(\.id)
     }
     #endif
 
@@ -400,6 +422,7 @@ struct ProjectsView: View {
     /// How many projects each filter would show, counted after the search has
     /// had its say so the numbers agree with what tapping one produces.
     private var filterCounts: [CaptureFilter: Int] {
+        if let counted = model.listCounts(for: listQuery, filters: availableFilters) { return counted }
         let searched = sourceCaptures.matching(query)
         return availableFilters.reduce(into: [:]) { counts, filter in
             counts[filter] = searched
