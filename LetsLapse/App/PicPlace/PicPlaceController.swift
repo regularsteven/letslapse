@@ -73,6 +73,8 @@ final class PicPlaceController: ObservableObject {
         /// The project's sources are not on this device; its poster is (v2
         /// plan §3.6). Whatever the session, the card says so first.
         case previewOnly(PicPlaceSyncRecord?)
+        /// Stage 4: the project is in the conflicts list.
+        case conflict(Conflict.Kind)
         case signedOut
         /// Signed in, but this library is not (or not this account's): a sync
         /// would push into the wrong place.
@@ -115,6 +117,23 @@ final class PicPlaceController: ObservableObject {
     /// The first connection's progress while it runs (§4.1 step 4).
     @Published internal(set) var initialSyncProgress: InitialSyncProgress?
     var initialSyncTask: Task<Void, Never>?
+    /// Stage 4: the rows a person has to decide, the last check, and whether
+    /// one is running.
+    @Published internal(set) var conflicts: [Conflict] = []
+    @Published internal(set) var lastCheck: CheckOutcome?
+    @Published internal(set) var isChecking = false
+    @Published internal(set) var lastResolveError: String?
+    /// The conflicts sheet, presented by whichever card is on screen.
+    @Published var isReviewingConflicts = false
+    var checkTask: Task<Void, Never>?
+    var lastCheckAt: Date?
+    var foregroundObserver: NSObjectProtocol?
+    /// The server's watermark from the last index read (stage 4).
+    var syncMeta = PicPlaceSyncState.Meta()
+
+    func saveSyncState() {
+        PicPlaceSyncState.save(records, meta: syncMeta, root: root)
+    }
 
     /// What a Sync sends. Stage 2: the minimal set; the originals follow per
     /// project in stage 5. `LL_PICPLACE_POLICY=minimal|originals|everything`
@@ -146,7 +165,9 @@ final class PicPlaceController: ObservableObject {
         if binding == nil, PicPlaceBindingRecord.exists(inRoot: root) {
             LLog("picplace: \(PicPlaceBindingRecord.fileName) exists but could not be read — treating the library as unbound; the file is left as it is")
         }
-        records = PicPlaceSyncState.load(root: root)
+        let loaded = PicPlaceSyncState.load(root: root)
+        records = loaded.records
+        syncMeta = loaded.meta
         migrateLegacyRecords()
         Self.migrateLegacyTokens()
 
@@ -234,6 +255,7 @@ final class PicPlaceController: ObservableObject {
                 self.dryRun(target)
             }
         }
+        armChangeChecks()
         #if os(macOS)
         // `LL_PICPLACE_NEST=<host>:<username>` binds an unbound library to a
         // staged account and runs the Mac nest — the rename into
@@ -367,12 +389,15 @@ final class PicPlaceController: ObservableObject {
     private func bootstrapSession() async {
         do {
             try await establishProfile()
-            runInitialSyncIfPending()
         } catch {
             // Offline at launch is fine: the stored profile stands until the
             // server says otherwise (a refused refresh calls handleSignedOutByServer).
             LLog("picplace: could not reach \(sessionHost) at launch: \(error)")
         }
+        // A transient failure of the handshake (a 500, a flaky link) must
+        // not cost the launch its check: the profile is known, the check
+        // fails or succeeds on its own.
+        if isSignedIn { runInitialSyncIfPending() }
     }
 
     struct LibraryMismatch: LocalizedError {
@@ -547,7 +572,7 @@ final class PicPlaceController: ObservableObject {
         do {
             try record.write(inRoot: root)
             binding = record
-            PicPlaceSyncState.save(records, root: root)
+            saveSyncState()
             LLog("picplace: library bound to @\(username) on \(record.server.host)")
             runInitialSyncIfPending()
         } catch {
@@ -573,6 +598,15 @@ final class PicPlaceController: ObservableObject {
         LLog("picplace: library disconnected")
     }
 
+    /// The project's revision as the server compares it: its last edit in
+    /// milliseconds — ROUNDED, because the document encoder rounds the stamp
+    /// to the millisecond and a device that reads the document back must
+    /// compute the same number the device that wrote it sent (a truncated
+    /// in-memory stamp read as "moved" one launch later, 2026-09-15).
+    func revision(of capture: AppModel.CaptureProject) -> Int {
+        Int((model.lastEdited(capture).timeIntervalSince1970 * 1000).rounded())
+    }
+
     // MARK: Project state
 
     /// A project whose sources are not on this device and which PicPlace
@@ -588,6 +622,7 @@ final class PicPlaceController: ObservableObject {
         #if DEBUG
         if let stagedState { return stagedState }
         #endif
+        if let conflict = conflicts.first(where: { $0.originID == model.originID(of: capture) }) { return .conflict(conflict.kind) }
         if isPreviewOnly(capture) { return .previewOnly(records[model.originID(of: capture)]) }
         guard isSignedIn else { return .signedOut }
         guard canSync else { return .notConnected }
@@ -610,6 +645,7 @@ final class PicPlaceController: ObservableObject {
         }
         #endif
         guard let capture = model.capture(id: captureID) else { return nil }
+        if conflicts.contains(where: { $0.originID == model.originID(of: capture) }) { return .failed }
         if isPreviewOnly(capture) { return .previewOnly }
         guard canSync else { return nil }
         if progress[captureID] != nil { return .syncing }
@@ -630,11 +666,11 @@ final class PicPlaceController: ObservableObject {
                 guard var record = records[key] else { return }
                 record.alsoOn = project.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name)
                 records[key] = record
-                PicPlaceSyncState.save(records, root: root)
+                saveSyncState()
             } catch let error as PicPlaceAPIError where error.status == 404 {
                 // Deleted on the server: this device's record no longer describes anything.
                 records[key] = nil
-                PicPlaceSyncState.save(records, root: root)
+                saveSyncState()
             } catch {
                 // Offline: keep what we knew.
             }
@@ -676,7 +712,7 @@ final class PicPlaceController: ObservableObject {
             folder: folder,
             name: capture.displayTitle,
             type: capture.isPhotoCapture ? "photo" : (capture.kind == .video ? "video" : "interval"),
-            revision: Int(model.lastEdited(capture).timeIntervalSince1970 * 1000),
+            revision: revision(of: capture),
             capturedAt: capture.createdAt,
             policy: policy,
             originUUID: capture.derivedFromOriginID,
@@ -697,7 +733,9 @@ final class PicPlaceController: ObservableObject {
         let lastPosterToken = records[key]?.posterToken
         syncTasks[capture.id] = Task {
             do {
-                if policy.sendsRecords, let posterSource {
+                // A preview-only project's "source" IS its poster: nothing to
+                // render, the file it has is the one that goes.
+                if policy.sendsRecords, let posterSource, posterSource.lastPathComponent != ProjectFileRegistry.posterName {
                     _ = await PicPlacePoster.ensure(sourceURL: posterSource, kind: posterKind, grade: grade, token: posterToken,
                                                     lastToken: lastPosterToken, in: folder)
                 }
@@ -706,6 +744,21 @@ final class PicPlaceController: ObservableObject {
                 records[key] = record
             } catch is CancellationError {
                 // Cancelled by the user: the card goes back to what it was.
+            } catch let error as PicPlaceAPIError where error.code == "uuid_taken" {
+                // Another account holds this origin id: the project is re-minted
+                // as a fork of it here and pushed under its own id (§4.4).
+                LLog("picplace: \(key) is taken by another account — re-minting \(capture.displayTitle) as a fork")
+                progress[capture.id] = nil
+                syncTasks[capture.id] = nil
+                if let forkID = try? model.forkProjectForKeepBoth(capture.id), let fork = model.capture(id: forkID) {
+                    sync(fork)
+                } else {
+                    var record = PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: policy.rawValue)
+                    record.lastError = "This project's id belongs to another account, and it could not be re-minted here."
+                    records[key] = record
+                }
+                saveSyncState()
+                return
             } catch {
                 LLog("picplace: sync of \(capture.id) failed: \(error)")
                 var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: policy.rawValue)
@@ -714,7 +767,7 @@ final class PicPlaceController: ObservableObject {
                     ?? error.localizedDescription
                 records[key] = record
             }
-            PicPlaceSyncState.save(records, root: root)
+            saveSyncState()
             progress[capture.id] = nil
             syncTasks[capture.id] = nil
             refreshUsage()
@@ -762,7 +815,7 @@ final class PicPlaceController: ObservableObject {
             let originID = model.originID(of: capture)
             if records[originID] == nil { records[originID] = record; moved += 1 }
         }
-        if moved > 0 { PicPlaceSyncState.save(records, root: root) }
+        if moved > 0 { saveSyncState() }
         LLog("picplace: migrated \(moved) of \(decoded.count) v1 sync record(s) into the library")
     }
 

@@ -14,31 +14,40 @@ enum PicPlaceSyncState {
 
     static let format = 1
 
+    /// What the file carries beside the records: the server's watermark
+    /// for the next `updated_since` (stage 4).
+    struct Meta: Codable, Equatable {
+        var serverTime: String?
+        var checkedAt: Date?
+    }
+
     private struct File: Codable {
         var format: Int
         var records: [String: PicPlaceSyncRecord]
+        var meta: Meta?
     }
 
-    static func load(root: URL) -> [UUID: PicPlaceSyncRecord] {
+    static func load(root: URL) -> (records: [UUID: PicPlaceSyncRecord], meta: Meta) {
         let url = PicPlaceBindingRecord.syncStateURL(inRoot: root)
-        guard let data = try? Data(contentsOf: url) else { return [:] }
+        guard let data = try? Data(contentsOf: url) else { return ([:], Meta()) }
         do {
             let file = try NDJSONFile.makeDecoder().decode(File.self, from: data)
-            return Dictionary(uniqueKeysWithValues: file.records.compactMap { key, value in UUID(uuidString: key).map { ($0, value) } })
+            let records = Dictionary(uniqueKeysWithValues: file.records.compactMap { key, value in UUID(uuidString: key).map { ($0, value) } })
+            return (records, file.meta ?? Meta())
         } catch {
             LLog("picplace: could not read \(url.lastPathComponent): \(error)")
-            return [:]
+            return ([:], Meta())
         }
     }
 
-    static func save(_ records: [UUID: PicPlaceSyncRecord], root: URL) {
+    static func save(_ records: [UUID: PicPlaceSyncRecord], meta: Meta, root: URL) {
         let url = PicPlaceBindingRecord.syncStateURL(inRoot: root)
         do {
             let keyed = Dictionary(uniqueKeysWithValues: records.map { ($0.key.uuidString.lowercased(), $0.value) })
             let encoder = NDJSONFile.makeEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try encoder.encode(File(format: format, records: keyed)).write(to: url, options: .atomic)
+            try encoder.encode(File(format: format, records: keyed, meta: meta)).write(to: url, options: .atomic)
         } catch {
             LLog("picplace: could not write \(url.lastPathComponent): \(error)")
         }

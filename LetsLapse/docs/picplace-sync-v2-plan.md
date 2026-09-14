@@ -681,3 +681,62 @@ to `sdk=iphonesimulator*` in the project, and the skill's simulator build
 signing ad-hoc (`CODE_SIGN_IDENTITY=-`) instead of not at all. Verified: the
 iPhone 16 Pro Simulator signed in, connected as the **fresh** case and pulled
 all four projects — the second device the plan asked for.
+
+## 12. Stage 4 — landed 2026-09-15 (the merge, continuously)
+
+**What shipped** (`App/PicPlace/PicPlaceChangeSync.swift`,
+`PicPlaceConflictsView.swift`):
+
+- **A check** — at launch once the first connection is done, whenever the
+  app comes to the front (rate-limited to one a minute), and from *Check
+  PicPlace now* in Settings — reads the **whole** account index with
+  tombstones and applies the §4.4 table by origin id with the sync record's
+  revision as the base: new there → pull; new here → push (minimal); only
+  this device moved → push; only the server moved → **pull-update** (the
+  bundle's members and the poster refreshed on disk, the record replaced —
+  `AppModel.applyPulledUpdate`, keeping `addedAt` and any blend only this
+  device knows); deleted here and unchanged there → the delete pushed
+  (claim, `DELETE`, a tombstone); everything else becomes a **conflict**.
+  A shoot being written defers the check. `updated_since` is deliberately
+  NOT used yet: an incremental index lists only what the server changed,
+  and a project only this device edited sits beside an unchanged server
+  row — the watermark is stored for a later, incremental pass at scale.
+- **Conflicts** (`Conflict.Kind`): both edited · unrelated (no base) ·
+  deleted on the server while held here · deleted here while changed
+  there. Settings shows *N projects need your decision — Review*; the
+  project card *Needs your decision · Review…*; the sheet lists each with
+  *This device · edited … / PicPlace · edited … from <device>* and offers
+  keep this device's / keep PicPlace's / **keep both** (the tombstone rows:
+  restore to PicPlace / delete here too; delete on PicPlace / bring it back
+  here), plus *Use the most recent edit for all*. Keep-local re-stamps the
+  record (`markEdited`) so the push carries a fresh revision; keep-both
+  forks this device's version (`AppModel.forkProjectForKeepBoth`: folder
+  renamed, new id and origin, `derivedFromOriginID`) and pulls the server's
+  into the original's place.
+- **`409 uuid_taken`** on a push re-mints the project as a fork and pushes
+  again; a tombstoned project answers the claim with `409 project_deleted`
+  and the push resurrects it.
+- **Revision rounding**: the document encoder rounds stamps to the
+  millisecond while the revision truncated — a device read its own
+  document back one millisecond off and re-pushed on every launch. One
+  `revision(of:)`, rounded, everywhere.
+- A failed handshake at launch no longer costs the launch its check.
+
+**Verified between two scratch devices on `picplace.test`** (device B via
+`-letslapse.deviceID`), each row logged: new here → pushed / new there →
+pulled; a rename on A pushed, pulled as an update on B; both edited →
+conflict on B, resolved by newest (B's, re-stamped) and pulled by A; both
+edited → keep both on B (fork `34E1…` pushed, the original taken from the
+server), the fork pulled by A; deleted on A → tombstone → B's
+*deleted on PicPlace* resolved by deleting locally; deleted on B while
+edited on A → *deleted here, changed there* resolved by bringing it back;
+then two clean checks. The sheet and the Settings rows screenshotted.
+Throwaway projects tombstoned afterwards.
+
+**For the PicPlace developer** (found on the way): `status.projects.count`
+counts tombstones (6 with 5 live); one `500 SQLSTATE[40001] Deadlock … insert
+ignore into cache` from `/status` under concurrent requests of one device —
+the rate limiter's cache store.
+
+**Not exercised**: `uuid_taken` (needs a second account), the *unrelated*
+kind (the same branch as both-edited).

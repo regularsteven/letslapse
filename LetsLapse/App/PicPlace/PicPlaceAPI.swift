@@ -66,6 +66,13 @@ struct PPProject: Decodable {
     var claim: PPClaim?
     var presence: [PPPresence]
     var updatedAt: Date?
+    /// v2: the device of the last manifest PUT, and the tombstone.
+    var updatedBy: PPDeviceSummary?
+    var deletedAt: Date?
+    var deletedBy: PPDeviceSummary?
+    var originUuid: String?
+
+    var isTombstone: Bool { deletedAt != nil }
 }
 
 struct PPAsset: Decodable {

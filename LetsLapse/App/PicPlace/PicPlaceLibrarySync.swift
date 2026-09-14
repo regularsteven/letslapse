@@ -45,7 +45,27 @@ extension PicPlaceController {
     /// Runs the pending first connection once the library is loaded and the
     /// session is up — at launch, and right after an in-place connect on iOS.
     func runInitialSyncIfPending() {
-        guard let binding, binding.initialSync.state == .pending, canSync, initialSyncTask == nil else { return }
+        guard let binding, canSync, initialSyncTask == nil else { return }
+        guard binding.initialSync.state == .pending else {
+            // Connected before: this launch checks what changed (stage 4).
+            Task { [weak self] in
+                guard let self else { return }
+                if !model.isLibraryLoaded {
+                    for await loaded in model.$isLibraryLoaded.values where loaded { break }
+                }
+                #if DEBUG
+                // `LL_PICPLACE_DELETE=<uuid>` deletes a project before the
+                // launch check, so the check's push-delete row is exercised.
+                if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_DELETE"], let id = UUID(uuidString: raw),
+                   let capture = model.capture(id: id) {
+                    do { try model.deleteCapture(capture); LLog("picplace hook: deleted \(capture.displayTitle) locally") }
+                    catch { LLog("picplace hook: delete failed: \(error)") }
+                }
+                #endif
+                checkForChanges(reason: "launch")
+            }
+            return
+        }
         initialSyncTask = Task { [weak self] in
             guard let self else { return }
             // The launch walk first: a project it has not indexed yet would
@@ -80,7 +100,7 @@ extension PicPlaceController {
                 guard let origin = UUID(uuidString: row.uuid) else { continue }
                 serverOrigins.insert(origin)
                 if let localID = localByOrigin[origin], let capture = model.capture(id: localID) {
-                    let localRevision = Int(model.lastEdited(capture).timeIntervalSince1970 * 1000)
+                    let localRevision = revision(of: capture)
                     if localRevision == row.revision {
                         // In step. Make sure the base is recorded.
                         if records[origin] == nil {
@@ -130,7 +150,7 @@ extension PicPlaceController {
                 if Task.isCancelled { return }
             }
 
-            PicPlaceSyncState.save(records, root: root)
+            saveSyncState()
             progress.phase = .done
             initialSyncProgress = progress
             if progress.failures.isEmpty, progress.deferred == 0 {
@@ -239,7 +259,7 @@ extension PicPlaceController {
                 alsoOn: row.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name),
                 server: profile?.server ?? serverString, lastError: nil, policy: "pull",
                 heavyFiles: heavy.count, heavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) })
-            PicPlaceSyncState.save(records, root: root)
+            saveSyncState()
             let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": row.revision, "tier": "preview"])
             LLog("picplace: pulled \(capture.displayTitle) (\(uuid.prefix(8))) — \(files) object(s), \(bytes) bytes; \(heavy.count) heavy file(s) stay on PicPlace")
         } catch {
@@ -249,7 +269,7 @@ extension PicPlaceController {
     }
 
     /// One asset's bytes through a presigned GET minted for it.
-    private func download(assetID: String, projectUUID: String) async throws -> Data {
+    func download(assetID: String, projectUUID: String) async throws -> Data {
         let urls: [String: [PPDownloadURL]] = try await client.post("projects/\(projectUUID)/assets/urls", json: ["assets": [assetID]])
         guard let item = urls["assets"]?.first else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted no download URL.") }
         if let error = item.error { throw PicPlaceSyncRun.Failed(caption: item.message ?? error) }

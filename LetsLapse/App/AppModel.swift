@@ -9964,6 +9964,71 @@ final class AppModel: ObservableObject {
         return capture
     }
 
+    /// The server's newer records applied to a project this library already
+    /// holds (v2 plan §4.4, "at base / moved past base" → pull): the capture
+    /// record becomes the server's, keyed to this origin id and keeping
+    /// `addedAt` (a fact about this library); the blend list is the server's
+    /// plus any blend only this device knows. Files under `source/` and
+    /// `blends/` are untouched — the caller has already refreshed the bundle
+    /// members and the poster on disk.
+    func applyPulledUpdate(originID: UUID, capture arrived: CaptureProject, blends arrivedBlends: [BlendProject]) throws {
+        _ = try store.update(originID) { document in
+            var capture = arrived
+            capture.id = originID
+            capture.originID = originID
+            capture.addedAt = document.capture.addedAt
+            capture.sourceFileNames.removeAll { $0.hasSuffix(".json") }
+            var blends = arrivedBlends.map { blend -> BlendProject in
+                var blend = blend
+                blend.captureID = originID
+                return blend
+            }
+            let known = Set(blends.map(\.id))
+            blends.append(contentsOf: document.blends.filter { !known.contains($0.id) })
+            document.capture = capture
+            document.blends = blends
+        }
+        validatedSourceFrames.remove(originID)
+        noteFilesChanged(for: originID)
+        assetStore.forget(projectFolder: captureFolderURL(for: originID))
+        noteIndexChanged()
+    }
+
+    /// "Keep both" (v2 plan §4.4): this device's version of a project becomes
+    /// a project of its own — a new id, its own origin, `derivedFromOriginID`
+    /// naming where it came from — so the server's version can take the
+    /// original's place. The folder is renamed (the originals move with the
+    /// fork), the record re-keyed and inserted, the old id's row removed.
+    /// Returns the fork's id.
+    func forkProjectForKeepBoth(_ id: UUID) throws -> UUID {
+        guard let document = store.document(id: id) else { throw ProjectStore.StoreError.noSuchProject(id) }
+        let newID = UUID()
+        let from = captureFolderURL(for: id)
+        let to = captureFolderURL(for: newID)
+        try FileManager.default.moveItem(at: from, to: to)
+        var capture = document.capture
+        let origin = originID(of: capture)
+        capture.id = newID
+        capture.originID = newID
+        capture.derivedFromOriginID = origin
+        capture.importedFromID = nil
+        capture.modifiedAt = Date()
+        capture.modifiedBy = DeviceIdentity.id
+        let blends = document.blends.map { blend -> BlendProject in
+            var blend = blend
+            blend.captureID = newID
+            return blend
+        }
+        store.remove(id: id)
+        try store.insert(ProjectDocument(capture: capture, blends: blends))
+        validatedSourceFrames.remove(id)
+        validatedSourceFrames.remove(newID)
+        assetStore.forget(projectFolder: from)
+        assetStore.forget(projectFolder: to)
+        noteIndexChanged()
+        return newID
+    }
+
     /// `Projects/<id>/poster.jpg` when the project has one (v2 plan §3.5).
     func posterURL(for capture: CaptureProject) -> URL? {
         let url = captureFolderURL(for: capture.id).appendingPathComponent(ProjectFileRegistry.posterName)

@@ -130,6 +130,10 @@ struct PicPlaceSyncRun {
             let _: [String: PPClaim] = try await client.post("projects/\(uuid)/claim", json: ["ttl_seconds": Self.claimTTL])
         } catch let error as PicPlaceAPIError where error.status == 404 {
             // New to the server.
+        } catch let error as PicPlaceAPIError where error.status == 409 && error.code == "project_deleted" {
+            // Tombstoned on the server: the PUT below resurrects it (a
+            // device that still holds the project is pushing it on purpose).
+            LLog("picplace: \(uuid) is a tombstone on the server — the push resurrects it")
         }
 
         do {

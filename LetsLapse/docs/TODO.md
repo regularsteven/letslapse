@@ -61,8 +61,11 @@ play-pen: signed in, connected, two projects synced) · **stage 2 built
 inventory, deterministic `records.aar`, `poster.jpg`, originID as the server
 key, the manifest cap; committed 8cf8b41 after the play-pen re-sync) · **stage 3
 built 2026-09-14 night** (plan §11: the first connection's cases, the pull,
-preview-only; merge + fresh verified on scratch roots, the play-pen's own merge
-and the Simulator owed) · **code-first by
+preview-only; verified on the play-pen and the Simulator as device 2; committed
+1cd2552) · **stage 4 built 2026-09-15** (plan §12: the check at launch /
+foreground / on demand over the whole index, the §4.4 rows with the base,
+conflicts + the sheet, tombstones both ways, uuid_taken re-mint; every row
+verified between two scratch devices) · **code-first by
 decision** — mirrors follow per screen once the sync logic holds · **Size:**
 large (five stages) · seams: `App/PicPlace/*` (binding, sync state, Keychain
 per account, `SyncPolicy`, the pull, the merge), `App/StorageLocation.swift`

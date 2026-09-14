@@ -35,6 +35,7 @@ struct PicPlaceStatusCard: View {
                 if case .notSynced = state { _ = picplace.summary(for: capture) }
             }
             .picplaceConnectAlert(picplace)
+            .picplaceConflictsSheet(picplace)
         }
     }
 
@@ -136,6 +137,8 @@ struct PicPlaceStatusCard: View {
     @ViewBuilder
     private func glyph(for state: PicPlaceController.ProjectState, size: CGFloat) -> some View {
         switch state {
+        case .conflict:
+            Image(systemName: "exclamationmark.icloud.fill").font(.system(size: size * 0.85)).foregroundStyle(LL.amber)
         case .previewOnly:
             Image(systemName: "icloud.and.arrow.down").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
         case .signedOut, .notSynced:
@@ -153,6 +156,12 @@ struct PicPlaceStatusCard: View {
 
     private func title(for state: PicPlaceController.ProjectState) -> String {
         switch state {
+        case .conflict(let kind):
+            switch kind {
+            case .deletedOnServer: return "Deleted on PicPlace"
+            case .deletedHereEditedThere: return "Deleted here, changed on PicPlace"
+            default: return "Needs your decision"
+            }
         case .previewOnly: return "Preview only"
         case .signedOut: return "Keep a copy on PicPlace"
         case .notConnected: return "Library not connected"
@@ -166,6 +175,13 @@ struct PicPlaceStatusCard: View {
 
     private func caption(for capture: AppModel.CaptureProject, state: PicPlaceController.ProjectState) -> String {
         switch state {
+        case .conflict(let kind):
+            switch kind {
+            case .bothEdited: return "Edited here and on PicPlace since they last agreed"
+            case .unrelated: return "This device and PicPlace hold different versions that never agreed"
+            case .deletedOnServer: return "Another device deleted it on PicPlace; this copy is still here"
+            case .deletedHereEditedThere: return "Deleted here, but PicPlace changed it since"
+            }
         case .previewOnly(let record):
             if let record, let heavy = record.heavyFiles, heavy > 0 {
                 return "The originals — \(heavy.formatted()) file\(heavy == 1 ? "" : "s") · \(LLFormat.bytes(record.heavyBytes ?? 0)) — are on PicPlace, not on this device. Downloading them comes in a later stage."
@@ -225,6 +241,7 @@ struct PicPlaceStatusCard: View {
     private func actionButton(for capture: AppModel.CaptureProject, state: PicPlaceController.ProjectState, size: CGFloat) -> some View {
         let (label, isCancel): (String, Bool) = {
             switch state {
+            case .conflict: return ("Review…", false)
             case .previewOnly: return ("Download originals", false)
             case .signedOut: return (picplace.isSigningIn ? "Signing in…" : "Sign in", false)
             case .notConnected: return (picplace.libraryLink == .mismatch ? "Settings" : "Connect…", false)
@@ -237,6 +254,7 @@ struct PicPlaceStatusCard: View {
         }()
         return Button {
             switch state {
+            case .conflict: picplace.isReviewingConflicts = true
             case .previewOnly: break                       // stage 5
             case .signedOut: picplace.signIn()
             case .notConnected: if picplace.libraryLink == .unbound { picplace.offerConnect() } else { model.requestedTab = .settings }
@@ -301,6 +319,7 @@ struct PicPlaceSettingsCard: View {
                 }
                 libraryRow
                 initialSyncRow
+                checkRow
                 if PicPlaceConfiguration.showsServerSetting {
                     LLRow(title: "Server") {
                         Text(profile.host)
@@ -370,6 +389,7 @@ struct PicPlaceSettingsCard: View {
         .llCard()
         .onAppear { picplace.refreshUsage() }
         .picplaceConnectAlert(picplace)
+        .picplaceConflictsSheet(picplace)
         .alert("PicPlace server", isPresented: $isEditingServer) {
             TextField("https://picplace.co", text: $serverDraft)
                 #if os(iOS)
@@ -468,6 +488,52 @@ struct PicPlaceSettingsCard: View {
                 EmptyView()
             }
         }
+    }
+
+    /// Stage 4: a check on demand, what the last one did, and the review
+    /// row when rows need a person.
+    @ViewBuilder
+    private var checkRow: some View {
+        if picplace.binding?.initialSync.state == .done {
+            if !picplace.conflicts.isEmpty {
+                Button {
+                    picplace.isReviewingConflicts = true
+                } label: {
+                    LLRow(title: "\(picplace.conflicts.count) project\(picplace.conflicts.count == 1 ? "" : "s") need\(picplace.conflicts.count == 1 ? "s" : "") your decision",
+                          subtitle: "Edited on both sides, or deleted on one — choose which version stands",
+                          titleColor: LL.amber) {
+                        Text("Review")
+                            .font(.system(size: 15))
+                            .foregroundStyle(LL.accent)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            Button {
+                picplace.checkForChanges(reason: "manual")
+            } label: {
+                LLRow(title: picplace.isChecking ? "Checking PicPlace…" : "Check PicPlace now", subtitle: lastCheckText, titleColor: LL.accent) {
+                    if picplace.isChecking { ProgressView().controlSize(.small) }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(picplace.isChecking)
+        }
+    }
+
+    private var lastCheckText: String? {
+        guard let check = picplace.lastCheck else { return "Runs at launch and when the app comes to the front" }
+        var parts: [String] = []
+        if check.pulled > 0 { parts.append("\(check.pulled) brought here") }
+        if check.updated > 0 { parts.append("\(check.updated) updated from PicPlace") }
+        if check.pushed > 0 { parts.append("\(check.pushed) sent") }
+        if check.deletedThere > 0 { parts.append("\(check.deletedThere) deleted on PicPlace") }
+        if check.conflicts > 0 { parts.append("\(check.conflicts) to decide") }
+        if !check.failures.isEmpty { parts.append(check.failures.joined(separator: "; ")) }
+        let when = check.checkedAt.formatted(.relative(presentation: .named))
+        return parts.isEmpty ? "Checked \(when) · nothing changed" : "Checked \(when) · " + parts.joined(separator: " · ")
     }
 
     private func initialSyncTitle(_ progress: PicPlaceController.InitialSyncProgress) -> String {
