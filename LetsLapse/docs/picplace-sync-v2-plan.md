@@ -848,3 +848,16 @@ boot + Simulator.app · the Valet CA trusted (`VALET_CA=` overrides the
 path) · install · launch; prints the device id and the log-tail command.
 Run end to end on the iPhone 16 Pro: 1 min 40 s including the build; the
 app came up at its first-run camera prompt with no session.
+
+**Two convergence rules the first real multi-device day asked for
+(2026-09-15):** a project **deleted on PicPlace** whose copy here never
+moved past the server's last revision now goes to the trash on its own
+(reversible; the check reports *N removed here*) — only a copy edited
+since is a person's decision, as §4.4 had it for every case. And the
+**poster converges**: a project in step that this device holds whole but
+has never pushed with a poster (a v1 push, a first connection's "in step")
+is pushed once; a preview-only project without a poster asks the server
+for one whenever the server's row has moved since it last asked
+(`posterCheckedAt`). Verified on the scratch devices: four tombstoned
+copies trashed in one check; Perf bench's poster rendered and sent from
+the device holding its frames.

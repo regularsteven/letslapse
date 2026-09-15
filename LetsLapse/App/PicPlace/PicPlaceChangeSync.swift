@@ -122,11 +122,26 @@ extension PicPlaceController {
                 let base = records[origin]?.revision
                 if row.isTombstone {
                     guard let localID = localByOrigin[origin], let capture = model.capture(id: localID) else { continue }
-                    // Deleted there, still here: the person decides.
+                    // Deleted there, still here. A copy that never moved past
+                    // the server's last revision loses nothing by going — to
+                    // the trash, reversible — so it goes; a copy edited since
+                    // is the person's to decide.
+                    let localRevision = revision(of: capture)
+                    if localRevision == row.revision || localRevision == base {
+                        do {
+                            try model.deleteCapture(capture)
+                            records[origin] = nil
+                            outcome.deletedHere += 1
+                            LLog("picplace: \(capture.displayTitle) was deleted on PicPlace\(row.deletedBy.map { " from \($0.name)" } ?? "") — moved to the trash here")
+                        } catch {
+                            outcome.failures.append("\(capture.displayTitle): \(Self.describe(error))")
+                        }
+                        continue
+                    }
                     conflicts.append(Conflict(originID: origin, localID: localID, name: capture.displayTitle, kind: .deletedOnServer,
                                               localEditedAt: model.lastEdited(capture), serverEditedAt: row.deletedAt,
                                               serverDevice: row.deletedBy?.name, serverRevision: row.revision,
-                                              localRevision: revision(of: capture)))
+                                              localRevision: localRevision))
                     continue
                 }
                 if localTombstones.contains(origin) {
@@ -153,6 +168,22 @@ extension PicPlaceController {
                         var record = records[origin] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: profile?.server ?? serverString, lastError: nil, policy: "in-step")
                         record.revision = row.revision
                         records[origin] = record
+                    }
+                    // In step — but the poster? A project this device holds
+                    // whole and has never pushed with one (a v1 push, the
+                    // first connection's "in step") gets one push; a
+                    // preview-only project without one asks the server once
+                    // per change there.
+                    if !model.sourcesMissing(capture), records[origin]?.posterToken == nil, syncTasks[capture.id] == nil {
+                        await syncAndWait(capture)
+                        if records[origin]?.lastError == nil { outcome.pushed += 1; LLog("picplace: \(capture.displayTitle) — in step, poster sent") }
+                    } else if model.sourcesMissing(capture), model.posterURL(for: capture) == nil,
+                              (records[origin]?.posterCheckedAt).map({ ($0 < (row.updatedAt ?? .distantFuture)) }) ?? true {
+                        do {
+                            if try await fetchPoster(row, into: capture) { outcome.updated += 1 }
+                        } catch {
+                            outcome.failures.append("\(row.name): \(Self.describe(error))")
+                        }
                     }
                     continue
                 }
@@ -279,6 +310,25 @@ extension PicPlaceController {
         records[originID] = record
         let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": row.revision])
         LLog("picplace: updated \(row.name) (\(uuid.prefix(8))) from the server (revision \(row.revision))")
+    }
+
+    /// The poster of a preview-only project that has none here — fetched
+    /// when the server holds one. Remembers the look, so an absent poster
+    /// costs one GET per change on the server, not one per check.
+    private func fetchPoster(_ row: PPProject, into capture: AppModel.CaptureProject) async throws -> Bool {
+        let uuid = row.uuid.lowercased()
+        let originID = model.originID(of: capture)
+        let detail: PPProjectDetail = try await client.get("projects/\(uuid)")
+        var record = records[originID] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: profile?.server ?? serverString, lastError: nil, policy: "pull")
+        record.posterCheckedAt = Date()
+        records[originID] = record
+        guard let poster = (detail.assets ?? []).first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName && $0.status == "confirmed" }) else { return false }
+        let data = try await download(assetID: poster.id, projectUUID: uuid)
+        try data.write(to: model.projectFolderURL(for: capture).appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
+        model.noteFilesChanged(for: capture.id)
+        model.noteIndexChanged()
+        LLog("picplace: poster of \(row.name) (\(uuid.prefix(8))) fetched")
+        return true
     }
 
     /// A delete made here, pushed: claim, delete (the server leaves a

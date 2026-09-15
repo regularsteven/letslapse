@@ -610,6 +610,7 @@ struct PicPlaceSettingsCard: View {
         if check.updated > 0 { parts.append("\(check.updated) updated from PicPlace") }
         if check.pushed > 0 { parts.append("\(check.pushed) sent") }
         if check.deletedThere > 0 { parts.append("\(check.deletedThere) deleted on PicPlace") }
+        if check.deletedHere > 0 { parts.append("\(check.deletedHere) removed here (deleted elsewhere; in the trash)") }
         if check.conflicts > 0 { parts.append("\(check.conflicts) to decide") }
         if !check.failures.isEmpty { parts.append(check.failures.joined(separator: "; ")) }
         let when = check.checkedAt.formatted(.relative(presentation: .named))

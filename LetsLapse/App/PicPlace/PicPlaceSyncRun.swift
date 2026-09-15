@@ -46,6 +46,9 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     var serverHeavyFiles: Int?
     var serverHeavyBytes: Int64?
     var originalsMovedAt: Date?
+    /// When a preview-only project last asked the server for a poster it
+    /// lacks — asked again only once the server's row moved.
+    var posterCheckedAt: Date?
 }
 
 /// One push of one project (docs/picplace-sync-v1.md §2, v2 plan §4.2):
