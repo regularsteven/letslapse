@@ -189,6 +189,10 @@ struct ProjectsView: View {
         .onReceive(model.$requestedProjectDetailID) { requested in
             consumeDetailRequest(requested)
         }
+        .onAppear { consumeFilterRequest(model.requestedProjectsFilter) }
+        .onReceive(model.$requestedProjectsFilter) { requested in
+            consumeFilterRequest(requested)
+        }
         #if DEBUG
         .onAppear {
             if let hooked = ListDebugHooks.filter { filter = hooked }
@@ -490,6 +494,21 @@ struct ProjectsView: View {
         DispatchQueue.main.async {
             if model.requestedProjectDetailID == requested {
                 model.requestedProjectDetailID = nil
+            }
+        }
+    }
+
+    /// A batch import asking for the list, filtered to what it made. Same
+    /// shape as the detail request above, for the same publisher-timing
+    /// reason.
+    private func consumeFilterRequest(_ requested: CaptureFilter?) {
+        guard let requested else { return }
+        path = []
+        filter = requested
+        query = .empty
+        DispatchQueue.main.async {
+            if model.requestedProjectsFilter == requested {
+                model.requestedProjectsFilter = nil
             }
         }
     }

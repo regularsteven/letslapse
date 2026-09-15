@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Stills import · the question · portrait</title>
+  <desc>Mirrors App/StillsImportSheet.swift over AppModel.stillsImportQuestion — the question Create ▸ Import photos… asks once the pick has resolved to two or more files and before any copy: a shoot, or a photo each. The reading is ImportedStills.reading (Kit, ImportedStills+Reading.swift; docs/import-classification.md §3): a SHOOT is a clean set — one name sequence, every frame on one beat, the only irregularity a pause whose beat continues — and PHOTOS is suggested only when no beat of 24 frames exists anywhere. Title = the count; the line under it = the files' own reading (the one folder they came from · formats · body · first shutter to last). Two rows say what each answer MAKES, in numbers, so Photos on a 5030-file folder reads as the 5030 projects it would be. Import is the default action (⏎) and Cancel (⎋) is always reachable; the sheet is not dismissable by swipe or click-away — the import is suspended on a continuation inside runStillsImport, and an answer is what starts the copy. LL_IMPORT_STILLS=&lt;folder&gt; with no LL_IMPORT_ANSWER stages it; LL_IMPORT_ANSWER=shoot|photos|cancel answers it headless. THIS FILE: the clean state. The set reads as a shoot, so the Interval shoot row is pre-selected and tagged Detected — Auto is the pre-selection, not a third row, because a pre-selected row shows the answer where an 'Auto' label would make the person guess what it will do. One tap imports. Drawn on Charles_ARW once its stray Lightroom render is out: 306 ARW, Sony ILCE-7M4, 3.62 s ± 0.02, 18 min, one evening. Verified 2026-09-15 against the running app on a 30-frame slice of the same folder (the layout; the 306-frame reading is the Kit's test). On the phone the sheet is full height like the archive sheet — its 380-wide content sits centred in the 393-pt screen with the two buttons anchored at the bottom above the home indicator, and the space between the rows and the buttons is the sheet's, not a control. iPad shares this file (a form sheet). Verified 2026-09-15 on an iPhone 16 Pro simulator (LetsLapse Fresh device, LL_IMPORT_STILLS).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#C6C6C9"/>
+    <g transform="translate(24,24)">
+
+      <!-- the Create tab, dimmed under the sheet; only its status bar shows -->
+      <g id="status-bar" fill="#3A3A3F">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#3A3A3F" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#3A3A3F" stroke-opacity="0.5"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#3A3A3F" fill-opacity="0.5"/><rect x="354" y="32" width="19" height="7" rx="2" fill="#3A3A3F"/></g>
+      </g>
+
+      <!-- the sheet: full height, rounded top, LL.screenBackground -->
+      <g id="sheet">
+        <path d="M0 100 a40 40 0 0 1 40 -40 H353 a40 40 0 0 1 40 40 V852 H0 Z" fill="#F2F2F7"/>
+        <g id="icon" transform="translate(196.5 106)" data-symbol="photo.stack" fill="#C36A00">
+        <rect x="-13" y="-16" width="26" height="4" rx="1.5" fill="#C36A00" fill-opacity="0.55"/>
+        <rect x="-16" y="-10" width="32" height="26" rx="5"/>
+        <circle cx="-6" cy="-2" r="3" fill="#F2F2F7"/>
+        <path d="M-11 12 l8 -9 5 5 3 -3 6 7 z" fill="#F2F2F7"/>
+      </g>
+      <text x="196.5" y="161" font-size="19" class="sb" text-anchor="middle" fill="#000">Import 306 photos</text>
+      <text x="196.5" y="181" font-size="14" text-anchor="middle" fill="#6D6D72">Charles_ARW · ARW · SONY ILCE-7M4 · 18 min</text>
+      <g id="row-shoot">
+        <rect x="30.5" y="208" width="332" height="54" rx="12" fill="#FFFFFF" stroke="#C36A00" stroke-width="2"/>
+        <g data-symbol="checkmark.circle.fill"><circle cx="52.5" cy="229" r="10" fill="#C36A00"/>
+          <path d="M48.0 229.5 l3 3 6 -6.5" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <text x="74.5" y="233" font-size="15" class="sb" fill="#000">Interval shoot</text><rect x="194.5" y="220" width="58" height="17" rx="8.5" fill="#C36A00" fill-opacity="0.14"/>
+          <text x="223.5" y="232" font-size="11" class="sb" text-anchor="middle" fill="#8A4A00">Detected</text>
+        <text x="74.5" y="251" font-size="13" fill="#6D6D72">One project of 306 frames, 3.6 s apart</text>
+      </g>
+      <g id="row-photos">
+        <rect x="30.5" y="272" width="332" height="54" rx="12" fill="#FFFFFF" stroke="#000" stroke-opacity="0.08" stroke-width="1"/>
+        <circle cx="52.5" cy="293" r="9.2" fill="none" stroke="#8E8E93" stroke-opacity="0.75" stroke-width="1.6" data-symbol="circle"/>
+        <text x="74.5" y="297" font-size="15" class="sb" fill="#000">Photos</text>
+        <text x="74.5" y="315" font-size="13" fill="#6D6D72">306 separate projects</text>
+      </g>
+      <g id="import" opacity="1">
+        <rect x="30.5" y="684" width="332" height="50" rx="14" fill="#C36A00"/>
+        <text x="196.5" y="715" font-size="16" class="b" text-anchor="middle" fill="#FFFFFF">Import</text>
+      </g>
+      <g id="cancel">
+        <rect x="30.5" y="744" width="332" height="50" rx="14" fill="#FFFFFF"/>
+        <text x="196.5" y="775" font-size="15.5" class="sb" text-anchor="middle" fill="#C36A00">Cancel</text>
+      </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Stills import · the question · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/StillsImportSheet.swift over AppModel.stillsImportQuestion — Interval shoot pre-selected and tagged Detected</text>
+</svg>

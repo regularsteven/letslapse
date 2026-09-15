@@ -1259,6 +1259,9 @@ final class AppModel: ObservableObject {
     /// clears it. Screens presented over the tabs (the camera is a full-screen
     /// cover) must dismiss themselves as well; this only moves the selection.
     @Published var requestedTab: LLTab?
+    /// A batch import asking the Projects list to show the kind it just made,
+    /// popped to the list. `ProjectsView` consumes and clears it.
+    @Published var requestedProjectsFilter: CaptureFilter?
     /// The Watch asking for the camera back. Handled by `ContentView`, which
     /// presents the capture screen OVER whatever is showing — a setup flow
     /// underneath is left completely alone, which is what lets the remote
@@ -4115,25 +4118,29 @@ final class AppModel: ObservableObject {
     /// Silent by design and forgiving by design: no sheet, no toast, and any failure is dropped.
     /// A project with no tags is the state it was already in.
     func autoTagIfEnabled(_ capture: CaptureProject) {
+        Task { [weak self] in await self?.autoTag(capture) }
+    }
+
+    /// The built-in Vision pass over one frame of `capture`, when the built-in
+    /// model is the active one. Awaitable so a batch of imports can run it one
+    /// project at a time instead of all at once.
+    func autoTag(_ capture: CaptureProject) async {
         guard ModelManager.shared.activeModel?.isBuiltIn == true else { return }
         guard let source = sceneSource(for: capture) else { return }
+        guard let sample = try? await SceneFrameSampler.sample(source) else { return }
+        defer { SceneFrameSampler.cleanUp(sample) }
+        // One frame, not the sampler's usual three or five: this runs unasked while a capture
+        // has just finished writing, and the marginal tag from frames two and three is not
+        // worth the contention.
+        guard let frame = sample.frameURLs.first else { return }
 
-        Task { [weak self] in
-            guard let sample = try? await SceneFrameSampler.sample(source) else { return }
-            defer { SceneFrameSampler.cleanUp(sample) }
-            // One frame, not the sampler's usual three or five: this runs unasked while a capture
-            // has just finished writing, and the marginal tag from frames two and three is not
-            // worth the contention.
-            guard let frame = sample.frameURLs.first else { return }
+        let light = SceneContext.light(
+            from: capture.createdAt, duration: capture.sourceDurationSeconds ?? 0)
+        guard let result = try? await VisionSceneAnalyzer.shared.analyze(
+            SceneAnalysisRequest(imageURLs: [frame], place: nil, light: light))
+        else { return }
 
-            let light = SceneContext.light(
-                from: capture.createdAt, duration: capture.sourceDurationSeconds ?? 0)
-            guard let result = try? await VisionSceneAnalyzer.shared.analyze(
-                SceneAnalysisRequest(imageURLs: [frame], place: nil, light: light))
-            else { return }
-
-            await self?.applyAutomaticTags(result, to: capture.id)
-        }
+        applyAutomaticTags(result, to: capture.id)
     }
 
     /// Writes what the background pass found — tags only, and only onto a project nobody has
@@ -7652,21 +7659,61 @@ final class AppModel: ObservableObject {
     /// named here so the two import paths are readable side by side.
     static let importedVideoMode = ProjectModes.importedVideo
 
-    /// Brings stills shot on another camera in: a set of them as an interval
-    /// project, a single one as a photo project.
-    ///
-    /// `selection` is what the picker handed back: files, folders, or both.
-    /// **Whatever it resolves to IS the shoot** — the frames are not
-    /// re-ordered by their timestamps, not de-duplicated by content, and not
-    /// filtered for outliers. A set with a lens cap frame or a test shot in it
-    /// is a set with a lens cap frame in it, and Bad Frames is where that gets
-    /// dealt with, by the person who can see the picture.
-    func importStills(from selection: [URL]) {
-        guard mediaImport == nil else { return }
-        Task { await runStillsImport(selection) }
+    /// The import sheet's question: what the picked files are, as they read,
+    /// waiting on the person to say what to make of them. Nil the rest of the
+    /// time. Presented from the root like the archive sheet, so it covers
+    /// whatever tab the pick was made from.
+    @Published var stillsImportQuestion: StillsImportQuestion?
+    /// The import suspended on that question, inside `runStillsImport`.
+    private var stillsImportDecision: CheckedContinuation<StillsImportQuestion.Answer, Never>?
+    /// `LL_IMPORT_ANSWER=shoot|photos|cancel` — answers the sheet without
+    /// showing it, so a headless import can be driven end to end.
+    var stagedStillsImportAnswer: StillsImportQuestion.Answer?
+
+    struct StillsImportQuestion: Identifiable, Equatable {
+        enum Answer: String { case shoot, photos, cancel }
+
+        let id = UUID()
+        var reading: ImportedStills.Reading
+        var count: Int
+        /// The one folder every file came out of, when there is one.
+        var folderName: String?
+        var formats: [String]
+        var cameraName: String?
+        /// First shutter to last, from the frames' own clocks.
+        var spanSeconds: Double?
     }
 
-    private func runStillsImport(_ selection: [URL]) async {
+    /// Brings stills shot on another camera in: a set of them as an interval
+    /// project, or as one photo project each — the person's call, made on
+    /// the import sheet with the files' own reading in front of them
+    /// (docs/import-classification.md) — and a single one as a photo project.
+    ///
+    /// `selection` is what the picker handed back: files, folders, or both.
+    /// **Whatever it resolves to IS the import** — the frames are not
+    /// re-ordered by their timestamps, not de-duplicated by content, and not
+    /// filtered for outliers. The sheet *names* a test shot or a stray render
+    /// so the person can tidy the folder or choose knowingly; it never drops
+    /// one, and Bad Frames is where a frame gets dropped, by the person who
+    /// can see the picture.
+    ///
+    /// `syntheticNames` are file names the caller invented — the Photos
+    /// library path stages `photo-0001…` when the library has lost the
+    /// camera's name — which the reading must not mistake for a sequence.
+    func importStills(from selection: [URL], syntheticNames: Set<String> = []) {
+        guard mediaImport == nil, stillsImportQuestion == nil else { return }
+        Task { await runStillsImport(selection, syntheticNames: syntheticNames) }
+    }
+
+    /// The sheet's answer. Resumes the import waiting on it.
+    func answerStillsImport(_ answer: StillsImportQuestion.Answer) {
+        let pending = stillsImportDecision
+        stillsImportDecision = nil
+        stillsImportQuestion = nil
+        pending?.resume(returning: answer)
+    }
+
+    private func runStillsImport(_ selection: [URL], syntheticNames: Set<String>) async {
         // Held for the whole job. On a sandboxed build the picker's URLs are
         // the only ones with access, and a folder's scope is what covers the
         // files inside it — so the scope has to outlive the walk, not be
@@ -7697,9 +7744,42 @@ final class AppModel: ObservableObject {
             ImportedStills.probe(urls: urls)
         }.value
 
+        // Two or more files are a question — a shoot, or a photo each — asked
+        // with the files' reading in front of the person and answered on the
+        // sheet. One file is a photo and needs no asking.
+        var kind: ImportedStills.Reading.Kind = .photos
+        if sequence.count >= 2 {
+            let reading = ImportedStills.reading(for: sequence, syntheticNames: syntheticNames)
+            let answer: StillsImportQuestion.Answer
+            if let staged = stagedStillsImportAnswer {
+                answer = staged
+            } else {
+                mediaImport = nil
+                stillsImportQuestion = StillsImportQuestion(
+                    reading: reading, count: sequence.count,
+                    folderName: Self.commonFolderName(of: sequence),
+                    formats: sequence.formatLabels, cameraName: sequence.cameraName,
+                    spanSeconds: sequence.elapsedSeconds)
+                answer = await withCheckedContinuation { continuation in
+                    stillsImportDecision = continuation
+                }
+                mediaImport = MediaImportProgress(totalFrames: sequence.count)
+            }
+            switch answer {
+            case .cancel: return
+            case .shoot: kind = .shoot
+            case .photos: kind = .photos
+            }
+        }
+
         let totalBytes = sequence.frames.reduce(Int64(0)) { $0 + Int64($1.byteCount ?? 0) }
         mediaImport?.phase = .copying
         mediaImport?.totalBytes = totalBytes
+
+        if kind == .photos, sequence.count >= 2 {
+            await importPhotoBatch(sequence, totalBytes: totalBytes)
+            return
+        }
 
         let id = UUID()
         let root = captureFolderURL(for: id)
@@ -7728,6 +7808,83 @@ final class AppModel: ObservableObject {
             try? FileManager.default.removeItem(at: root)
             errorMessage = "Couldn't import those photos: \(error.localizedDescription)"
         }
+    }
+
+    /// One `Photo · Imported` project per frame — the sheet's "Photos" answer.
+    ///
+    /// Each frame goes through the same registration a single imported photo
+    /// does (its own folder, its own date from EXIF, its own name, one-line
+    /// sidecars), under one progress card. Two things are deliberately not
+    /// per-project here: the Vision auto-tag, which would otherwise spawn one
+    /// analysis per photo all at once, runs serially afterwards; and the
+    /// asset records go at utility priority rather than user-initiated, since
+    /// no single project's panel is about to open.
+    ///
+    /// A failure stops the batch where it is and says how far it got — every
+    /// project made before it is complete and stays. The batch lands on the
+    /// Projects list filtered to photos, where the new projects sit at their
+    /// own capture dates.
+    private func importPhotoBatch(_ sequence: ImportedStills.Sequence, totalBytes: Int64) async {
+        var made: [CaptureProject] = []
+        var copiedBytes: Int64 = 0
+        do {
+            try Self.checkStorageHeadroom(for: totalBytes, at: projectsRootURL)
+            for (index, frame) in sequence.frames.enumerated() {
+                try Task.checkCancellation()
+                let single = ImportedStills.Sequence(frames: [frame])
+                let id = UUID()
+                let root = captureFolderURL(for: id)
+                let done = copiedBytes
+                do {
+                    let relativeNames = try await copyImportedStills(single, to: root) { _, bytes in
+                        self.mediaImport?.frames = index
+                        self.mediaImport?.bytes = done + bytes
+                    }
+                    made.append(try registerImportedStills(
+                        single, id: id, relativeNames: relativeNames, selection: [frame.url],
+                        recordPriority: .utility, autoTag: false))
+                } catch {
+                    try? FileManager.default.removeItem(at: root)
+                    throw error
+                }
+                copiedBytes += Int64(frame.byteCount ?? 0)
+                mediaImport?.frames = index + 1
+                mediaImport?.bytes = copiedBytes
+            }
+        } catch {
+            // Said on Create, where the person still is — a batch that stopped
+            // short does not move them to the list, or the line would be
+            // shown to nobody.
+            errorMessage = made.isEmpty
+                ? "Couldn't import those photos: \(error.localizedDescription)"
+                : "Imported \(made.count) of \(sequence.count) photos, then: \(error.localizedDescription)"
+            tagSerially(made)
+            return
+        }
+        mediaImport?.phase = .finishing
+        requestedProjectsFilter = .photos
+        requestedTab = .projects
+        tagSerially(made)
+    }
+
+    /// The batch's Vision pass: one frame each, one after another, off the
+    /// import's own clock.
+    private func tagSerially(_ batch: [CaptureProject]) {
+        guard !batch.isEmpty else { return }
+        Task { [weak self] in
+            for capture in batch { await self?.autoTag(capture) }
+        }
+    }
+
+    /// The folder every frame came out of, when they all came out of one.
+    nonisolated static func commonFolderName(of sequence: ImportedStills.Sequence) -> String? {
+        let folders = Set(sequence.frames.map { $0.url.deletingLastPathComponent().path })
+        guard folders.count == 1,
+              let folder = sequence.frames.first?.url.deletingLastPathComponent()
+                  .lastPathComponent.trimmingCharacters(in: .whitespaces),
+              !folder.isEmpty, folder != "/"
+        else { return nil }
+        return folder
     }
 
     /// Resolves a picker selection into the frames it means, in the order the
@@ -7853,7 +8010,9 @@ final class AppModel: ObservableObject {
         _ sequence: ImportedStills.Sequence,
         id: UUID,
         relativeNames: [String],
-        selection: [URL]
+        selection: [URL],
+        recordPriority: DispatchQoS = .userInitiated,
+        autoTag: Bool = true
     ) throws -> CaptureProject {
         let root = captureFolderURL(for: id)
         let sourceFolder = root.appendingPathComponent("source", isDirectory: true)
@@ -7902,9 +8061,10 @@ final class AppModel: ObservableObject {
         }
         // The frames' own record: bytes, hash, and what each file said about
         // itself (title, rating, keywords, the photographer, the camera). User-
-        // initiated priority, because the panel opens on this project next.
-        recordAssets(for: capture, priority: .userInitiated)
-        autoTagIfEnabled(capture)
+        // initiated priority, because the panel opens on this project next —
+        // unless this is one of a batch, which lands on the list instead.
+        recordAssets(for: capture, priority: recordPriority)
+        if autoTag { autoTagIfEnabled(capture) }
         return capture
     }
 

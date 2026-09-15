@@ -1,0 +1,96 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Stills import · the question · warned · 760×680</title>
+  <desc>Mirrors App/StillsImportSheet.swift over AppModel.stillsImportQuestion — the question Create ▸ Import photos… asks once the pick has resolved to two or more files and before any copy: a shoot, or a photo each. The reading is ImportedStills.reading (Kit, ImportedStills+Reading.swift; docs/import-classification.md §3): a SHOOT is a clean set — one name sequence, every frame on one beat, the only irregularity a pause whose beat continues — and PHOTOS is suggested only when no beat of 24 frames exists anywhere. Title = the count; the line under it = the files' own reading (the one folder they came from · formats · body · first shutter to last). Two rows say what each answer MAKES, in numbers, so Photos on a 5030-file folder reads as the 5030 projects it would be. Import is the default action (⏎) and Cancel (⎋) is always reachable; the sheet is not dismissable by swipe or click-away — the import is suspended on a continuation inside runStillsImport, and an answer is what starts the copy. LL_IMPORT_STILLS=&lt;folder&gt; with no LL_IMPORT_ANSWER stages it; LL_IMPORT_ANSWER=shoot|photos|cancel answers it headless. THIS FILE: the warned state. The files disagree with each other, so NO row is pre-selected, Import is inert (45 % opacity) until one is chosen, and an amber line says why, naming the files — the fix is always one the person makes, in the folder or by choosing knowingly; the app never drops a file it merely copied. Drawn on /Volumes/letslapse/Source_SONY/Charles_ARW as it stands: 306 ARW frames on a 3.6 s beat plus _WEX3518-Rendered.dng, a Lightroom render of frame 3518 sitting beside its raw with the same capture time to the millisecond — a stranger by name (stem _WEX#-Rendered, 3518 twice), which the old import took as a 307th frame. The line adds what the folder becomes without it. The other lines this box carries, one per reading: strangers by beat (test shots 30–60 s apart before the run, a snap taken mid-run — named, never imported silently), strangers by clock, RAW+JPEG pairs, a beat change, a slow beat (&gt; 60 s), a short sequence (&lt; 24 frames), no capture times, irregular names. Verified 2026-09-15 against the running app on this folder. The sheet is 380×541 here — its content height, above the 300 floor — centred in the window like the archive sheet.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/>
+    </filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="behind">
+      <text x="40" y="92" font-size="30" class="b" fill="#000">Create</text>
+      <text x="40" y="112" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="40" y="126" width="352" height="96" rx="12" fill="#FFFFFF"/><rect x="48" y="134" width="336" height="48" rx="8" fill="#5A6E8C"/>
+      <text x="48" y="204" font-size="13" class="sb" fill="#000">Smooth timelapse</text><text x="48" y="218" font-size="10" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="408" y="126" width="352" height="96" rx="12" fill="#FFFFFF"/><rect x="416" y="134" width="336" height="48" rx="8" fill="#6E7382"/>
+      <text x="416" y="204" font-size="13" class="sb" fill="#000">Long exposure</text><text x="416" y="218" font-size="10" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="40" y="232" width="352" height="96" rx="12" fill="#FFFFFF"/><rect x="48" y="240" width="336" height="48" rx="8" fill="#B48A5E"/>
+      <text x="48" y="310" font-size="13" class="sb" fill="#000">Speed ramp</text><text x="48" y="324" font-size="10" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="408" y="232" width="352" height="96" rx="12" fill="#FFFFFF"/><rect x="416" y="240" width="336" height="48" rx="8" fill="#D9D5CB"/>
+      <text x="416" y="310" font-size="13" class="sb" fill="#000">Custom blend</text><text x="416" y="324" font-size="10" fill="#6D6D72">Your own depth, speed and look</text>
+      <rect x="40" y="340" width="720" height="252" rx="12" fill="#FFFFFF"/>
+      <g font-size="14" fill="#000">
+        <text x="76" y="366">Record now</text><text x="76" y="402">Import a video…</text><text x="76" y="438">Import photos…</text>
+        <text x="76" y="474">Import a LetsLapse project…</text><text x="76" y="510">Interval ladders</text><text x="76" y="546">Manage presets</text><text x="76" y="582">Create Shape-mation</text>
+      </g>
+      <g stroke="#000" stroke-opacity="0.06"><line x1="76" y1="376" x2="748" y2="376"/><line x1="76" y1="412" x2="748" y2="412"/><line x1="76" y1="448" x2="748" y2="448"/><line x1="76" y1="484" x2="748" y2="484"/><line x1="76" y1="520" x2="748" y2="520"/><line x1="76" y1="556" x2="748" y2="556"/></g>
+      <g id="tabbar">
+        <rect x="280" y="638" width="240" height="46" rx="23" fill="#FFFFFF"/>
+        <rect x="292" y="646" width="46" height="30" rx="15" fill="#C36A00" fill-opacity="0.12"/>
+        <text x="315" y="672" font-size="8.5" class="sb" text-anchor="middle" fill="#C36A00">Create</text>
+        <text x="362" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Gallery</text>
+        <text x="411" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Projects</text>
+        <text x="459" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Collections</text>
+        <text x="502" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Settings</text>
+      </g>
+    </g>
+
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7" fill-opacity="0.62"/>
+
+    <!-- 380 × 541: the content's own height (the 300 floor is passed either way), centred in the window. -->
+    <g id="sheet">
+      <rect x="210" y="90" width="380" height="541" rx="12" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+      <g id="icon" transform="translate(400 136)" data-symbol="photo.stack" fill="#C36A00">
+        <rect x="-13" y="-16" width="26" height="4" rx="1.5" fill="#C36A00" fill-opacity="0.55"/>
+        <rect x="-16" y="-10" width="32" height="26" rx="5"/>
+        <circle cx="-6" cy="-2" r="3" fill="#F2F2F7"/>
+        <path d="M-11 12 l8 -9 5 5 3 -3 6 7 z" fill="#F2F2F7"/>
+      </g>
+      <text x="400" y="191" font-size="19" class="sb" text-anchor="middle" fill="#000">Import 307 photos</text>
+      <text x="400" y="211" font-size="14" text-anchor="middle" fill="#6D6D72">Charles_ARW · ARW, DNG · SONY ILCE-7M4 ·</text>
+      <text x="400" y="229" font-size="14" text-anchor="middle" fill="#6D6D72">18 min</text>
+      <g id="row-shoot">
+        <rect x="234" y="254" width="332" height="54" rx="12" fill="#FFFFFF" stroke="#000" stroke-opacity="0.08" stroke-width="1"/>
+        <circle cx="256" cy="275" r="9.2" fill="none" stroke="#8E8E93" stroke-opacity="0.75" stroke-width="1.6" data-symbol="circle"/>
+        <text x="278" y="279" font-size="15" class="sb" fill="#000">Interval shoot</text>
+        <text x="278" y="297" font-size="13" fill="#6D6D72">One project of 307 frames, 3.6 s apart</text>
+      </g>
+      <g id="row-photos">
+        <rect x="234" y="318" width="332" height="54" rx="12" fill="#FFFFFF" stroke="#000" stroke-opacity="0.08" stroke-width="1"/>
+        <circle cx="256" cy="339" r="9.2" fill="none" stroke="#8E8E93" stroke-opacity="0.75" stroke-width="1.6" data-symbol="circle"/>
+        <text x="278" y="343" font-size="15" class="sb" fill="#000">Photos</text>
+        <text x="278" y="361" font-size="13" fill="#6D6D72">307 separate projects</text>
+      </g>
+      <g id="warning">
+        <rect x="234" y="394" width="332" height="86" rx="12" fill="#FFB340" fill-opacity="0.16"/>
+        <g data-symbol="exclamationmark.triangle.fill" transform="translate(246 406)">
+        <path d="M8 0.5 L15.5 13.5 H0.5 Z" fill="#FFB340" stroke="#FFB340" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M8 5 v4" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="11.3" r="1" fill="#FFFFFF"/>
+      </g>
+        <g font-size="13" fill="#000"><text x="271" y="418">306 frames keep a 3.6 s beat. 1 file doesn't</text><text x="271" y="434">belong: _WEX3518-Rendered.dng. Without it</text><text x="271" y="450">this folder is a shoot — move it out and import</text><text x="271" y="466">again.</text></g>
+      </g>
+      <g id="import" opacity="0.45">
+        <rect x="234" y="497" width="332" height="50" rx="14" fill="#C36A00"/>
+        <text x="400" y="528" font-size="16" class="b" text-anchor="middle" fill="#FFFFFF">Import</text>
+      </g>
+      <g id="cancel">
+        <rect x="234" y="557" width="332" height="50" rx="14" fill="#FFFFFF"/>
+        <text x="400" y="588" font-size="15.5" class="sb" text-anchor="middle" fill="#C36A00">Cancel</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="722" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Stills import · the question · warned · 760×680 pt window</text>
+  <text x="400" y="740" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/StillsImportSheet.swift over AppModel.stillsImportQuestion — no pre-selection, the files named in amber</text>
+</svg>

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Stills import · the question · warned · portrait</title>
+  <desc>Mirrors App/StillsImportSheet.swift over AppModel.stillsImportQuestion — the question Create ▸ Import photos… asks once the pick has resolved to two or more files and before any copy: a shoot, or a photo each. The reading is ImportedStills.reading (Kit, ImportedStills+Reading.swift; docs/import-classification.md §3): a SHOOT is a clean set — one name sequence, every frame on one beat, the only irregularity a pause whose beat continues — and PHOTOS is suggested only when no beat of 24 frames exists anywhere. Title = the count; the line under it = the files' own reading (the one folder they came from · formats · body · first shutter to last). Two rows say what each answer MAKES, in numbers, so Photos on a 5030-file folder reads as the 5030 projects it would be. Import is the default action (⏎) and Cancel (⎋) is always reachable; the sheet is not dismissable by swipe or click-away — the import is suspended on a continuation inside runStillsImport, and an answer is what starts the copy. LL_IMPORT_STILLS=&lt;folder&gt; with no LL_IMPORT_ANSWER stages it; LL_IMPORT_ANSWER=shoot|photos|cancel answers it headless. THIS FILE: the warned state. The files disagree with each other, so NO row is pre-selected, Import is inert (45 % opacity) until one is chosen, and an amber line says why, naming the files — the fix is always one the person makes, in the folder or by choosing knowingly; the app never drops a file it merely copied. Drawn on /Volumes/letslapse/Source_SONY/Charles_ARW as it stands: 306 ARW frames on a 3.6 s beat plus _WEX3518-Rendered.dng, a Lightroom render of frame 3518 sitting beside its raw with the same capture time to the millisecond — a stranger by name (stem _WEX#-Rendered, 3518 twice), which the old import took as a 307th frame. The line adds what the folder becomes without it. The other lines this box carries, one per reading: strangers by beat (test shots 30–60 s apart before the run, a snap taken mid-run — named, never imported silently), strangers by clock, RAW+JPEG pairs, a beat change, a slow beat (&gt; 60 s), a short sequence (&lt; 24 frames), no capture times, irregular names. Verified 2026-09-15 against the running app on this folder. On the phone the sheet is full height like the archive sheet — its 380-wide content sits centred in the 393-pt screen with the two buttons anchored at the bottom above the home indicator, and the space between the rows and the buttons is the sheet's, not a control. iPad shares this file (a form sheet). Verified 2026-09-15 on an iPhone 16 Pro simulator (LetsLapse Fresh device, LL_IMPORT_STILLS).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#C6C6C9"/>
+    <g transform="translate(24,24)">
+
+      <!-- the Create tab, dimmed under the sheet; only its status bar shows -->
+      <g id="status-bar" fill="#3A3A3F">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#3A3A3F" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#3A3A3F" stroke-opacity="0.5"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#3A3A3F" fill-opacity="0.5"/><rect x="354" y="32" width="19" height="7" rx="2" fill="#3A3A3F"/></g>
+      </g>
+
+      <!-- the sheet: full height, rounded top, LL.screenBackground -->
+      <g id="sheet">
+        <path d="M0 100 a40 40 0 0 1 40 -40 H353 a40 40 0 0 1 40 40 V852 H0 Z" fill="#F2F2F7"/>
+        <g id="icon" transform="translate(196.5 106)" data-symbol="photo.stack" fill="#C36A00">
+        <rect x="-13" y="-16" width="26" height="4" rx="1.5" fill="#C36A00" fill-opacity="0.55"/>
+        <rect x="-16" y="-10" width="32" height="26" rx="5"/>
+        <circle cx="-6" cy="-2" r="3" fill="#F2F2F7"/>
+        <path d="M-11 12 l8 -9 5 5 3 -3 6 7 z" fill="#F2F2F7"/>
+      </g>
+      <text x="196.5" y="161" font-size="19" class="sb" text-anchor="middle" fill="#000">Import 307 photos</text>
+      <text x="196.5" y="181" font-size="14" text-anchor="middle" fill="#6D6D72">Charles_ARW · ARW, DNG · SONY ILCE-7M4 ·</text>
+      <text x="196.5" y="199" font-size="14" text-anchor="middle" fill="#6D6D72">18 min</text>
+      <g id="row-shoot">
+        <rect x="30.5" y="224" width="332" height="54" rx="12" fill="#FFFFFF" stroke="#000" stroke-opacity="0.08" stroke-width="1"/>
+        <circle cx="52.5" cy="245" r="9.2" fill="none" stroke="#8E8E93" stroke-opacity="0.75" stroke-width="1.6" data-symbol="circle"/>
+        <text x="74.5" y="249" font-size="15" class="sb" fill="#000">Interval shoot</text>
+        <text x="74.5" y="267" font-size="13" fill="#6D6D72">One project of 307 frames, 3.6 s apart</text>
+      </g>
+      <g id="row-photos">
+        <rect x="30.5" y="288" width="332" height="54" rx="12" fill="#FFFFFF" stroke="#000" stroke-opacity="0.08" stroke-width="1"/>
+        <circle cx="52.5" cy="309" r="9.2" fill="none" stroke="#8E8E93" stroke-opacity="0.75" stroke-width="1.6" data-symbol="circle"/>
+        <text x="74.5" y="313" font-size="15" class="sb" fill="#000">Photos</text>
+        <text x="74.5" y="331" font-size="13" fill="#6D6D72">307 separate projects</text>
+      </g>
+      <g id="warning">
+        <rect x="30.5" y="364" width="332" height="86" rx="12" fill="#FFB340" fill-opacity="0.16"/>
+        <g data-symbol="exclamationmark.triangle.fill" transform="translate(42.5 376)">
+        <path d="M8 0.5 L15.5 13.5 H0.5 Z" fill="#FFB340" stroke="#FFB340" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M8 5 v4" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="11.3" r="1" fill="#FFFFFF"/>
+      </g>
+        <g font-size="13" fill="#000"><text x="67.5" y="388">306 frames keep a 3.6 s beat. 1 file doesn't</text><text x="67.5" y="404">belong: _WEX3518-Rendered.dng. Without it</text><text x="67.5" y="420">this folder is a shoot — move it out and import</text><text x="67.5" y="436">again.</text></g>
+      </g>
+      <g id="import" opacity="0.45">
+        <rect x="30.5" y="684" width="332" height="50" rx="14" fill="#C36A00"/>
+        <text x="196.5" y="715" font-size="16" class="b" text-anchor="middle" fill="#FFFFFF">Import</text>
+      </g>
+      <g id="cancel">
+        <rect x="30.5" y="744" width="332" height="50" rx="14" fill="#FFFFFF"/>
+        <text x="196.5" y="775" font-size="15.5" class="sb" text-anchor="middle" fill="#C36A00">Cancel</text>
+      </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Stills import · the question · warned · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/StillsImportSheet.swift over AppModel.stillsImportQuestion — no pre-selection, the files named in amber</text>
+</svg>

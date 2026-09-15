@@ -659,12 +659,16 @@ struct CreateView: View {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             var urls: [URL] = []
             var used = Set<String>()
+            var invented = Set<String>()
             for (index, item) in items.enumerated() {
                 guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-                let name = Self.stagedName(
+                let (name, isInvented) = Self.stagedName(
                     for: item, fallbackIndex: index, taken: &used)
                 let url = directory.appendingPathComponent(name)
-                if (try? data.write(to: url)) != nil { urls.append(url) }
+                if (try? data.write(to: url)) != nil {
+                    urls.append(url)
+                    if isInvented { invented.insert(name) }
+                }
             }
             photoItems = []
             isImporting = false
@@ -678,16 +682,18 @@ struct CreateView: View {
                     : "Couldn't load those photos."
                 return
             }
-            model.importStills(from: urls)
+            // The invented names travel with the import so its reading knows
+            // `photo-0001, photo-0002…` is not a camera's sequence.
+            model.importStills(from: urls, syntheticNames: invented)
         }
     }
 
     /// The name one library item is staged under: its original camera file
     /// name when the library still has it, else `photo-0001` plus whatever
-    /// extension its content type implies.
+    /// extension its content type implies — and whether it was the latter.
     private static func stagedName(
         for item: PhotosPickerItem, fallbackIndex: Int, taken: inout Set<String>
-    ) -> String {
+    ) -> (name: String, invented: Bool) {
         let ext = item.supportedContentTypes
             .compactMap(\.preferredFilenameExtension).first ?? "jpg"
         var name: String?
@@ -698,8 +704,9 @@ struct CreateView: View {
             }
         }
         let candidate = name ?? String(format: "photo-%04d.%@", fallbackIndex + 1, ext)
-        return AppModel.uniqueImportName(
+        let staged = AppModel.uniqueImportName(
             for: URL(fileURLWithPath: candidate), taken: &taken)
+        return (staged, name == nil)
     }
     #else
     private static let videoContentTypes: [UTType] = [

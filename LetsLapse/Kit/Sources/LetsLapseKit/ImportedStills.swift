@@ -38,6 +38,16 @@ public enum ImportedStills {
         }
     }
 
+    /// What a frame's capture time was read from.
+    public enum CaptureTimeSource: String, Equatable, Sendable {
+        /// `DateTimeOriginal` (or its fallbacks) plus a sub-second tag.
+        case exifSubsecond
+        /// `DateTimeOriginal` (or its fallbacks), whole seconds.
+        case exif
+        /// No EXIF stamp at all; the file's modification date stood in.
+        case fileModification
+    }
+
     /// One imported file, as its own metadata describes it.
     public struct Frame: Equatable, Sendable {
         public var url: URL
@@ -45,6 +55,12 @@ public enum ImportedStills {
         /// see `Self.captureDate(from:)` for how the second and the sub-second
         /// tags are put back together.
         public var capturedAt: Date?
+        /// Where `capturedAt` came from. The import reading (`Reading`)
+        /// measures a beat only from times the camera wrote — a copied
+        /// file's modification date is seconds-apart-in-copy-order and
+        /// manufactures a perfect interval — and can measure it finer than
+        /// ±1 s only when the body wrote the sub-second tag.
+        public var captureTimeSource: CaptureTimeSource?
         public var exposure: DNGAuthor.DNGExposure
         public var pixelWidth: Int?
         public var pixelHeight: Int?
@@ -76,10 +92,12 @@ public enum ImportedStills {
             cameraModel: String? = nil,
             software: String? = nil,
             location: Location? = nil,
-            byteCount: Int? = nil
+            byteCount: Int? = nil,
+            captureTimeSource: CaptureTimeSource? = nil
         ) {
             self.url = url
             self.capturedAt = capturedAt
+            self.captureTimeSource = captureTimeSource
             self.exposure = exposure
             self.pixelWidth = pixelWidth
             self.pixelHeight = pixelHeight
@@ -483,9 +501,14 @@ public enum ImportedStills {
         let tiff = properties[kCGImagePropertyTIFFDictionary] as? [String: Any] ?? [:]
         let aux = properties[kCGImagePropertyExifAuxDictionary] as? [String: Any] ?? [:]
 
-        frame.capturedAt = captureDate(exif: exif, tiff: tiff)
-            ?? (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
-                .contentModificationDate
+        if let stamped = captureTime(exif: exif, tiff: tiff) {
+            frame.capturedAt = stamped.date
+            frame.captureTimeSource = stamped.hasSubsecond ? .exifSubsecond : .exif
+        } else if let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate {
+            frame.capturedAt = modified
+            frame.captureTimeSource = .fileModification
+        }
         frame.exposure = DNGAuthor.DNGExposure(
             exifDictionary: exif, capturedAt: frame.capturedAt)
 
@@ -532,6 +555,15 @@ public enum ImportedStills {
     /// nothing derived from these dates — spacing, interval, span, the warp
     /// axis — is affected by that: they are all differences.
     public static func captureDate(exif: [String: Any], tiff: [String: Any]) -> Date? {
+        captureTime(exif: exif, tiff: tiff)?.date
+    }
+
+    /// `captureDate`, and whether the sub-second tag contributed — the
+    /// difference between a clock that can place a frame to the millisecond
+    /// and one that rounds to the second (see `Frame.captureTimeSource`).
+    public static func captureTime(
+        exif: [String: Any], tiff: [String: Any]
+    ) -> (date: Date, hasSubsecond: Bool)? {
         let stamp = (exif[kCGImagePropertyExifDateTimeOriginal as String] as? String)
             ?? (exif[kCGImagePropertyExifDateTimeDigitized as String] as? String)
             ?? (tiff[kCGImagePropertyTIFFDateTime as String] as? String)
@@ -551,8 +583,8 @@ public enum ImportedStills {
         guard let digits = subsecond?.trimmingCharacters(in: .whitespaces),
               !digits.isEmpty, digits.allSatisfy(\.isNumber),
               let fraction = Double("0.\(digits)")
-        else { return date }
-        return date.addingTimeInterval(fraction)
+        else { return (date, false) }
+        return (date.addingTimeInterval(fraction), true)
     }
 
     /// "+02:00" / "-0500" / "Z" → a fixed-offset zone.

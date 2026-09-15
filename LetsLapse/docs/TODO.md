@@ -11,6 +11,32 @@ live inline.
 
 ## Open
 
+### Import photos — classify a shoot vs a pile of photos before registering
+
+**Detail:** [import-classification.md](import-classification.md) · **Raised:**
+2026-09-15 (Steven: "Import photos…" ingests any multi-file pick as
+`Interval · Imported`, which most picks are not; test the names for a
+sequence, then the clock for a regular ≤ 60 s beat, and only then call it a
+shoot — otherwise every file is its own photo; a set holding both asks:
+import as individual photos, or cancel and tidy the folder. On review: a
+shoot needs VERY high confidence or the app asks — a rendered derivative in
+the folder is a cleanup, not a skip; the test shots before a real run must
+never ride in; then: nominate the type in the import itself, with an
+Auto) · **path E SHIPPED 2026-09-15 (code first, Steven's call; signed off
+"works as expected"; mirrors drawn)** — one sheet after the pick (Interval shoot /
+Photos), the row pre-selected and tagged Detected when the set is clean, an
+amber line naming the files and no pre-selection when they disagree; the
+classifier (a shoot is a CLEAN set: one name sequence, every frame on one
+beat, pauses allowed) advises instead of deciding. Kit
+`ImportedStills+Reading.swift` + 30 tests; `App/StillsImportSheet.swift`;
+the branch + photo-batch path in `runStillsImport`; `LL_IMPORT_ANSWER`.
+Verified on the Mac against a scratch root and an iPhone 16 Pro simulator
+(doc §10): `Charles_ARW` warns (`_WEX3518-Rendered.dng`), a clean slice is
+Detected and lands in the blend flow, `china` → 117 photo projects on the
+list. Mirrors: `design/{macOS,iOS}/stills-import.question*.svg`. **Still
+owed:** the batch's toast + Undo, *Leave these out* on the amber line,
+`lapse classify`, an iPad run · small.
+
 ### PicPlace sync v1 — sign in, push a nominated project, show its status
 
 **Detail:** [picplace-sync-v1.md](picplace-sync-v1.md) · **Raised:** 2026-09-14

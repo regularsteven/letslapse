@@ -383,6 +383,13 @@ struct ContentView: View {
                 .environmentObject(model)
             .environmentObject(model.processingProgress)
         }
+        // The stills import's question — a shoot, or a photo each — asked
+        // from the root for the same reason: the pick can be made from any
+        // tab, and the answer is what starts the copy.
+        .sheet(item: $model.stillsImportQuestion) { question in
+            StillsImportSheet(question: question)
+                .environmentObject(model)
+        }
         .onChange(of: model.requestedProjectDetailID) { requested in
             guard requested != nil else { return }
             selectedTab = .projects
@@ -874,6 +881,13 @@ struct ContentView: View {
         // which no headless run can drive, and this is the whole feature behind
         // it: the selection walk, the EXIF probe, the copy, the derived
         // sidecars and the registration. Paths may be folders or files.
+        // `LL_IMPORT_ANSWER=shoot|photos|cancel` answers the import sheet
+        // without showing it; without it, a multi-file `LL_IMPORT_STILLS`
+        // stops on the sheet, which is how the sheet is screenshotted.
+        if let raw = environment["LL_IMPORT_ANSWER"],
+           let answer = AppModel.StillsImportQuestion.Answer(rawValue: raw.lowercased()) {
+            model.stagedStillsImportAnswer = answer
+        }
         if let paths = environment["LL_IMPORT_STILLS"], !paths.isEmpty {
             model.importStills(from: paths.split(separator: ":").map {
                 URL(fileURLWithPath: String($0))
