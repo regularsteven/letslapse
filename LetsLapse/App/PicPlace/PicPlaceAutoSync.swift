@@ -18,6 +18,15 @@ import LetsLapseKit
 /// person's own press — Sync, Download originals, Check now — works on any
 /// connection: that is their call. A shoot being written pauses all of it;
 /// downloads of originals stay per project.
+///
+/// Pushes go through **one queue, one project at a time**. An import of
+/// 117 photos wrote 117 documents in two seconds; each armed its own
+/// twenty-second timer and all 117 pushes fired together — some 900
+/// requests inside a second against a server that allows 300 a minute, so
+/// 96 of them were refused (2026-09-15). The debounce still decides WHEN a
+/// project is due; the queue decides the order and the pace (the client
+/// paces every request under the server's limit besides). A push that
+/// fails is retried by the check with a backoff (`PicPlaceSyncRecord.retryDueAt`).
 extension PicPlaceController {
 
     private static let pushDebounce: TimeInterval = 20
@@ -122,6 +131,12 @@ extension PicPlaceController {
             for task in pendingPushes.values { task.cancel() }
             pendingPushes.removeAll()
             heldPushes.removeAll()
+            pushQueue.removeAll()
+            pushQueueTask?.cancel()
+            pushQueueTask = nil
+            pushQueueDone = 0
+            pushQueueTotal = 0
+            if autoStatus?.hasPrefix("Syncing") == true { autoStatus = nil }
         }
         if !originalsAllowed {
             originalsQueueTask?.cancel()
@@ -137,8 +152,9 @@ extension PicPlaceController {
             heldCheck = false
             checkForChanges(reason: "network")
         }
-        for id in heldPushes { noteProjectChanged(id) }
+        let held = heldPushes
         heldPushes.removeAll()
+        for id in held { enqueuePush(id) }
         scheduleOriginalsQueue()
     }
 
@@ -158,8 +174,9 @@ extension PicPlaceController {
     // MARK: Edits
 
     /// A project's document changed on disk. Twenty seconds after the last
-    /// change, the project goes up — if it actually moved past the base
-    /// (a pull writes the document too, and must not bounce back).
+    /// change, the project joins the queue — and goes up if it actually
+    /// moved past the base (a pull writes the document too, and must not
+    /// bounce back).
     func noteProjectChanged(_ id: UUID) {
         guard autoSyncEnabled, canSync, binding?.initialSync.state == .done else { return }
         pendingPushes[id]?.cancel()
@@ -167,32 +184,114 @@ extension PicPlaceController {
             do { try await Task.sleep(nanoseconds: UInt64(Self.pushDebounce * 1_000_000_000)) } catch { return }
             guard let self else { return }
             self.pendingPushes[id] = nil
-            await self.pushIfMoved(id)
+            self.enqueuePush(id)
         }
     }
 
-    private func pushIfMoved(_ id: UUID) async {
-        // Held, not dropped: the network rule lifts, the push goes.
+    /// A project due for a push takes its place in the queue (once), and
+    /// the worker starts if it is not running. Held, not dropped, while
+    /// the network rule holds.
+    func enqueuePush(_ id: UUID) {
+        guard autoSyncEnabled, canSync else { return }
         guard autoAllowed else { heldPushes.insert(id); return }
-        guard model.stage != .processing, syncTasks[id] == nil, checkTask == nil, initialSyncTask == nil,
-              let capture = model.capture(id: id) else { return }
+        if !pushQueue.contains(id) {
+            pushQueue.append(id)
+            pushQueueTotal += 1
+        }
+        drainPushQueue()
+    }
+
+    private func drainPushQueue() {
+        guard pushQueueTask == nil, !pushQueue.isEmpty else { return }
+        pushQueueTask = Task { [weak self] in
+            guard let self else { return }
+            await runPushQueue()
+            pushQueueTask = nil
+            pushQueueDone = 0
+            pushQueueTotal = 0
+            if autoStatus?.hasPrefix("Syncing") == true { autoStatus = nil }
+        }
+    }
+
+    private func runPushQueue() async {
+        var sent = 0
+        var failed = 0
+        while !pushQueue.isEmpty, !Task.isCancelled {
+            // The rule moved under the queue: keep what is left for the release.
+            guard autoAllowed else {
+                heldPushes.formUnion(pushQueue)
+                pushQueue.removeAll()
+                break
+            }
+            // A check or the first connection walks the whole library and
+            // may push these very projects: let it finish, then look again.
+            if let running = checkTask { await running.value; continue }
+            if let running = initialSyncTask { await running.value; continue }
+            // A shoot being written: its project must not be pushed mid-write.
+            // The queue stops here; the check after the shoot pushes what moved.
+            if model.stage == .processing { pushQueue.removeAll(); break }
+            let id = pushQueue.removeFirst()
+            let outcome = await pushIfMoved(id)
+            pushQueueDone += 1
+            switch outcome {
+            case .sent: sent += 1
+            case .failed: failed += 1
+            case .nothing: break
+            }
+            if outcome == .failed, lastSyncFailedOffline {
+                // The server cannot be reached: failing through the rest one
+                // timeout at a time helps nobody. The check — which runs
+                // again on the timer and when the network changes — pushes
+                // whatever still differs, this project included.
+                LLog("picplace: auto-sync queue — PicPlace can't be reached; \(pushQueue.count) project(s) left to the next check")
+                pushQueue.removeAll()
+                break
+            }
+        }
+        if sent + failed > 0 {
+            LLog("picplace: auto-sync queue — \(sent) sent, \(failed) failed\(pushQueue.isEmpty ? "" : ", \(pushQueue.count) held")")
+        }
+        updateAutoError()
+        if sent > 0 { scheduleOriginalsQueue() }
+    }
+
+    private enum PushOutcome { case sent, failed, nothing }
+
+    @discardableResult
+    private func pushIfMoved(_ id: UUID) async -> PushOutcome {
+        guard let capture = model.capture(id: id) else { return .nothing }
         // A delete is written through the same funnel (the tombstone), and
         // its folder is in the trash: the check pushes deletes, not this.
-        guard capture.deletedAt == nil else { return }
+        guard capture.deletedAt == nil else { return .nothing }
         let origin = model.originID(of: capture)
-        if conflicts.contains(where: { $0.originID == origin }) { return }
+        if conflicts.contains(where: { $0.originID == origin }) { return .nothing }
+        // A person's own Sync of it is under way: that push is this push.
+        if let running = syncTasks[id] { await running.value; return .nothing }
         let base = records[origin]?.revision
-        guard base == nil || revision(of: capture) != base else { return }
+        guard base == nil || revision(of: capture) != base else { return .nothing }
         // A project pushed by the check moments ago with the same stamp is in step.
-        autoStatus = "Syncing \(capture.displayTitle)…"
+        autoStatus = pushQueueTotal > 1
+            ? "Syncing \(pushQueueDone + 1) of \(pushQueueTotal) · \(capture.displayTitle)…"
+            : "Syncing \(capture.displayTitle)…"
         await syncAndWait(capture)
-        autoStatus = nil
-        if let error = records[origin]?.lastError {
-            autoError = "\(capture.displayTitle): \(error)"
-        } else {
-            autoError = nil
-            scheduleOriginalsQueue()
+        return records[origin]?.lastError == nil ? .sent : .failed
+    }
+
+    /// The "Auto-sync problem" line: how many pushes stand failed, the
+    /// last reason, and when the next try is due.
+    func updateAutoError() {
+        let failed = failedPushes
+        guard !failed.isEmpty else { autoError = nil; return }
+        let latest = failed.max { ($0.record.failedAt ?? .distantPast) < ($1.record.failedAt ?? .distantPast) }!
+        let due = failed.compactMap(\.record.retryDueAt).min()
+        var line = failed.count == 1
+            ? "\(model.capture(id: latest.localID)?.displayTitle ?? "1 project") couldn't be synced"
+            : "\(failed.count) projects couldn't be synced"
+        if let reason = latest.record.lastError { line += " — \(reason)" }
+        if let due {
+            line += due <= Date() ? " · retrying at the next check" : " · next try \(due.formatted(date: .omitted, time: .shortened))"
         }
+        autoError = line
     }
 
     // MARK: The originals queue
@@ -216,9 +315,15 @@ extension PicPlaceController {
         query.sort = .created
         query.ascending = true
         let rows = (try? libraryIndex.projects(query).rows) ?? []
+        let now = Date()
         for row in rows {
             guard originalsAllowed, !Task.isCancelled else { break }
-            guard let capture = model.capture(id: row.id), records[model.originID(of: capture)] != nil else { continue }
+            guard let capture = model.capture(id: row.id), let record = records[model.originID(of: capture)] else { continue }
+            // The records go first: a project whose bundle and poster never
+            // reached the server is the check's to retry, not this queue's.
+            guard record.recordsReachedServer else { continue }
+            // A failed upload waits for its backoff, like a failed push.
+            if let due = record.retryDueAt, due > now { continue }
             guard !model.sourcesMissing(capture), syncTasks[capture.id] == nil else { continue }
             let folder = model.projectFolderURL(for: capture)
             let summary = await Task.detached(priority: .utility) { () -> PicPlaceSyncInventory.Summary in
@@ -233,11 +338,13 @@ extension PicPlaceController {
             }
             autoStatus = "Uploading originals · \(capture.displayTitle) · \(summary.heavyFiles.formatted()) files · \(LLFormat.bytes(summary.heavyBytes))"
             await syncAndWait(capture, policy: .originals)
-            if let error = records[origin]?.lastError {
-                autoError = "\(capture.displayTitle): \(error)"
+            if records[origin]?.lastError != nil {
+                // One failure stops the walk; the next check re-arms the
+                // queue and this project waits out its backoff.
+                updateAutoError()
                 break
             }
-            autoError = nil
+            updateAutoError()
         }
         if autoStatus?.hasPrefix("Uploading originals") == true { autoStatus = nil }
     }

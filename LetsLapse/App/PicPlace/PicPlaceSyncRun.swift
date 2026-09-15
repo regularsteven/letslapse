@@ -49,6 +49,46 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     /// When a preview-only project last asked the server for a poster it
     /// lacks — asked again only once the server's row moved.
     var posterCheckedAt: Date?
+    /// The index row's confirmed-asset count when this device last took
+    /// the server's records (a pull, a pull-update). A different count
+    /// means the server holds something this device has not fetched — the
+    /// bundle and poster of a push that completed after the pull, or the
+    /// originals — and the check fetches the records again.
+    var serverConfirmedSeen: Int?
+    /// The failure behind `lastError`: when, how many times in a row, and
+    /// which policy was being sent. The check retries a failed push once
+    /// `failedAt` plus the backoff for `failures` has passed; a person's
+    /// own press ignores the wait.
+    var failedAt: Date?
+    var failures: Int?
+    var failedPolicy: String?
+
+    /// Whether the records — bundle and poster — of a push by THIS device
+    /// reached the server: a record that has only ever failed has none.
+    var recordsReachedServer: Bool { revision > 0 && (lastError == nil || failedPolicy == PicPlaceSyncPolicy.originals.rawValue) }
+
+    /// When the failed push may be tried again on its own: three minutes
+    /// after the first failure, doubling, an hour at most.
+    var retryDueAt: Date? {
+        guard lastError != nil, let failedAt else { return nil }
+        let count = max(1, failures ?? 1)
+        let wait = min(60 * 60, 3 * 60 * pow(2, Double(count - 1)))
+        return failedAt.addingTimeInterval(wait)
+    }
+
+    mutating func noteFailure(_ caption: String, policy: PicPlaceSyncPolicy) {
+        lastError = caption
+        failedAt = Date()
+        failures = (failures ?? 0) + 1
+        failedPolicy = policy.rawValue
+    }
+
+    mutating func clearFailure() {
+        lastError = nil
+        failedAt = nil
+        failures = nil
+        failedPolicy = nil
+    }
 }
 
 /// One push of one project (docs/picplace-sync-v1.md §2, v2 plan §4.2):
@@ -263,7 +303,9 @@ struct PicPlaceSyncRun {
                 .compactMap(\.device)
                 .filter { $0.id != thisDeviceID }
                 .map(\.name)
-            let _: [String: PPClaim?] = try await client.delete("projects/\(uuid)/claim")
+            // Best effort: the push is complete; a claim this device could
+            // not release expires on its own and this device may re-claim it.
+            let _: [String: PPClaim?]? = try? await client.delete("projects/\(uuid)/claim")
 
             return PicPlaceSyncRecord(syncedAt: Date(), revision: project.revision, files: files.count, bytes: totalBytes,
                                       uploaded: pending.count, alsoOn: alsoOn,

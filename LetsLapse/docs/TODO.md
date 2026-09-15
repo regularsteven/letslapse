@@ -100,7 +100,14 @@ a 3-minute timer check, the originals queue, only on Wi-Fi for everything
 automatic, unchanged copies of deleted projects trashed, posters converging ·
 **HANDOVER for the next agent: [picplace-sync-v2-handover.md](picplace-sync-v2-handover.md)**
 (next: a real-world run on picplace.co, iOS background transfers, eviction,
-per-blend posters, the mirrors) · **code-first by
+per-blend posters, the mirrors) · **pacing + recovery 2026-09-15 afternoon**
+(handover §7: the first load — 117 photos imported at once — fired 117
+pushes together, 96 refused with `429` and never retried; now every request
+takes its turn under the server's per-device budget, `429`/`5xx`/dropped
+requests retry in place, pushes go through one serial queue, the check
+retries failed pushes with a backoff, a preview-only copy re-fetches records
+when the server's asset count moved; verified: the storm against the real
+limiter with 0 failures, a 60 s outage recovered by the check) · **code-first by
 decision** — mirrors follow per screen once the sync logic holds · **Size:**
 large (five stages) · seams: `App/PicPlace/*` (binding, sync state, Keychain
 per account, `SyncPolicy`, the pull, the merge), `App/StorageLocation.swift`

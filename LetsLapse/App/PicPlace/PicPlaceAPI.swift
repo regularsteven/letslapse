@@ -12,7 +12,13 @@ struct PPStatus: Decodable {
     struct Projects: Decodable { var count: Int; var byType: [String: Int]?; var deleted: Int? }
     /// The caps the app checks before sending (asks §4, §12): absent on a
     /// server that predates them, in which case the app assumes 1 MB.
-    struct Limits: Decodable { var manifestMaxBytes: Int64?; var objectMaxBytes: Int64?; var assetBatch: Int?; var tombstoneDays: Int? }
+    struct Limits: Decodable {
+        /// `requests_per_minute` (server-asks §15): per device — one token
+        /// lineage, one install — with the account as the backstop.
+        struct RequestsPerMinute: Decodable { var device: Int?; var account: Int? }
+        var manifestMaxBytes: Int64?; var objectMaxBytes: Int64?; var assetBatch: Int?; var tombstoneDays: Int?
+        var requestsPerMinute: RequestsPerMinute?
+    }
     var apiVersion: Int
     var serverTime: Date
     var user: User
@@ -144,6 +150,11 @@ struct PicPlaceAPIError: LocalizedError {
 
     var errorDescription: String? { message }
 
+    /// A refusal the same request may get past a moment later: the rate
+    /// limit, a server that stumbled (the cache-table deadlock `/status`
+    /// produced under load), a gateway between. Anything else is an answer.
+    var isTransient: Bool { status == 429 || status == 500 || (502 ... 504).contains(status) }
+
     /// The failure line the status card shows.
     var cardCaption: String {
         if let claim, let device = claim.device, code == "claim_held" || code == "claim_expired" || code == "claim_required" {
@@ -156,6 +167,7 @@ struct PicPlaceAPIError: LocalizedError {
         case "account_not_enabled": return "This PicPlace account isn't enabled for LetsLapse yet"
         case "device_revoked": return "This device was signed out of PicPlace"
         default:
+            if status == 429 { return "PicPlace is busy (rate limited); LetsLapse will try again" }
             if status == 404 { return "PicPlace doesn't have this project" }
             if status >= 500 { return "PicPlace had a problem (\(status)); try again later" }
             return message
@@ -185,10 +197,53 @@ actor PicPlaceClient {
     /// Called once when a refresh is refused — the tokens are gone for good.
     private let signedOut: @Sendable () -> Void
 
+    // MARK: The rate limit
+
+    /// The server allows N requests a minute per device (`/status` →
+    /// `limits.requests_per_minute.device`; 120 assumed until it says — the
+    /// figure the first contract named) and refuses the rest with a `429`
+    /// and `Retry-After`. An import of a hundred photos is a hundred pushes
+    /// of six requests each: fired together they are refused together
+    /// (2026-09-15, 117 photos → 96 failed pushes). So every request takes
+    /// its turn here — a sliding minute's window kept under a share of the
+    /// budget, the rest left for the person's own presses and for other
+    /// instances on the same account — and a `429` pauses everyone for
+    /// as long as the server asks, then the request goes again.
+    private var requestsPerMinute = 120
+    /// When each of the last minute's requests went (a sliding window).
+    private var sentAt: [Date] = []
+    /// A `429`'s `Retry-After`, or a low `X-RateLimit-Remaining`: nobody sends before it.
+    private var pausedUntil: Date?
+    private var pauseLogged: Date?
+    /// The share of the budget automatic and sequential work may use.
+    private static let budgetShare = 0.85
+    /// Under this many remaining (the server's own count, which sees every
+    /// instance on the account), the next request waits a few seconds.
+    private static let remainingReserve = 3
+    private static let maxRetryAfter: TimeInterval = 120
+    private static let attemptsPerRequest = 4
+    #if DEBUG
+    /// `LL_PICPLACE_RATE=<n>` pins the budget (the server's own figure is
+    /// ignored) — set high, it reproduces the 2026-09-15 storm against the
+    /// real limiter and exercises the `429` path; `LL_PICPLACE_OUTAGE=<start>:<seconds>`
+    /// makes every request fail as offline from `start` seconds after
+    /// launch for `seconds`, for the retry-after-failure path.
+    private let forcedRate: Int? = ProcessInfo.processInfo.environment["LL_PICPLACE_RATE"].flatMap(Int.init)
+    private let outage: (from: Date, until: Date)? = {
+        guard let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_OUTAGE"] else { return nil }
+        let parts = raw.split(separator: ":").compactMap { Double($0) }
+        guard parts.count == 2 else { return nil }
+        return (Date().addingTimeInterval(parts[0]), Date().addingTimeInterval(parts[0] + parts[1]))
+    }()
+    #endif
+
     init(tokens: PicPlaceTokens?, accountKey: String?, signedOut: @escaping @Sendable () -> Void) {
         self.tokens = tokens
         self.accountKey = accountKey
         self.signedOut = signedOut
+        #if DEBUG
+        if let forcedRate { requestsPerMinute = forcedRate }
+        #endif
         let config = URLSessionConfiguration.default
         config.waitsForConnectivity = false
         config.timeoutIntervalForRequest = 60
@@ -196,6 +251,64 @@ actor PicPlaceClient {
     }
 
     var isSignedIn: Bool { tokens != nil }
+
+    /// The budget `/status` reported; the gate paces under it from now on.
+    func setRateLimit(requestsPerMinute limit: Int?) {
+        #if DEBUG
+        if forcedRate != nil { return }
+        #endif
+        guard let limit, limit > 0, limit != requestsPerMinute else { return }
+        requestsPerMinute = limit
+        LLog("picplace: pacing requests under \(limit)/min (\(budget)/min for sync work)")
+    }
+
+    private var budget: Int { max(6, Int(Double(requestsPerMinute) * Self.budgetShare)) }
+
+    /// A request's turn: after any pause the server asked for, and once the
+    /// last minute holds fewer requests than the budget. Callers wait here
+    /// together — the actor is released across every sleep — so a burst of
+    /// pushes drains at the server's pace instead of being refused.
+    private func waitForTurn() async throws {
+        while true {
+            try Task.checkCancellation()
+            let now = Date()
+            if let until = pausedUntil, until > now {
+                try await Task.sleep(nanoseconds: UInt64(max(0.05, until.timeIntervalSince(now)) * 1_000_000_000))
+                continue
+            }
+            sentAt.removeAll { now.timeIntervalSince($0) >= 60 }
+            if sentAt.count < budget {
+                sentAt.append(now)
+                return
+            }
+            // The window is full: the oldest request leaves it first.
+            let wait = 60 - now.timeIntervalSince(sentAt[0]) + 0.05
+            if pauseLogged.map({ now.timeIntervalSince($0) > 30 }) ?? true {
+                pauseLogged = now
+                LLog("picplace: \(budget) requests in the last minute — pacing (\(Int(wait.rounded())) s)")
+            }
+            try await Task.sleep(nanoseconds: UInt64(max(0.05, wait) * 1_000_000_000))
+        }
+    }
+
+    /// What the server said about the limit with this response.
+    private func noteRateLimit(_ http: HTTPURLResponse) {
+        if http.statusCode == 429 {
+            let asked = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 10
+            let pause = min(Self.maxRetryAfter, max(1, asked)) + Double.random(in: 0.2 ... 1.2)
+            pausedUntil = Date().addingTimeInterval(pause)
+            LLog("picplace: rate limited (429) — pausing every request for \(Int(pause.rounded())) s")
+            return
+        }
+        if let remaining = http.value(forHTTPHeaderField: "X-RateLimit-Remaining").flatMap(Int.init),
+           remaining <= Self.remainingReserve {
+            // Another instance on the account (or a burst of hand presses)
+            // has nearly used the server's window; wait a little rather
+            // than take the last of it and be refused.
+            let until = Date().addingTimeInterval(5)
+            if (pausedUntil ?? .distantPast) < until { pausedUntil = until }
+        }
+    }
 
     /// The pair in hand — what `establishProfile` stores under the account
     /// once `/status` has named it.
@@ -373,36 +486,67 @@ actor PicPlaceClient {
         }
     }
 
+    /// One request, as many times as it takes within reason: a `429` waits
+    /// out the server's `Retry-After` and goes again; a `5xx` or a dropped
+    /// connection waits a couple of seconds and goes again; a `401`
+    /// refreshes the tokens once. Every endpoint is safe to repeat by
+    /// contract — a manifest PUT at the same revision is a replay, a
+    /// negotiate of the same name refreshes the same upload, confirm,
+    /// presence, claim and release are idempotent — so a retry can only
+    /// finish what the first attempt started.
     private func sendData(_ method: String, _ path: String, query: [String: String], body: Any?, retrying: Bool = false) async throws -> (Data, HTTPURLResponse) {
-        let current = try await validTokens()
-        var components = URLComponents(url: apiBase(for: current).appendingPathComponent(path), resolvingAgainstBaseURL: false)!
-        if !query.isEmpty { components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) } }
-        var request = URLRequest(url: components.url!)
-        request.httpMethod = method
-        request.setValue("Bearer \(current.accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let body {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
-        }
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw PicPlaceOfflineError(underlying: error)
-        }
-        guard let http = response as? HTTPURLResponse else { throw PicPlaceOfflineError(underlying: nil) }
+        var refreshed = retrying
+        var attempt = 0
+        while true {
+            attempt += 1
+            try await waitForTurn()
+            let current = try await validTokens()
+            var components = URLComponents(url: apiBase(for: current).appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+            if !query.isEmpty { components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) } }
+            var request = URLRequest(url: components.url!)
+            request.httpMethod = method
+            request.setValue("Bearer \(current.accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            if let body {
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+            }
+            let data: Data
+            let response: URLResponse
+            do {
+                #if DEBUG
+                if let outage, outage.from <= Date(), Date() < outage.until {
+                    throw URLError(.cannotConnectToHost)
+                }
+                #endif
+                (data, response) = try await session.data(for: request)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let offline = PicPlaceOfflineError(underlying: error)
+                guard attempt < Self.attemptsPerRequest, (error as? URLError)?.code != .cancelled else { throw offline }
+                LLog("picplace: \(method) \(path) — no answer (\(error.localizedDescription)); trying again")
+                try await Task.sleep(nanoseconds: UInt64(2 * attempt) * 1_000_000_000)
+                continue
+            }
+            guard let http = response as? HTTPURLResponse else { throw PicPlaceOfflineError(underlying: nil) }
+            noteRateLimit(http)
 
-        if http.statusCode == 401, !retrying, tokens != nil {
-            // The access token was revoked or expired early; refresh once and retry.
-            _ = try await refresh()
-            return try await sendData(method, path, query: query, body: body, retrying: true)
+            if http.statusCode == 401, !refreshed, tokens != nil {
+                // The access token was revoked or expired early; refresh once and retry.
+                refreshed = true
+                _ = try await refresh()
+                continue
+            }
+            if (200 ..< 300).contains(http.statusCode) { return (data, http) }
+            let error = Self.decodeError(status: http.statusCode, data: data)
+            guard error.isTransient, attempt < Self.attemptsPerRequest else { throw error }
+            if http.statusCode != 429 {
+                LLog("picplace: \(method) \(path) → \(http.statusCode); trying again")
+                try await Task.sleep(nanoseconds: UInt64(2 * attempt) * 1_000_000_000)
+            }
+            // A 429 has set the pause; the loop's gate waits it out.
         }
-        guard (200 ..< 300).contains(http.statusCode) else {
-            throw Self.decodeError(status: http.statusCode, data: data)
-        }
-        return (data, http)
     }
 
     /// Which key, in plain words, when a reply does not match the wire types.

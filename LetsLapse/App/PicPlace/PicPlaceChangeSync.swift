@@ -15,7 +15,15 @@ import UIKit
 /// moved, a project deleted on the server that this device still holds, a
 /// project this device deleted that the server changed since. Checks run
 /// at launch (after the first connection), whenever the app comes to the
-/// front, and on demand.
+/// front, every few minutes while auto-sync is on, and on demand.
+///
+/// The check is also **the recovery path**: a push that failed — refused
+/// by the rate limit, cut off, a claim held elsewhere — leaves a record
+/// with `lastError`, and the check sends it again once its backoff has
+/// passed (a person's own *Check PicPlace now* does not wait). Every push
+/// the check makes goes one project at a time through the paced client,
+/// so a check that has a hundred projects to send takes the minutes it
+/// takes rather than being refused.
 extension PicPlaceController {
 
     /// One row a person has to decide.
@@ -52,6 +60,9 @@ extension PicPlaceController {
         var deletedHere = 0
         var deletedThere = 0
         var conflicts = 0
+        /// Failed pushes this check sent again, and those still waiting for their backoff.
+        var retried = 0
+        var waiting = 0
         var failures: [String] = []
         var checkedAt = Date()
     }
@@ -100,6 +111,14 @@ extension PicPlaceController {
         isChecking = true
         defer { isChecking = false }
         var outcome = CheckOutcome()
+        // A person's press retries every failed push now; the automatic
+        // checks wait for each one's backoff.
+        let now = Date()
+        func retryDue(_ record: PicPlaceSyncRecord?) -> Bool {
+            guard let record, record.lastError != nil else { return false }
+            if reason == "manual" { return true }
+            return (record.retryDueAt ?? .distantPast) <= now
+        }
         do {
             // The whole index, tombstones included, every time: the merge
             // table needs every row — a project only THIS device edited sits
@@ -169,16 +188,44 @@ extension PicPlaceController {
                         record.revision = row.revision
                         records[origin] = record
                     }
+                    let record = records[origin]
+                    let failedRecords = record?.lastError != nil && record?.failedPolicy != PicPlaceSyncPolicy.originals.rawValue
+                    if !model.sourcesMissing(capture), failedRecords, syncTasks[capture.id] == nil {
+                        // The manifest got through and the rest of the push
+                        // did not (the bundle, the poster, the confirms):
+                        // the same push again finishes it — a replay of the
+                        // manifest, uploads of what is still missing.
+                        if retryDue(record) {
+                            await syncAndWait(capture)
+                            if records[origin]?.lastError == nil { outcome.retried += 1; LLog("picplace: \(capture.displayTitle) — push retried, done") }
+                            else { outcome.failures.append("\(capture.displayTitle): \(records[origin]?.lastError ?? "push failed")") }
+                        } else {
+                            outcome.waiting += 1
+                        }
+                        continue
+                    }
                     // In step — but the poster? A project this device holds
                     // whole and has never pushed with one (a v1 push, the
                     // first connection's "in step") gets one push; a
-                    // preview-only project without one asks the server once
+                    // preview-only project takes the server's records again
+                    // whenever the server's asset count moved since it last
+                    // did (a push that finished after the pull, a poster
+                    // that arrived), else asks for a poster it lacks once
                     // per change there.
-                    if !model.sourcesMissing(capture), records[origin]?.posterToken == nil, syncTasks[capture.id] == nil {
+                    if !model.sourcesMissing(capture), record?.posterToken == nil, syncTasks[capture.id] == nil {
                         await syncAndWait(capture)
                         if records[origin]?.lastError == nil { outcome.pushed += 1; LLog("picplace: \(capture.displayTitle) — in step, poster sent") }
+                    } else if model.sourcesMissing(capture), record?.policy == "pull" || record?.serverConfirmedSeen != nil,
+                              record?.serverConfirmedSeen != row.assets.confirmed {
+                        do {
+                            try await pullUpdate(row, into: capture)
+                            outcome.updated += 1
+                            LLog("picplace: \(capture.displayTitle) — records fetched again (the server holds \(row.assets.confirmed) confirmed asset(s), this device had seen \(record?.serverConfirmedSeen.map(String.init) ?? "none"))")
+                        } catch {
+                            outcome.failures.append("\(row.name): \(Self.describe(error))")
+                        }
                     } else if model.sourcesMissing(capture), model.posterURL(for: capture) == nil,
-                              (records[origin]?.posterCheckedAt).map({ ($0 < (row.updatedAt ?? .distantFuture)) }) ?? true {
+                              (record?.posterCheckedAt).map({ ($0 < (row.updatedAt ?? .distantFuture)) }) ?? true {
                         do {
                             if try await fetchPoster(row, into: capture) { outcome.updated += 1 }
                         } catch {
@@ -191,8 +238,11 @@ extension PicPlaceController {
                 let serverMoved = base.map { row.revision != $0 } ?? true
                 switch (base != nil, localMoved, serverMoved) {
                 case (true, true, false):
+                    if records[origin]?.lastError != nil, !retryDue(records[origin]) { outcome.waiting += 1; continue }
+                    let wasFailed = records[origin]?.lastError != nil
                     await syncAndWait(capture)
-                    if records[origin]?.lastError == nil { outcome.pushed += 1 } else { outcome.failures.append("\(capture.displayTitle): \(records[origin]?.lastError ?? "push failed")") }
+                    if records[origin]?.lastError == nil { if wasFailed { outcome.retried += 1 } else { outcome.pushed += 1 } }
+                    else { outcome.failures.append("\(capture.displayTitle): \(records[origin]?.lastError ?? "push failed")") }
                 case (true, false, true):
                     do { try await pullUpdate(row, into: capture); outcome.updated += 1 }
                     catch { outcome.failures.append("\(row.name): \(Self.describe(error))") }
@@ -205,28 +255,36 @@ extension PicPlaceController {
             }
 
             // New here since the last check: up they go (records and a poster).
+            // A record whose every push failed is not a push: the project
+            // is still new to the server, and goes when its backoff allows.
             for (origin, localID) in localByOrigin where !seen.contains(origin) {
                 guard let capture = model.capture(id: localID) else { continue }
-                if records[origin] != nil {
-                    // Pushed before, gone from the server without a tombstone (purged): leave it be.
-                    continue
+                if let record = records[origin] {
+                    if record.recordsReachedServer || record.policy == "pull" {
+                        // Pushed (or pulled) before, gone from the server without a tombstone (purged): leave it be.
+                        continue
+                    }
+                    if !retryDue(record) { outcome.waiting += 1; continue }
                 }
+                let wasFailed = records[origin]?.lastError != nil
                 await syncAndWait(capture)
-                if records[origin]?.lastError == nil { outcome.pushed += 1 } else { outcome.failures.append("\(capture.displayTitle): \(records[origin]?.lastError ?? "push failed")") }
+                if records[origin]?.lastError == nil { if wasFailed { outcome.retried += 1 } else { outcome.pushed += 1 } }
+                else { outcome.failures.append("\(capture.displayTitle): \(records[origin]?.lastError ?? "push failed")") }
             }
 
             outcome.conflicts = conflicts.count
             self.conflicts = conflicts
-            autoError = nil
             syncMeta.serverTime = index.serverTime.map { ISO8601DateFormatter().string(from: $0) }
             syncMeta.checkedAt = Date()
             saveSyncState()
             lastCheck = outcome
-            LLog("picplace: check (\(reason)) — \(outcome.pulled) pulled, \(outcome.updated) updated, \(outcome.pushed) pushed, \(outcome.deletedThere) deleted there, \(conflicts.count) conflict(s)\(outcome.failures.isEmpty ? "" : ", failures: \(outcome.failures.joined(separator: "; "))")")
+            updateAutoError()
+            LLog("picplace: check (\(reason)) — \(outcome.pulled) pulled, \(outcome.updated) updated, \(outcome.pushed) pushed, \(outcome.retried) retried, \(outcome.waiting) waiting to retry, \(outcome.deletedThere) deleted there, \(outcome.deletedHere) removed here, \(conflicts.count) conflict(s)\(outcome.failures.isEmpty ? "" : ", failures (\(outcome.failures.count)): \(outcome.failures.prefix(5).joined(separator: "; "))\(outcome.failures.count > 5 ? "; …" : "")")")
             for conflict in conflicts {
                 LLog("picplace: conflict — \(conflict.name) (\(conflict.originID.uuidString.prefix(8))) \(conflict.kind): local \(conflict.localRevision.map(String.init) ?? "-") vs server \(conflict.serverRevision)\(conflict.serverDevice.map { " from \($0)" } ?? "")")
             }
-            refreshUsage()
+            // The index was read a moment ago: the usage line needs only /status.
+            refreshUsage(rows: index.projects)
             scheduleOriginalsQueue()
             #if DEBUG
             // `LL_PICPLACE_DOWNLOAD=<uuid>` / `LL_PICPLACE_UPLOAD=<uuid>` move a
@@ -271,8 +329,9 @@ extension PicPlaceController {
         let uuid = row.uuid.lowercased()
         let originID = model.originID(of: capture)
         let folder = model.projectFolderURL(for: capture)
-        let detail: PPProjectDetail = try await client.get("projects/\(uuid)")
+        // One read: the typed detail and the raw manifest come from the same body.
         let raw = try await client.getData("projects/\(uuid)")
+        let detail = try PicPlaceClient.decoder.decode(PPProjectDetail.self, from: raw)
         guard let object = try JSONSerialization.jsonObject(with: raw) as? [String: Any],
               var manifest = object["manifest"] as? [String: Any] else {
             throw PicPlaceSyncRun.Failed(caption: "PicPlace sent no manifest for \(row.name).")
@@ -302,12 +361,21 @@ extension PicPlaceController {
             try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
         }
         try model.applyPulledUpdate(originID: originID, capture: document.capture, blends: document.blends)
+        model.noteFilesChanged(for: capture.id)
         var record = records[originID] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: profile?.server ?? serverString, lastError: nil)
         record.syncedAt = Date()
         record.revision = row.revision
-        record.lastError = nil
+        record.clearFailure()
         record.alsoOn = row.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name)
         record.posterToken = nil
+        record.serverConfirmedSeen = assets.count
+        let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
+        record.serverHeavyFiles = heavy.count
+        record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }
+        if model.sourcesMissing(capture) {
+            record.heavyFiles = heavy.count
+            record.heavyBytes = record.serverHeavyBytes
+        }
         records[originID] = record
         let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": row.revision])
         LLog("picplace: updated \(row.name) (\(uuid.prefix(8))) from the server (revision \(row.revision))")
@@ -322,6 +390,7 @@ extension PicPlaceController {
         let detail: PPProjectDetail = try await client.get("projects/\(uuid)")
         var record = records[originID] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: profile?.server ?? serverString, lastError: nil, policy: "pull")
         record.posterCheckedAt = Date()
+        record.serverConfirmedSeen = (detail.assets ?? []).filter { $0.status == "confirmed" }.count
         records[originID] = record
         guard let poster = (detail.assets ?? []).first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName && $0.status == "confirmed" }) else { return false }
         let data = try await download(assetID: poster.id, projectUUID: uuid)

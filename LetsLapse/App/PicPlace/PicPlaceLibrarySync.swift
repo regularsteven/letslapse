@@ -54,12 +54,30 @@ extension PicPlaceController {
                     for await loaded in model.$isLibraryLoaded.values where loaded { break }
                 }
                 #if DEBUG
-                // `LL_PICPLACE_DELETE=<uuid>` deletes a project before the
-                // launch check, so the check's push-delete row is exercised.
-                if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_DELETE"], let id = UUID(uuidString: raw),
-                   let capture = model.capture(id: id) {
-                    do { try model.deleteCapture(capture); LLog("picplace hook: deleted \(capture.displayTitle) locally") }
-                    catch { LLog("picplace hook: delete failed: \(error)") }
+                // `LL_PICPLACE_DELETE=<uuid>[,<uuid>…]` deletes projects before
+                // the launch check, so the check's push-delete row is
+                // exercised; `all-local` deletes every project whose sources
+                // are on this device — never a preview pulled from the
+                // server, which is some other device's project — and only
+                // on a SCRATCH root: how a bench run's throwaways are tombstoned.
+                if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_DELETE"] {
+                    var targets: [AppModel.CaptureProject] = []
+                    if raw == "all-local" {
+                        #if os(macOS)
+                        if StorageRoot.rootCameFromArguments, let rows = try? model.libraryIndex?.projects({ var q = LibraryIndex.ProjectQuery(); q.limit = 100_000; return q }()).rows {
+                            targets = rows.compactMap { model.capture(id: $0.id) }.filter { !model.sourcesMissing($0) }
+                            LLog("picplace hook: deleting \(targets.count) local project(s) of \(rows.count) on this scratch root")
+                        } else {
+                            LLog("picplace hook: LL_PICPLACE_DELETE=all-local refused — not a scratch root")
+                        }
+                        #endif
+                    } else {
+                        targets = raw.split(separator: ",").compactMap { UUID(uuidString: String($0)) }.compactMap { model.capture(id: $0) }
+                    }
+                    for capture in targets {
+                        do { try model.deleteCapture(capture); LLog("picplace hook: deleted \(capture.displayTitle) locally") }
+                        catch { LLog("picplace hook: delete failed: \(error)") }
+                    }
                 }
                 #endif
                 checkForChanges(reason: "launch")
@@ -205,8 +223,9 @@ extension PicPlaceController {
             throw PicPlaceSyncRun.Failed(caption: "A folder for \(row.name) already exists here.")
         }
 
-        let detail: PPProjectDetail = try await client.get("projects/\(uuid)")
+        // One read: the typed detail and the raw manifest come from the same body.
         let raw = try await client.getData("projects/\(uuid)")
+        let detail = try PicPlaceClient.decoder.decode(PPProjectDetail.self, from: raw)
         guard let object = try JSONSerialization.jsonObject(with: raw) as? [String: Any],
               var manifest = object["manifest"] as? [String: Any] else {
             throw PicPlaceSyncRun.Failed(caption: "PicPlace sent no manifest for \(row.name).")
@@ -264,7 +283,9 @@ extension PicPlaceController {
                 syncedAt: Date(), revision: row.revision, files: files, bytes: bytes, uploaded: 0,
                 alsoOn: row.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name),
                 server: profile?.server ?? serverString, lastError: nil, policy: "pull",
-                heavyFiles: heavy.count, heavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) })
+                heavyFiles: heavy.count, heavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) },
+                serverHeavyFiles: heavy.count, serverHeavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) },
+                serverConfirmedSeen: assets.count)
             saveSyncState()
             let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": row.revision, "tier": "preview"])
             LLog("picplace: pulled \(capture.displayTitle) (\(uuid.prefix(8))) — \(files) object(s), \(bytes) bytes; \(heavy.count) heavy file(s) stay on PicPlace")

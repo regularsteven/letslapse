@@ -145,6 +145,15 @@ final class PicPlaceController: ObservableObject {
     @Published internal(set) var autoError: String?
     @Published internal(set) var isOnWiFi = true
     var pendingPushes: [UUID: Task<Void, Never>] = [:]
+    /// The pushes that are due, in order, and the one worker that sends
+    /// them one project at a time (a hundred imports are a hundred pushes;
+    /// sent together they were refused together).
+    var pushQueue: [UUID] = []
+    var pushQueueTask: Task<Void, Never>?
+    /// The queue's progress for the status line: how many this run of the
+    /// queue has sent, of how many it took on.
+    @Published internal(set) var pushQueueDone = 0
+    @Published internal(set) var pushQueueTotal = 0
     /// Pushes and a check that were due while the network rule held them.
     var heldPushes: Set<UUID> = []
     var heldCheck = false
@@ -152,6 +161,12 @@ final class PicPlaceController: ObservableObject {
     var autoTimer: Timer?
     var originalsQueueTask: Task<Void, Never>?
     var pathMonitorBox: AnyObject?
+    /// One usage refresh for a whole run of syncs, not two requests per project.
+    var usageRefreshTask: Task<Void, Never>?
+    /// Whether the last sync to fail did so because the server could not be
+    /// reached at all — the queue stops on that rather than fail through
+    /// its remaining projects one slow timeout at a time.
+    var lastSyncFailedOffline = false
     static let autoSyncKey = "letslapse.picplace.autoSync"
     static let autoOriginalsKey = "letslapse.picplace.autoOriginals"
     static let wifiOnlyKey = "letslapse.picplace.wifiOnly"
@@ -282,8 +297,14 @@ final class PicPlaceController: ObservableObject {
                 self.dryRun(target)
             }
         }
+        #endif
+        // Every build: the foreground and timer checks, the network monitor.
+        // These sat inside the DEBUG block above until 2026-09-15, so the
+        // Release app on the Mac never ran a timer or foreground check —
+        // only launch and hand-pressed ones — while the Debug Simulator did.
         armChangeChecks()
         armAutoSync()
+        #if DEBUG
         #if os(macOS)
         // `LL_PICPLACE_NEST=<host>:<username>` binds an unbound library to a
         // staged account and runs the Mac nest — the rename into
@@ -476,6 +497,8 @@ final class PicPlaceController: ObservableObject {
 
     private func noteLimits(_ status: PPStatus) {
         if let cap = status.limits?.manifestMaxBytes, cap > 0 { manifestMaxBytes = cap }
+        let perMinute = status.limits?.requestsPerMinute?.device
+        Task { await client.setRateLimit(requestsPerMinute: perMinute) }
         #if DEBUG
         // `LL_PICPLACE_MANIFEST_CAP=<bytes>` forces the overflow path.
         if let forced = ProcessInfo.processInfo.environment["LL_PICPLACE_MANIFEST_CAP"].flatMap(Int64.init) { manifestMaxBytes = forced }
@@ -498,26 +521,43 @@ final class PicPlaceController: ObservableObject {
     }
 
     /// The Settings card's "On PicPlace" line: how many of this account's
-    /// projects are on the server and the bytes they take.
-    func refreshUsage() {
+    /// projects are on the server and the bytes they take. `rows` spares
+    /// the index read when the caller has just read it (the check).
+    func refreshUsage(rows: [PPProject]? = nil) {
         guard isSignedIn else { return }
         Task {
             if let status: PPStatus = try? await client.get("status") {
                 noteLimits(status)
-                await refreshUsage(status: status)
+                await refreshUsage(status: status, rows: rows)
             }
         }
     }
 
-    private func refreshUsage(status: PPStatus) async {
+    /// A refresh once the syncs in flight have settled — two requests for a
+    /// run of pushes, not two per project.
+    func scheduleUsageRefresh() {
+        usageRefreshTask?.cancel()
+        usageRefreshTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }
+            guard let self else { return }
+            usageRefreshTask = nil
+            refreshUsage()
+        }
+    }
+
+    private func refreshUsage(status: PPStatus, rows given: [PPProject]? = nil) async {
         // The index, not just the count: which of the account's projects are
         // NOT in this library is the number that explains the total.
-        var rows: [PPProject] = []
-        do {
-            let index: PPProjectIndex = try await client.get("projects")
-            rows = index.projects
-        } catch {
-            LLog("picplace: could not read the account's index: \(error)")
+        // The check's index carries tombstones; a deleted project is not one
+        // this library is missing.
+        var rows: [PPProject] = (given ?? []).filter { !$0.isTombstone }
+        if given == nil {
+            do {
+                let index: PPProjectIndex = try await client.get("projects")
+                rows = index.projects
+            } catch {
+                LLog("picplace: could not read the account's index: \(error)")
+            }
         }
         let count = status.projects?.count ?? rows.count
         var missing: [PPProject] = []
@@ -779,8 +819,10 @@ final class PicPlaceController: ObservableObject {
                     record.serverHeavyFiles = previous.serverHeavyFiles
                     record.serverHeavyBytes = previous.serverHeavyBytes
                     record.originalsMovedAt = previous.originalsMovedAt
+                    record.serverConfirmedSeen = previous.serverConfirmedSeen
                     if policy == .minimal { record.posterToken = posterToken }
                 }
+                record.clearFailure()
                 if policy.sendsHeavy {
                     record.originalsMovedAt = Date()
                     record.serverHeavyFiles = record.files
@@ -807,17 +849,27 @@ final class PicPlaceController: ObservableObject {
                 saveSyncState()
                 return
             } catch {
-                LLog("picplace: sync of \(capture.id) failed: \(error)")
+                LLog("picplace: sync of \(capture.displayTitle) (\(key.uuidString.prefix(8)), \(policy.rawValue)) failed: \(error)")
+                lastSyncFailedOffline = error is PicPlaceOfflineError
                 var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: policy.rawValue)
-                record.lastError = (error as? PicPlaceAPIError)?.cardCaption
+                record.noteFailure((error as? PicPlaceAPIError)?.cardCaption
                     ?? (error as? LocalizedError)?.errorDescription
-                    ?? error.localizedDescription
+                    ?? error.localizedDescription, policy: policy)
                 records[key] = record
             }
             saveSyncState()
             progress[capture.id] = nil
             syncTasks[capture.id] = nil
-            refreshUsage()
+            scheduleUsageRefresh()
+        }
+    }
+
+    /// The failed pushes of projects this library still holds live.
+    var failedPushes: [(originID: UUID, localID: UUID, record: PicPlaceSyncRecord)] {
+        records.compactMap { origin, record in
+            guard record.lastError != nil, record.policy != "pull",
+                  let localID = (try? model.libraryIndex?.projectID(originID: origin)) ?? nil else { return nil }
+            return (origin, localID, record)
         }
     }
 
@@ -875,7 +927,7 @@ final class PicPlaceController: ObservableObject {
             do {
                 let got = try await run.run()
                 var record = records[key] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: revision(of: capture), files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: "pull")
-                record.lastError = nil
+                record.clearFailure()
                 record.originalsMovedAt = Date()
                 records[key] = record
                 summaries[capture.id] = nil
@@ -887,7 +939,7 @@ final class PicPlaceController: ObservableObject {
             } catch {
                 LLog("picplace: download of \(capture.displayTitle)'s originals failed: \(error)")
                 var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: "pull")
-                record.lastError = (error as? PicPlaceAPIError)?.cardCaption ?? (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                record.noteFailure((error as? PicPlaceAPIError)?.cardCaption ?? (error as? LocalizedError)?.errorDescription ?? error.localizedDescription, policy: .originals)
                 records[key] = record
                 model.noteOriginalsArrived(for: capture.id)
             }

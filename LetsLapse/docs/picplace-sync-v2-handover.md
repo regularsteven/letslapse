@@ -1,12 +1,14 @@
 # PicPlace sync v2 — handover
 
 **Date:** 2026-09-15 · **Branch:** `ios-app`, commits `52a078d` → `6178c06`
-(eleven, all on top of v1's `0b5d545`) · **State:** stages 1–5 of the plan
-and the first half of §4.7 (auto-sync) are built, verified and committed;
-Steven has lived with it across his Mac and the iPhone 16 Pro Simulator for
-a day against `picplace.test`. Nothing has touched `picplace.co` or a
-physical device yet. · **Working mode:** code-first by decision (plan D12);
-every screen's SVG mirror is owed.
+(eleven, all on top of v1's `0b5d545`), then the load-test fixes of
+2026-09-15 afternoon (§7) · **State:** stages 1–5 of the plan and the first
+half of §4.7 (auto-sync) are built, verified and committed; Steven has lived
+with it across his Mac and the iPhone 16 Pro Simulator for a day against
+`picplace.test`. The first load — 117 photos imported at once — broke it
+(§7) and the sync now paces itself and recovers. Nothing has touched
+`picplace.co` or a physical device yet. · **Working mode:** code-first by
+decision (plan D12); every screen's SVG mirror is owed.
 
 Read in this order: this file → [picplace-sync-v2-plan.md](picplace-sync-v2-plan.md)
 (the model and the twelve decisions, then §9–§14 for what each stage landed
@@ -25,6 +27,7 @@ hooks.
 | 4 | **The merge, continuously**: a check at launch / foreground / every 3 min / on demand over the whole index with tombstones; every §4.4 row; conflicts with a sheet (keep this device's / PicPlace's / both); tombstones both ways; `uuid_taken` re-mint | plan §12, `PicPlaceChangeSync`, `PicPlaceConflictsView` |
 | 5 | **Originals per project**: Upload (policy `originals`) and Download (pages of presigned URLs, resumable); presence tiers | plan §13, `PicPlaceDownloadRun` |
 | §4.7 (part) | **Auto-sync**: settled edits pushed after 20 s, the timer check, the originals queue behind switches; **only on Wi-Fi/Ethernet for everything automatic**, a person's press on any connection; unchanged copies of deleted projects trashed on their own; posters converge | plan §14, `PicPlaceAutoSync` |
+| §7 | **Pacing and recovery**: every request takes its turn under the server's per-device budget; `429`/`5xx`/dropped requests are retried in place; pushes go through one serial queue; a failed push is retried by the check with a backoff; a preview-only copy re-fetches records when the server's asset count moved | §7 below, `PicPlaceClient`, `PicPlaceAutoSync`, `PicPlaceChangeSync` |
 
 Also: the Simulator signs in (`App/LetsLapse-Simulator.entitlements`,
 `tools/sim-fresh.sh`), the two-device bench (`tools/picplace-bench/`), and
@@ -113,6 +116,24 @@ Client, found and fixed on the way:
   bench's `launch_wait.sh` waits for a new log file.
 - Cosmetic, open: the disabled *Download originals* draws in the accent
   colour; the Library row's date format is the locale's.
+- **The Release app never checked on its own.** `armChangeChecks()` and
+  `armAutoSync()` sat inside a `#if DEBUG` block at the end of
+  `PicPlaceController.init` — so the Release build on the Mac (Steven's
+  play-pen instance, the Xcode Run action) had no timer check, no
+  foreground check and no network monitor; only launch and hand-pressed
+  checks ran, and every "other devices' changes arrive every few minutes"
+  verification had been on Debug builds (the bench, the Simulator). Found
+  in the play-pen logs on 2026-09-15 (five sessions, zero timer checks),
+  reproduced with a Release build on a scratch root, fixed by moving the two
+  calls out of the block; a Release timer check verified 180 s after launch.
+  **Judge nothing about scheduling from a Debug build alone.**
+- **The first load broke it** (2026-09-15, 117 photos imported at once):
+  every project's debounce fired together, 117 pushes × 6 requests + two
+  usage reads each hit the server's 300/min inside a second, 96 failed with
+  `429`, and nothing retried them — the check read a failed record
+  (`revision: 0`, `lastError`) as "pushed before, purged on the server" and
+  left it. The originals queue then tried to upload originals of a project
+  whose records had never arrived. §7 has the fix and the numbers.
 
 Server side (the developer's, reported): first-negotiate `bytes: null`
 (fixed there too), `status.projects.count` includes tombstones, one
@@ -181,3 +202,97 @@ Server side (the developer's, reported): first-negotiate `bytes: null`
   of what a check decided (`Logs/console-*.log`, grep `picplace:`).
 - Server: `~/Sites/picplace`, `php artisan tinker` for the registry;
   Garage via `dev/garage/`.
+- **A scratch run on this Mac is not a second device to the server.** The
+  bench's `-letslapse.deviceID` gives the run its own device ROW, but the
+  server resolves the device of a request from the token
+  (`LetsLapseDevice::where('access_token_id', …)->first()`), and a scratch
+  root bound to the account signs in with the play-pen's token — so its
+  claims, presence, `updated_by` and its share of the **per-device rate
+  budget** are the play-pen's. Only a second sign-in (the Simulator) is a
+  second device. The bench's two-device rows still hold: they were driven
+  by revisions and records, which are per library.
+
+## 7. The load test and the fixes (2026-09-15 afternoon)
+
+**What was wrong**, in the order it failed: (1) `PicPlaceAutoSync` armed
+one debounce task per project and every one of them called `sync()` when
+it fired — 117 pushes in parallel; (2) `PicPlaceClient` knew nothing of the
+server's limit — no pacing, no `Retry-After`, a `429` failed the push;
+(3) `sync()` called `refreshUsage()` after every push — `/status` +
+`/projects`, two more requests per project; (4) the check's "new here"
+loop skipped any project with a record, a failed one included, so the 96
+never went again; (5) `runOriginalsQueue` walked projects whose records
+had never reached the server; (6) `PicPlaceSyncRun` released the claim
+with a throwing `delete` after everything else had succeeded, so a refused
+release failed a finished push (45 claims were left held); (7) the second
+device pulled the half-pushed projects as empty shells and, being "in
+step" by revision, never fetched their bundles once the push completed.
+
+**What changed:**
+
+- `PicPlaceClient` (`PicPlaceAPI.swift`): a **request gate** — a sliding
+  minute's window kept at 85 % of `limits.requests_per_minute.device`
+  (120 assumed until `/status` reports it; `setRateLimit` from
+  `noteLimits`); a `429` pauses every caller for `Retry-After` (+ jitter,
+  ≤ 120 s) and the request goes again; `X-RateLimit-Remaining ≤ 3` pauses
+  5 s (another instance on the account may be using the window); `500`,
+  `502–504` and dropped connections retry after 2/4/6 s; four attempts per
+  request. Every endpoint is safe to repeat by contract (PUT at the same
+  revision is a replay; negotiate/confirm/presence/claim are idempotent).
+- **One push queue** (`PicPlaceAutoSync`): the debounce enqueues; one
+  worker sends one project at a time, yields to a running check or first
+  connection (they push the same projects), stops on an offline failure
+  and leaves the rest to the check. Status: *Syncing 43 of 117 · name…*.
+- `refreshUsage()` is **coalesced** (`scheduleUsageRefresh`, 3 s after the
+  last sync) and the check reuses the index it just read.
+- `PicPlaceSyncRecord` gained `failedAt` / `failures` / `failedPolicy`
+  (`noteFailure`, `clearFailure`), `retryDueAt` (3 min doubling to 1 h),
+  `recordsReachedServer`, and `serverConfirmedSeen`.
+- **The check retries failed pushes** when due — in the "new here" loop
+  (a record that only ever failed is not "pushed before"), the in-step row
+  (the manifest got through, the rest did not: the same push again is a
+  replay plus the missing uploads) and the "only this device moved" row.
+  A manual *Check PicPlace now* ignores the wait. The summary line and the
+  Settings row say *N retried · N waiting to retry*; the failed card says
+  when the next try is; *Auto-sync problem* says how many stand failed.
+- **The originals queue** skips projects whose records are not up and
+  projects whose last failure is not due.
+- **The claim release is best effort**; a finished push is finished.
+- **A preview-only copy re-fetches the records** (`pullUpdate`) whenever
+  the index row's `assets.confirmed` differs from `serverConfirmedSeen` —
+  the second device's empty shells fill in once the pusher's retry lands.
+  `pull`/`pullUpdate` read the detail once (typed and raw from one body)
+  instead of twice.
+- Hooks: `LL_PICPLACE_RATE=<n>`, `LL_PICPLACE_OUTAGE=<start>:<seconds>`,
+  `LL_PICPLACE_DELETE=all-local` (CLAUDE.md).
+- **The timer, foreground and network arming moved out of `#if DEBUG`**
+  (§4) — the Release app checks every 3 minutes now.
+
+**Verified on a scratch root bound to the account (`tools/picplace-bench`
+style, Debug build), the play-pen and the Simulator running beside it:**
+
+- **The storm, with the client's pacing switched off** (`LL_PICPLACE_RATE=2000`
+  against the server's real 300/min): the 117-photo import → 117 records
+  pushed (66 by the queue, 51 by a timer check the queue yielded to) and
+  117 originals uploaded by the queue, **0 failed**, through 7 genuine
+  `429`s (paused 16–31 s each) and one `500` (the limiter's cache-table
+  deadlock, retried). ~5 minutes end to end.
+- **Pacing on** (the default): a 20-photo import, 0 `429`s.
+- **A 60 s outage** (`LL_PICPLACE_OUTAGE`) mid-queue: see the run-3 lines
+  in the session log — the first push fails after its retries, the queue
+  stops and leaves the rest to the check, the check during the outage fails
+  and is retried by the timer, the check after it pushes the rest and
+  reports the failed one as *waiting to retry* until its 3 minutes pass,
+  then *retried*.
+- The play-pen's own recovery is Steven's relaunch with this build: its 96
+  failed records have no `failedAt`, so they are due at once; the 30
+  half-pushed ones are in step by revision and replay; the 66 the server
+  never saw go as new; the stale claims are this device's and re-claim.
+  The Simulator's 68 shells fill in on its next check after that.
+
+**Numbers for `picplace.co`:** a minimal push is 6 requests, an originals
+upload 6 more (plus the presigned PUTs, which do not count), a pull 4, a
+check 1 + one `/status`. At 300/min per device the client's 255/min budget
+moves ~40 pushes a minute: the 117-photo import is ~3 minutes of API
+traffic, the volume library's 365-project first connection ~9. The timer
+check every 3 minutes costs 2 requests + the index body (~600 B a project).

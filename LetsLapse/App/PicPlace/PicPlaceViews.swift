@@ -273,7 +273,11 @@ struct PicPlaceStatusCard: View {
                 + Self.objectsLine(files: record.files, bytes: record.bytes, heavyFiles: record.heavyFiles ?? 0, heavyBytes: record.heavyBytes ?? 0)
                 + (record.uploaded == 0 ? " · nothing needed uploading" : " · \(record.uploaded) uploaded")
         case .failed(let record):
-            return record.lastError ?? "Something went wrong"
+            var line = record.lastError ?? "Something went wrong"
+            if picplace.autoSyncEnabled, let due = record.retryDueAt {
+                line += due <= Date() ? " · tries again at the next check" : " · tries again at \(due.formatted(date: .omitted, time: .shortened))"
+            }
+            return line
         }
     }
 
@@ -614,6 +618,8 @@ struct PicPlaceSettingsCard: View {
         if check.pulled > 0 { parts.append("\(check.pulled) brought here") }
         if check.updated > 0 { parts.append("\(check.updated) updated from PicPlace") }
         if check.pushed > 0 { parts.append("\(check.pushed) sent") }
+        if check.retried > 0 { parts.append("\(check.retried) sent on a retry") }
+        if check.waiting > 0 { parts.append("\(check.waiting) waiting to retry") }
         if check.deletedThere > 0 { parts.append("\(check.deletedThere) deleted on PicPlace") }
         if check.deletedHere > 0 { parts.append("\(check.deletedHere) removed here (deleted elsewhere; in the trash)") }
         if check.conflicts > 0 { parts.append("\(check.conflicts) to decide") }

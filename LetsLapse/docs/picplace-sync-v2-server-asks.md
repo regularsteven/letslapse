@@ -106,6 +106,41 @@ PicPlace hosts, bytes never pass through PicPlace.
     matching half.
 18. Multipart uploads — when needed (12).
 
+## Asks added 2026-09-15 — from the first load test (117 photos imported at once)
+
+The client now paces itself under `limits.requests_per_minute.device` (a
+sliding minute kept at 85 % of it), waits out every `429`'s `Retry-After`
+and retries, and retries `5xx`/dropped requests a few times. With that,
+117 pushes and 117 originals uploads went through against the real
+limiter with zero failures. Three things on your side would make the
+budget go further:
+
+19. **The limiter's cache store.** `CACHE_STORE=database` on `.test` deadlocks
+    under concurrent requests from one device (`SQLSTATE[40001] … insert
+    ignore into cache`, seen again 2026-09-15 09:08 UTC on a manifest PUT —
+    the client retried and carried on). If `.co` uses the database store
+    too, the limiter itself is the 500. Redis/APCu/file for the throttle
+    cache, or the limiter on a store that upserts.
+20. **`X-RateLimit-Reset` on every response**, not only on a `429`. The
+    window is fixed, not sliding, and the client cannot see when it started;
+    with the reset time it can pace exactly instead of assuming a sliding
+    minute (which is stricter than your window, so the budget is
+    under-used). Cheap: Laravel already computes it on the `429`.
+21. **A bulk manifest endpoint** (`PUT /projects` with N manifests, or a
+    negotiate that accepts assets for N projects) would turn an import of
+    N projects from ~6 N requests into ~2 N. At 300/min an import of 117
+    photos is ~3 minutes of API traffic today; a 365-project first
+    connection is ~7. Not urgent — the client copes — but it is the
+    lever for big libraries.
+
+A note for the math, learnt on the bench: the per-device budget is **per
+token lineage**, and a device row is resolved from the token
+(`LetsLapseDevice::where('access_token_id', …)->first()`). Two app
+instances signed in with one token — the play-pen and a scratch run on
+this Mac — are one device to the limiter and to claims/presence/`updated_by`
+(the first row registered with that token wins). Only a second sign-in is
+a second device.
+
 ## Facts we will rely on unless you say otherwise
 
 - One `device_key` under two accounts = two rows, two token lineages; no
