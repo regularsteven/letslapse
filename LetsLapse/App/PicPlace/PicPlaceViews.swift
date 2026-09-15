@@ -567,6 +567,11 @@ struct PicPlaceSettingsCard: View {
                     if picplace.autoStatus != nil { ProgressView().controlSize(.small) }
                 }
             }
+            if let error = picplace.autoError {
+                LLRow(title: "Auto-sync problem", subtitle: error, titleColor: LL.levelOff) {
+                    EmptyView()
+                }
+            }
         }
     }
 

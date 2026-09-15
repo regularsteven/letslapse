@@ -217,6 +217,7 @@ extension PicPlaceController {
 
             outcome.conflicts = conflicts.count
             self.conflicts = conflicts
+            autoError = nil
             syncMeta.serverTime = index.serverTime.map { ISO8601DateFormatter().string(from: $0) }
             syncMeta.checkedAt = Date()
             saveSyncState()

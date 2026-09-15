@@ -138,7 +138,11 @@ final class PicPlaceController: ObservableObject {
     @Published var wifiOnly: Bool = UserDefaults.standard.object(forKey: PicPlaceController.wifiOnlyKey) as? Bool ?? true {
         didSet { UserDefaults.standard.set(wifiOnly, forKey: Self.wifiOnlyKey); autoSyncSettingChanged() }
     }
+    /// What auto-sync is doing right now (a spinner beside it), and the
+    /// last thing that went wrong (no spinner; cleared by the next success
+    /// or check).
     @Published internal(set) var autoStatus: String?
+    @Published internal(set) var autoError: String?
     @Published internal(set) var isOnWiFi = true
     var pendingPushes: [UUID: Task<Void, Never>] = [:]
     /// Pushes and a check that were due while the network rule held them.

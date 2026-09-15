@@ -176,6 +176,9 @@ extension PicPlaceController {
         guard autoAllowed else { heldPushes.insert(id); return }
         guard model.stage != .processing, syncTasks[id] == nil, checkTask == nil, initialSyncTask == nil,
               let capture = model.capture(id: id) else { return }
+        // A delete is written through the same funnel (the tombstone), and
+        // its folder is in the trash: the check pushes deletes, not this.
+        guard capture.deletedAt == nil else { return }
         let origin = model.originID(of: capture)
         if conflicts.contains(where: { $0.originID == origin }) { return }
         let base = records[origin]?.revision
@@ -183,10 +186,11 @@ extension PicPlaceController {
         // A project pushed by the check moments ago with the same stamp is in step.
         autoStatus = "Syncing \(capture.displayTitle)…"
         await syncAndWait(capture)
+        autoStatus = nil
         if let error = records[origin]?.lastError {
-            autoStatus = "\(capture.displayTitle): \(error)"
+            autoError = "\(capture.displayTitle): \(error)"
         } else {
-            autoStatus = nil
+            autoError = nil
             scheduleOriginalsQueue()
         }
     }
@@ -230,9 +234,10 @@ extension PicPlaceController {
             autoStatus = "Uploading originals · \(capture.displayTitle) · \(summary.heavyFiles.formatted()) files · \(LLFormat.bytes(summary.heavyBytes))"
             await syncAndWait(capture, policy: .originals)
             if let error = records[origin]?.lastError {
-                autoStatus = "\(capture.displayTitle): \(error)"
+                autoError = "\(capture.displayTitle): \(error)"
                 break
             }
+            autoError = nil
         }
         if autoStatus?.hasPrefix("Uploading originals") == true { autoStatus = nil }
     }
