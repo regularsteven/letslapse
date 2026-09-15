@@ -352,7 +352,13 @@ without saying so.
 Tools, all compiled on demand into `~/Library/Developer/LetsLapseRun/tools/`:
 `ax.swift <pid> <windowTitlePart> <AXRole> <text>` prints an element's frame;
 `ax focus|setvalue|type|move|activate|frontpid` do what they say (`type` goes
-through the selected-text setter; neither it nor `setvalue` trips the trap).
+through the selected-text setter; neither it nor `setvalue` trips the trap);
+`ax press <pid> <windowTitlePart> AXButton <label>` performs the element's
+AXPress — a button pushed with no pointer event anywhere, so it is safe beside
+Steven's own instance (2026-09-15); `*` for the title searches every window of
+the pid, which is how a button inside a SwiftUI sheet (its own untitled window
+on macOS) is reached. Match on the button's accessibility label, e.g.
+`ax press <pid> '*' AXButton 'All PicPlace settings'`.
 `hid.swift click|dblclick|drag|type|key` posts real HID events when the grant
 allows it. Never address the driver's instance through System Events'
 `process whose unix id is` — with Steven's copy running it resolves to his.

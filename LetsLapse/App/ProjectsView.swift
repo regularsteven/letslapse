@@ -82,9 +82,7 @@ struct ProjectsView: View {
     /// the whole session, since a `@StateObject` on a tab survives switching
     /// away from it. That is deliberate: an in-flight transfer must not die
     /// because somebody looked at Settings.
-    @StateObject private var transferServer = ProjectTransferServer()
     @AppStorage(ProjectTransferServer.enabledKey) private var sharingEnabled = false
-    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -149,6 +147,13 @@ struct ProjectsView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            #if os(iOS)
+            // A deliberate pull on the list is "Check PicPlace now": what the
+            // check brings here, updates or trashes reaches the list through
+            // the index, and the Gallery the same way. On the List itself,
+            // not the stack — a pushed detail's scroll view must not inherit it.
+            .refreshable { await model.picplace.checkNow() }
+            #endif
             .background(LL.screenBackground)
             .alert(
                 "Couldn't delete",
@@ -203,40 +208,11 @@ struct ProjectsView: View {
             ListDebugHooks.dump(screen: "projects", sort: sortKey.rawValue, ascending: sortAscending, filter: filter, query: query, ids: ids)
         }
         #endif
-        .onAppear {
-            transferServer.attach(model: model)
-            if sharingEnabled { transferServer.start() }
-        }
-        // Turning the setting off has to take the live listener with it —
-        // otherwise the device goes on advertising until the app is relaunched,
-        // which is precisely the "a code left advertising on a phone in a bag"
-        // failure this feature has to design out.
-        .onChange(of: sharingEnabled) { enabled in
-            if enabled {
-                transferServer.attach(model: model)
-                transferServer.start()
-            } else {
-                transferServer.stop()
-            }
-        }
-        // iOS suspends network activity in the background anyway; standing the
-        // listener down makes that honest rather than silent. A cable does not
-        // buy background time either, so this holds over USB too.
-        //
-        // macOS has no equivalent — switching apps never backgrounds a Mac
-        // scene — so there the stand-down is `ProjectTransferServer.idleTimeout`
-        // instead: 15 minutes with nobody connected and the listener stops
-        // itself, because a Mac left advertising its whole library while
-        // nobody is sitting at it is exactly the failure to design out.
+        // The nearby-device server is the model's (the Gallery header shows
+        // the same pill); this list arms it and stands it down like the
+        // Gallery does, through one modifier.
+        .armsProjectSharing(model.transferServer, isEnabled: sharingEnabled)
         #if os(iOS)
-        .onChange(of: scenePhase) { phase in
-            guard sharingEnabled else { return }
-            if phase == .background {
-                transferServer.stop()
-            } else if phase == .active, !transferServer.isRunning {
-                transferServer.start()
-            }
-        }
         // No transfer dim, by decision (2026-08-29): direct peer-to-peer
         // moved a 10 GB pull in ~9 minutes at thermal "fair" — too short for
         // panel heat to matter. The keep-awake in `ProjectTransferServer`
@@ -266,7 +242,7 @@ struct ProjectsView: View {
                 Text("Projects")
                     .font(.system(size: 34, weight: .bold))
                 Spacer(minLength: 8)
-                ProjectSharingChip(server: transferServer, isEnabled: $sharingEnabled)
+                ProjectSharingChip(server: model.transferServer, picplace: model.picplace, isEnabled: $sharingEnabled)
                     .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 6 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

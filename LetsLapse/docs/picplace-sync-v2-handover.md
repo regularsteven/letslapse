@@ -268,6 +268,35 @@ step" by revision, never fetched their bundles once the push completed.
 - **The timer, foreground and network arming moved out of `#if DEBUG`**
   (§4) — the Release app checks every 3 minutes now.
 
+**The sync panel (2026-09-15, later the same day — Steven's brief, code
+first, mirrors drawn in the same unit):** the Projects header's sharing
+pill is now the **sync pill**, present in the Gallery header too (Mac: right
+of Timeline; iPad and iPhone landscape: right of Timeline in a
+`ViewThatFits` row that drops the zoom slider and shows Timeline as a glyph
+where the full row does not fit; iPhone portrait: in the Timeline glyph's
+seat, the Timeline switch moved into the ▤ Library sheet). It opens
+**Project Syncing** (`ProjectSyncSheet` in `App/ProjectSharingChip.swift`):
+signed out, one *Sign in with PicPlace* button and no server row; signed
+in but the library not this account's, *Connect this library* or whose it
+is; connected, the account line, one status line, *Check PicPlace now*
+with `checkSummary` under it, and *All PicPlace settings ›* → `AppModel.
+requestedSettingsAnchor = .picplace` (the shell selects Settings, the list
+scrolls to the card) — then the nearby-devices block as before. The
+nearby-device server moved to `AppModel.transferServer` (both headers, one
+state; `.armsProjectSharing` on both lists). On touch devices a deliberate
+pull on the Projects list or either Gallery grid awaits `PicPlaceController.
+checkNow()` (`.refreshable` on the scroll views themselves — not the
+stack, not the month rail, not the editor cover). Verified: Mac (panel,
+the link landing on the card, through the AX `press` action), the iPhone
+16 Pro simulator signed out (header, sheet, Library sheet, the pull's log
+line on both grids — a quick flick does not count, a slow pull does), an
+iPad Pro 11 simulator for the tight row. Not driven: a pull on a signed-in
+iOS device (the Simulator was signed out at 13:51 by hand); the connected
+state's rows are the Mac's. Mirrors: `iOS/projects.sharing.portrait.svg`
+(redrawn at the large detent), `iOS/gallery.portrait.svg`,
+`iOS/gallery.library-sheet.portrait.svg`, `macOS/gallery.svg`,
+`macOS/gallery.timeline.svg`.
+
 **Verified on a scratch root bound to the account (`tools/picplace-bench`
 style, Debug build), the play-pen and the Simulator running beside it:**
 

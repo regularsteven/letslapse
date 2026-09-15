@@ -918,6 +918,12 @@ final class AppModel: ObservableObject {
     /// projects this device pushed, and the pushes in flight. Main-actor
     /// state the cards observe directly; nothing else in the model reads it.
     @MainActor lazy var picplace = PicPlaceController(model: self)
+    /// The library's nearby-device server (`Shared/ProjectTransferServer`),
+    /// one per app: the sync pill in the Projects header and the one in the
+    /// Gallery header open the same panel over the same listener, so the
+    /// server cannot belong to either tab's view (it was `ProjectsView`'s
+    /// `@StateObject` until 2026-09-15). Armed by `.armsProjectSharing`.
+    @MainActor lazy var transferServer = ProjectTransferServer(model: self)
     /// Bumped on the main actor whenever the index changed — after a
     /// persist's rows landed, after the launch pass, after the asset store
     /// re-indexed a project — so a list re-asks its question (M2).
@@ -1262,6 +1268,10 @@ final class AppModel: ObservableObject {
     /// A batch import asking the Projects list to show the kind it just made,
     /// popped to the list. `ProjectsView` consumes and clears it.
     @Published var requestedProjectsFilter: CaptureFilter?
+    /// A card of the Settings list asked for from elsewhere (the sync
+    /// panel's "All PicPlace settings"): the shell selects the tab, the
+    /// Settings list scrolls to the anchor and clears it.
+    @Published var requestedSettingsAnchor: SettingsAnchor?
     /// The Watch asking for the camera back. Handled by `ContentView`, which
     /// presents the capture screen OVER whatever is showing — a setup flow
     /// underneath is left completely alone, which is what lets the remote

@@ -409,6 +409,12 @@ struct ContentView: View {
             model.requestedTab = nil
             selectedTab = requested
         }
+        // A card of the Settings list asked for from the sync panel: the
+        // list itself scrolls there (and clears the request) once it is up.
+        .onChange(of: model.requestedSettingsAnchor) { requested in
+            guard requested != nil else { return }
+            selectedTab = .settings
+        }
         // A deep link into a specific Settings page, from a screen that can
         // explain what is missing but not fix it (project detail's
         // "Download a model in Settings" caption).

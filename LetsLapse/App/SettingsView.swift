@@ -97,6 +97,21 @@ struct SettingsView: View {
             : "\(variant.axes.summary) — a field test, not the shipping renderer"
     }
 
+    private func scrollToRequestedAnchor(_ scroller: ScrollViewProxy) {
+        guard let anchor = model.requestedSettingsAnchor else { return }
+        // Twice: the tab has just been selected and the list may not have
+        // laid out at the first attempt (the `LL_SCROLL` hook needs 0.5 s
+        // on the Mac); the second is a no-op when the first landed.
+        for delay in [0.5, 1.1] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                withAnimation(.easeInOut(duration: 0.3)) { scroller.scrollTo(anchor, anchor: .top) }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            if model.requestedSettingsAnchor == anchor { model.requestedSettingsAnchor = nil }
+        }
+    }
+
     var body: some View {
         ScrollViewReader { scroller in
         ScrollView {
@@ -168,6 +183,11 @@ struct SettingsView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { scroller.scrollTo(anchor, anchor: .top) }
         }
         #endif
+        // A card asked for from another screen (the sync panel's "All
+        // PicPlace settings"): the request may predate this list, so both
+        // the appearance and a later change answer it.
+        .onAppear { scrollToRequestedAnchor(scroller) }
+        .onChange(of: model.requestedSettingsAnchor) { _ in scrollToRequestedAnchor(scroller) }
         }
         .background(LL.screenBackground)
         .navigationDestination(for: SettingsDestination.self) { destination in

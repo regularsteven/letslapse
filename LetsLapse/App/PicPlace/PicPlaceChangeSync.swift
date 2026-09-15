@@ -105,6 +105,37 @@ extension PicPlaceController {
         }
     }
 
+    /// A person's check the caller can wait on — the pull-to-refresh of the
+    /// Projects and Gallery lists. Joins a check already running rather
+    /// than queue another; nothing to wait on when the library is not
+    /// connected or its first connection has not finished.
+    func checkNow() async {
+        guard canSync, binding?.initialSync.state == .done else {
+            LLog("picplace: check (pull) — nothing to check: \(isSignedIn ? (binding == nil ? "library not connected" : "first connection pending") : "signed out")")
+            return
+        }
+        if checkTask == nil { checkForChanges(reason: "manual") }
+        await checkTask?.value
+    }
+
+    /// The last check in a line — the Settings card's and the sync panel's
+    /// subtitle under *Check PicPlace now*.
+    var checkSummary: String {
+        guard let check = lastCheck else { return "Runs at launch, when the app comes to the front, and every few minutes" }
+        var parts: [String] = []
+        if check.pulled > 0 { parts.append("\(check.pulled) brought here") }
+        if check.updated > 0 { parts.append("\(check.updated) updated from PicPlace") }
+        if check.pushed > 0 { parts.append("\(check.pushed) sent") }
+        if check.retried > 0 { parts.append("\(check.retried) sent on a retry") }
+        if check.waiting > 0 { parts.append("\(check.waiting) waiting to retry") }
+        if check.deletedThere > 0 { parts.append("\(check.deletedThere) deleted on PicPlace") }
+        if check.deletedHere > 0 { parts.append("\(check.deletedHere) removed here (deleted elsewhere; in the trash)") }
+        if check.conflicts > 0 { parts.append("\(check.conflicts) to decide") }
+        if !check.failures.isEmpty { parts.append(check.failures.joined(separator: "; ")) }
+        let when = check.checkedAt.formatted(.relative(presentation: .named))
+        return parts.isEmpty ? "Checked \(when) · nothing changed" : "Checked \(when) · " + parts.joined(separator: " · ")
+    }
+
     // MARK: The check
 
     private func runCheck(reason: String) async {

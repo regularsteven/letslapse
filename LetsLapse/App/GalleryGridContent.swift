@@ -30,6 +30,11 @@ struct GalleryGridContent: View {
     /// editor (the Gallery's item view on the Mac); nil opens the editor the
     /// way the menu always did — a window on the Mac, a cover on iOS.
     var onEdit: ((UUID) -> Void)? = nil
+    /// A deliberate pull on either grid (touch only; nil draws no control):
+    /// the Gallery hands it "Check PicPlace now". Set on the scroll views
+    /// themselves, never on this view — the month rail and the editor cover
+    /// must not inherit a refresh they have no meaning for.
+    var onRefresh: (() async -> Void)? = nil
 
     // Shared zoom-level key — pinch on either grid keeps them in sync.
     @AppStorage("gallery.columnCount") private var storedColumnCount = 3
@@ -49,6 +54,7 @@ struct GalleryGridContent: View {
                     scrollTarget: $scrollTarget,
                     onTap: { capture, order in tap(capture, order: order) },
                     onOpen: onOpen,
+                    onRefresh: onRefresh,
                     menu: { capture in tileContextMenu(for: capture) }
                 )
             } else {
@@ -103,6 +109,7 @@ struct GalleryGridContent: View {
                 withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(id) }
                 scrollTarget = nil
             }
+            .pullsToRefresh(onRefresh)
         }
         .scrollContentBackground(.hidden)
         .gesture(
@@ -269,6 +276,7 @@ private struct TimelineGalleryGrid<Menu: View>: View {
     /// The tap, with the timeline's own order for a ⇧-click run.
     var onTap: (AppModel.CaptureProject, [UUID]) -> Void
     var onOpen: (UUID) -> Void
+    var onRefresh: (() async -> Void)?
     @ViewBuilder var menu: (AppModel.CaptureProject) -> Menu
 
     @State private var scrollProxy: ScrollViewProxy?
@@ -337,6 +345,7 @@ private struct TimelineGalleryGrid<Menu: View>: View {
                 }
                 Color.clear.frame(height: 82)
             }
+            .pullsToRefresh(onRefresh)
             .scrollContentBackground(.hidden)
             // The gaps and the margins select none, as on the standard grid.
             .contentShape(Rectangle())
@@ -453,4 +462,17 @@ private struct OrderedSet<T: Hashable>: Sequence {
     }
 
     func makeIterator() -> IndexingIterator<[T]> { order.makeIterator() }
+}
+
+private extension View {
+    /// `.refreshable` only when there is an action — a `nil` leaves the
+    /// scroll view exactly as it was, no control and no gesture.
+    @ViewBuilder
+    func pullsToRefresh(_ action: (() async -> Void)?) -> some View {
+        if let action {
+            refreshable { await action() }
+        } else {
+            self
+        }
+    }
 }

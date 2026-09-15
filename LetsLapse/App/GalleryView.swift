@@ -33,6 +33,9 @@ struct GalleryView: View {
     @AppStorage("gallery.sortAscending") private var sortAscending = false
     @AppStorage("gallery.columnCount")   private var columnCount   = 3
     @AppStorage("gallery.timelineMode")  private var timelineMode  = false
+    /// The nearby-devices switch, bound through the sync pill in the header
+    /// (Settings ▸ Advanced writes the same key).
+    @AppStorage(ProjectTransferServer.enabledKey) private var sharingEnabled = false
 
     // MARK: Ephemeral state
     @State private var query       = SceneQuery.empty
@@ -163,6 +166,9 @@ struct GalleryView: View {
             .onReceive(model.$requestedProjectDetailID) { consumeDetailRequest($0) }
             // The Shapes rows read each project's `shapes.json`; re-check on every visit.
             .onAppear   { model.refreshShapeSummaries() }
+            // The sync pill in this header opens the same panel as the
+            // Projects one: this tab arms the nearby-device server too.
+            .armsProjectSharing(model.transferServer, isEnabled: sharingEnabled)
             .onAppear   { consumeSelectHook() }
             .onAppear   { consumeItemHook() }
             #if DEBUG
@@ -199,7 +205,10 @@ struct GalleryView: View {
                     filter: $filter,
                     tagSelection: $query.tags,
                     shapeSelection: $shapeSelection,
-                    presentTags: presentTags
+                    presentTags: presentTags,
+                    // The phone's only Timeline switch since the header glyph
+                    // was retired (2026-09-15); the wide layouts keep the button.
+                    timelineMode: $timelineMode
                 )
                 .navigationTitle("Library")
                 .toolbar {
@@ -260,7 +269,8 @@ struct GalleryView: View {
                     timelineMode: timelineMode,
                     selection:    $selection,
                     scrollTarget: $scrollTarget,
-                    onOpen: { path.append($0) }
+                    onOpen: { path.append($0) },
+                    onRefresh: refreshAction
                 )
             }
             // On compact devices a plain tap opens the preview sheet; in
@@ -375,7 +385,8 @@ struct GalleryView: View {
                 selection:    $selection,
                 scrollTarget: $scrollTarget,
                 onOpen: { open($0) },
-                onEdit: gridEditHandler
+                onEdit: gridEditHandler,
+                onRefresh: refreshAction
             )
         }
     }
@@ -567,10 +578,13 @@ struct GalleryView: View {
 
     /// iPhone portrait: the tab's large title, with the three controls that
     /// earn a seat on a 361pt row opposite it — library (the sheet that holds
-    /// the kind and tag filters), sort, and the Timeline toggle as a glyph.
+    /// the kind and tag filters, and since 2026-09-15 the Timeline switch),
+    /// sort, and the sync pill (Steven, 2026-09-15: the Timeline glyph is
+    /// retired from this row; the pill takes its seat, and the Library sheet
+    /// carries the switch so the remembered mode is never out of reach).
     ///
     /// No search field here by decision (Steven, 2026-09-08): the row is for
-    /// filter · order · mode, and search on a phone was costing the whole
+    /// filter · order · sync, and search on a phone was costing the whole
     /// header. No zoom slider either — the grid already takes a pinch over
     /// the same 2–6 columns, through the same `gallery.columnCount` key.
     /// Rhythm matches the Projects tab: 34pt title 15pt down and 20pt in,
@@ -583,7 +597,7 @@ struct GalleryView: View {
             HStack(spacing: 8) {
                 libraryButton
                 sortControl
-                timelineGlyphToggle
+                syncChip
             }
             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 6 }
         }
@@ -597,7 +611,23 @@ struct GalleryView: View {
     /// field yields down to 120pt before anything else gives, which is what
     /// keeps a small iPhone's landscape row (an SE has 635pt to work in) from
     /// overflowing the way portrait did.
+    ///
+    /// Two rows since the sync pill joined (2026-09-15): the full one — search
+    /// at its ideal width, sort, the zoom slider, *Timeline* with its label,
+    /// the pill — where it fits, else a tighter one with no zoom slider (the
+    /// grid takes a pinch over the same columns) and Timeline as its glyph.
+    /// An iPad held upright with the sidebar open (a 534pt column) and an
+    /// SE in landscape take the second; everything wider takes the first.
     private var fullHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            fullHeaderRow(tight: false)
+            fullHeaderRow(tight: true)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private func fullHeaderRow(tight: Bool) -> some View {
         HStack(spacing: 10) {
             libraryButton
 
@@ -610,42 +640,89 @@ struct GalleryView: View {
 
             // Search
             SceneSearchField(text: $query.text, placeholder: "Search titles, tags, in frame")
-                .frame(minWidth: 120, idealWidth: 190, maxWidth: 190)
+                .frame(minWidth: 120, idealWidth: tight ? 120 : 190, maxWidth: 190)
 
             // Sort menu
             sortControl
 
             // Zoom slider
-            HStack(spacing: 4) {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Slider(
-                    value: Binding(
-                        get: { Double(columnCount) },
-                        set: { columnCount = Int($0.rounded()) }
-                    ),
-                    in: 2...6,
-                    step: 1
-                )
-                .frame(width: 80)
-                Image(systemName: "square.grid.3x3")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+            if !tight {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.grid.2x2")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Slider(
+                        value: Binding(
+                            get: { Double(columnCount) },
+                            set: { columnCount = Int($0.rounded()) }
+                        ),
+                        in: 2...6,
+                        step: 1
+                    )
+                    .frame(width: 80)
+                    Image(systemName: "square.grid.3x3")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             // Timeline toggle
-            Toggle(isOn: $timelineMode) {
-                Label("Timeline", systemImage: "calendar")
-                    .font(.system(size: 13))
+            if tight {
+                timelineGlyphToggle
+            } else {
+                Toggle(isOn: $timelineMode) {
+                    Label("Timeline", systemImage: "calendar")
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .toggleStyle(.button)
+                .tint(LL.accent)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
-            .toggleStyle(.button)
-            .tint(LL.accent)
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+
+            // The sync pill, to the right of Timeline (Steven, 2026-09-15):
+            // the same one as the Projects header, opening the same panel.
+            syncChip
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+    }
+
+    /// The Timeline toggle as a 32pt square, the library button's twin: accent
+    /// glyph while timeline mode is on, secondary while the grid is plain.
+    /// The tight full row's Timeline (it was the phone-portrait header's until
+    /// the sync pill took that seat, 2026-09-15).
+    private var timelineGlyphToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { timelineMode.toggle() }
+        } label: {
+            Image(systemName: "calendar")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(timelineMode ? LL.accent : .secondary)
+                .frame(width: 32, height: 32)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Timeline")
+        .accessibilityValue(timelineMode ? "On" : "Off")
+        .accessibilityAddTraits(timelineMode ? .isSelected : [])
+    }
+
+    /// A deliberate pull on the grid is "Check PicPlace now" — touch only;
+    /// what the check brings, updates or trashes reaches both lists through
+    /// the index.
+    private var refreshAction: (() async -> Void)? {
+        #if os(iOS)
+        return { await model.picplace.checkNow() }
+        #else
+        return nil
+        #endif
+    }
+
+    /// The Projects header's pill, here too: PicPlace and nearby devices
+    /// behind one glyph, over the model's one server.
+    private var syncChip: some View {
+        ProjectSharingChip(server: model.transferServer, picplace: model.picplace, isEnabled: $sharingEnabled)
     }
 
     /// ▤ Library — collapses the sidebar where it is inline, opens it as a
@@ -672,24 +749,6 @@ struct GalleryView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(isWide ? (showSidebar ? "Hide library sidebar" : "Show library sidebar") : "Library")
         .accessibilityValue(isWide ? "" : (isLit ? "Filtered" : "All projects"))
-    }
-
-    /// The Timeline toggle as a 32pt square, the library button's twin: accent
-    /// glyph while timeline mode is on, secondary while the grid is plain.
-    private var timelineGlyphToggle: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) { timelineMode.toggle() }
-        } label: {
-            Image(systemName: "calendar")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(timelineMode ? LL.accent : .secondary)
-                .frame(width: 32, height: 32)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Timeline")
-        .accessibilityValue(timelineMode ? "On" : "Off")
-        .accessibilityAddTraits(timelineMode ? .isSelected : [])
     }
 
     // MARK: Sort control

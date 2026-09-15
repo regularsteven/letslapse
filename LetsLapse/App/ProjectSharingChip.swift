@@ -1,8 +1,8 @@
 #if !os(watchOS)
 import SwiftUI
 
-/// The Projects header's sharing control: a pill opposite the title, and the
-/// sheet behind it.
+/// The library's sync control: a pill in the Projects and Gallery headers,
+/// and the **sync panel** behind it — PicPlace on top, nearby devices below.
 ///
 /// Modelled on `RemoteLinkChip`, and deliberately somewhere else. That chip
 /// lives on the capture screen because the camera remote's code is regenerated
@@ -20,8 +20,15 @@ import SwiftUI
 /// `transfer.sharingEnabled` Settings ▸ Advanced writes, so the two are one
 /// state rather than two that agree by convention.
 ///
-/// Its own view rather than a computed property on `ProjectsView` so it can
-/// `@ObservedObject` the server directly: the list observes the *model*, so the
+/// **Since 2026-09-15 the panel is "Project Syncing"** (a working title): the
+/// same pill opens it from the Gallery header too, and the panel leads with
+/// PicPlace — sign in when signed out, *Check PicPlace now* with the last
+/// check's line and what auto-sync is doing when signed in, and a way to the
+/// full card in Settings — before the nearby-devices switch it always had.
+/// Nothing about the server (the address) is here: that is Settings' only.
+///
+/// Its own view rather than a computed property on the lists so it can
+/// `@ObservedObject` the server directly: the lists observe the *model*, so the
 /// server's published changes — code minted, transfer started — would never
 /// redraw a control built inline there.
 ///
@@ -31,6 +38,7 @@ import SwiftUI
 /// this machine is advertising — which is exactly why it is not tucked away.
 struct ProjectSharingChip: View {
     @ObservedObject var server: ProjectTransferServer
+    @ObservedObject var picplace: PicPlaceController
     /// The Settings switch, bound through from the list so that turning
     /// sharing on or off here does exactly what turning it on or off there
     /// does — one write, one listener, no third state.
@@ -53,10 +61,19 @@ struct ProjectSharingChip: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint("Opens sharing, with the pairing code and its QR")
+        .accessibilityHint("Opens project syncing: PicPlace and nearby devices")
         .sheet(isPresented: $showsSheet) {
-            ProjectSharingSheet(server: server, isEnabled: $isEnabled)
+            ProjectSyncSheet(server: server, picplace: picplace, isEnabled: $isEnabled)
         }
+        #if DEBUG
+        // `LL_SYNC_PANEL=1` opens the panel as the header appears — how the
+        // sheet is screenshotted for its mirror without a tap.
+        .onAppear {
+            if ProcessInfo.processInfo.environment["LL_SYNC_PANEL"] != nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { showsSheet = true }
+            }
+        }
+        #endif
     }
 
     /// Green on, red off — the two states the human asked to be able to read at
@@ -93,25 +110,84 @@ struct ProjectSharingChip: View {
     }
 
     private var accessibilityLabel: String {
-        guard isEnabled else { return "Sharing off" }
+        guard isEnabled else { return "Project syncing, sharing off" }
         if let transfer = server.activeTransfer {
-            return "Sharing on, sending \(transfer.projectName)"
+            return "Project syncing, sending \(transfer.projectName)"
         }
-        if server.failure != nil { return "Sharing unavailable" }
-        return "Sharing on"
+        if server.failure != nil { return "Project syncing, sharing unavailable" }
+        return "Project syncing, sharing on"
     }
 }
 
-/// What the pill opens: the switch, the code, the code as a QR, and whatever
-/// the server is doing right now.
+/// The nearby-device server's lifecycle, hung off whichever list is showing
+/// its pill: armed when the list appears with the switch on, taken down
+/// with the switch, and on iOS stood down in the background. One modifier
+/// for the two lists, because the server is the model's and a list's
+/// `onChange` only fires while that list exists — a switch thrown in the
+/// Gallery's panel must take the listener with it whether or not the
+/// Projects tab was ever visited.
+struct ProjectSharingArming: ViewModifier {
+    @ObservedObject var server: ProjectTransferServer
+    var isEnabled: Bool
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                if isEnabled, !server.isRunning { server.start() }
+            }
+            // Turning the setting off has to take the live listener with it —
+            // otherwise the device goes on advertising until the app is
+            // relaunched, which is precisely the "a code left advertising on a
+            // phone in a bag" failure this feature has to design out.
+            .onChange(of: isEnabled) { enabled in
+                if enabled {
+                    if !server.isRunning { server.start() }
+                } else {
+                    server.stop()
+                }
+            }
+            // iOS suspends network activity in the background anyway; standing
+            // the listener down makes that honest rather than silent. A cable
+            // does not buy background time either, so this holds over USB too.
+            //
+            // macOS has no equivalent — switching apps never backgrounds a Mac
+            // scene — so there the stand-down is `ProjectTransferServer.idleTimeout`
+            // instead: 15 minutes with nobody connected and the listener stops
+            // itself, because a Mac left advertising its whole library while
+            // nobody is sitting at it is exactly the failure to design out.
+            #if os(iOS)
+            .onChange(of: scenePhase) { phase in
+                guard isEnabled else { return }
+                if phase == .background {
+                    server.stop()
+                } else if phase == .active, !server.isRunning {
+                    server.start()
+                }
+            }
+            #endif
+    }
+}
+
+extension View {
+    func armsProjectSharing(_ server: ProjectTransferServer, isEnabled: Bool) -> some View {
+        modifier(ProjectSharingArming(server: server, isEnabled: isEnabled))
+    }
+}
+
+/// What the pill opens: **Project Syncing** — the PicPlace block (sign in,
+/// or the check, its status and the way to the full card), then the
+/// nearby-devices block (the switch, the code, the code as a QR, and
+/// whatever the server is doing right now).
 ///
 /// The QR is the same code in a form another device's camera can read
 /// (`PairingQR`), which is what lets the importing end skip typing six digits
 /// off one screen into another. It is drawn from `server.pairingCode`, so it
 /// rotates with the code and simply is not there when there is nothing to pair
 /// with.
-struct ProjectSharingSheet: View {
+struct ProjectSyncSheet: View {
     @ObservedObject var server: ProjectTransferServer
+    @ObservedObject var picplace: PicPlaceController
     @Binding var isEnabled: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -121,6 +197,10 @@ struct ProjectSharingSheet: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    LLSectionHeader("PicPlace")
+                    picplaceBlock
+                    LLSectionHeader("Nearby devices")
+                        .padding(.top, 6)
                     toggleRow
                     if isEnabled {
                         codeBlock
@@ -145,8 +225,11 @@ struct ProjectSharingSheet: View {
             }
         }
         .background(LL.screenBackground)
+        .picplaceConnectAlert(picplace)
+        .picplaceConflictsSheet(picplace)
+        .onAppear { if picplace.isSignedIn { picplace.refreshUsage() } }
         #if os(macOS)
-        .frame(width: 360, height: 520)
+        .frame(width: 360, height: 620)
         #else
         .presentationDetents([.medium, .large])
         #endif
@@ -154,7 +237,7 @@ struct ProjectSharingSheet: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("Share projects")
+            Text("Project Syncing")
                 .font(.headline)
             Spacer()
             Button {
@@ -170,6 +253,217 @@ struct ProjectSharingSheet: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
+
+    // MARK: PicPlace
+
+    /// Signed out → the sign-in button. Signed in on a library that is not
+    /// this account's → connect it (or who it belongs to). Connected → the
+    /// account line, what is happening, *Check PicPlace now*, and the way to
+    /// the full card. The server address is Settings' alone.
+    @ViewBuilder
+    private var picplaceBlock: some View {
+        if !picplace.isSignedIn {
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    if picplace.isSigningIn { picplace.cancelSignIn() } else { picplace.signIn() }
+                } label: {
+                    Label(picplace.isSigningIn ? "Signing in…" : signInTitle,
+                          systemImage: picplace.isSigningIn ? "hourglass" : "person.crop.circle.badge.checkmark")
+                        .font(.system(size: 15, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(LL.accent)
+                Text(picplace.isSigningIn
+                     ? "Finish in your browser, or tap to cancel"
+                     : (picplace.lastSignInError ?? signInSubtitle))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else if !picplace.canSync {
+            VStack(alignment: .leading, spacing: 6) {
+                if picplace.libraryLink == .unbound {
+                    Button {
+                        picplace.offerConnect()
+                    } label: {
+                        Label(picplace.isConnecting ? "Connecting…" : "Connect this library", systemImage: "icloud.and.arrow.up")
+                            .font(.system(size: 15, weight: .medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(LL.accent)
+                    .disabled(picplace.isConnecting)
+                    Text(picplace.lastConnectError
+                         ?? "Signed in as @\(picplace.profile?.username ?? ""). Keep this library's projects on \(picplace.sessionHost) too.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Label("This library belongs to @\(picplace.binding?.user.displayHandle ?? "") on \(picplace.binding?.server.host ?? "")",
+                          systemImage: "person.crop.circle.badge.exclamationmark")
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(LL.levelOff)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Sign in as them to sync it, or disconnect it in Settings.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                settingsLink
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                // The account, and what the server holds of it.
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.icloud.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.green)
+                    Text(accountLine)
+                        .font(.system(size: 15, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                statusLine
+                checkButton
+                settingsLink
+            }
+        }
+    }
+
+    private var signInTitle: String {
+        if let binding = picplace.binding { return "Sign in as @\(binding.user.displayHandle)" }
+        return "Sign in with PicPlace"
+    }
+
+    private var signInSubtitle: String {
+        if let binding = picplace.binding { return "This library belongs to @\(binding.user.displayHandle) on \(binding.server.host)" }
+        return "Keep a copy of your projects on \(picplace.sessionHost)"
+    }
+
+    private var accountLine: String {
+        var line = "@\(picplace.profile?.username ?? "") on \(picplace.sessionHost)"
+        if let usage = picplace.usage { line += " · \(usage.projects) project\(usage.projects == 1 ? "" : "s")" }
+        return line
+    }
+
+    /// What is happening, one line: decisions waiting come first, then what
+    /// auto-sync is doing or why it is not, then the first connection, then
+    /// the last problem — the same readings as the Settings card, in the
+    /// order a person needs them.
+    @ViewBuilder
+    private var statusLine: some View {
+        if !picplace.conflicts.isEmpty {
+            Button {
+                picplace.isReviewingConflicts = true
+            } label: {
+                HStack(spacing: 8) {
+                    Label("\(picplace.conflicts.count) project\(picplace.conflicts.count == 1 ? "" : "s") need\(picplace.conflicts.count == 1 ? "s" : "") your decision",
+                          systemImage: "exclamationmark.icloud.fill")
+                        .foregroundStyle(LL.amber)
+                    Spacer(minLength: 0)
+                    Text("Review")
+                        .foregroundStyle(LL.accent)
+                }
+                .font(.system(size: 13.5, weight: .medium))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else if let status = picplace.autoStatus {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(status)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        } else if let progress = picplace.initialSyncProgress, progress.phase != .done {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(initialSyncLine(progress))
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        } else if let error = picplace.autoError {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(.system(size: 13.5))
+                .foregroundStyle(LL.levelOff)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if let hold = picplace.autoHold {
+            Label("Auto-sync \(hold)", systemImage: "pause.circle")
+                .font(.system(size: 13.5))
+                .foregroundStyle(.secondary)
+        } else if picplace.autoSyncEnabled {
+            Label("Edits go to PicPlace as you make them", systemImage: "arrow.triangle.2.circlepath")
+                .font(.system(size: 13.5))
+                .foregroundStyle(.secondary)
+        } else {
+            Label("Auto-sync is off — projects sync when you ask", systemImage: "pause.circle")
+                .font(.system(size: 13.5))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func initialSyncLine(_ progress: PicPlaceController.InitialSyncProgress) -> String {
+        switch progress.phase {
+        case .waiting(let why): return "First connection — \(why.lowercased())"
+        case .deciding: return "Comparing with PicPlace…"
+        case .pulling: return "Bringing projects here… \(progress.pulled) of \(progress.total)"
+        case .pushing: return "Sending projects… \(progress.pulled + progress.pushed) of \(progress.total)"
+        case .done: return "Library in step with PicPlace"
+        case .failed(let why): return "First connection failed — \(why)"
+        }
+    }
+
+    private var checkButton: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                picplace.checkForChanges(reason: "manual")
+            } label: {
+                HStack(spacing: 8) {
+                    if picplace.isChecking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise.icloud")
+                    }
+                    Text(picplace.isChecking ? "Checking PicPlace…" : "Check PicPlace now")
+                }
+                .font(.system(size: 15, weight: .medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.bordered)
+            .tint(LL.accent)
+            .disabled(picplace.isChecking)
+            Text(picplace.checkSummary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// The full card — account, library, the switches, the server — is in
+    /// Settings; this panel only carries what a person needs beside the list.
+    private var settingsLink: some View {
+        Button {
+            dismiss()
+            picplace.model.requestedSettingsAnchor = .picplace
+        } label: {
+            HStack(spacing: 4) {
+                Text("All PicPlace settings")
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .font(.system(size: 13.5, weight: .medium))
+            .foregroundStyle(LL.accent)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Nearby devices
 
     private var toggleRow: some View {
         VStack(alignment: .leading, spacing: 6) {

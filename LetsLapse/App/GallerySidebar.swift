@@ -10,6 +10,12 @@ import SwiftUI
 /// - **Collections**: link to Collections tab (navigates via model)
 /// - **Shapes**: Ellipse / Rectangle / Square / No Shapes, from each project's
 ///   `shapes.json` register (Find shapes, or drawn in the Masks tab)
+///
+/// And on the phone, where it is a sheet, a fifth on top — **View**, the
+/// Timeline switch: the portrait header gave the Timeline glyph's seat to
+/// the sync pill (2026-09-15), and the mode is remembered, so this is where
+/// a phone turns it on and off. The wide layouts pass nothing and keep
+/// their header button.
 struct GallerySidebar: View {
     @EnvironmentObject var model: AppModel
     @Binding var filter: CaptureFilter
@@ -18,10 +24,16 @@ struct GallerySidebar: View {
     /// The tags present among the projects the grid's question matches —
     /// the index's answer (M3), in the taxonomy's order, custom after.
     var presentTags: [String]
+    /// The Timeline switch, when this sidebar is the only place it lives.
+    var timelineMode: Binding<Bool>? = nil
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if let timelineMode {
+                    viewSection(timelineMode)
+                    Divider().padding(.horizontal, 12)
+                }
                 librarySection
                 if !presentTags.isEmpty {
                     Divider().padding(.horizontal, 12)
@@ -37,6 +49,32 @@ struct GallerySidebar: View {
         }
         .scrollContentBackground(.hidden)
         .background(LL.screenBackground)
+    }
+
+    // MARK: View (phone)
+
+    private func viewSection(_ timelineMode: Binding<Bool>) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            LLSectionHeader("View")
+                .padding(.horizontal, 14)
+            Toggle(isOn: timelineMode) {
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 15))
+                        .foregroundStyle(timelineMode.wrappedValue ? LL.accent : .secondary)
+                        .frame(width: 22)
+                    Text("Timeline")
+                        .font(.system(size: 14))
+                }
+            }
+            .tint(LL.accent)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            Text("Tiles grouped by shoot day, with a month rail")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 14)
+        }
     }
 
     // MARK: Library

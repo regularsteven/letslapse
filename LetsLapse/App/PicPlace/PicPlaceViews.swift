@@ -612,21 +612,7 @@ struct PicPlaceSettingsCard: View {
         }
     }
 
-    private var lastCheckText: String? {
-        guard let check = picplace.lastCheck else { return "Runs at launch and when the app comes to the front" }
-        var parts: [String] = []
-        if check.pulled > 0 { parts.append("\(check.pulled) brought here") }
-        if check.updated > 0 { parts.append("\(check.updated) updated from PicPlace") }
-        if check.pushed > 0 { parts.append("\(check.pushed) sent") }
-        if check.retried > 0 { parts.append("\(check.retried) sent on a retry") }
-        if check.waiting > 0 { parts.append("\(check.waiting) waiting to retry") }
-        if check.deletedThere > 0 { parts.append("\(check.deletedThere) deleted on PicPlace") }
-        if check.deletedHere > 0 { parts.append("\(check.deletedHere) removed here (deleted elsewhere; in the trash)") }
-        if check.conflicts > 0 { parts.append("\(check.conflicts) to decide") }
-        if !check.failures.isEmpty { parts.append(check.failures.joined(separator: "; ")) }
-        let when = check.checkedAt.formatted(.relative(presentation: .named))
-        return parts.isEmpty ? "Checked \(when) · nothing changed" : "Checked \(when) · " + parts.joined(separator: " · ")
-    }
+    private var lastCheckText: String? { picplace.checkSummary }
 
     private func initialSyncTitle(_ progress: PicPlaceController.InitialSyncProgress) -> String {
         switch progress.phase {

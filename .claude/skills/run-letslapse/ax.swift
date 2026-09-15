@@ -55,7 +55,12 @@ let setting = args.first == "setvalue"
 // one a keystroke takes — where `setvalue` swaps the storage wholesale and
 // never trips what typing trips.
 let typing = args.first == "type"
-let positional = (moving || focusing || setting || typing) ? Array(args.dropFirst()) : args
+// `press <pid> <titlePart> <role> <text>` performs the element's AXPress —
+// a button pushed through accessibility, on this pid only, with no pointer
+// event anywhere on the screen. The way to press a control in a
+// driver-launched instance while Steven is working in his own (2026-09-15).
+let pressing = args.first == "press"
+let positional = (moving || focusing || setting || typing || pressing) ? Array(args.dropFirst()) : args
 guard positional.count == ((setting || typing) ? 5 : 4), let pid = Int32(positional[0]) else {
     print("usage: ax.swift <pid> <windowTitleSubstring> <AXRole> <text>  |  ax.swift move <pid> <windowTitleSubstring> <x> <y>"); exit(2)
 }
@@ -86,7 +91,11 @@ let app = AXUIElementCreateApplication(pid)
 guard let windows = attr(app, kAXWindowsAttribute) as? [AXUIElement] else {
     print("ax: no windows for pid \(pid) — accessibility refused, or no such process"); exit(1)
 }
-guard let window = windows.first(where: { (string($0, kAXTitleAttribute) ?? "").contains(titlePart) }) else {
+// `*` for the title searches every window of the pid in turn — a SwiftUI
+// sheet on macOS is its own untitled window, so a button inside one has no
+// title to be found by (2026-09-15).
+let candidates = titlePart == "*" ? windows : windows.filter { (string($0, kAXTitleAttribute) ?? "").contains(titlePart) }
+guard let window = candidates.first else {
     let names = windows.map { string($0, kAXTitleAttribute) ?? "?" }
     print("ax: no window titled *\(titlePart)* — windows: \(names)"); exit(1)
 }
@@ -155,6 +164,23 @@ if typing {
         exit(0)
     }
     print("ax: type failed (\(result.rawValue))"); exit(1)
+}
+
+if pressing {
+    var found: AXUIElement?
+    for candidate in candidates {
+        visited = 0
+        if let hit = search(candidate, depth: 0) { found = hit; break }
+    }
+    guard let hit = found else {
+        print("ax: \(role) \(text) not found in \(candidates.count) window(s)"); exit(1)
+    }
+    let result = AXUIElementPerformAction(hit, kAXPressAction as CFString)
+    if result == .success {
+        print("pressed")
+        exit(0)
+    }
+    print("ax: press failed (\(result.rawValue))"); exit(1)
 }
 
 if setting {
