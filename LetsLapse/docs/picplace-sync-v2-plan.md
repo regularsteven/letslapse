@@ -839,3 +839,12 @@ now — runs on any connection: that is their call. The switch sits at the
 top level of the card on both platforms, on by default. Verified with
 `LL_PICPLACE_NETWORK=cellular:45`: the launch check held, a funnel rename's
 push held, both ran at the release.
+
+**`tools/sim-fresh.sh` (2026-09-15):** one script for a fresh Simulator —
+shut down · erase (or `--new` creates "LetsLapse Fresh" on the newest iOS
+runtime; `--keep` skips the erase) · a signed Simulator build into
+`~/Library/Developer/LetsLapseRun/dd-sim-fresh` (`--no-build` reuses it) ·
+boot + Simulator.app · the Valet CA trusted (`VALET_CA=` overrides the
+path) · install · launch; prints the device id and the log-tail command.
+Run end to end on the iPhone 16 Pro: 1 min 40 s including the build; the
+app came up at its first-run camera prompt with no session.
