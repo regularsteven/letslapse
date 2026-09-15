@@ -68,10 +68,13 @@ conflicts + the sheet, tombstones both ways, uuid_taken re-mint; every row
 verified between two scratch devices; committed 08cc5c4) · **stage 5 built
 2026-09-15** (plan §13: upload / download originals per project, resumable
 downloads in pages of presigned URLs, presence tiers, the card's Originals
-line; 1,480 files in 8 s on the bench) · **Stages 1–5 done; auto-sync built 2026-09-15**
-(plan §14: settled edits pushed after 20 s, a 3-minute timer check, the
-originals queue behind two switches + Wi-Fi only on iOS) · **next: background
-transfers on iOS, eviction, per-blend posters, the mirrors (D12)** · **code-first by
+line; 1,480 files in 8 s on the bench) · **Stages 1–5 + auto-sync done and
+committed 2026-09-15 (`52a078d`…`6178c06`)** — settled edits pushed after 20 s,
+a 3-minute timer check, the originals queue, only on Wi-Fi for everything
+automatic, unchanged copies of deleted projects trashed, posters converging ·
+**HANDOVER for the next agent: [picplace-sync-v2-handover.md](picplace-sync-v2-handover.md)**
+(next: a real-world run on picplace.co, iOS background transfers, eviction,
+per-blend posters, the mirrors) · **code-first by
 decision** — mirrors follow per screen once the sync logic holds · **Size:**
 large (five stages) · seams: `App/PicPlace/*` (binding, sync state, Keychain
 per account, `SyncPolicy`, the pull, the merge), `App/StorageLocation.swift`

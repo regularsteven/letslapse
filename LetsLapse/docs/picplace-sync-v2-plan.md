@@ -1,7 +1,11 @@
 # PicPlace sync, version two — the library binds to an account, the minimal dataset syncs, libraries merge
 
-**Date:** 2026-09-14 · **Status:** plan agreed (Steven, 2026-09-14); nothing
-implemented · **Working mode:** **code-first by decision** — "I want to test
+> **2026-09-15:** stages 1–5 and the first half of §4.7 are built and
+> committed; the handover for the next agent — complete / owed / next /
+> problems / tested vs untested — is [picplace-sync-v2-handover.md](picplace-sync-v2-handover.md).
+
+**Date:** 2026-09-14 · **Status:** plan agreed (Steven, 2026-09-14); stages 1–5
++ auto-sync landed 2026-09-15 (§9–§14) · **Working mode:** **code-first by decision** — "I want to test
 the logic, and design can be a bit messy for now"; the SVG mirrors are
 tidied once the sync logic is proven, per screen, in the same unit of work
 that finalises the screen · **Environment:** `picplace.test` + Garage in
