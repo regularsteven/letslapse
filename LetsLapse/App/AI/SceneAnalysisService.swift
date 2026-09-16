@@ -2,6 +2,7 @@ import AVFoundation
 import CoreLocation
 import Foundation
 import ImageIO
+import LetsLapseKit
 import UniformTypeIdentifiers
 
 /// The product-facing shape of on-device scene labelling.
@@ -262,15 +263,9 @@ enum SceneFrameSampler {
 
     private static func stillFrames(_ urls: [URL], into directory: URL) -> [URL] {
         urls.enumerated().compactMap { index, url in
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                // Bake EXIF orientation: a portrait frame described as landscape is a portrait
-                // frame the model reads sideways.
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-            ]
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            // Orientation baked in: a portrait frame described as landscape is a portrait
+            // frame the model reads sideways.
+            guard let image = OrientedDecode.cgImage(url: url, maxPixelSize: maxPixelSize, cacheImmediately: false)
             else { return nil }
             return write(image, index: index, into: directory)
         }

@@ -412,13 +412,7 @@ enum ScanExport {
     /// Decoded with its EXIF orientation applied — a page exported sideways is
     /// a page nobody can read.
     private static func loadOriented(_ url: URL) -> CGImage? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 4096,
-        ]
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        OrientedDecode.cgImage(url: url, maxPixelSize: 4096, cacheImmediately: false)
     }
 }
 

@@ -1,5 +1,6 @@
 import CryptoKit
 import ImageIO
+import LetsLapseKit
 import SwiftUI
 import UniformTypeIdentifiers
 #if canImport(UIKit)
@@ -353,12 +354,7 @@ enum DiskThumbnailStore {
     static func storedData(for url: URL, maxPixelSize: Int? = nil) -> Data? {
         let file = fileURL(for: key(for: url))
         guard let maxPixelSize else { return try? Data(contentsOf: file) }
-        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
-              let scaled = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                  kCGImageSourceCreateThumbnailFromImageAlways: true,
-                  kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-                  kCGImageSourceCreateThumbnailWithTransform: true,
-              ] as CFDictionary)
+        guard let scaled = OrientedDecode.cgImage(url: file, maxPixelSize: maxPixelSize, cacheImmediately: false)
         else { return nil }
         return encodeJPEG(scaled)
     }
@@ -370,11 +366,7 @@ enum DiskThumbnailStore {
         // already small, so this is cheap.
         guard let full = encodeJPEG(image) else { return nil }
         guard let source = CGImageSourceCreateWithData(full as CFData, nil),
-              let scaled = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                  kCGImageSourceCreateThumbnailFromImageAlways: true,
-                  kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-                  kCGImageSourceCreateThumbnailWithTransform: true,
-              ] as CFDictionary)
+              let scaled = OrientedDecode.cgImage(source: source, maxPixelSize: maxPixelSize, cacheImmediately: false)
         else { return full }
         return encodeJPEG(scaled)
     }

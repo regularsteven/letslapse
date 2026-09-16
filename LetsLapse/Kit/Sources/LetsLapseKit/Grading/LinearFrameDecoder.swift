@@ -242,16 +242,12 @@ public final class LinearFrameDecoder {
                 displayReferred: false)
         }
 
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let decoded = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                  kCGImageSourceCreateThumbnailFromImageAlways: true,
-                  kCGImageSourceCreateThumbnailWithTransform: true,
-                  kCGImageSourceShouldCacheImmediately: true,
-                  kCGImageSourceThumbnailMaxPixelSize: 20000,
-              ] as CFDictionary) else {
+        // The stored pixels, oriented in the graph — never ImageIO's
+        // `…WithTransform`, which Core Image reads as scrambled tiles for a
+        // quarter-turned picture above 16 MP on iOS (`OrientedDecode`).
+        guard var image = OrientedDecode.ciImage(url: url, maxPixelSize: 20000) else {
             throw LapseError.imageLoadFailed(url)
         }
-        var image = CIImage(cgImage: decoded)
         if scale != 1 {
             image = image.transformed(by: CGAffineTransform(scaleX: CGFloat(scale), y: CGFloat(scale)))
         }

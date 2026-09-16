@@ -300,14 +300,10 @@ enum ProjectThumbnailGenerator {
         if isRAW(url), let decoded = rawImage(for: url, maxPixelSize: maxPixelSize) {
             return decoded
         }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-        ]
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        // Oriented by `OrientedDecode`, not ImageIO's `…WithTransform` — a
+        // transformed ImageIO image reads as scrambled tiles in Core Image and
+        // Vision above 16 MP on iOS, and these thumbnails feed both.
+        return OrientedDecode.cgImage(url: url, maxPixelSize: maxPixelSize)
     }
 
     /// The same test `LinearFrameDecoder` uses, so the two decoders cannot

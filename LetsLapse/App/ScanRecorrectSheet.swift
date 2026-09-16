@@ -346,13 +346,7 @@ struct ScanRecorrectSheet: View {
     private func loadImage() async {
         let url = request.page.original
         image = await Task.detached(priority: .userInitiated) { () -> CGImage? in
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: 1600,
-            ]
-            return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            OrientedDecode.cgImage(url: url, maxPixelSize: 1600, cacheImmediately: false)
         }.value
     }
 

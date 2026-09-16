@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import ImageIO
+import LetsLapseKit
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -99,14 +100,7 @@ final class WarpPreviewLoader: ObservableObject {
     /// Bounded, orientation-applied decode — the same 1024px budget the movie
     /// generator gets.
     private nonisolated static func decodeStill(url: URL) -> CGImage? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: 1024,
-        ]
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        OrientedDecode.cgImage(url: url, maxPixelSize: 1024)
     }
 }
 

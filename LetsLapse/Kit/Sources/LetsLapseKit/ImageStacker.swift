@@ -680,17 +680,16 @@ public final class ImageStacker {
     /// than what came back, fall through to a full decode — rendering a DNG
     /// project from its preview JPEGs was how blended raws looked unblended.
     /// Public so the app's own full-size loads stay orientation-correct too.
+    ///
+    /// The orientation is baked by `OrientedDecode`, never by ImageIO's
+    /// `…WithTransform`: the result is wrapped in Core Image by the framing
+    /// lock and handed to Vision by the shape finder, and both read a
+    /// transformed ImageIO image as scrambled tiles above 16 MP on iOS.
     public static func loadImage(at url: URL) throws -> CGImage {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else {
             throw LapseError.imageLoadFailed(url)
         }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 20000,
-            kCGImageSourceShouldCacheImmediately: true,
-        ]
-        let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        let stored = OrientedDecode.stored(source: source, maxPixelSize: 20000)
 
         var primaryLongSide = 0
         if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] {
@@ -698,70 +697,28 @@ public final class ImageStacker {
             let height = (properties[kCGImagePropertyPixelHeight] as? Int) ?? 0
             primaryLongSide = max(width, height)
         }
-        if let thumbnail, max(thumbnail.width, thumbnail.height) >= primaryLongSide {
-            return thumbnail
+        if let stored, max(stored.image.width, stored.image.height) >= primaryLongSide {
+            return OrientedDecode.oriented(stored.image, stored.orientation)
         }
         if let full = CGImageSourceCreateImageAtIndex(source, 0, [
             kCGImageSourceShouldCacheImmediately: true,
         ] as CFDictionary) {
-            // Full decode skips the thumbnail path's WithTransform, so bake
-            // the EXIF orientation in here.
-            var orientation = 1
-            if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-               let value = properties[kCGImagePropertyOrientation] as? UInt32 {
-                orientation = Int(value)
-            }
-            return Self.oriented(full, exifOrientation: orientation)
+            return OrientedDecode.oriented(full, OrientedDecode.orientation(of: source))
         }
-        if let thumbnail {
-            return thumbnail
+        if let stored {
+            return OrientedDecode.oriented(stored.image, stored.orientation)
         }
         throw LapseError.imageLoadFailed(url)
     }
 
-    /// Bakes an EXIF orientation (1–8) into the pixels. Exact behaviour is
-    /// pinned by `OrientationTests`.
+    /// Bakes an EXIF orientation (1–8) into the pixels — `OrientedDecode`'s
+    /// redraw, in the picture's own colour space. Exact behaviour is pinned
+    /// by `OrientedDecodeTests`.
     static func oriented(_ image: CGImage, exifOrientation: Int) -> CGImage {
-        guard exifOrientation > 1, exifOrientation <= 8 else { return image }
-        let width = image.width
-        let height = image.height
-        let swapsAxes = exifOrientation >= 5
-        let outWidth = swapsAxes ? height : width
-        let outHeight = swapsAxes ? width : height
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                data: nil, width: outWidth, height: outHeight,
-                bitsPerComponent: 8, bytesPerRow: outWidth * 4,
-                space: colorSpace,
-                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) else {
+        guard let orientation = CGImagePropertyOrientation(rawValue: UInt32(max(0, exifOrientation))) else {
             return image
         }
-        context.interpolationQuality = .none
-        var transform = CGAffineTransform.identity
-        switch exifOrientation {
-        case 2:
-            transform = transform.translatedBy(x: CGFloat(width), y: 0).scaledBy(x: -1, y: 1)
-        case 3:
-            transform = transform.translatedBy(x: CGFloat(width), y: CGFloat(height)).rotated(by: .pi)
-        case 4:
-            transform = transform.translatedBy(x: 0, y: CGFloat(height)).scaledBy(x: 1, y: -1)
-        case 5:
-            transform = transform.translatedBy(x: 0, y: CGFloat(width)).rotated(by: -.pi / 2)
-            transform = transform.translatedBy(x: CGFloat(width), y: 0).scaledBy(x: -1, y: 1)
-        case 6:
-            transform = transform.translatedBy(x: 0, y: CGFloat(width)).rotated(by: -.pi / 2)
-        case 7:
-            transform = transform.translatedBy(x: CGFloat(height), y: 0).rotated(by: .pi / 2)
-            transform = transform.translatedBy(x: CGFloat(width), y: 0).scaledBy(x: -1, y: 1)
-        case 8:
-            transform = transform.translatedBy(x: CGFloat(height), y: 0).rotated(by: .pi / 2)
-        default:
-            break
-        }
-        context.concatenate(transform)
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        guard let result = context.makeImage() else { return image }
-        return result
+        return OrientedDecode.oriented(image, orientation)
     }
 }
 

@@ -118,12 +118,9 @@ func runShapes(path: String, residual: Double?, live: Bool, longEdge: Int?, verb
         if let contourDimension { profiles[i].1.contourImageDimension = contourDimension }
     }
     let decodeEdge = profiles.map { $0.1.decodeLongEdge }.max() ?? 1024
-    let options: [CFString: Any] = [
-        kCGImageSourceCreateThumbnailFromImageAlways: true,
-        kCGImageSourceCreateThumbnailWithTransform: true,
-        kCGImageSourceThumbnailMaxPixelSize: decodeEdge,
-    ]
-    guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+    // The detector hands this to Vision, which reads an ImageIO-transformed
+    // image as scrambled tiles above 16 MP on iOS — so `OrientedDecode`.
+    guard let image = OrientedDecode.cgImage(source: source, maxPixelSize: decodeEdge, cacheImmediately: false) else {
         fail("could not decode \(path)")
     }
     if !json { print("\(url.lastPathComponent): \(Int(native.width))×\(Int(native.height)) (orientation \(orientation)), decoded at \(image.width)×\(image.height)") }

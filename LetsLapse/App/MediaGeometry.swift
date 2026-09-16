@@ -45,8 +45,8 @@ enum MediaGeometry {
         guard width > 0, height > 0 else { return nil }
         // EXIF 5–8 are the quarter-turns: the stored pixels are laid out across
         // the other axis from how the image reads. Swapping here keeps this in
-        // step with `ProjectThumbnailGenerator.displayImage`, which asks Image I/O
-        // to apply the same transform via `kCGImageSourceCreateThumbnailWithTransform`.
+        // step with `OrientedDecode`, which bakes the same turn into every
+        // still the app decodes.
         let orientation = (properties[kCGImagePropertyOrientation] as? Int) ?? 1
         let quarterTurned = (5...8).contains(orientation)
         return quarterTurned

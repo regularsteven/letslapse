@@ -316,15 +316,11 @@ public final class FramingLumaDecoder: @unchecked Sendable {
            let height = properties[kCGImagePropertyPixelHeight] as? Int {
             longSide = Int((Double(max(width, height)) * scale).rounded())
         }
-        guard let decoded = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(16, longSide),
-        ] as CFDictionary) else {
+        // Oriented in the graph, not by ImageIO — see `OrientedDecode`.
+        guard let image = OrientedDecode.ciImage(source: source, maxPixelSize: max(16, longSide)) else {
             throw LapseError.imageLoadFailed(url)
         }
-        return CIImage(cgImage: decoded)
+        return image
     }
 }
 #endif
