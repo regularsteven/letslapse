@@ -666,3 +666,27 @@ mirrors: the connect sheet, the Add sheet, the card's states (🟡).
 "Holidays" as a new library — each from its own Settings card; the merge
 that mixed them cannot recur (a merge is only offered when *linking* to a
 named library, and the sheet says the numbers).
+
+## 15. The transition heal (2026-09-16, late) — a binding whose server library is missing
+
+Steven connected "Prague LetsLapse Shots" at 18:56 on the A′ build (the one
+relaunched for him after the cleanup): A′ wrote the identity's uuid into
+the binding but created nothing on the server and sent no `library` on the
+pushes, so the 398 went up **unfiled**. The C1 build then scoped every pass
+to that uuid and read them all as "filed in another library" (0 on
+PicPlace, 398 elsewhere) — and one push's `422 → re-create → retry` had
+already created the library row with a single project in it.
+
+**Fix:** `repairBindingLibraryIfMissing(status)` runs at the handshake and
+before every check: a v2 binding without a library takes the identity's
+uuid; a library missing on the server is created under the binding's uuid
+and name; and the account's **unfiled** rows that this library holds are
+assigned to it (`POST /libraries/{uuid}/projects` with exactly those uuids
+— never the whole default, never another named library's), once per
+change of the default library's count. Reproduced on the bench (Bench A's
+library row force-deleted → its project unfiled → the relaunch created the
+library and filed the project; the check clean) and wiped after.
+
+**For Steven:** relaunch the Xcode build on Prague — the launch heals it
+(the card: *On PicPlace · 398 projects*); then Holidays → Connect → *New
+library on PicPlace*. Nothing on the server side.

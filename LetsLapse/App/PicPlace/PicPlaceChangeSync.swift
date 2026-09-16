@@ -154,6 +154,12 @@ extension PicPlaceController {
             return (record.retryDueAt ?? .distantPast) <= now
         }
         do {
+            // Stage C: a binding whose server library is missing is put
+            // right before the pass reads everything as filed elsewhere.
+            if serverHasLibraries, let status: PPStatus = try? await client.get("status") {
+                noteLibraries(status)
+                await repairBindingLibraryIfMissing(status)
+            }
             // The whole index, tombstones included, every time: the merge
             // table needs every row — a project only THIS device edited sits
             // beside a server row that `updated_since` would not list. The

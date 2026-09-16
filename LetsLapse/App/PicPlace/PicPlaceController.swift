@@ -591,11 +591,12 @@ final class PicPlaceController: ObservableObject {
         upgradeBindingIfServerReportsItself(status)
         noteLimits(status)
         noteLibraries(status)
+        await repairBindingLibraryIfMissing(status)
         await refreshUsage(status: status)
     }
 
     /// What the server keeps apart (stage C): the feature and the list.
-    private func noteLibraries(_ status: PPStatus) {
+    func noteLibraries(_ status: PPStatus) {
         serverHasLibraries = status.hasLibraries
         serverLibraries = status.libraries ?? []
     }
@@ -625,6 +626,64 @@ final class PicPlaceController: ObservableObject {
         }
     }
 
+    /// The library's scope put right against the server (stage C). Two
+    /// things a pass must never read as "everything is filed elsewhere":
+    /// a binding whose server library is MISSING — a binding made before
+    /// the server kept libraries apart (stage A′ wrote the uuid and pushed
+    /// into the default library; a v2 binding has no uuid at all, and takes
+    /// the identity's), or a library purged elsewhere — is created under
+    /// the binding's uuid and name; and the account's UNFILED rows that
+    /// this library holds are assigned to it (`POST /libraries/{uuid}/projects`
+    /// — exactly this library's, never the whole default, never another
+    /// named library's). Runs at the handshake and before a check; the
+    /// assignment only when the default library's count moved.
+    private var unfiledCountSeen: Int?
+
+    func repairBindingLibraryIfMissing(_ status: PPStatus) async {
+        guard status.hasLibraries, canSync, var record = binding else { return }
+        if record.library == nil {
+            guard let identity = StorageRoot.identity else { return }
+            record.library = .init(uuid: identity.id, name: identity.displayName)
+            try? record.write(inRoot: root)
+            binding = record
+            LLog("picplace: this library was connected before PicPlace kept libraries apart — it becomes “\(identity.displayName)” \(identity.id.uuidString.lowercased())")
+        }
+        guard let library = record.library else { return }
+        let uuid = library.uuid.uuidString.lowercased()
+        var libraries = status.libraries ?? []
+        do {
+            if !libraries.contains(where: { $0.libraryUUID == library.uuid }) {
+                let created: PPLibraryResponse = try await client.put("libraries/\(uuid)", json: ["name": library.name, "adopt_default": false])
+                LLog("picplace: library “\(library.name)” \(uuid) was not on \(sessionHost) — created (\(created.library.count) projects there)")
+                libraries.append(created.library)
+            }
+            let unfiled = libraries.first { $0.isDefault }?.count ?? 0
+            if unfiled > 0, unfiled != unfiledCountSeen {
+                unfiledCountSeen = unfiled
+                let rows: PPProjectIndex = try await client.get("projects", query: ["library": "null"])
+                var mine: [String] = []
+                if let index = model.libraryIndex {
+                    for row in rows.projects where !row.isTombstone {
+                        guard let origin = UUID(uuidString: row.uuid), ((try? index.projectID(originID: origin)) ?? nil) != nil else { continue }
+                        mine.append(row.uuid.lowercased())
+                    }
+                }
+                if !mine.isEmpty {
+                    let result: PPAssignResult = try await client.post("libraries/\(uuid)/projects", json: ["projects": mine])
+                    LLog("picplace: \(result.moved) of the account's \(unfiled) unfiled project(s) are this library's — filed under “\(library.name)” (\(result.unchanged ?? 0) already there, \(result.unknown?.count ?? 0) unknown)")
+                    for origin in mine.compactMap(UUID.init(uuidString:)) { clearElsewhere(origin) }
+                    saveSyncState()
+                    unfiledCountSeen = nil
+                } else {
+                    LLog("picplace: none of the account's \(unfiled) unfiled project(s) is held here — left unfiled")
+                }
+            }
+            if let refreshed: PPStatus = try? await client.get("status") { noteLibraries(refreshed) } else { serverLibraries = libraries }
+        } catch {
+            LLog("picplace: could not put the library's scope right on \(sessionHost): \(error)")
+        }
+    }
+
     /// The Settings card's "On PicPlace" line: how many of this account's
     /// projects are on the server and the bytes they take. `rows` spares
     /// the index read when the caller has just read it (the check).
@@ -634,6 +693,7 @@ final class PicPlaceController: ObservableObject {
             if let status: PPStatus = try? await client.get("status") {
                 noteLimits(status)
                 noteLibraries(status)
+                await repairBindingLibraryIfMissing(status)
                 await refreshUsage(status: status, rows: rows)
             }
         }
