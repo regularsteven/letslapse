@@ -73,6 +73,10 @@ struct GalleryPreviewPanel: View {
     #endif
     @State private var isRenaming = false
     @State private var renameText = ""
+    /// Auto rename & tag on this one project (2026-09-16): the same sheet the
+    /// project screen presents, from the row above TAGS.
+    @StateObject private var autoName = AutoNameController()
+    @ObservedObject private var models = ModelManager.shared
     @State private var previewItem: MediaPreviewItem?
     @State private var confirmingDelete = false
     @State private var exportedArchive: ExportedArchive?
@@ -137,6 +141,9 @@ struct GalleryPreviewPanel: View {
                     .padding(.top, 16)
 
                 VStack(alignment: .leading, spacing: 14) {
+                    if style == .pane, !capture.isScannerCapture {
+                        autoRenameRow
+                    }
                     tagsSection
                     if style == .pane, !capture.isScannerCapture {
                         presetsSection
@@ -199,6 +206,7 @@ struct GalleryPreviewPanel: View {
             ProjectMediaPreviewSheet(item: item)
         }
         .exportedArchiveSheet($exportedArchive)
+        .autoNamePresentation(autoName, captureID: capture.id)
         .confirmationDialog(
             "Delete this project?",
             isPresented: $confirmingDelete,
@@ -352,6 +360,46 @@ struct GalleryPreviewPanel: View {
             .foregroundStyle(filled ? .white : .primary)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: Auto rename & tag
+
+    /// Directly above TAGS (2026-09-16), the batch panel's row on one
+    /// project: the existing Auto rename & tag sheet, through the cached
+    /// engine — the thumbnail's frame analysed once and kept beside the
+    /// project. The subtitle is the run's own status while one is in flight.
+    private var autoRenameRow: some View {
+        Button {
+            Task { await autoName.run(capture: capture, model: model) }
+        } label: {
+            HStack(spacing: 8) {
+                if autoName.isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 14)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .semibold))
+                        .accessibilityHidden(true)
+                }
+                Text(autoName.status ?? "Auto rename & tag")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(models.isReady ? LL.accent : Color.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!models.isReady || autoName.isRunning)
+        .accessibilityLabel("Auto rename & tag")
     }
 
     // MARK: Tags

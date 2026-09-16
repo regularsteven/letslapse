@@ -137,28 +137,13 @@ struct ProjectDetailView: View {
             previewGradedPhoto(capture, url: url)
         }
         #endif
-        .sheet(item: $autoName.proposal) { proposal in
-            AutoNameSheet(proposal: proposal, libraryTags: model.libraryTags) { metadata in
-                if let capture {
-                    model.applySceneMetadata(metadata, to: capture)
-                }
-            }
-        }
+        // The Auto rename & tag sheet and its failure alert — the presentation the Gallery's
+        // preview panel shares (AutoNameSheet.swift).
+        .autoNamePresentation(autoName, captureID: captureID)
         .sheet(isPresented: $isEditingTags) {
             if let capture {
                 TagPickerSheet(tags: tagsBinding(for: capture), libraryTags: model.libraryTags)
             }
-        }
-        .alert(
-            "Couldn't analyse this project",
-            isPresented: Binding(
-                get: { autoName.failure != nil },
-                set: { if !$0 { autoName.failure = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(autoName.failure ?? "")
         }
         // No noun on the menu items or these dialogs — a menu opened inside a
         // project is already saying which project it acts on. The *destructive*
@@ -1213,21 +1198,10 @@ struct ProjectDetailView: View {
         return "Names and tags this project from its own frames, on this device"
     }
 
+    /// Through the cached engine (2026-09-16): the thumbnail's frame, analysed once and kept
+    /// beside the project, so a second run from here or from the Gallery costs no second pass.
     private func startAutoName(_ capture: AppModel.CaptureProject) {
-        guard let source = model.sceneSource(for: capture) else {
-            autoName.failure = "This project has no frames to analyse."
-            return
-        }
-        let locationFile = model.sourceClipURLs(for: capture).first
-            ?? model.sourceFrameURLs(for: capture).first
-        Task {
-            await autoName.run(
-                source: source,
-                capturedAt: capture.createdAt,
-                duration: capture.sourceDurationSeconds ?? 0,
-                locationFile: locationFile,
-                fallbackTitle: capture.displayTitle)
-        }
+        Task { await autoName.run(capture: capture, model: model) }
     }
 
     // MARK: - Labels

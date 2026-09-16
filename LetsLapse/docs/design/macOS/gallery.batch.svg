@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1350 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Gallery · batch mode — three projects selected, the batch panel · 1310×800</title>
-  <desc>Mirrors App/GalleryView.swift (selectionHeader, the batch pane) + App/GalleryGridContent.swift (tap(_:order:), the selection circles) + App/GalleryTile.swift (selectionCircle) + App/GalleryBatchPanel.swift + App/GallerySelection.swift — gallery.svg's window with THREE tiles selected (2026-09-13, code first, mirrored after Steven's verification on his Mac): tile 1 clicked, tiles 2 and 6 ⌘-clicked. SELECTION: `GallerySelection` is a set with an anchor (the last plain or ⌘ click) and a selecting flag. On the Mac a plain click selects one tile, ⌘-click toggles a tile, ⇧-click adds the run from the anchor to the clicked tile in the grid's own order (the timeline's day groups included), ⌘A selects every tile the sidebar and the search field leave visible, ⌘D selects none; the arrows move the selection to the neighbouring tile (up and down keep the column, ⇧ grows the run) and the grid scrolls it into view; 0–5 rate every selected project, 0 clearing the rating — all from a local key monitor scoped to the Gallery's window that steps aside while a text field is first responder. The tile menu (gallery.menu.svg) adds Select Multiple, which puts the empty circle on every tile so tap after tap adds to the selection, and Select All. More than one tile selected — or Select Multiple on — is BATCH MODE: the header row becomes Done · "3 selected" · Select All (Deselect All once every visible tile is in) and search, sort, zoom and Timeline are gone; every tile wears its circle, ticked where selected, and a click on the circle toggles that tile without touching the rest. A click in a gutter or the margin selects none. THE BATCH PANEL takes the pane the preview panel had: "3 projects" 16 pt bold over "Changes here apply to every selected project." 12 pt secondary, a divider, then the three groups the single panel leads with, read over the selection — TAGS as the union of the projects' keywords, a solid chip (accent, xmark) for a tag on every project and a MIXED chip (accent at 13 %, LL.accentDeep text, the count 11 pt at 70 %) for a tag on some: the xmark takes the tag off every project, the body of a mixed chip puts it on every project, + Add tag raises the shared picker over the tags on all so anything it adds lands on all; PRESETS as the collapsed disclosure row with the pill reading the common state or "Mixed" (grey, styled as Edited) — open, it is gallery.presets.svg's grid previewed on the FIRST selected project with a "Previewed on River Sunset to Dusk" 11 pt caption under it, a tile tap applying the preset to every selected project through AppModel.applyPreset / applyCustomPreset (each keeps its own rotation, crop and owned white) after a confirmation that counts the Edited ones ("1 of the 3 selected projects carries manual adjustments, which the Cinema preset will replace; the rest simply take the preset. There's no undo."); METADATA as components/metadata-fields.mixed.narrow.svg — every row the value the projects agree on or "Mixed", a commit writing all of them, a revert reverting all of them. No INFO (nothing the files said is true of several files), no meta rows, no footer, no clips list. Tiles render through each project's grade (ProjectThumbnailCache.thumbnail(for:kind:grade:)), so a preset applied here shows in the grid at once. STATES NOT DRAWN: Select Multiple with nothing selected (the header reads "Select projects", every circle empty, no pane — iOS/gallery.selecting.portrait.svg draws it); the batch panel with PRESETS open; the batch preset confirmation; the picker over the batch field. Hooks: LL_TAB=gallery LL_SELECT=all|multiple|&lt;uuid&gt;,&lt;uuid&gt; (LL_PANEL=presets opens the row). Verified 2026-09-13 on the Mac Debug build over a scratch library and by Steven on his own Mac (⌘/⇧-click, ⌘A). **2026-09-13, evening — the pane is 330 pt (item view, code first, mirrored after Steven's sign-off):** GalleryColumns.pane went 300 → 330 (the batch panel shares the constant) so the right-hand divider holds still when the Gallery changes into its item view; the content column is 302 and `metadata-fields.mixed.narrow` is drawn at 302. The window is drawn at 1310×800 so the centre column keeps its 778 pt and the tiles their size. The mixed tag chips flow the same four rows at 302 (row 2 would need 363 for Rooftops); the PRESETS pill and chevron sit 30 pt further right, the tab bar 15.</desc>
+  <desc>Mirrors App/GalleryView.swift (selectionHeader, the batch pane) + App/GalleryGridContent.swift (tap(_:order:), the selection circles) + App/GalleryTile.swift (selectionCircle) + App/GalleryBatchPanel.swift + App/GallerySelection.swift — gallery.svg's window with THREE tiles selected (2026-09-13, code first, mirrored after Steven's verification on his Mac): tile 1 clicked, tiles 2 and 6 ⌘-clicked. SELECTION: `GallerySelection` is a set with an anchor (the last plain or ⌘ click) and a selecting flag. On the Mac a plain click selects one tile, ⌘-click toggles a tile, ⇧-click adds the run from the anchor to the clicked tile in the grid's own order (the timeline's day groups included), ⌘A selects every tile the sidebar and the search field leave visible, ⌘D selects none; the arrows move the selection to the neighbouring tile (up and down keep the column, ⇧ grows the run) and the grid scrolls it into view; 0–5 rate every selected project, 0 clearing the rating — all from a local key monitor scoped to the Gallery's window that steps aside while a text field is first responder. The tile menu (gallery.menu.svg) adds Select Multiple, which puts the empty circle on every tile so tap after tap adds to the selection, and Select All. More than one tile selected — or Select Multiple on — is BATCH MODE: the header row becomes Done · "3 selected" · Select All (Deselect All once every visible tile is in) and search, sort, zoom and Timeline are gone; every tile wears its circle, ticked where selected, and a click on the circle toggles that tile without touching the rest. A click in a gutter or the margin selects none. THE BATCH PANEL takes the pane the preview panel had: "3 projects" 16 pt bold over "Changes here apply to every selected project." 12 pt secondary, a divider, then the three groups the single panel leads with, read over the selection — TAGS as the union of the projects' keywords, a solid chip (accent, xmark) for a tag on every project and a MIXED chip (accent at 13 %, LL.accentDeep text, the count 11 pt at 70 %) for a tag on some: the xmark takes the tag off every project, the body of a mixed chip puts it on every project, + Add tag raises the shared picker over the tags on all so anything it adds lands on all; PRESETS as the collapsed disclosure row with the pill reading the common state or "Mixed" (grey, styled as Edited) — open, it is gallery.presets.svg's grid previewed on the FIRST selected project with a "Previewed on River Sunset to Dusk" 11 pt caption under it, a tile tap applying the preset to every selected project through AppModel.applyPreset / applyCustomPreset (each keeps its own rotation, crop and owned white) after a confirmation that counts the Edited ones ("1 of the 3 selected projects carries manual adjustments, which the Cinema preset will replace; the rest simply take the preset. There's no undo."); METADATA as components/metadata-fields.mixed.narrow.svg — every row the value the projects agree on or "Mixed", a commit writing all of them, a revert reverting all of them. No INFO (nothing the files said is true of several files), no meta rows, no footer, no clips list. Tiles render through each project's grade (ProjectThumbnailCache.thumbnail(for:kind:grade:)), so a preset applied here shows in the grid at once. STATES NOT DRAWN: Select Multiple with nothing selected (the header reads "Select projects", every circle empty, no pane — iOS/gallery.selecting.portrait.svg draws it); the batch panel with PRESETS open; the batch preset confirmation; the picker over the batch field. Hooks: LL_TAB=gallery LL_SELECT=all|multiple|&lt;uuid&gt;,&lt;uuid&gt; (LL_PANEL=presets opens the row). Verified 2026-09-13 on the Mac Debug build over a scratch library and by Steven on his own Mac (⌘/⇧-click, ⌘A). **2026-09-13, evening — the pane is 330 pt (item view, code first, mirrored after Steven's sign-off):** GalleryColumns.pane went 300 → 330 (the batch panel shares the constant) so the right-hand divider holds still when the Gallery changes into its item view; the content column is 302 and `metadata-fields.mixed.narrow` is drawn at 302. The window is drawn at 1310×800 so the centre column keeps its 778 pt and the tiles their size. The mixed tag chips flow the same four rows at 302 (row 2 would need 363 for Rooftops); the PRESETS pill and chevron sit 30 pt further right, the tab bar 15. **2026-09-16, Auto rename &amp; tag (Steven's brief + his gallery.batch.autorename.svg as the spec, code and mirror the same day):** a row sits directly above TAGS — sparkles · "Auto rename &amp; tag" · "×3 selected" · chevron, a 35 pt primary-6 % rounded row like the preview panel's action buttons — and TAGS, PRESETS and METADATA move down 49 pt for it. Pressing it swaps the grid for the review list, drawn in gallery.batch.autorename.svg; the label always carries the selection count; above 50 selected it refuses with an alert naming the cap. Hook: LL_AUTORENAME=1|demo with LL_SELECT.</desc>
 
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1310" height="800" rx="11"/></clipPath>
@@ -345,17 +345,28 @@
       <line x1="1000" y1="138.5" x2="1330" y2="138.5" stroke="#000" stroke-opacity="0.10"/>
       <!-- TAGS over the three: Water on all three (solid), Sky & weather and Urban on two,
            Nature, Rooftops and Landmark on one each (mixed, with the count). -->
-      <g id="tags">
-        <text x="1018" y="163" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+      <!-- AUTO RENAME & TAG (2026-09-16): the row above TAGS — the whole selection through the
+           review list (gallery.batch.autorename.svg). Primary 6 % fill, radius 9, 9 pt vertical
+           padding; sparkles + "Auto rename & tag" 14 semibold accent, "×3 selected" 12.5
+           secondary, chevron trailing. Inert (secondary ink) only when no model can run. -->
+<g id="auto-rename" data-symbol="sparkles">
+<rect x="1014" y="150.5" width="302" height="35" rx="9" fill="#000" fill-opacity="0.06"/>
+<path d="M1033 162 l1.6 4.4 4.4 1.6 -4.4 1.6 -1.6 4.4 -1.6 -4.4 -4.4 -1.6 4.4 -1.6 z M1039.5 159.5 l0.8 2.2 2.2 0.8 -2.2 0.8 -0.8 2.2 -0.8 -2.2 -2.2 -0.8 2.2 -0.8 z" fill="#C36A00"/>
+<text x="1047" y="173" font-size="14" class="sb" fill="#C36A00">Auto rename &amp; tag</text>
+<text x="1188" y="173" font-size="12.5" fill="#6D6D72">×3 selected</text>
+<path d="M1300 163.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-opacity="0.6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+</g>
+<g id="tags">
+        <text x="1018" y="212" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
         <g id="batch-tag-field">
-          <g data-tag="Water" data-state="all" transform="translate(1014,171.5)">
+          <g data-tag="Water" data-state="all" transform="translate(1014,220.5)">
             <rect x="0" y="0" width="82" height="33" rx="16.5" fill="#C36A00"/>
             <text x="12" y="21.5" font-size="14" class="sb" fill="#FFF">Water</text>
             <g stroke="#FFF" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
               <path d="M61.5 12.5 l8 8 M69.5 12.5 l-8 8"/>
             </g>
           </g>
-          <g data-tag="Sky &amp; weather" data-state="some" data-count="2/3" transform="translate(1104,171.5)">
+          <g data-tag="Sky &amp; weather" data-state="some" data-count="2/3" transform="translate(1104,220.5)">
             <rect x="0" y="0" width="169" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
             <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Sky &amp; weather</text>
             <text x="122" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">2/3</text>
@@ -363,7 +374,7 @@
               <path d="M148.5 12.5 l8 8 M156.5 12.5 l-8 8"/>
             </g>
           </g>
-          <g data-tag="Urban" data-state="some" data-count="2/3" transform="translate(1014,212.5)">
+          <g data-tag="Urban" data-state="some" data-count="2/3" transform="translate(1014,261.5)">
             <rect x="0" y="0" width="105" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
             <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Urban</text>
             <text x="58" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">2/3</text>
@@ -371,7 +382,7 @@
               <path d="M84.5 12.5 l8 8 M92.5 12.5 l-8 8"/>
             </g>
           </g>
-          <g data-tag="Nature" data-state="some" data-count="1/3" transform="translate(1127,212.5)">
+          <g data-tag="Nature" data-state="some" data-count="1/3" transform="translate(1127,261.5)">
             <rect x="0" y="0" width="113" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
             <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Nature</text>
             <text x="66" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">1/3</text>
@@ -379,7 +390,7 @@
               <path d="M92.5 12.5 l8 8 M100.5 12.5 l-8 8"/>
             </g>
           </g>
-          <g data-tag="Rooftops" data-state="some" data-count="1/3" transform="translate(1014,253.5)">
+          <g data-tag="Rooftops" data-state="some" data-count="1/3" transform="translate(1014,302.5)">
             <rect x="0" y="0" width="129" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
             <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Rooftops</text>
             <text x="82" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">1/3</text>
@@ -387,7 +398,7 @@
               <path d="M108.5 12.5 l8 8 M116.5 12.5 l-8 8"/>
             </g>
           </g>
-          <g data-tag="Landmark" data-state="some" data-count="1/3" transform="translate(1151,253.5)">
+          <g data-tag="Landmark" data-state="some" data-count="1/3" transform="translate(1151,302.5)">
             <rect x="0" y="0" width="129" height="33" rx="16.5" fill="#C36A00" fill-opacity="0.13"/>
             <text x="12" y="21.5" font-size="14" class="sb" fill="#8A4A00">Landmark</text>
             <text x="82" y="21" font-size="11" class="sb" fill="#8A4A00" fill-opacity="0.7">1/3</text>
@@ -395,7 +406,7 @@
               <path d="M108.5 12.5 l8 8 M116.5 12.5 l-8 8"/>
             </g>
           </g>
-          <g data-action="add" transform="translate(1014,294.5)">
+          <g data-action="add" transform="translate(1014,343.5)">
             <rect x="0.6" y="0.6" width="110.8" height="31.8" rx="15.9" fill="#FFFFFF" stroke="#C36A00" stroke-width="1.2" stroke-dasharray="4 3"/>
             <path d="M19 16.5 h9 M23.5 12 v9" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" data-symbol="plus"/>
             <text x="35" y="21.5" font-size="14" class="m" fill="#C36A00">Add tag</text>
@@ -403,12 +414,12 @@
         </g>
       </g>
       <g id="presets" data-state="collapsed">
-        <text x="1018" y="358.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
-        <rect x="1239" y="341.5" width="60" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
-        <text x="1269" y="358.5" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Mixed</text>
-        <path d="M1307 349.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+        <text x="1018" y="407.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
+        <rect x="1239" y="390.5" width="60" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
+        <text x="1269" y="407.5" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Mixed</text>
+        <path d="M1307 398.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
       </g>
-      <image href="../components/metadata-fields.mixed.narrow.svg" x="1014" y="380.5" width="302" height="1218"/>
+      <image href="../components/metadata-fields.mixed.narrow.svg" x="1014" y="429.5" width="302" height="1218"/>
       <!-- the rest of the record scrolls under the window edge -->
     </g>
 

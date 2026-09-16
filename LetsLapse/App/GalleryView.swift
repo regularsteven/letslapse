@@ -54,6 +54,13 @@ struct GalleryView: View {
     /// preset offer), and `itemTransition` says where to go once it has.
     @State private var exitRequest: EditorExitRequest?
     @State private var itemTransition: ItemTransition?
+    /// Auto rename & tag over the selection (2026-09-16): while set, the
+    /// grid column shows the review list and the pane its panel. The
+    /// selection is left as it was, so the grid comes back to it.
+    @State private var review: AutoRenameReviewSession?
+    /// One line the review had to say on its way out — the selection cap,
+    /// or that nothing could be analysed.
+    @State private var reviewNotice: String?
 
     /// Where the editor goes once it has left: back to the grid, or on to the
     /// project the filmstrip (or an arrow) named.
@@ -153,6 +160,16 @@ struct GalleryView: View {
             } message: {
                 Text(deleteFailure ?? "")
             }
+            .alert("Auto rename & tag",
+                   isPresented: Binding(
+                       get: { reviewNotice != nil },
+                       set: { if !$0 { reviewNotice = nil } }
+                   )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(reviewNotice ?? "")
+            }
+            .onAppear { consumeAutoRenameHook() }
             #if os(iOS)
             .toolbar(.hidden, for: .navigationBar)
             #else
@@ -221,7 +238,12 @@ struct GalleryView: View {
         // iPhone/compact: the batch panel, raised by the selection row's Edit
         .sheet(isPresented: $showBatchSheet) {
             NavigationStack {
-                GalleryBatchPanel(captures: batchCaptures)
+                GalleryBatchPanel(captures: batchCaptures, onAutoRename: {
+                    // The list takes the grid's place under the sheet, so the
+                    // sheet goes first.
+                    showBatchSheet = false
+                    startAutoRename()
+                })
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Close") { showBatchSheet = false }
@@ -259,19 +281,26 @@ struct GalleryView: View {
         if isWide {
             wideLayout
         } else {
-            // Compact: just the grid + header
+            // Compact: just the grid + header — or the review list with its
+            // bar under it, while Auto rename & tag runs over the selection.
             VStack(spacing: 0) {
                 galleryHeader
                 Divider()
-                GalleryGridContent(
-                    rows:         sortedRows,
-                    columnCount:  columnCount,
-                    timelineMode: timelineMode,
-                    selection:    $selection,
-                    scrollTarget: $scrollTarget,
-                    onOpen: { path.append($0) },
-                    onRefresh: refreshAction
-                )
+                if let review {
+                    AutoRenameReviewList(session: review, compact: true)
+                    Divider()
+                    AutoRenameReviewPanel(session: review, asBar: true)
+                } else {
+                    GalleryGridContent(
+                        rows:         sortedRows,
+                        columnCount:  columnCount,
+                        timelineMode: timelineMode,
+                        selection:    $selection,
+                        scrollTarget: $scrollTarget,
+                        onOpen: { path.append($0) },
+                        onRefresh: refreshAction
+                    )
+                }
             }
             // On compact devices a plain tap opens the preview sheet; in
             // selection mode taps toggle and the sheet stays down. Closing
@@ -374,20 +403,28 @@ struct GalleryView: View {
         }
     }
 
+    /// The grid under its header — or, while a review runs, the Auto rename
+    /// & tag list in the grid's place, under the same selection header.
     private var gridColumn: some View {
         VStack(spacing: 0) {
             galleryHeader
             Divider()
-            GalleryGridContent(
-                rows:         sortedRows,
-                columnCount:  columnCount,
-                timelineMode: timelineMode,
-                selection:    $selection,
-                scrollTarget: $scrollTarget,
-                onOpen: { open($0) },
-                onEdit: gridEditHandler,
-                onRefresh: refreshAction
-            )
+            if let review {
+                AutoRenameReviewList(session: review)
+                    .transition(.opacity)
+            } else {
+                GalleryGridContent(
+                    rows:         sortedRows,
+                    columnCount:  columnCount,
+                    timelineMode: timelineMode,
+                    selection:    $selection,
+                    scrollTarget: $scrollTarget,
+                    onOpen: { open($0) },
+                    onEdit: gridEditHandler,
+                    onRefresh: refreshAction
+                )
+                .transition(.opacity)
+            }
         }
     }
 
@@ -418,9 +455,13 @@ struct GalleryView: View {
     /// panel over exactly one, nothing over none.
     @ViewBuilder
     private var paneColumn: some View {
-        if selection.isBatch {
+        if let review {
             Divider()
-            GalleryBatchPanel(captures: batchCaptures)
+            AutoRenameReviewPanel(session: review)
+                .frame(width: GalleryColumns.pane)
+        } else if selection.isBatch {
+            Divider()
+            GalleryBatchPanel(captures: batchCaptures, onAutoRename: startAutoRename)
                 .frame(width: GalleryColumns.pane)
         } else if let id = selection.single,
                   let capture = model.capture(id: id) {
@@ -534,6 +575,9 @@ struct GalleryView: View {
         let allSelected = !all.isEmpty && selection.ids.count == all.count
         return HStack(spacing: 10) {
             Button("Done") {
+                // Mid-review, Done is Cancel first: nothing written, then out
+                // of selection mode as ever.
+                review?.cancel()
                 withAnimation(.easeInOut(duration: 0.2)) { selection.clear() }
             }
             .buttonStyle(.plain)
@@ -553,8 +597,10 @@ struct GalleryView: View {
             }
             .buttonStyle(.plain)
             .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(LL.accent)
-            .disabled(all.isEmpty)
+            .foregroundStyle(review == nil ? LL.accent : Color.secondary)
+            // The review's rows are the selection as it was entered: not a
+            // moment to change what "N selected" means under it.
+            .disabled(all.isEmpty || review != nil)
 
             if !isWide {
                 Button {
@@ -839,6 +885,46 @@ struct GalleryView: View {
         path.append(id)
     }
 
+    // MARK: Auto rename & tag
+
+    /// The batch panel's action over more than one project: the review list
+    /// in the grid's place. Refused above the cap with a line that names it.
+    private func startAutoRename() {
+        guard review == nil else { return }
+        let captures = batchCaptures
+        guard captures.count > 1 else { return }
+        guard captures.count <= AutoRenameReviewSession.selectionCap else {
+            reviewNotice = "Auto rename & tag reviews up to \(AutoRenameReviewSession.selectionCap) projects at a time. \(captures.count) are selected — narrow the selection and try again."
+            return
+        }
+        let session = AutoRenameReviewSession(captures: captures, model: model)
+        session.onFinish = { outcome in
+            withAnimation(.easeInOut(duration: 0.25)) { review = nil }
+            if case .allFailed(let message) = outcome { reviewNotice = message }
+        }
+        withAnimation(.easeInOut(duration: 0.25)) { review = session }
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["LL_AUTORENAME"] == "demo" {
+            session.stageDemo()
+            return
+        }
+        #endif
+        session.start()
+    }
+
+    /// `LL_AUTORENAME=1|demo` — with `LL_SELECT=<uuid>,<uuid>[,…]` (or
+    /// `all`), enters the review list from launch: `1` runs the real
+    /// engine, `demo` stages the three drawn row states without a model.
+    /// Pair with `LL_TAB=gallery`.
+    private func consumeAutoRenameHook() {
+        #if DEBUG
+        guard review == nil, let raw = ProcessInfo.processInfo.environment["LL_AUTORENAME"],
+              raw != "0" else { return }
+        // The selection hook runs in the same appear pass; give it the turn.
+        DispatchQueue.main.async { startAutoRename() }
+        #endif
+    }
+
     // MARK: Item view
 
     /// Enters the item view on `capture`, the editor on `page`. False when
@@ -953,6 +1039,26 @@ struct GalleryView: View {
                     case .right?: step(1);  return true
                     default: return false
                     }
+                }
+                // ⌘Z / ⇧⌘Z: Auto rename & tag's writes register on the
+                // window's undo manager (one action per accept or Apply all),
+                // and the Edit menu's Undo does not reach it — nothing in a
+                // SwiftUI window's responder chain answers `undo:` unless a
+                // text field is being edited (measured 2026-09-16) — so the
+                // Gallery answers the keys itself, for its own actions only.
+                if flags.subtracting(.shift) == .command, key == "z",
+                   let manager = window.undoManager {
+                    let redo = flags.contains(.shift)
+                    let name = redo ? manager.redoActionName : manager.undoActionName
+                    guard name.hasPrefix("Auto rename & tag"), redo ? manager.canRedo : manager.canUndo else { return false }
+                    if redo { manager.redo() } else { manager.undo() }
+                    return true
+                }
+                // The review list: ⎋ cancels it (nothing written); the
+                // grid's keys are not its own.
+                if let review {
+                    if flags.isEmpty, event.keyCode == 53 { review.cancel(); return true }
+                    return false
                 }
                 // ⏎ on one selected tile opens it.
                 if flags.isEmpty, event.keyCode == 36 || event.keyCode == 76,

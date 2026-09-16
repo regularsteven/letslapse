@@ -1,0 +1,249 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1310 880" width="1310" height="880" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+<title>macOS · Gallery · batch mode — Auto rename &amp; tag, the review list · 1310×800</title>
+<desc>Mirrors App/AutoRenameReviewList.swift (AutoRenameReviewList, AutoRenameReviewRow, AutoRenameReviewPanel) + App/AutoRenameReview.swift (AutoRenameReviewSession, AppModel.applyAutoRename) + App/GalleryView.swift (gridColumn / paneColumn while `review` is set) + App/AI/AutoRenameEngine.swift — gallery.batch.svg's window after the batch panel's "Auto rename &amp; tag ×3 selected" row (2026-09-16; Steven's brief and his own drawing of this file were the spec, implemented the same day and tidied to the tokens after). THE LIST takes the grid's place, in place — not a sheet, not a window — under the same selection header (Done cancels the review first; Select All is disabled while it runs, since the rows ARE the selection as it was entered). One row per selected project in the grid's order: the tile as the grid draws it (ring, circle, type badge, clip count), then "Suggested name — edit it or leave it" 11.5 pt over a 32 pt field (14 semibold, 358 wide) — empty means keep the existing name, which is how a row is tagged without renaming — SUBJECT TAGS as the tag editor in its PROPOSED style (accent 13 %, LL.accentDeep text, an xmark each, + Add tag raising gallery.tags.svg's picker; no fractions and no partial state, because a row is one project and a tag is on it or not), FROM THIS CAPTURE as read-only chips (mappin place, sun.horizon light) with "Read from location and time, not the image" once on the first row, and top right Accept (levelGood tick) and Discard (levelFar cross), 28 pt. Row 1 wears the RENAMING marker (amber 35 %, 10.5 semibold deep accent) because that project already carries a name a person chose — Apply all never silently overwrites deliberate naming. Row 3 is PENDING: a small spinner and "Looking at this one…", skeleton field and pills on primary 6 %, the capture chips already there (metadata needs no model), Accept disabled, Discard live (it cancels that row's analysis). Rows stream in as their analysis lands, two at a time (Gemma one at a time). Accept writes that row and collapses it after a beat; Discard collapses it and writes nothing; when the list empties by any mix of the two the grid returns with the selection intact. THE PANEL (the 330 pt pane, 14 pt inset): "3 projects" 16 bold, "Names and tags below apply only to the row they sit on." 12 pt secondary, a divider, Cancel (dashed accent capsule 128×40) and Apply all (filled, 130×40, a tick), then the readiness line — "2 of 3 ready." plus "Apply all uses what is finished and leaves the rest untouched." while rows are pending, or "One couldn't be read." Apply all writes every ready row as ONE undo action ("Auto rename &amp; tag (N projects)", ⌘Z in the Gallery; a single accept is "Auto rename &amp; tag") and cancels the rest; Cancel writes nothing. STATES NOT DRAWN: a failed row ("Couldn't read this one" + Retry, the capture chips under it); the accepted beat (the tick stays green as the row collapses); the compact layout (the list full width with the panel as a bar under it — iPhone, unmirrored). ENGINE: Stage A analyses the frame behind the tile once and keeps the record as Projects/&lt;id&gt;/scene-analysis.json (keyed by asset + frame + schema, so a second run — here, from the single panel, from the project screen — costs no second pass); Stage B generates the name and the tags from it, reconciled against the library's tags (exact, case- and diacritic-insensitive → a small alias table → new, minted only on accept). Above 50 selected the row refuses with an alert naming the cap. Hooks: LL_TAB=gallery LL_SELECT=&lt;uuid&gt;,&lt;uuid&gt;,&lt;uuid&gt; LL_AUTORENAME=demo (these three states, no model) | 1 (the real engine); LL_KEY=cmd+z@16 undoes. Verified 2026-09-16 on the Mac Debug build over a scratch library, Gemma and cache hits alike. Drawn at the 1310×800 window like its siblings; the running app was captured at 1800×1125.</desc>
+<defs>
+<linearGradient id="thumbA" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#9FB6CE"/>
+<stop offset="55%" stop-color="#E8D7BC"/>
+<stop offset="100%" stop-color="#C6B79C"/>
+</linearGradient>
+<linearGradient id="thumbB" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#6E7A99"/>
+<stop offset="45%" stop-color="#D98B4A"/>
+<stop offset="100%" stop-color="#4A4437"/>
+</linearGradient>
+<linearGradient id="thumbC" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#6B7076"/>
+<stop offset="60%" stop-color="#8A8B84"/>
+<stop offset="100%" stop-color="#9A9478"/>
+</linearGradient>
+<clipPath id="clipA">
+<rect x="240" y="118" width="230" height="172" rx="8"/>
+</clipPath>
+<clipPath id="clipB">
+<rect x="240" y="322" width="230" height="172" rx="8"/>
+</clipPath>
+<clipPath id="clipC">
+<rect x="240" y="526" width="230" height="172" rx="8"/>
+</clipPath>
+<filter id="win" x="-5%" y="-5%" width="110%" height="115%">
+<feDropShadow dx="0" dy="6" stdDeviation="14" flood-color="#000" flood-opacity="0.18"/>
+</filter>
+</defs>
+<rect width="1310" height="880" fill="#DCDCDE"/>
+<!-- window -->
+<rect x="15" y="12" width="1280" height="800" rx="12" fill="#FFFFFF" filter="url(#win)"/>
+<!-- titlebar -->
+<path d="M15 24 a12 12 0 0 1 12 -12 h1256 a12 12 0 0 1 12 12 v32 h-1280 z" fill="#F0F0F2"/>
+<circle cx="40" cy="34" r="6.5" fill="#FF5F57"/>
+<circle cx="60" cy="34" r="6.5" fill="#FEBC2E"/>
+<circle cx="80" cy="34" r="6.5" fill="#28C840"/>
+<text x="655" y="39" text-anchor="middle" font-size="14" font-weight="600" fill="#1C1C1E">Gallery</text>
+<!-- sidebar -->
+<path d="M15 56 h205 v756 h-193 a12 12 0 0 1 -12 -12 z" fill="#F4F4F6"/>
+<text x="38" y="88" font-size="11.5" font-weight="600" letter-spacing="0.6" fill="#8A8A8E">LIBRARY</text>
+<rect x="26" y="98" width="183" height="30" rx="7" fill="#E9E2D8"/>
+<text x="58" y="118" font-size="13.5" font-weight="600" fill="#1C1C1E">All</text>
+<rect x="38" y="105" width="7" height="7" rx="1.5" fill="#C36A00"/>
+<rect x="48" y="105" width="7" height="7" rx="1.5" fill="#C36A00"/>
+<rect x="38" y="115" width="7" height="7" rx="1.5" fill="#C36A00"/>
+<rect x="48" y="115" width="7" height="7" rx="1.5" fill="#C36A00"/>
+<rect x="37" y="140" width="18" height="14" rx="2.5" fill="none" stroke="#5B5B60" stroke-width="1.5"/>
+<text x="58" y="152" font-size="13.5" fill="#1C1C1E">Photos</text>
+<rect x="37" y="172" width="18" height="13" rx="2" fill="none" stroke="#5B5B60" stroke-width="1.5"/>
+<text x="58" y="184" font-size="13.5" fill="#1C1C1E">Interval</text>
+<rect x="37" y="204" width="18" height="13" rx="2" fill="none" stroke="#5B5B60" stroke-width="1.5"/>
+<line x1="46" y1="204" x2="46" y2="217" stroke="#5B5B60" stroke-width="1.5"/>
+<text x="58" y="216" font-size="13.5" fill="#1C1C1E">Video</text>
+<line x1="30" y1="240" x2="205" y2="240" stroke="#E0E0E3" stroke-width="1"/>
+<text x="38" y="268" font-size="11.5" font-weight="600" letter-spacing="0.6" fill="#8A8A8E">TAGS</text>
+<circle cx="42" cy="294" r="3.5" fill="#C3C3C7"/>
+<text x="58" y="299" font-size="13.5" fill="#1C1C1E">Water</text>
+<circle cx="42" cy="324" r="3.5" fill="#C3C3C7"/>
+<text x="58" y="329" font-size="13.5" fill="#1C1C1E">Sky &amp; weather</text>
+<circle cx="42" cy="354" r="3.5" fill="#C3C3C7"/>
+<text x="58" y="359" font-size="13.5" fill="#1C1C1E">Urban</text>
+<circle cx="42" cy="384" r="3.5" fill="#C3C3C7"/>
+<text x="58" y="389" font-size="13.5" fill="#1C1C1E">Landmark</text>
+<circle cx="42" cy="414" r="3.5" fill="#C3C3C7"/>
+<text x="58" y="419" font-size="13.5" fill="#1C1C1E">Rooftops</text>
+<line x1="30" y1="442" x2="205" y2="442" stroke="#E0E0E3" stroke-width="1"/>
+<text x="38" y="470" font-size="11.5" font-weight="600" letter-spacing="0.6" fill="#8A8A8E">COLLECTIONS</text>
+<rect x="37" y="488" width="18" height="13" rx="2" fill="none" stroke="#5B5B60" stroke-width="1.5"/>
+<text x="58" y="500" font-size="13.5" fill="#1C1C1E">All Collections</text>
+<line x1="30" y1="526" x2="205" y2="526" stroke="#E0E0E3" stroke-width="1"/>
+<text x="38" y="554" font-size="11.5" font-weight="600" letter-spacing="0.6" fill="#8A8A8E">SHAPES</text>
+<ellipse cx="46" cy="578" rx="9" ry="6.5" fill="none" stroke="#5B5B60" stroke-width="1.5"/>
+<text x="66" y="583" font-size="13.5" fill="#1C1C1E">Ellipse</text>
+<rect x="37" y="602" width="18" height="12" rx="3" fill="none" stroke="#5B5B60" stroke-width="1.5"/>
+<text x="66" y="613" font-size="13.5" fill="#1C1C1E">Rectangle</text>
+<rect x="38" y="631" width="15" height="15" rx="3" fill="none" stroke="#5B5B60" stroke-width="1.5"/>
+<text x="66" y="643" font-size="13.5" fill="#1C1C1E">Square</text>
+<circle cx="46" cy="672" r="8" fill="none" stroke="#5B5B60" stroke-width="1.5"/>
+<line x1="40" y1="678" x2="52" y2="666" stroke="#5B5B60" stroke-width="1.5"/>
+<text x="66" y="677" font-size="13.5" fill="#1C1C1E">No Shapes</text>
+<!-- content background -->
+<rect x="220" y="56" width="745" height="756" fill="#FAFAFA"/>
+<!-- selection header row -->
+<text x="240" y="93" font-size="14" fill="#C36A00">Done</text>
+<text x="597" y="96" text-anchor="middle" font-size="19" font-weight="700" fill="#1C1C1E">3 selected</text>
+<text x="945" y="93" text-anchor="end" font-size="14" fill="#8A8A8E">Select All</text>
+<line x1="220" y1="108" x2="965" y2="108" stroke="#E6E6E9" stroke-width="1"/>
+<!-- ============ ROW 1 ============ -->
+<g clip-path="url(#clipA)">
+<rect x="240" y="118" width="230" height="172" fill="url(#thumbA)"/>
+<rect x="322" y="176" width="26" height="62" fill="#8D96A3"/>
+<rect x="330" y="164" width="7" height="16" fill="#8D96A3"/>
+<rect x="240" y="238" width="230" height="8" fill="#B9BCB4"/>
+<rect x="240" y="246" width="230" height="44" fill="#A9AAA2"/>
+</g>
+<rect x="240" y="118" width="230" height="172" rx="8" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+<rect x="252" y="256" width="60" height="20" rx="5" fill="#2A2A2C" fill-opacity="0.72"/>
+<text x="282" y="270" text-anchor="middle" font-size="11.5" font-weight="500" fill="#FFFFFF">Interval</text>
+<circle cx="262" cy="140" r="11" fill="#C36A00"/>
+<path d="M256.5 140 l4 4 l7 -7.5" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="492" y="133" font-size="11.5" fill="#6D6D72">Suggested name — edit it or leave it</text>
+<rect x="694" y="123" width="58" height="15" rx="7.5" fill="#FFB340" fill-opacity="0.35"/>
+<text x="723" y="134" text-anchor="middle" font-size="10.5" font-weight="600" fill="#8A4A00">Renaming</text>
+<rect x="492" y="142" width="358" height="32" rx="6" fill="#FFFFFF" stroke="#C9C9CE" stroke-width="1"/>
+<text x="504" y="163" font-size="14" font-weight="600" fill="#1C1C1E">Building on the horizon</text>
+<text x="492" y="201" font-size="11.5" font-weight="600" letter-spacing="0.5" fill="#6D6D72">SUBJECT TAGS</text>
+<g>
+<rect x="492" y="210" width="90" height="27" rx="13.5" fill="#F7ECDE"/>
+<text x="506" y="228" font-size="13" fill="#8A4A00">Urban</text>
+<path data-symbol="xmark" d="M558 219.5 l8 8 M566 219.5 l-8 8" stroke="#8A4A00" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="590" y="210" width="133" height="27" rx="13.5" fill="#F7ECDE"/>
+<text x="604" y="228" font-size="13" fill="#8A4A00">Architecture</text>
+<path data-symbol="xmark" d="M699 219.5 l8 8 M707 219.5 l-8 8" stroke="#8A4A00" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="731" y="210" width="121" height="27" rx="13.5" fill="#F7ECDE"/>
+<text x="745" y="228" font-size="13" fill="#8A4A00">Waterfront</text>
+<path data-symbol="xmark" d="M828 219.5 l8 8 M836 219.5 l-8 8" stroke="#8A4A00" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="860" y="210" width="86" height="27" rx="13.5" fill="none" stroke="#C36A00" stroke-width="1.3" stroke-dasharray="4 3"/>
+<path data-symbol="plus" d="M874 223.5 h11 M879.5 218 v11" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round"/>
+<text x="892" y="228" font-size="13" fill="#C36A00">Add tag</text>
+</g>
+<text x="492" y="265" font-size="11.5" font-weight="600" letter-spacing="0.5" fill="#6D6D72">FROM THIS CAPTURE</text>
+<rect x="492" y="273" width="88" height="25" rx="12.5" fill="#EFEFF1"/>
+<circle cx="507" cy="285.5" r="3.5" fill="none" stroke="#6E6E73" stroke-width="1.4"/>
+<path data-symbol="mappin" d="M507 289 v3.5" stroke="#6E6E73" stroke-width="1.4" stroke-linecap="round"/>
+<text x="518" y="290" font-size="12.5" fill="#3A3A3C">Karlín</text>
+<rect x="588" y="273" width="76" height="25" rx="12.5" fill="#EFEFF1"/>
+<circle cx="603" cy="285.5" r="4" fill="none" stroke="#6E6E73" stroke-width="1.4"/>
+<path data-symbol="sun.horizon" d="M597 285.5 h-3 M609 285.5 h3 M603 279.5 v-3" stroke="#6E6E73" stroke-width="1.4" stroke-linecap="round"/>
+<text x="614" y="290" font-size="12.5" fill="#3A3A3C">Dusk</text>
+<text x="674" y="290" font-size="11.5" fill="#A0A0A5">Read from location and time, not the image</text>
+<circle cx="902" cy="133" r="14" fill="#34C759"/>
+<path data-symbol="checkmark" d="M895.5 133 l4.5 4.5 l8 -8.5" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="940" cy="133" r="14" fill="#FF3B30"/>
+<path data-symbol="xmark" d="M934 127 l12 12 M946 127 l-12 12" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
+<line x1="240" y1="308" x2="945" y2="308" stroke="#EAEAEC" stroke-width="1"/>
+<!-- ============ ROW 2 ============ -->
+<g clip-path="url(#clipB)">
+<rect x="240" y="322" width="230" height="172" fill="url(#thumbB)"/>
+<path d="M240 418 L300 392 L352 414 L404 388 L470 416 L470 494 L240 494 Z" fill="#3E3B3F"/>
+<rect x="240" y="452" width="230" height="42" fill="#33302F"/>
+</g>
+<rect x="240" y="322" width="230" height="172" rx="8" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+<rect x="396" y="334" width="62" height="21" rx="5" fill="#2A2A2C" fill-opacity="0.72"/>
+<text x="427" y="349" text-anchor="middle" font-size="11.5" font-weight="500" fill="#FFFFFF">3 clips</text>
+<rect x="252" y="460" width="60" height="20" rx="5" fill="#2A2A2C" fill-opacity="0.72"/>
+<text x="282" y="474" text-anchor="middle" font-size="11.5" font-weight="500" fill="#FFFFFF">Interval</text>
+<circle cx="262" cy="344" r="11" fill="#C36A00"/>
+<path d="M256.5 344 l4 4 l7 -7.5" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="492" y="337" font-size="11.5" fill="#6D6D72">Suggested name — edit it or leave it</text>
+<rect x="492" y="346" width="358" height="32" rx="6" fill="#FFFFFF" stroke="#C9C9CE" stroke-width="1"/>
+<text x="504" y="367" font-size="14" font-weight="600" fill="#1C1C1E">Ridgeline at last light</text>
+<text x="492" y="405" font-size="11.5" font-weight="600" letter-spacing="0.5" fill="#6D6D72">SUBJECT TAGS</text>
+<g>
+<rect x="492" y="414" width="94" height="27" rx="13.5" fill="#F7ECDE"/>
+<text x="506" y="432" font-size="13" fill="#8A4A00">Sunset</text>
+<path data-symbol="xmark" d="M562 423.5 l8 8 M570 423.5 l-8 8" stroke="#8A4A00" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="594" y="414" width="143" height="27" rx="13.5" fill="#F7ECDE"/>
+<text x="608" y="432" font-size="13" fill="#8A4A00">Sky &amp; weather</text>
+<path data-symbol="xmark" d="M713 423.5 l8 8 M721 423.5 l-8 8" stroke="#8A4A00" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="745" y="414" width="78" height="27" rx="13.5" fill="#F7ECDE"/>
+<text x="759" y="432" font-size="13" fill="#8A4A00">Hills</text>
+<path data-symbol="xmark" d="M799 423.5 l8 8 M807 423.5 l-8 8" stroke="#8A4A00" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="831" y="414" width="86" height="27" rx="13.5" fill="none" stroke="#C36A00" stroke-width="1.3" stroke-dasharray="4 3"/>
+<path data-symbol="plus" d="M845 427.5 h11 M850.5 422 v11" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round"/>
+<text x="863" y="432" font-size="13" fill="#C36A00">Add tag</text>
+</g>
+<text x="492" y="469" font-size="11.5" font-weight="600" letter-spacing="0.5" fill="#6D6D72">FROM THIS CAPTURE</text>
+<rect x="492" y="477" width="94" height="25" rx="12.5" fill="#EFEFF1"/>
+<circle cx="507" cy="489.5" r="3.5" fill="none" stroke="#6E6E73" stroke-width="1.4"/>
+<path data-symbol="mappin" d="M507 493 v3.5" stroke="#6E6E73" stroke-width="1.4" stroke-linecap="round"/>
+<text x="518" y="494" font-size="12.5" fill="#3A3A3C">Šumava</text>
+<rect x="594" y="477" width="76" height="25" rx="12.5" fill="#EFEFF1"/>
+<circle cx="609" cy="489.5" r="4" fill="none" stroke="#6E6E73" stroke-width="1.4"/>
+<path data-symbol="sun.horizon" d="M603 489.5 h-3 M615 489.5 h3 M609 483.5 v-3" stroke="#6E6E73" stroke-width="1.4" stroke-linecap="round"/>
+<text x="620" y="494" font-size="12.5" fill="#3A3A3C">Dusk</text>
+<circle cx="902" cy="337" r="14" fill="#34C759"/>
+<path data-symbol="checkmark" d="M895.5 337 l4.5 4.5 l8 -8.5" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="940" cy="337" r="14" fill="#FF3B30"/>
+<path data-symbol="xmark" d="M934 331 l12 12 M946 331 l-12 12" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
+<line x1="240" y1="512" x2="945" y2="512" stroke="#EAEAEC" stroke-width="1"/>
+<!-- ============ ROW 3 — still analysing ============ -->
+<g clip-path="url(#clipC)">
+<rect x="240" y="526" width="230" height="172" fill="url(#thumbC)"/>
+<ellipse cx="358" cy="588" rx="96" ry="26" fill="#5E6268" fill-opacity="0.55"/>
+<rect x="240" y="640" width="230" height="58" fill="#8D8A70"/>
+</g>
+<rect x="240" y="526" width="230" height="172" rx="8" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+<rect x="252" y="664" width="54" height="20" rx="5" fill="#2A2A2C" fill-opacity="0.72"/>
+<text x="279" y="678" text-anchor="middle" font-size="11.5" font-weight="500" fill="#FFFFFF">Photo</text>
+<circle cx="262" cy="548" r="11" fill="#C36A00"/>
+<path d="M256.5 548 l4 4 l7 -7.5" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="501" cy="546" r="7.5" fill="none" stroke="#C9C9CE" stroke-width="2"/>
+<path d="M501 538.5 a7.5 7.5 0 0 1 7.5 7.5" fill="none" stroke="#C36A00" stroke-width="2" stroke-linecap="round"/>
+<text x="518" y="551" font-size="13" fill="#6D6D72">Looking at this one…</text>
+<rect x="492" y="566" width="300" height="32" rx="6" fill="#EDEDF0"/>
+<rect x="492" y="616" width="90" height="27" rx="13.5" fill="#EDEDF0"/>
+<rect x="590" y="616" width="133" height="27" rx="13.5" fill="#EDEDF0"/>
+<rect x="731" y="616" width="121" height="27" rx="13.5" fill="#EDEDF0"/>
+<rect x="492" y="663" width="88" height="25" rx="12.5" fill="#EFEFF1"/>
+<circle cx="507" cy="675.5" r="3.5" fill="none" stroke="#6E6E73" stroke-width="1.4"/>
+<path data-symbol="mappin" d="M507 679 v3.5" stroke="#6E6E73" stroke-width="1.4" stroke-linecap="round"/>
+<text x="518" y="680" font-size="12.5" fill="#3A3A3C">Karlín</text>
+<rect x="588" y="663" width="88" height="25" rx="12.5" fill="#EFEFF1"/>
+<circle cx="603" cy="675.5" r="4" fill="none" stroke="#6E6E73" stroke-width="1.4"/>
+<path data-symbol="sun.horizon" d="M597 675.5 h-3 M609 675.5 h3 M603 669.5 v-3" stroke="#6E6E73" stroke-width="1.4" stroke-linecap="round"/>
+<text x="614" y="680" font-size="12.5" fill="#3A3A3C">Morning</text>
+<circle cx="902" cy="541" r="14" fill="#E4E4E7"/>
+<path data-symbol="checkmark" d="M895.5 541 l4.5 4.5 l8 -8.5" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="940" cy="541" r="14" fill="#FF3B30"/>
+<path data-symbol="xmark" d="M934 535 l12 12 M946 535 l-12 12" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
+<!-- right panel -->
+<path d="M965 56 h318 a12 12 0 0 1 12 12 v732 a12 12 0 0 1 -12 12 h-318 z" fill="#FFFFFF"/>
+<line x1="965" y1="56" x2="965" y2="812" stroke="#E6E6E9" stroke-width="1"/>
+<text x="979" y="97" font-size="16" font-weight="700" fill="#1C1C1E">3 projects</text>
+<text x="979" y="120" font-size="12" fill="#6D6D72">Names and tags below apply only to the</text>
+<text x="979" y="137" font-size="12" fill="#6D6D72">row they sit on.</text>
+<line x1="965" y1="158" x2="1295" y2="158" stroke="#E6E6E9" stroke-width="1"/>
+<rect x="979" y="182" width="128" height="40" rx="20" fill="none" stroke="#C36A00" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="1043" y="207" text-anchor="middle" font-size="13.5" fill="#C36A00">Cancel</text>
+<rect x="1121" y="182" width="130" height="40" rx="20" fill="#C36A00"/>
+<text x="1177" y="207" text-anchor="middle" font-size="13.5" font-weight="600" fill="#FFFFFF">Apply all</text>
+<path data-symbol="checkmark" d="M1213 202.5 l4.5 4.5 l8.5 -9" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="979" y="256" font-size="12" fill="#6D6D72">2 of 3 ready. Apply all uses what is</text>
+<text x="979" y="273" font-size="12" fill="#6D6D72">finished and leaves the rest untouched.</text>
+<!-- tab bar -->
+<rect x="453" y="744" width="500" height="58" rx="29" fill="#F2F2F4" fill-opacity="0.94"/>
+<circle cx="507" cy="766" r="7.5" fill="none" stroke="#7C7C81" stroke-width="1.6"/>
+<circle cx="507" cy="766" r="2.6" fill="#7C7C81"/>
+<text x="507" y="791" text-anchor="middle" font-size="11.5" fill="#7C7C81">Create</text>
+<rect x="555" y="748" width="52" height="42" rx="12" fill="#EFE2D4"/>
+<rect x="569" y="759" width="24" height="17" rx="4" fill="none" stroke="#C36A00" stroke-width="1.8"/>
+<circle cx="581" cy="767.5" r="3" fill="#C36A00"/>
+<text x="581" y="791" text-anchor="middle" font-size="11.5" font-weight="600" fill="#C36A00">Gallery</text>
+<rect x="694" y="757" width="18" height="18" rx="3" fill="none" stroke="#7C7C81" stroke-width="1.6"/>
+<text x="703" y="791" text-anchor="middle" font-size="11.5" fill="#7C7C81">Projects</text>
+<rect x="790" y="757" width="18" height="18" rx="3" fill="none" stroke="#7C7C81" stroke-width="1.6"/>
+<text x="799" y="791" text-anchor="middle" font-size="11.5" fill="#7C7C81">Collections</text>
+<line x1="889" y1="761" x2="911" y2="761" stroke="#7C7C81" stroke-width="1.8" stroke-linecap="round"/>
+<line x1="889" y1="768" x2="911" y2="768" stroke="#7C7C81" stroke-width="1.8" stroke-linecap="round"/>
+<line x1="889" y1="775" x2="911" y2="775" stroke="#7C7C81" stroke-width="1.8" stroke-linecap="round"/>
+<text x="900" y="791" text-anchor="middle" font-size="11.5" fill="#7C7C81">Settings</text>
+<!-- caption -->
+<text x="655" y="843" text-anchor="middle" font-size="14" font-weight="600" fill="#1C1C1E">macOS · Gallery · batch mode — Auto rename &amp; tag, review list · 1310×800 pt window</text>
+<text x="655" y="864" text-anchor="middle" font-size="12" fill="#6E6E73">each row carries its own suggestion; tick applies that row and removes it, cross discards it — when the list empties, the grid returns</text>
+</svg>

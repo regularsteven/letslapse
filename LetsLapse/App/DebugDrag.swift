@@ -55,4 +55,48 @@ import AppKit
         }
     }
 }
+
+/// A synthetic key press for the launch hooks (`LL_KEY`), the keyboard twin
+/// of `DebugDrag`: built in-process and sent through `NSApp.sendEvent` to the
+/// main window — the path a real key takes after the HID layer, so the local
+/// monitors (the Gallery's keys) and the key equivalents see it — and never
+/// posted to the HID stream, so no other app on the Mac can catch it.
+@MainActor enum DebugKey {
+    /// `spec` is `[cmd+][shift+][alt+][ctrl+]<key>` — `z`, `escape`, `return`,
+    /// `left`/`right`/`up`/`down`, or any single character.
+    static func press(_ spec: String) {
+        guard let window = NSApp.mainWindow ?? NSApp.windows.first(where: \.isVisible) else {
+            LLog("LL_KEY: no window to key into")
+            return
+        }
+        var flags: NSEvent.ModifierFlags = []
+        var key = ""
+        for part in spec.lowercased().split(separator: "+").map(String.init) {
+            switch part {
+            case "cmd", "command": flags.insert(.command)
+            case "shift": flags.insert(.shift)
+            case "alt", "option": flags.insert(.option)
+            case "ctrl", "control": flags.insert(.control)
+            default: key = part
+            }
+        }
+        let codes: [String: (UInt16, String)] = [
+            "escape": (53, "\u{1B}"), "return": (36, "\r"), "left": (123, "\u{F702}"),
+            "right": (124, "\u{F703}"), "up": (126, "\u{F700}"), "down": (125, "\u{F701}"),
+            "a": (0, "a"), "d": (2, "d"), "z": (6, "z"),
+        ]
+        let (code, characters) = codes[key] ?? (0, key)
+        func event(_ type: NSEvent.EventType) -> NSEvent? {
+            NSEvent.keyEvent(
+                with: type, location: .zero, modifierFlags: flags,
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, characters: characters, charactersIgnoringModifiers: characters,
+                isARepeat: false, keyCode: code)
+        }
+        guard let down = event(.keyDown), let up = event(.keyUp) else { return }
+        LLog("LL_KEY: \(spec) → window \(window.windowNumber)")
+        NSApp.sendEvent(down)
+        NSApp.sendEvent(up)
+    }
+}
 #endif

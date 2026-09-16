@@ -32,7 +32,11 @@ struct GalleryBatchPanel: View {
     #endif
     /// The selected projects, in the grid's order.
     var captures: [AppModel.CaptureProject]
+    /// Auto rename & tag over the selection: the host swaps its grid for the
+    /// review list (2026-09-16). Nil where no host can (the row is hidden).
+    var onAutoRename: (() -> Void)? = nil
 
+    @ObservedObject private var models = ModelManager.shared
     @State private var presetsExpanded = GalleryBatchPanel.presetsInitiallyExpanded
     @State private var pendingPreset: BatchPresetRequest?
     @StateObject private var presetThumbnails = PresetThumbnailCache()
@@ -63,6 +67,9 @@ struct GalleryBatchPanel: View {
                     .padding(.top, 16)
 
                 VStack(alignment: .leading, spacing: 14) {
+                    if onAutoRename != nil {
+                        autoRenameRow
+                    }
                     tagsSection
                     if !presetTargets.isEmpty {
                         presetsSection
@@ -98,6 +105,45 @@ struct GalleryBatchPanel: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    // MARK: Auto rename & tag
+
+    /// Directly above TAGS (2026-09-16): the whole selection through the
+    /// review list — a row per project, each with its own suggestion,
+    /// accepted or discarded one at a time (`AutoRenameReviewList`). The
+    /// label carries the count, so what the tap covers is on the button.
+    /// Inert without a model to run — the built-in one is always there, so
+    /// in practice only a catalog that failed to load disables it.
+    private var autoRenameRow: some View {
+        Button {
+            onAutoRename?()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text("Auto rename & tag")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("×\(captures.count) selected")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(models.isReady ? LL.accent : Color.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!models.isReady)
+        .accessibilityLabel("Auto rename & tag, \(captures.count) selected")
     }
 
     // MARK: Tags

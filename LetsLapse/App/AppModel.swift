@@ -119,6 +119,15 @@ final class AppModel: ObservableObject {
         var sourceDurationSeconds: Double?
         var sourceWidth: Int?
         var sourceHeight: Int?
+        /// Whether `name` was typed by a person (a rename) rather than
+        /// accepted from an on-device suggestion as it came (Auto rename &
+        /// tag, 2026-09-16). Nil for every project named before the flag
+        /// existed, which reads as user-set: a name that is there was a
+        /// decision, whoever made it. Read it through
+        /// `AppModel.isNameUserSet(_:)` — the batch review marks such a row
+        /// *Renaming* so Apply all never silently overwrites deliberate
+        /// naming. Optional so older documents still decode.
+        var nameWasUserSet: Bool?
         /// Extra codec variants per source clip, keyed by the clip's original
         /// relative file name. Absent (nil) until a clip is first converted.
         var clipEncodings: [String: [ClipEncoding]]?
@@ -4045,20 +4054,41 @@ final class AppModel: ObservableObject {
 
     func renameProject(_ capture: CaptureProject, to newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        updateCapture(capture.id) { $0.name = trimmed.isEmpty ? nil : trimmed }
+        updateCapture(capture.id) {
+            $0.name = trimmed.isEmpty ? nil : trimmed
+            // A person typed this one.
+            $0.nameWasUserSet = trimmed.isEmpty ? nil : true
+        }
+    }
+
+    /// Whether the project's name was a person's decision — typed in a
+    /// rename, edited before an accepted suggestion, or there before the
+    /// flag existed. False for a project with no name of its own and for a
+    /// suggestion accepted as it came.
+    func isNameUserSet(_ capture: CaptureProject) -> Bool {
+        guard let name = capture.name, !name.isEmpty else { return false }
+        return capture.nameWasUserSet ?? true
     }
 
     /// Applies what the user accepted from an on-device scene analysis. One write, because a
     /// rename and a tag change arriving separately would leave the manifest briefly disagreeing
     /// with the sheet the user just confirmed.
-    func applySceneMetadata(_ metadata: SceneMetadata, to capture: CaptureProject) {
+    ///
+    /// - Parameter nameEdited: whether the person changed the suggested title before accepting —
+    ///   what `nameWasUserSet` records. A title accepted as it came is the model's naming, and the
+    ///   batch review is allowed to overwrite it without a marker next time.
+    func applySceneMetadata(_ metadata: SceneMetadata, to capture: CaptureProject, nameEdited: Bool = true) {
         let trimmed = metadata.title.trimmingCharacters(in: .whitespacesAndNewlines)
         // An edit: this is the ACCEPTED "Auto rename & tag" proposal, which
         // renames the project. The silent pass that put tags there in the
         // first place (`applyAutomaticTags`) is not stamped — nobody chose it.
         updateCapture(capture.id) { capture in
-            if !trimmed.isEmpty {
+            // Not the title it already shows: a proposal that opened on the project's dated
+            // fallback (Vision writes no title) and was accepted as it came must not pin that
+            // fallback as a name.
+            if !trimmed.isEmpty, trimmed != capture.displayTitle {
                 capture.name = trimmed
+                capture.nameWasUserSet = nameEdited
             }
             capture.sceneTags = metadata.tags.isEmpty ? nil : metadata.tags
             capture.sceneElements = metadata.elements.isEmpty ? nil : metadata.elements
@@ -4066,6 +4096,11 @@ final class AppModel: ObservableObject {
             // marker comes off the card.
             capture.sceneTaggedAutomatically = nil
         }
+        // Tags ARE keywords (Part 2 §4.5): the edited layer follows the
+        // manifest cache, as `setSceneTags` has it — until 2026-09-16 the
+        // accepted sheet wrote the cache alone, and a project whose record
+        // already held edited keywords kept showing those in the panel.
+        if let updated = self.capture(id: capture.id) { writeProjectKeywords(metadata.tags, for: updated) }
     }
 
     /// Sets a project's subject tags directly, from the tag editor.
@@ -4079,17 +4114,7 @@ final class AppModel: ObservableObject {
     /// panel's inline field cannot offer anyway.
     func setSceneTags(_ tags: [String], on capture: CaptureProject) {
         guard let current = self.capture(id: capture.id) else { return }
-        // Trimmed and de-duplicated case-insensitively here as well as in the editor: this is the
-        // only door onto the field, and a duplicate would filter and search as a separate thing.
-        var cleaned: [String] = []
-        for tag in tags {
-            let value = SceneMetadata.normalizedTag(tag)
-            guard !value.isEmpty else { continue }
-            let canonical = SceneMetadata.canonicalTag(for: value) ?? value
-            guard !cleaned.contains(where: { $0.caseInsensitiveCompare(canonical) == .orderedSame })
-            else { continue }
-            cleaned.append(canonical)
-        }
+        let cleaned = Self.cleanedSceneTags(tags)
         guard cleaned != (current.sceneTags ?? []) else { return }
 
         updateCapture(capture.id) { capture in
@@ -4102,6 +4127,23 @@ final class AppModel: ObservableObject {
         // layer, where an export will read `dc:subject` from and where "from file / edited here"
         // is answered.
         if let updated = self.capture(id: capture.id) { writeProjectKeywords(cleaned, for: updated) }
+    }
+
+    /// Tags as they are stored: trimmed, taxonomy labels folded onto their values ("Sky & weather"
+    /// → `skyWeather`), de-duplicated case-insensitively in first-seen order. Applied here as well
+    /// as in the editor: this is the only door onto the field, and a duplicate would filter and
+    /// search as a separate thing.
+    static func cleanedSceneTags(_ tags: [String]) -> [String] {
+        var cleaned: [String] = []
+        for tag in tags {
+            let value = SceneMetadata.normalizedTag(tag)
+            guard !value.isEmpty else { continue }
+            let canonical = SceneMetadata.canonicalTag(for: value) ?? value
+            guard !cleaned.contains(where: { $0.caseInsensitiveCompare(canonical) == .orderedSame })
+            else { continue }
+            cleaned.append(canonical)
+        }
+        return cleaned
     }
 
     /// Seeds a project's tags from the keywords its files carried — only when it has none of its

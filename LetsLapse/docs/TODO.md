@@ -11,6 +11,45 @@ live inline.
 
 ## Open
 
+### Auto rename & tag in the Gallery — shipped 2026-09-16 (macOS), owed follow-ups
+
+**Raised:** 2026-09-16 (Steven's brief, with his own
+`docs/design/macOS/gallery.batch.autorename.svg` as the spec) · **Shipped the
+same day:** the analysis/generation split with the per-project cache
+(`App/AI/AutoRenameEngine.swift`, Kit `SceneAnalysisRecord` as
+`Projects/<id>/scene-analysis.json`, Kit `SceneTagReconciler`), the batch
+review list in the grid's place (`App/AutoRenameReview*.swift`), the row above
+TAGS in both Gallery panels, `CaptureProject.nameWasUserSet`, the Settings
+toggle, ⌘Z undo. Verified on the Mac against a scratch library; the brief's
+acceptance list is met on the Mac bar the items below.
+
+- **iPhone / iPad look.** The compact layout compiles (the list full width,
+  the panel as a bar under it) but has not been run on a phone and has no
+  mirror: `iOS/gallery.batch-sheet.portrait.svg` is ⚠️ for the new row and a
+  `gallery.autorename.portrait.svg` is owed. Test imports/analysis on a
+  throwaway simulator library only (auto-sync pushes edits).
+- **Gemma on a phone.** Verified on the Mac only; the 8 GB-iPhone kill at
+  first inference (Phase 0) still applies — the review list must be tried on
+  a device with the entitlement build before it is trusted there.
+- **Edit ▸ Undo.** Disabled for the whole app on the Mac: nothing in a SwiftUI
+  window's responder chain answers `undo:` unless a text field is being
+  edited, so the Gallery's key monitor answers ⌘Z/⇧⌘Z for its own actions
+  (the warp editor has the same gap; its chip is what works). A proper fix
+  is a `CommandGroup(replacing: .undoRedo)` fed by a `@FocusedValue` — one
+  job for every screen that registers undo.
+- **Three-frame sampling** (brief §2.4 ↺). Stage A looks at ONE frame — the
+  tile's — everywhere now, the single sheet included (it used to sample 3 or
+  5). If that proves weak on long intervals, sample first/middle/last and
+  merge labels; bump `SceneAnalysisRecord.currentSchema` to re-run.
+- **Recognised text.** The record carries `recognisedText` per the brief but
+  the Vision stage stores none (Phase 4's stance: a sign's words are not
+  scene information, and this file travels with the project); `hasText`
+  carries the one fact used. Reverse in `AutoRenameEngine.run` if wanted.
+- **Element-derived tags.** Stage B offers up to 3 of the engine's elements
+  as tags beside the taxonomy ones (the spec's Architecture / Waterfront /
+  Hills); Gemma's nouns can be dull ("path", "figures") — watch the sidebar
+  and tighten `AutoRenameEngine.elementTagCandidates` or the alias table.
+
 ### Import photos — classify a shoot vs a pile of photos before registering
 
 **Detail:** [import-classification.md](import-classification.md) · **Raised:**

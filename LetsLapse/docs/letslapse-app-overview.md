@@ -865,9 +865,27 @@ The layering, outermost first:
   the model to guess them. Multi-frame requests run one frame at a time and merge, because an extra
   frame costs roughly half a gigabyte an 8 GB phone does not have.
 - **`SceneAnalyser`** — the actor that speaks MLX: model load, prompt, generation, JSON parsing.
-- **`AutoNameSheet`** — "Auto rename & tag" on a project's management card. Nothing is written
-  until Apply; the title is editable and tags can be dropped, while the place and light chips are
-  shown but not editable (they are the capture's facts, handed *to* the model).
+- **`AutoNameSheet`** — "Auto rename & tag" on a project's management card, and since 2026-09-16
+  on the Gallery's preview panel (`.autoNamePresentation`, one shared presentation). Nothing is
+  written until Apply; the title is editable and tags can be dropped, while the place and light
+  chips are shown but not editable (they are the capture's facts, handed *to* the model).
+- **`AutoRenameEngine`** (`App/AI/AutoRenameEngine.swift`, 2026-09-16) — **analysis is cached,
+  generation is not.** Stage A runs the model once per asset over the frame behind the project's
+  Gallery tile and writes the raw reading beside the project as `scene-analysis.json`
+  (`SceneAnalysisRecord` in the Kit, keyed by `assetID + sourceFrameID + schemaVersion`, registered
+  in `ProjectFileRegistry` as a derived sidecar that travels); Stage B turns a record into a
+  title and a tag set — Vision's mapping or Gemma's words, then `SceneTagReconciler` (Kit:
+  exact, case- and diacritic-insensitive → a small alias table → a new tag minted only on
+  accept). Two analyses at a time, Gemma serially; nothing runs unasked. A tag today and a
+  rename next month therefore cost one vision pass. The engine is which model Settings has
+  active (the *Use the installed model for better results* toggle is that same choice).
+- **The batch review** (`App/AutoRenameReview.swift`, `App/AutoRenameReviewList.swift`) — the
+  Gallery batch panel's *Auto rename & tag ×N selected* row (above TAGS) replaces the grid with a
+  row per selected project, streamed in as its analysis lands: an editable suggested name (empty
+  keeps the existing one; a user-named project wears *Renaming* — `CaptureProject.nameWasUserSet`),
+  suggested tags as plain pills, read-only place/light chips, Accept and Discard. Apply all
+  commits the ready rows, Cancel nothing; every accept or Apply all is one undo registration
+  (`AppModel.applyAutoRename`, ⌘Z in the Gallery). Fifty projects at most per review.
 
 What gets stored, and why it matters downstream: `CaptureProject.sceneTags` (the closed taxonomy in
 `SceneMetadata`) and `.sceneElements` (the model's own nouns for what is in frame). Both feed

@@ -108,6 +108,12 @@ public enum ProjectFileRegistry {
     /// `poster.jpg` — the project's graded poster frame (v2 plan §3.5).
     public static let posterName = "poster.jpg"
 
+    /// `scene-analysis.json` — what the on-device vision pass said about the
+    /// project's thumbnail frame (`SceneAnalysisRecord`): Auto rename & tag's
+    /// cached Stage A, keyed by the frame it looked at, so the second run —
+    /// a tag today, a name next month — costs no second pass.
+    public static let sceneAnalysisName = "scene-analysis.json"
+
     public static let all: [ProjectFile] = [
         // Capture-time records, beside the media.
         ProjectFile("frames.timestamps", at: .source, class: .captureFact, travels: true, isHotPath: true),
@@ -136,6 +142,10 @@ public enum ProjectFileRegistry {
         // tile a fresh device shows before the sources are on it. Derived:
         // any device holding the sources can render it again.
         ProjectFile(posterName, at: .root, class: .derived, travels: true),
+        // The vision pass's record. Derived — any device holding the frame
+        // can run the model again — but it is the expensive kind of derived,
+        // so it travels: a shoot analysed once is analysed for every copy.
+        ProjectFile(sceneAnalysisName, at: .root, class: .derived, travels: true),
         ProjectFile("notes/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("masks/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("fonts/", at: .root, class: .edit, isDirectory: true, travels: true),

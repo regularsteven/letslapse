@@ -27,11 +27,22 @@ import SwiftUI
 /// The picker is a sheet on iOS and a popover on the Mac, and this view owns that choice so every
 /// call site is one line.
 struct TagField: View {
+    /// How an applied chip is drawn.
+    enum Style {
+        /// A tag the project carries: solid accent, white text.
+        case applied
+        /// A tag on offer — the Auto rename & tag review rows (2026-09-16): accent at 13 %,
+        /// deep-accent text, the batch panel's "on some" tint without its fraction. One style for
+        /// every pill on a row: a row is one project, and a suggestion is either on it or not.
+        case proposed
+    }
+
     @Binding var tags: [String]
     /// Every tag already used somewhere in this library, for the picker's YOUR TAGS group.
     var libraryTags: [String] = []
     /// False inside the picker itself, where the search field is already the add affordance.
     var showsAddChip = true
+    var style: Style = .applied
 
     @State private var isPicking = false
 
@@ -70,12 +81,12 @@ struct TagField: View {
                 // and VoiceOver would otherwise read the symbol's own name.
                 .accessibilityHidden(true)
         }
-        .foregroundStyle(Color.white)
+        .foregroundStyle(style == .applied ? Color.white : LL.accentDeep)
         .lineLimit(1)
         .padding(.leading, 12)
         .padding(.trailing, 12)
         .padding(.vertical, 7)
-        .background(LL.accent, in: Capsule())
+        .background(style == .applied ? LL.accent : LL.accent.opacity(0.13), in: Capsule())
     }
 
     private var addChip: some View {

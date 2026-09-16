@@ -702,7 +702,7 @@ struct SettingsView: View {
                 LLRow(
                     title: "AI Models",
                     subtitle: aiModelsSubtitle,
-                    showsDivider: false
+                    showsDivider: installedLanguageModel != nil
                 ) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
@@ -711,8 +711,38 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            // The engine choice as a plain preference (Auto rename & tag,
+            // 2026-09-16): on, the installed language model reads the frame
+            // and writes a name; off, Apple Vision tags it. One stored value
+            // with the AI Models screen's picker — the toggle just says
+            // "installed model or built-in" — so the two never disagree. On
+            // by default once a model is present (the manager adopts the
+            // download as it finishes).
+            if let installed = installedLanguageModel, let builtIn = builtInModel {
+                LLRow(
+                    title: "Use the installed model for better results",
+                    subtitle: "\(installed.name) names the scene and describes it; Apple Vision only tags it.",
+                    showsDivider: false
+                ) {
+                    Toggle("", isOn: Binding(
+                        get: { models.activeModel?.isBuiltIn == false },
+                        set: { on in models.activeModelID = on ? installed.id : builtIn.id }))
+                        .labelsHidden()
+                        .tint(.green)
+                }
+            }
         }
         .llCard()
+    }
+
+    /// The language model on disk, if one is — the one the toggle above turns on.
+    private var installedLanguageModel: CatalogModel? {
+        models.downloadedModels.first { !$0.isBuiltIn && $0.tagsScenes }
+    }
+
+    private var builtInModel: CatalogModel? {
+        models.downloadedModels.first { $0.isBuiltIn }
     }
 
     private var aiModelsSubtitle: String {

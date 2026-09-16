@@ -1,10 +1,13 @@
 import CoreLocation
 import SwiftUI
 
-/// Drives one "Auto rename & tag" run: sample frames, gather context, generate, propose.
+/// Drives one "Auto rename & tag" run: the capture's facts, the cached analysis, a proposal.
 ///
 /// Nothing is written until the user confirms. The controller's whole job is to get from a tap to
-/// a filled-in sheet — `Apply` is one call on `AppModel` from the view.
+/// a filled-in sheet — `Apply` is one call on `AppModel` from the view. Since 2026-09-16 the run
+/// goes through `AutoRenameEngine`: the multi-frame sampler is no longer called from here (the
+/// silent capture-time pass still uses it), and a second run on the same project reads the
+/// record beside it instead of the model.
 @MainActor
 final class AutoNameController: ObservableObject {
     /// What the row shows while a run is in flight.
@@ -17,6 +20,10 @@ final class AutoNameController: ObservableObject {
     struct Proposal: Identifiable {
         let id = UUID()
         var title: String
+        /// The title the sheet opened with — the model's, or the project's current name where the
+        /// model wrote none — so Apply can tell an accepted suggestion from a typed one
+        /// (`CaptureProject.nameWasUserSet`).
+        var suggestedTitle: String = ""
         /// The tags the sheet will apply. Started as whatever the model returned, then edited
         /// freely — dropped, added back from the taxonomy, or typed. There is no longer a
         /// ticked/unticked distinction to carry: a tag is in this list or it is not.
@@ -38,54 +45,30 @@ final class AutoNameController: ObservableObject {
         }
     }
 
-    /// Resolved per run rather than held: the active model can change in Settings between one run
-    /// and the next, and with it which engine answers.
-    private let analyzer: (any SceneAnalyzing)?
-
-    init(analyzer: (any SceneAnalyzing)? = nil) {
-        self.analyzer = analyzer
-    }
-
-    /// - Parameter fallbackTitle: the name to propose when the backend writes none. Vision
-    ///   classifies without describing, so its proposal starts from the project's current name and
-    ///   the sheet is about the tags.
-    func run(
-        source: SceneFrameSampler.Source,
-        capturedAt: Date,
-        duration: TimeInterval,
-        locationFile: URL?,
-        fallbackTitle: String = ""
-    ) async {
+    /// Stage A from the record beside the project when it is current — one look at the
+    /// thumbnail's frame, ever — and Stage B over it (brief §2). The sheet it fills is the same
+    /// one; what changes is that a second run costs nothing, whichever screen made the first. The
+    /// tags open as the project's own plus the reconciled suggestions, so Apply adds rather than
+    /// replaces (a hand-typed tag survives an accepted proposal). With no title from the engine
+    /// (Vision) the field opens on the project's current title and the sheet is about the tags.
+    func run(capture: AppModel.CaptureProject, model: AppModel) async {
         guard !isRunning else { return }
-        status = "Preparing frames…"
+        status = "Looking at this one…"
         failure = nil
-
-        var sample: SceneFrameSampler.Sample?
-        defer {
-            if let sample { SceneFrameSampler.cleanUp(sample) }
-            status = nil
-        }
-
+        defer { status = nil }
         do {
-            let taken = try await SceneFrameSampler.sample(source)
-            sample = taken
-
-            status = "Reading capture details…"
-            let light = SceneContext.light(from: capturedAt, duration: duration)
-            let place = await SceneContext.place(for: Self.location(of: locationFile))
-
-            let engine = analyzer ?? SceneAnalyzerFactory.active()
-            let result = try await engine.analyze(
-                SceneAnalysisRequest(imageURLs: taken.frameURLs, place: place, light: light),
-                status: { line in Task { @MainActor [weak self] in self?.status = line } })
-
-            let proposedTitle = result.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let engine = AutoRenameEngine.shared
+            let facts = await engine.facts(for: capture, model: model)
+            let suggestion = try await engine.suggestion(for: capture, model: model, facts: facts)
+            let opening = suggestion.title.isEmpty ? capture.displayTitle : suggestion.title
+            let applied = model.resolvedKeywords(for: capture)
             proposal = Proposal(
-                title: proposedTitle.isEmpty ? fallbackTitle : proposedTitle,
-                tags: result.subjectTags,
-                elements: result.elements,
-                place: place,
-                light: light)
+                title: opening,
+                suggestedTitle: opening,
+                tags: applied + suggestion.tags.map(\.tag),
+                elements: suggestion.elements,
+                place: facts.place,
+                light: facts.light)
         } catch {
             failure = error.localizedDescription
         }
@@ -93,7 +76,7 @@ final class AutoNameController: ObservableObject {
 
     /// The capture's own fix, read off the file it was written into — EXIF for a still, the
     /// QuickTime location atom for a recording.
-    private static func location(of url: URL?) async -> CLLocation? {
+    static func location(of url: URL?) async -> CLLocation? {
         guard let url else { return nil }
         return await Task.detached(priority: .userInitiated) {
             let isImage = ["jpg", "jpeg", "heic", "png", "dng", "tiff"]
@@ -118,12 +101,13 @@ struct AutoNameSheet: View {
     /// in rather than read from an `@EnvironmentObject`, because this is presented as a sheet and
     /// the list is a plain value the presenter already has.
     private let libraryTags: [String]
-    private let onApply: (SceneMetadata) -> Void
+    /// The accepted record, and whether the person changed the title before accepting it.
+    private let onApply: (SceneMetadata, _ nameEdited: Bool) -> Void
 
     init(
         proposal: AutoNameController.Proposal,
         libraryTags: [String] = [],
-        onApply: @escaping (SceneMetadata) -> Void
+        onApply: @escaping (SceneMetadata, _ nameEdited: Bool) -> Void
     ) {
         _proposal = State(initialValue: proposal)
         self.libraryTags = libraryTags
@@ -208,7 +192,9 @@ struct AutoNameSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Apply") {
-                        onApply(proposal.accepted)
+                        let edited = proposal.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                            != proposal.suggestedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        onApply(proposal.accepted, edited)
                         dismiss()
                     }
                     .disabled(proposal.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -240,5 +226,45 @@ struct AutoNameSheet: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(Color.primary.opacity(0.07), in: Capsule())
+    }
+}
+
+// MARK: - Shared presentation
+
+/// The sheet and its failure alert, attached wherever a screen holds an `AutoNameController` — the
+/// project screen's management card and, since 2026-09-16, the Gallery's preview panel. One
+/// presentation, one Apply: `AppModel.applySceneMetadata` with the edited-title flag.
+private struct AutoNamePresentation: ViewModifier {
+    @EnvironmentObject var model: AppModel
+    @ObservedObject var controller: AutoNameController
+    var captureID: UUID
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $controller.proposal) { proposal in
+                AutoNameSheet(proposal: proposal, libraryTags: model.libraryTags) { metadata, nameEdited in
+                    if let capture = model.capture(id: captureID) {
+                        model.applySceneMetadata(metadata, to: capture, nameEdited: nameEdited)
+                    }
+                }
+            }
+            .alert(
+                "Couldn't analyse this project",
+                isPresented: Binding(
+                    get: { controller.failure != nil },
+                    set: { if !$0 { controller.failure = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(controller.failure ?? "")
+            }
+    }
+}
+
+extension View {
+    /// Presents `controller`'s proposal for the project `captureID` as the Auto rename & tag sheet.
+    func autoNamePresentation(_ controller: AutoNameController, captureID: UUID) -> some View {
+        modifier(AutoNamePresentation(controller: controller, captureID: captureID))
     }
 }

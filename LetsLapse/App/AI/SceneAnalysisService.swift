@@ -236,6 +236,34 @@ enum SceneFrameSampler {
         try? FileManager.default.removeItem(at: sample.workingDirectory)
     }
 
+    /// One frame, named outright — what Auto rename & tag's cached analysis looks at (2026-09-16,
+    /// brief §2.4): the frame that already backs the project's Gallery thumbnail, so nothing new
+    /// has to be chosen and a changed thumbnail is the one thing that invalidates the record.
+    enum Frame: Sendable {
+        case still(URL)
+        /// A frame out of a movie at `seconds` — the tile's own instant (`ProjectThumbnailGenerator`
+        /// takes 0.2 s).
+        case movie(URL, seconds: Double)
+    }
+
+    /// The frame re-encoded as one ≤1024 px JPEG, in a folder the caller deletes with `cleanUp`.
+    static func sample(frame: Frame) async throws -> Sample {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scene-analysis/\(UUID().uuidString)", isDirectory: true)
+        return try await Task.detached(priority: .userInitiated) {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let frames: [URL]
+            switch frame {
+            case .still(let url):
+                frames = stillFrames([url], into: directory)
+            case .movie(let url, let seconds):
+                frames = try await videoFrame(from: url, at: seconds, into: directory).map { [$0] } ?? []
+            }
+            guard !frames.isEmpty else { throw SamplingError.noFrames }
+            return Sample(frameURLs: frames, workingDirectory: directory)
+        }.value
+    }
+
     enum SamplingError: LocalizedError {
         case noFrames
 
@@ -296,6 +324,22 @@ enum SceneFrameSampler {
             }
         }
         return frames
+    }
+
+    /// The movie's frame nearest `seconds` — within half a second either way, the same tolerance
+    /// the multi-frame sampler allows, and for the same reason.
+    private static func videoFrame(from url: URL, at seconds: Double, into directory: URL) async throws -> URL? {
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: maxPixelSize, height: maxPixelSize)
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+        let duration = try await asset.load(.duration).seconds
+        guard duration.isFinite, duration > 0 else { throw SamplingError.noFrames }
+        let time = CMTime(seconds: min(max(0, seconds), duration), preferredTimescale: 600)
+        guard let image = try? await generator.image(at: time).image else { return nil }
+        return write(image, index: 0, into: directory)
     }
 
     private static func write(_ image: CGImage, index: Int, into directory: URL) -> URL? {

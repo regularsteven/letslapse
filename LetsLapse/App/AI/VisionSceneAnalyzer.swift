@@ -54,12 +54,17 @@ final class VisionSceneAnalyzer: SceneAnalyzing {
 
     // MARK: - Vision
 
-    /// What one frame yielded, before it is mapped onto the app's own vocabulary.
-    private struct FrameObservations: Sendable {
+    /// What one frame yielded, before it is mapped onto the app's own vocabulary. Internal rather
+    /// than private since 2026-09-16: Auto rename & tag's cache stores exactly this (as a
+    /// `SceneAnalysisRecord`) and hands it back to `assemble` months later.
+    struct FrameObservations: Sendable {
         /// Identifier and confidence, above threshold, most confident first.
         var identifiers: [(identifier: String, confidence: Float)] = []
         /// Whether the frame carried legible text.
         var hasText = false
+        /// Faces the detector found — a cheap request beside the classifier, and the one
+        /// reading of "people" the classifier's parents can miss.
+        var faceCount = 0
     }
 
     /// Below this a Vision identifier is noise — the classifier returns the full taxonomy every
@@ -74,35 +79,49 @@ final class VisionSceneAnalyzer: SceneAnalyzing {
         var lastError: Error?
 
         for url in urls {
-            let handler = VNImageRequestHandler(url: url, options: [:])
-            let classify = VNClassifyImageRequest()
-            // Read, but not transcribed anywhere: what a sign *says* is not scene information, and
-            // putting a stranger's shopfront into a searchable field is not something a silent
-            // background pass should do. Only the fact that legible text was present is kept, as
-            // the "signage" element below.
-            let readText = VNRecognizeTextRequest()
-            readText.recognitionLevel = .fast
-            readText.usesLanguageCorrection = false
-
             do {
-                try handler.perform([classify, readText])
+                frames.append(try observe(url))
             } catch {
                 // One unreadable frame is survivable — a capture is sampled at several points and
                 // the others still describe it.
                 lastError = error
                 continue
             }
-
-            let results = (classify.results ?? [])
-                .filter { $0.confidence >= confidenceThreshold }
-                .sorted { $0.confidence > $1.confidence }
-                .map { (identifier: $0.identifier, confidence: $0.confidence) }
-            let text = (readText.results ?? []).contains { $0.confidence >= confidenceThreshold }
-            frames.append(FrameObservations(identifiers: results, hasText: text))
         }
 
         guard !frames.isEmpty else { throw Failure.unreadable(lastError) }
         return frames
+    }
+
+    /// One frame's raw reading — the classifier, a text pass, a face count. Off the main actor;
+    /// throws when Vision could not read the file at all.
+    nonisolated static func observe(_ url: URL) throws -> FrameObservations {
+        let handler = VNImageRequestHandler(url: url, options: [:])
+        let classify = VNClassifyImageRequest()
+        // Read, but not transcribed anywhere: what a sign *says* is not scene information, and
+        // putting a stranger's shopfront into a searchable field is not something a silent
+        // background pass should do. Only the fact that legible text was present is kept, as
+        // the "signage" element below.
+        let readText = VNRecognizeTextRequest()
+        readText.recognitionLevel = .fast
+        readText.usesLanguageCorrection = false
+        let faces = VNDetectFaceRectanglesRequest()
+
+        try handler.perform([classify, readText, faces])
+
+        let results = (classify.results ?? [])
+            .filter { $0.confidence >= confidenceThreshold }
+            .sorted { $0.confidence > $1.confidence }
+            .map { (identifier: $0.identifier, confidence: $0.confidence) }
+        let text = (readText.results ?? []).contains { $0.confidence >= confidenceThreshold }
+        let faceCount = (faces.results ?? []).filter { $0.confidence >= confidenceThreshold }.count
+        return FrameObservations(identifiers: results, hasText: text, faceCount: faceCount)
+    }
+
+    /// The app's answer from stored observations — Auto rename & tag's Stage B over a cached
+    /// Stage A. The same mapping `analyze` runs, so a cached record and a live pass agree.
+    nonisolated static func assemble(from observations: FrameObservations, contextLight: String?) -> SceneAnalysisResult {
+        assemble([observations], contextLight: contextLight)
     }
 
     // MARK: - Mapping
@@ -118,7 +137,7 @@ final class VisionSceneAnalyzer: SceneAnalyzing {
     /// on capture footage. Anything unrecognised is simply not mapped — an unmapped identifier
     /// still reaches the "In frame" row, where a raw word is honest, rather than being forced into
     /// a tag it doesn't belong to.
-    private static let tagMap: [String: String] = [
+    private nonisolated static let tagMap: [String: String] = [
         // urban
         "cityscape": "urban", "urban_area": "urban", "city": "urban", "street": "urban",
         "architecture": "urban", "building": "urban", "skyscraper": "urban", "bridge": "urban",
@@ -173,13 +192,13 @@ final class VisionSceneAnalyzer: SceneAnalyzing {
     /// ones fall off the end. These are dropped from `elements` only: as *tags* the same
     /// identifiers are still informative, and `outdoor` in particular is what rescues an otherwise
     /// untagged frame.
-    private static let genericElements: Set<String> = [
+    private nonisolated static let genericElements: Set<String> = [
         "outdoor", "indoor", "land", "liquid", "material", "structure", "object", "scene",
         "background", "surface", "substance", "environment", "landscape",
     ]
 
     /// Identifiers that name a moment in the day rather than a subject.
-    private static let lightMap: [String: String] = [
+    private nonisolated static let lightMap: [String: String] = [
         "sunrise": "Golden hour", "sunset": "Golden hour", "golden_hour": "Golden hour",
         "dusk": "Golden hour", "dawn": "Golden hour",
         "night": "Night", "nighttime": "Night", "moon": "Night", "starry_sky": "Night",
@@ -189,7 +208,7 @@ final class VisionSceneAnalyzer: SceneAnalyzing {
     /// because it is the single most common identifier Vision returns and mapping it to `nature`
     /// outright would tag every city street as countryside — it only counts when nothing more
     /// specific was seen, which `assemble` decides.
-    private static func tag(for identifier: String) -> String? {
+    private nonisolated static func tag(for identifier: String) -> String? {
         for component in components(of: identifier) {
             if let tag = tagMap[component] { return tag }
         }
@@ -198,7 +217,7 @@ final class VisionSceneAnalyzer: SceneAnalyzing {
 
     /// `city_street` → `["city_street", "city", "street"]`. The whole identifier is tried first so
     /// a compound with its own entry (`urban_area`) wins over its parts.
-    private static func components(of identifier: String) -> [String] {
+    private nonisolated static func components(of identifier: String) -> [String] {
         let lowered = identifier.lowercased()
         let parts = lowered.split(whereSeparator: { $0 == "_" || $0 == "-" || $0 == " " })
             .map(String.init)
@@ -211,7 +230,7 @@ final class VisionSceneAnalyzer: SceneAnalyzing {
     /// ends at dusk should carry both of the things it was, which is the same merge rule the MLX
     /// path uses. Elements are the raw identifiers, most confident first, because they are the only
     /// place Vision's actual vocabulary ("waterfall", "canyon") reaches the user.
-    private static func assemble(
+    private nonisolated static func assemble(
         _ frames: [FrameObservations],
         contextLight: String?
     ) -> SceneAnalysisResult {
@@ -221,6 +240,9 @@ final class VisionSceneAnalyzer: SceneAnalyzing {
         /// times doesn't outrank one seen clearly once.
         var best: [String: Float] = [:]
         var sawOutdoor = false
+
+        // A face is a person whatever the classifier called the scene.
+        if frames.contains(where: { $0.faceCount > 0 }) { tags.insert("people") }
 
         for frame in frames {
             for entry in frame.identifiers {
@@ -275,7 +297,7 @@ final class VisionSceneAnalyzer: SceneAnalyzing {
 
     /// `city_street` → `city street`. Vision's identifiers are machine-shaped; the "In frame" row
     /// is read by people.
-    private static func readable(_ identifier: String) -> String {
+    private nonisolated static func readable(_ identifier: String) -> String {
         identifier
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
