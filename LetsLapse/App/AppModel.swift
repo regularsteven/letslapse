@@ -8554,6 +8554,10 @@ final class AppModel: ObservableObject {
         do {
             try migrateLegacyApplicationSupportFolderIfNeeded()
             try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
+            // The library's identity (libraries plan L1) — read, or minted
+            // for a library from before the file — and, on the Mac, its
+            // place in the list of known libraries.
+            StorageRoot.healIdentity()
             let export = try readLibraryExport()
             if LibraryReconciler.hasAnyDocument(projectsRoot: projectsRootURL) {
                 loadCollections(export: export)
@@ -10774,25 +10778,6 @@ final class AppModel: ObservableObject {
         LibraryLock.release(projectsRoot: projectsRootURL)
         #endif
     }
-
-    #if os(macOS)
-    /// Before the PicPlace nest moves the library's folders (v2 plan §3.3):
-    /// every queued write lands, no further write may start — the paths
-    /// every store holds are about to be wrong until the relaunch — and the
-    /// lock goes before `Projects/` does. The export is not regenerated:
-    /// the relaunch does that on the nested root.
-    func prepareForLibraryNest(reason: String) {
-        persister.flush()
-        persister.refuseWrites = reason
-        releaseLibraryLock()
-    }
-
-    /// The nest failed before anything moved: back to a writable library.
-    func abandonLibraryNest() {
-        persister.refuseWrites = nil
-        acquireLibraryLock()
-    }
-    #endif
 
     /// On return to the foreground: has `library.json` changed under this
     /// instance? With the lock in place it should never have, so a change

@@ -1,0 +1,600 @@
+# Libraries — several on a Mac, one on a phone until it connects, and the server learns what a library is
+
+**Date:** 2026-09-16 · **Status:** plan agreed in conversation (Steven,
+2026-09-16); nothing built yet · **Working mode:** **code-first by decision**
+("Code-first, and yes include the server ask") — the SVG mirrors are drawn
+per screen once each screen has settled, in the unit of work that finalises
+it; until then the platform `INDEX.md` rows carry 🟡 · **Server:** the asks
+that fall out of this plan are in
+[libraries-server-asks.md](libraries-server-asks.md), handed to the PicPlace
+side to build independently (Steven, 2026-09-16) · **Precedes:** [picplace-sync-v2-plan.md](picplace-sync-v2-plan.md) (the
+binding, the minimal dataset, merge) and
+[picplace-sync-v2-handover.md](picplace-sync-v2-handover.md) (what shipped,
+what is owed) · **Programme:**
+[data-model-server-portability-2026-09-12.md](data-model-server-portability-2026-09-12.md)
+(Part 3 — presence tiers and eviction, which stage D is the first slice of).
+
+---
+
+## 0. Steven's framing (2026-09-16)
+
+The immediate problem: Settings ▸ Storage ▸ **Library location** can only
+*move* the library into a folder (a copy) or *adopt* a folder that already
+holds one. There is no way to start a **new, empty library** in a folder —
+which is exactly what testing needs — and "Move back to the default
+location" now offers to copy the 431 GB volume onto the internal disk,
+because the default location stopped being a library the day the play-pen
+nested itself into `picplace.test/regularsteven/`.
+
+The direction, agreed after three future scenarios were put on the table:
+
+- **A client works 100 % before any server integration.** Self storage is
+  always the starting point (v2 plan §0); everything in this plan that runs
+  on a Mac without an account is local.
+- **iPhone and iPad hold ONE library until they connect.** Nothing to
+  configure, nothing to choose — the sandbox is the library (v2 D3).
+- **A Mac can have several libraries** in several locations: create new
+  ones, open existing ones, switch between them, move them. One library is
+  open at a time; switching is a relaunch, as it is today for a location
+  change.
+- **Several libraries per account, all backed up.** A person may keep a
+  *client X* library, a *personal* one and a *timelapse gallery*, and want
+  all three on PicPlace. So the server learns what a library is: **account ⊃
+  libraries ⊃ projects** — the Lightroom-Classic-catalogs-with-cloud model,
+  not Apple Photos' one-cloud-library rule. This also removes a real
+  collision (§2.5) instead of policing it.
+- **Once connected, a phone can work in any of the account's libraries**:
+  it shows one *active* library at a time, captures and imports land there,
+  and it can pull another library's previews. On the phone a library is a
+  **filter over one store**, never a second storage root (§2.4).
+- **Moving a library without its originals.** A finished job on a big volume
+  whose originals PicPlace already holds can move to a small disk carrying
+  only its records, posters and outputs; the projects become preview-only
+  there and the originals stay on PicPlace (and on the old volume until the
+  person deletes it). This is eviction wearing a move's clothes (§3.6).
+- **Sharing a library with a client** is a later feature request; the server
+  model chosen here is what makes it possible (a library row can have
+  members), so nothing today should close that door.
+
+## 1. Decisions
+
+| # | Decision | Why |
+|---|---|---|
+| **L1** | **A library has an identity file at its root**, `<root>/letslapse-library.json`: a client-minted uuid, a name, when and by which device it was created. Written on first launch for libraries that predate it. In the Kit (`LibraryIdentity`) so `lapse` and the audit read it. | Today a library is recognised by `Projects/library.json`, which data-model M4 retires (the trap in TODO). A folder name is not an identity: usernames change, folders move, drives get renamed. The uuid is also what the server will key the library by (L8). |
+| **L2** | **`StorageRoot.check` recognises a library by the identity file, or by a `Projects/` folder holding documents, or (until M4) by `Projects/library.json`.** An empty folder is `.empty`, and *the door decides* what that means — a new library or a move — rather than `check` calling it a move. | Closes the M4 trap now; makes "Create New Library" possible at all. |
+| **L3** | **The Mac keeps a registry of known libraries** (`storage.libraries` in UserDefaults: uuid, path, name, last opened), shown as Settings ▸ Storage ▸ **Libraries**, replacing the "Library location" + "Move back to the default location" rows. The identity file is the truth; the registry is the list. Removing from the list never touches disk. | The two rows assume exactly one library and one "default"; with nesting and testing there are already three roots on Steven's Mac (`/Volumes/letslapse`, the nested play-pen, the empty default container). |
+| **L4** | **One library open per launch; switching is a relaunch.** `StorageRoot.current` stays a `static let`; every door out of the Libraries list ends on the Relaunch button that exists today. | The persister, the index and two singletons latch their URLs at first use (v2 plan §3.3); an in-session root swap is the riskiest change in the app and buys nothing a relaunch does not. |
+| **L5** | **Creating a library copies nothing; switching copies nothing; nothing here deletes.** Create = folder + identity file + `Projects/` + registry + commit + relaunch (`loadLibrary()` bootstraps the rest). Move stays a copy that never deletes. `/Volumes/letslapse` is only ever a *switch* target. | The whole point of the request. |
+| **L6** | **A library the person created and placed stays where they put it.** The connect-time nest (`<root>/<host>/<username>/`, v2 D3) stays for the *unnamed* library at a storage root — Steven's convention — and is not applied to a library that already carries an identity and a chosen folder. Libraries the app pulls for a fresh device are placed by the app, under a folder the person picks once (default: the default location). | `/Volumes/Work/ClientX` being renamed under `picplace.co/regularsteven/` on connect would surprise; the identity file already says whose the library is. **Open for Steven** (§8.1) — the convention was his. |
+| **L7** | **Per-library PicPlace state that was per install moves into the library**: the session pointer for an unbound library (`PicPlace/session.json`) and the *Sync changes automatically* / *Upload originals automatically* switches (`PicPlace/settings.json`, **one entry per device** — a volume carried to another Mac never arrives with uploads on). **Upload originals is OFF by default everywhere, switched on only by the person for this device and this library, never by sign-in or connect, and never stored on the server** (Steven, 2026-09-16: the client owns the storage constraints). *Only on Wi-Fi* stays per install — it is a property of the device, not of the data. **A new library starts signed out** and offers "Sign in as @regularsteven" when tokens for an account already exist in the Keychain. | Today any unbound library borrows the install's last sign-in and inherits `autoOriginals` (ON on Steven's install): a test library would offer to connect to the real account and, on yes, start uploading its originals. |
+| **L8** | **The server gets libraries as rows** — `letslapse_libraries` (client uuid, owner, name, tombstone) and a nullable `library_id` on projects, null meaning *the account's default library*. `/libraries` CRUD, `?library=` on the index, `library` on the project PUT and row, `status.libraries[]`, a `features.libraries` flag. **Object keys do not change**: `u/{user}/p/{project}/…` — the library is a relation, not a path segment; moving a project between libraries is a row update; account-wide dedupe keeps working; usage stays per account for billing with a per-library breakdown for display. | The scenarios in §0. Additive and backward compatible: a v2 client that never sends `library` keeps working against the default library. |
+| **L9** | **The binding record gains `library: { uuid, name }`** from stage A, before the server knows libraries. A local library binds to exactly one server library `(server.id, user.uuid, library.uuid)`; the uuid is the identity file's. | So stage C is a migration of `matches()` and the request scope, not of the file format. |
+| **L10** | **Replica rule.** Until stage B: on one install, an account may be bound from at most **one** library — connecting a second library to the same account is refused with the first named. From stage C: at most one local copy of a given *server library* per install; different server libraries under one account coexist freely. | Presence is unique per `(project, device)`, the device is resolved from the token, tokens are per account per install: two local libraries holding the *same* projects under one account would overwrite each other's presence and tier. Library scope makes their project sets disjoint, which is what dissolves the collision (§2.5). |
+| **L11** | **On iOS a library is a filter, not a root.** Each project document carries an optional `library` (the server library uuid; nil = unassigned, the default library); the phone shows an *active library*, captures and imports land in it, previews of other libraries pull into the same `Projects/`. The Mac writes the same field from its root's binding at push time. | The one-root sandbox stays; switching is instant; no in-session root swap on the platform that cannot relaunch. A field that lived only in the index would be lost on rebuild; documents are the truth (M1). |
+| **L12** | **Move-without-originals is gated per project by server truth**: `source/` media may be left behind only where every frame listed in `assets.ndjson` is confirmed on PicPlace; projects that fail the gate move whole and the sheet says how many. Blends move (they are what the person works with). The mover still copies and never deletes. | Truthful by construction; the same gate is per-project eviction ("Free up space") next, and the sign-out hard gate after that (v2 D10). |
+
+## 2. The model
+
+### 2.1 The identity file
+
+`<root>/letslapse-library.json` (format 1; joins `StorageRoot.libraryItemNames`):
+
+```json
+{
+  "format": 1,
+  "id": "9C1F2A6E-…",
+  "name": "letslapse",
+  "createdAt": "2026-09-16T09:30:00.000Z",
+  "createdByDevice": "<DeviceIdentity.id>",
+  "createdWith": "0.1.0 (build)"
+}
+```
+
+- `name` defaults to the folder name; editable in the Libraries list
+  (renaming the file's `name` only — folders are never renamed by a rename).
+- Written by the app on the first launch of a library that lacks it (the
+  volume, the play-pen), the way the export is regenerated: self-healing,
+  logged once.
+- A library **moved** (copied) by the mover keeps its uuid: it is the same
+  library at a new path, and the registry re-points. Two folders with one
+  uuid (the leftover after a move) show in the list as the same library
+  with the leftover flagged "copy at …".
+- On iOS the file exists too (one library, uuid minted once) — it is what
+  the phone sends as its library when it *creates* one on the server.
+
+### 2.2 The registry (macOS)
+
+`storage.libraries` in UserDefaults: `[{ id, path, name, lastOpenedAt }]`,
+paths standardised, the current root always present. A scratch run
+(`rootCameFromArguments`) never writes it — the same guard as `commit`.
+Unreachable paths stay listed, greyed ("not mounted"). iOS has no registry.
+
+### 2.3 The Mac: many libraries, one open
+
+```
+LIBRARIES
+✓ letslapse        /Volumes/letslapse · 365 projects · not connected          (current)
+  regularsteven    ~/Library/…/LetsLapse/picplace.test/regularsteven · @regularsteven on picplace.test   Switch…
+  Field 2026       /Volumes/Field/Field 2026 — not mounted
+  ─────
+  Create New Library…      a Save panel (name + place) → identity + Projects/ → Relaunch
+  Open Other Library…      a folder panel → must be a library (L2) → Relaunch
+  Move This Library…       today's copy flow; stage D adds "without originals"
+```
+
+Each row's subtitle reads the binding from that root's `PicPlace/account.json`
+and the count from its identity/index when reachable. The current row is
+not switchable; every other reachable row's **Switch…** confirms and ends on
+Relaunch. Rows are removable from the list (disk untouched). The launch
+fallback alert (nominated root unreachable) names the reachable libraries
+and offers to open one, instead of only "keep using the default location".
+
+### 2.4 iOS: one store, an active library once connected
+
+- Before connecting: the sandbox is the library; no picker exists.
+- After connecting: the account's libraries come from `status.libraries[]`;
+  one is **active** (`letslapse.picplace.activeLibrary`, per install —
+  it *is* per device). The Projects list shows the active library's
+  projects (`ProjectQuery.library`); the picker lives in the Projects
+  toolbar menu and in Settings ▸ PicPlace. Captures and imports write
+  `library = active`; the import sheet may offer a per-import choice later.
+- **Adding** a library to the phone = the fresh pull scoped to it (records +
+  posters; originals per project, as now). Choosing it as the capture
+  target does not require pulling it.
+- The phone's pre-connection projects get assigned at connect time: into
+  an existing library or a new one made from them (§3.7).
+- Per-library "free up space" on the phone is stage D's gate applied in
+  place.
+
+### 2.5 The server: account ⊃ libraries ⊃ projects
+
+| Object | Key | Scope |
+|---|---|---|
+| account | `user.uuid` | tokens, devices, dedupe, usage, rate limits |
+| **library** | client uuid (= the identity file's) | name, tombstone; later members |
+| project | `originID` | `library_id` nullable → the default library |
+| presence | `(project, device)` | unchanged — unambiguous once a device's libraries hold disjoint sets |
+
+Why this dissolves the L10 collision: the collision only exists when two
+local libraries on one install hold the *same* project under one account —
+which is precisely "a second library merging into the account's one
+namespace". With library rows, "client X" and "personal" on one Mac hold
+disjoint projects; one token lineage per install serves both; presence,
+claims, `updated_by` and the per-device rate budget stay truthful. The
+remaining rule is the natural one: one local copy of a given server library
+per install.
+
+Sharing later: a `library_members` table (library, user, role); a member's
+own tokens read and write that library's projects; presigned URLs still
+serve the owner's objects; usage stays the owner's; the web view gains a
+per-library page. Not in scope; the binding's `matches()` becomes
+library-based then, which L9 has already prepared.
+
+### 2.6 Tool libraries
+
+Presets, LUTs, light ladders and blend profiles are per root on the Mac
+(they live in the root) and per device on the phone (one root). On the
+server they were planned as one *account* bundle (v2 plan §3.4, the
+`PUT /library` ask, which this plan renames "account bundle" to keep the
+word *library* for L8). Open point §8.3.
+
+## 3. The flows
+
+### 3.1 Create New Library (macOS)
+
+1. **Create New Library…** → `NSSavePanel` (`canCreateDirectories`, name
+   field "LetsLapse Library", default place: the default location). The
+   chosen URL is the new root.
+2. `check(destination:)` must be `.empty` (or the folder does not exist
+   yet). `.adopt` → "That folder already holds *Field 2026* — open it
+   instead?" (→ 3.2). Anything else → the existing refusals.
+3. Create the folder, write the identity file (name = the panel's name),
+   create `Projects/`, add to the registry, `StorageRoot.commit`, log.
+4. The sheet ends on **Relaunch LetsLapse** / Not Yet, as every location
+   change does; the new library starts signed out (L7).
+
+### 3.2 Open Other Library (macOS)
+
+Folder panel → `check` must be `.adopt` → registry + commit → Relaunch. An
+`.empty` pick offers to create instead. A pick that *contains* the current
+root or a registered library (a container) is refused: "That folder
+contains a LetsLapse library (`picplace.co/regularsteven`). Choose the
+library itself."
+
+### 3.3 Switch (macOS)
+
+Row action → confirm ("Switch to *letslapse*? LetsLapse relaunches on
+/Volumes/letslapse.") → commit → Relaunch. Disabled while
+`model.stage == .processing`, as Change… is today.
+
+### 3.4 Move This Library (macOS)
+
+Today's flow, on the current library only; the destination must be
+`.empty`. The mover **always** carries `libraryItemNames` + the identity
+file — never "everything visible" (trap §7.3). The registry re-points on
+success; the old copy is the leftover the sheet already tells the person to
+delete in Finder.
+
+### 3.5 The launch fallback (macOS)
+
+Nominated root unreachable → the session runs on the default location as
+today, but the alert lists the reachable registered libraries with **Open…**
+(commit + relaunch) beside **Keep using the default location** and the
+existing explanation. The setting is kept either way, so reconnecting the
+drive and relaunching still recovers.
+
+### 3.6 Move without originals (stage D)
+
+When the current library is connected, the move sheet's confirm screen
+offers two rows:
+
+> **Move everything** · 431 GB  
+> **Move without originals that are on PicPlace** · 19 GB moves; 412 GB of
+> originals in 340 projects stay on PicPlace — those projects show as
+> previews at the new location. 25 projects aren't fully on PicPlace and
+> move whole.
+
+Planning: per project, the gate (L12) reads the sync record's server truth
+(`serverHeavyFiles`, `originalsMovedAt`, and the manifest's per-frame
+sha256 against the index row's confirmed assets when it holds them);
+passing projects contribute everything **except `source/` media** (the
+capture sidecars in `source/` are records and always move); failing
+projects move whole. Copy as today. At the destination those projects are
+`previewOnly` by rule (v2 D7) and the next check reports tier `preview`.
+**Download originals** per project restores any of them; the old volume is
+untouched until the person deletes it.
+
+### 3.7 Connect, with libraries (stage C)
+
+The connect question gains a target when the account has libraries:
+
+> Connect this library to PicPlace as @regularsteven?  
+> ◉ **New library on PicPlace — "Field 2026"** · this library's 12 projects go up  
+> ○ **personal** · 300 projects on PicPlace, 12 here — merge  
+> ○ **client X** · 40 projects on PicPlace — merge
+
+The clean / fresh / merge line (v2 §4.1) is computed for the chosen target
+and the flow is v2's, scoped by `?library=`. A **fresh device** signing in
+sees a chooser of the account's libraries ("Which libraries do you want on
+this Mac?"), picks a folder once, and each chosen library is pulled into
+`<folder>/<library name>/` with its identity written from the server's
+uuid and name. On the phone the chooser sets the active library and pulls
+it (§2.4).
+
+### 3.8 Sign-out and disconnect
+
+Unchanged (v2 §4.6): sign-out drops tokens and keeps the binding; disconnect
+removes the binding and the sync state; projects stay. With L7 a sign-out
+in one library no longer signs another out — tokens are per account, but
+the session pointer is the library's own.
+
+## 4. What changes where
+
+**App (macOS unless noted)**
+
+- `App/StorageLocation.swift` — `LibraryIdentity` read/write/heal;
+  `LibraryRegistry`; `check` outcomes `.empty` / `.containsLibrary`, the
+  document-based adopt; `create(at:name:)`; the mover's carried set.
+- `App/SettingsView.swift` (the Storage section, ~901–1030; the sheet,
+  ~1963–2239) — the Libraries list, the three doors, a `create` sheet mode,
+  the confirm-then-relaunch for Switch.
+- `App/LetsLapseApp.swift` — the fallback alert's Open… rows.
+- `App/PicPlace/PicPlaceController.swift`, `PicPlaceAutoSync.swift`,
+  `PicPlaceSyncState.swift`, `PicPlaceViews.swift` — session pointer and
+  the two switches per library; a new library starts signed out; "Sign in
+  as @user" from Keychain tokens; "Sign in with another account…" (server
+  choice allowed while *this* library is unbound and has no session); the
+  replica rule; `library` in the binding record.
+- Stage C: `PicPlaceLibrarySync.swift` / `PicPlaceChangeSync.swift` /
+  `PicPlaceAPI.swift` — the target chooser, `?library=`, `library` on the
+  PUT, `status.libraries[]`; iOS active library, `ProjectQuery.library`,
+  capture/import writing the field, the picker (Projects toolbar menu +
+  Settings ▸ PicPlace).
+
+**Kit**
+
+- `Library/LibraryIdentity.swift` + tests (read, write, heal, name rules).
+- Stage C: `ProjectDocument` optional `library`; the reconciler indexes it;
+  `ProjectQuery.library`; `lapse audit` reports the identity.
+
+**Server** (the picplace repo, stage B) — see the asks: migration, model,
+`/libraries` controller, the index filter, the PUT field, `/status`, the
+roster and web filter, `features.libraries`, feature tests.
+
+**Docs and mirrors (owed per screen, code-first)** — `docs/design/macOS/`:
+`settings-libraries.svg` (new), `settings-library-location.svg` and
+`.moving.svg` (retitled to the Libraries rows; a `.create.svg` and a
+`.without-originals.svg`), the Settings PicPlace card; `docs/design/iOS/`:
+Settings ▸ PicPlace with the active library, the Projects toolbar menu.
+`INDEX.md` rows 🟡 until drawn. `letslapse-app-overview.md` §4.13 gains the
+identity file and the registry; the persistence tree gains
+`letslapse-library.json` and `PicPlace/session.json` / `settings.json`.
+
+## 5. Stages
+
+| Stage | Lands | Server needs | Proven by |
+|---|---|---|---|
+| **A** | Identity file + heal; `check` by documents (M4 fix); the registry; Settings ▸ Storage ▸ Libraries with Create / Open / Switch / Move; the fallback alert's Open…; per-library session + switches, new libraries signed out, the interim replica rule; `library` in `account.json`; `LL_STORAGE=create\|list` | nothing | Create New at a scratch path → relaunch → empty gallery, no bytes copied; the list shows the volume, the play-pen and the new one; Switch back to the volume is a commit, never a copy; `check` on a scratch copy of a library with `Projects/library.json` removed still says adopt; a new library shows Sign in, not the volume's session, and `autoOriginals` off; Kit tests; the Release app on the volume untouched throughout |
+| **B** | `letslapse_libraries`, `library_id`, `/libraries`, `?library=`, `library` on PUT/row, `status.libraries[]`, `features.libraries`, roster + web filter | — (this is the server work) | feature tests; the unchanged v2 client against picplace.test behaves exactly as before the deploy; the play-pen's projects report `library: null` |
+| **C** | Connect target chooser; fresh-device chooser; scoped checks; iOS active library, capture/import into it, previews of others; the replica rule narrows | B | two scratch libraries under one account on one Mac, bound to *test-1* and *test-2*, both pushing, presence rows distinct; the Simulator sets *test-1* active and captures land there, switches to *test-2* and captures land there; *test-1*'s previews pulled into the Simulator; `lapse index --verify` |
+| **D** | Move without originals; then per-project "Free up space" on the same gate | nothing new (tiers exist) | a scratch library of 3 projects, 2 with originals confirmed on picplace.test → move → 2 preview-only at the destination, 1 whole, the source untouched; Download originals restores one; the FLICKER-style before/after audit of both folders |
+| later | sharing (members), the account bundle per library, iOS background transfers (handover §2) | members table | — |
+
+Order against the handover's list: the real-world `picplace.co` run stays
+first for the *sync* programme; stage A is independent of it (local only)
+and unblocks Steven's testing now; B and C follow the real-world run.
+
+## 6. The test rig
+
+- **Steven's Mac today:** the Release app (Xcode Run action) runs on
+  `/Volumes/letslapse` (`storage.libraryRootPath`, as of 2026-09-16;
+  unbound; 365 projects, 431 GB; 39 GB free on the internal disk). The
+  play-pen is `~/Library/Application Support/LetsLapse/picplace.test/regularsteven/`
+  (bound to picplace.test, 4.3 GB). The default root itself holds nothing
+  but that nested folder. `letslapse.picplace.autoOriginals` is ON on this
+  install; `letslapse.picplace.server` is picplace.test; no session key.
+- **Agent runs** stay on scratch roots through the argument domain
+  (`-storage.libraryRootPath <scratch>`, Debug binary, private DerivedData);
+  the registry is not written from such a run (L3); `AppRelaunch` re-passes
+  the root. A Create from a scratch run relaunches onto the created root the
+  same way.
+- **The volume is never a copy target and never a source of a move** in any
+  test. The only thing ever done to it is a *switch*, which writes one
+  UserDefaults key.
+- **Hooks:** `LL_STORAGE=create` (the create sheet, demo values, disk
+  untouched), `LL_STORAGE=list` (three staged rows incl. an unmounted one),
+  the existing `move|adopt|moving|done|failed`; stage D adds
+  `LL_STORAGE=without-originals`; stage C adds `LL_PICPLACE_LIBRARIES=<n>`
+  (the chooser with staged libraries) and `LL_PICPLACE_ACTIVE=<uuid>` on
+  iOS.
+- **Server:** picplace.test + Garage for B and C; picplace.co only after
+  the real-world run and only with throwaway libraries; physical iOS
+  devices never against picplace.test (v2 rule).
+
+## 7. Traps recorded
+
+1. **M4 breaks the adopt check** (TODO, v2 §7): `check` keys adopt on
+   `Projects/library.json`. Stage A keys it on the identity file or on
+   documents.
+2. **"Move back to the default location" offers a 431 GB copy** once the
+   default root is a container of nested libraries: `check(defaultRootURL)`
+   finds no `Projects/library.json` and no collision → `.move`. The row goes
+   away with the list.
+3. **The mover copies "everything visible" when the source is the default
+   root** (`StorageMover.copyLibrary`) — with `picplace.test/…` nested
+   inside it, a move *from* the default root would drag a whole other
+   library along. Stage A: the carried set is always the known list + the
+   identity file.
+4. **The fallback session bootstraps an empty library at the default root**
+   beside the nested play-pen (`loadLibrary()` creates `Projects/`, the
+   index…), which later makes `check(default)` a collision. Stage A's alert
+   offers the registered libraries instead; the leftovers are worth a
+   one-time sweep note in the alert.
+5. **Any unbound library borrows the install's session**, and
+   **`autoOriginals` is per install** — a new library would offer the real
+   account and, on yes, upload its originals. L7.
+6. **Presence per `(project, device)` + tokens per account per install**:
+   two libraries under one account on one install collide until stage B
+   (L10's interim rule).
+7. **`features.library` already exists** on the server for the account
+   bundle; the scope flag is `features.libraries` (plural).
+8. **`StorageRoot.current` is a `static let`** — the iOS active library must
+   be a filter, never a root swap (L11).
+9. **A scratch run must not persist the registry** — same guard as
+   `commit` (`rootCameFromArguments`), else a test run lists scratch
+   folders in Steven's Settings.
+10. **A library uuid taken on the server** (`409 uuid_taken`, as for
+    projects): re-mint locally — rewrite the identity file and the binding —
+    and retry. Astronomically rare; the path must exist.
+11. **Two folders, one uuid** after a move (the leftover): the registry
+    keys by path and flags the duplicate; never auto-delete.
+
+## 8. Open points
+
+1. **The nest for placed libraries** (L6): keep Steven's
+   `<root>/<host>/<username>/` rename for the unnamed root library only, or
+   retire it once every library has an identity. His call.
+2. **Blends in a move without originals**: move by default (decided), a
+   second toggle ("also leave blends that are on PicPlace") later if wanted.
+3. **Tool libraries** (§2.6): per root on the Mac, per device on the phone,
+   one account bundle on the server — or one bundle per library. Decide when
+   the bundle surface is built.
+4. **Where pulled libraries land** on a fresh Mac: one folder picked once
+   (default: the default location), `<folder>/<library name>/` each.
+5. **The iOS picker's home**: the Projects toolbar menu ▤ (the compact iPhone
+   header has no spare slot — see the Gallery header decision) plus Settings.
+   Design when stage C's code settles.
+
+## 9. Stage A — landed 2026-09-16
+
+**What:** Kit `Library/LibraryIdentity.swift` (record, `ensure` heal with
+`.existing / .created / .unreadable`, `detect(root:)` by identity →
+documents → export → none; 11 tests) and `PicPlaceBindingRecord.library`
+(optional in format 1; `sessionURL` / `settingsURL`). App:
+`StorageRoot.healIdentity()` from `loadLibrary()` (skipped in a fallback
+session); `LibraryRegistry` (`storage.libraries`, upsert by identity then
+path, `move` on nest/copy, `discover()` over the default location and its
+`<host>/<username>/` children — export-only folders deliberately not
+listed); `check` → `.empty` / `.containsLibrary` / `.adopt(identity?)` /
+`.collision` / `.notWritable` / `.alreadyCurrent` / `.insideCurrent`, a
+not-yet-existing folder with a writable parent is `.empty`;
+`StorageRoot.create(at:name:)`; `renameIdentity(to:)`; the mover always
+carries `libraryItemNames` (§7.3 closed) and re-points the registry.
+Settings ▸ Storage ▸ **Libraries** card (§2.3 as drawn: rows, Current /
+Switch…, context menu Rename · Show in Finder · Remove from List, the three
+doors as NSSavePanel / NSOpenPanel, `LL_SCROLL=libraries`), the sheet's
+`create` mode and named switch copy, the launch alert's `Open “name”` rows.
+PicPlace: `PicPlace/session.json` + `settings.json` (one entry per device;
+`App/PicPlace/PicPlaceLibraryState.swift`), the install-wide session key
+claimed once by the library in use and the install-wide switch keys
+retired — only an explicit *auto-sync off* is carried, *upload originals*
+never (it starts OFF on every device for every library; the bench's
+`-letslapse.picplace.autoOriginals YES` still forces a run and writes
+nothing), profiles cached per account (`letslapse.picplace.accounts`),
+`knownAccounts` + `adoptSession` ("Sign in as @user" rows on the card, no
+browser), the interim replica rule in `connectLibrary()`, `library`
+written into the binding at connect. `armAutoSync` logs the three switches
+at launch.
+
+**Verified (Debug build, scratch roots through the argument domain; the
+volume and the play-pen untouched):** a fresh root gets its identity
+minted (`name` = folder); the list shows the current root, the nested
+play-pen (`@regularsteven on picplace.test`) and not the default root's
+empty export; `LL_CREATE_LIBRARY` made `Field 2026` (folder + identity +
+`Projects/`, no bytes copied) and the AX-pressed Relaunch came back on it
+with the identity read, not re-minted, signed out; `LL_OPEN_LIBRARY` on a
+folder holding only `Projects/<uuid>/project.json` (no identity, no
+export) offered **Switch to “lib-c”** — the M4 trap is closed; the
+scratchpad itself (a container of the current root) was refused with the
+library named; Switch → Relaunch landed on the other root; the demo list
+stages. Kit suite green; Mac and iOS Simulator builds clean.
+
+**Consequences to know:** *Upload originals automatically* starts OFF on
+every library after this build, the play-pen included — the install-wide
+ON is retired, not carried (Steven's rule, L7); switch it on per library
+where wanted. The default root today holds `Index/`, `Logs/`
+and an empty `Projects/library.json` from a run on 2026-09-16 14:17 (not
+this work) — the §7.4 leftovers; harmless, not listed, deletable by hand.
+
+**Traps met:** `Date()` has sub-millisecond precision and the file stores
+milliseconds — `LibraryIdentity.init` rounds `createdAt` so a record equals
+its read-back (the sync-revision rule again). `screencapture -l` of a
+sheet's window id captures its parent window. The `LL_SCROLL` anchor moves
+after the cards above it settle (the storage walk, the AI readiness line),
+so the hook scrolls three times.
+
+**Owed:** the mirrors (INDEX 🟡: `settings-libraries.svg`, `.create.svg`,
+the retitled move sheet); "Sign in as @user" seen with a real cached
+profile (none existed on this install yet); stages B–D.
+
+## 10. What Steven's first test showed (2026-09-16 evening) — and what changes
+
+**The run:** on the play-pen (bound, 879 projects) *Disconnect this library*
+→ Switch to the volume (unbound, 398) → relaunch → sign in → *Connect this
+library* ("PicPlace holds 879 projects, this library 398 … the rest are
+exchanged") → Connect → nest to `/Volumes/letslapse/picplace.test/regularsteven`
+→ relaunch → the merge ran: **879 preview shells pulled into the volume's
+library, 398 pushed up**, the account at 1,276. Then Switch back to the
+play-pen: it opened **signed out** and offered *Sign in as @regularsteven* /
+*Sign in with another account*; *Sign in as* → the connect question
+("PicPlace holds 1,276, this library 879 — merge") → Connect → refused by
+the interim replica rule naming the volume as "letslapse".
+
+**Mechanics, for the record:** the v2 merge did what it was built to do —
+the account is one namespace on the server, and any library that connects
+to it meets everything in it. Disconnecting the play-pen removed its local
+binding only. The interim rule (L10) could not fire because the play-pen
+was no longer bound. The dead preview, the dead Edit / Text / Shapes and
+the Finder buttons that do nothing share one cause: `heroImageURL` resolves
+the *source files*, a pulled shell has none, and every caller treats nil as
+"do nothing". The "signed out after the switch" was stage A's per-library
+session pointer (L7): the volume had a `session.json`, the play-pen did not.
+
+**Decisions taken from it (Steven, 2026-09-16 evening):**
+
+| # | Decision | Why |
+|---|---|---|
+| **L13** | **The session belongs to the Mac, not the library.** One sign-in per server per install; a library's binding decides whether it syncs with that account. The card shows **Sign In** or **Sign Out**, never two sign-in variants. L7's `session.json` and the "Sign in as @user" rows are reverted; tokens stay per account in the Keychain. | "It's one or the other with signing in and signing out." Switching libraries must never sign anyone out. |
+| **L14** | **Switching never disconnects.** *Disconnect this library* leaves the main card for the library row's menu, as the rare act it is (giving a drive away, re-homing to another account); its copy says what it costs (the merge base). | The binding is the library's identity on the server; dropping it on every switch would re-merge on every return. Steven asked whether a switch should disconnect — pushed back, agreed. |
+| **L15** | **Switch and create relaunch from the confirm** ("Switch and Relaunch", "Create and Relaunch"); the *Relaunch to finish* screen stays only after a **move**, where the copy took minutes. | A second screen that repeats the first is a wasted screen. |
+| **L16** | **A library has a name the person gave it.** Create takes it from the Save panel; a healed library carries its folder name as a *placeholder* and is shown as unnamed (a pencil, "Name this library"); **connect asks for a name** when it is still the placeholder, because the server library needs one; Rename is a visible affordance, not only a context menu. | "Their folder path's last name should not be the library name." |
+| **L17** | **Server libraries first.** Stage B is built by the PicPlace developer before stage C; the client's connect chooser, scoped sync and the iOS active library all sit on the rows. Until B lands, **connecting a library to an account that already holds projects is refused on this Mac** (not merged) — the merge is only offered when linking to a *named* server library. | The merge into a single namespace is what mixed the libraries; without scope there is no safe target. |
+| **L18** | **Connect is never raised automatically** after a sign-in. The card shows *Not on PicPlace — Connect…*; the person chooses when, and the question states the numbers that will **arrive here** and **go up** for the chosen target, with *New library on PicPlace from this library* as the default for a library that never synced. | "The rest are exchanged" did not say that 879 previews were about to land. |
+| **L19** | **The nest is retired** (recommended; Steven's convention 2026-09-14, his call): a library stays in the folder it is in; the identity file and the binding say whose it is. The recovery below un-nests the volume. | The rename on connect surprised on the real library; with a name and a binding the folder name carries no information. |
+| **L20** | **Preview-only projects show their poster everywhere** — grid, item view, media pane — and Edit / Text / Shapes are *disabled with the reason* ("Download originals to edit"), never dead; Finder reveals the project folder. | Steven: "the preview should show in this window." |
+
+**Stage A′ (client, after B ships or alongside it — no server dependency):**
+L13 revert (session per Mac: `letslapse.picplace.session` back, per server host), the card's Sign In / Sign Out, `knownAccounts` / `adoptSession` removed; L14 Disconnect moved to the row menu with honest copy; L15 one-screen switch/create; L16 names (placeholder state, pencil, connect asks); L17 the refusal copy names the library by name; L18 no automatic connect question; L20 `heroImageURL` falls back to `poster.jpg`, editor buttons disabled with reason, Finder reveals the folder; L19 the nest removed from `connect(with:)` (nest code stays for the crash-recovery marker only). Mirrors per screen after.
+
+**Stage B (server, the developer, first)** — [libraries-server-asks.md](libraries-server-asks.md), updated with this test: library rows, `library_id` on projects, `POST /libraries/{uuid}/projects` to assign a list (how an already-mixed account is sorted out), `status.libraries[]`, `features.libraries`, and a `letslapse:wipe-account` command for test accounts.
+
+**Stage C (client, after B):** the connect target chooser (new / link existing) with the numbers; scoped checks and pushes; the fresh-device chooser; the iOS active library; the replica rule per server library; L17's refusal lifted. Agreed with the PicPlace developer 2026-09-16 evening (asks §6): the check stays a **full** scoped pass and detects a departure as *held here, absent from the scoped index, not tombstoned*; the manifest PUT carries `library` only when it may create (first push, resurrection) or deliberately moves — never on an ordinary update, which would revert a move made elsewhere; `422 library_unknown` on a create re-`PUT`s the library and retries once; `library_changed_at` is what a later incremental pass keys on. What a departed project becomes locally (moved into the other library's folder when that library is on this Mac, else an orphan the card names) is C's design point, not the server's.
+
+## 11. Recovery of the mixed library — a one-off, with Steven's go
+
+State on 2026-09-16 16:30: `/Volumes/letslapse/picplace.test/regularsteven/Projects`
+holds 1,277 folders — **398 with source media** (the real library) and
+**879 without** (the pulled shells; their uuids are exactly the play-pen's
+879, which all have their sources at home). The account on picplace.test
+holds 1,276. The play-pen is unbound with its 879 intact. Nothing is lost.
+
+1. **Quit LetsLapse** (the Release app runs on the play-pen).
+2. **Server:** wipe @regularsteven's LetsLapse projects and objects on
+   **picplace.test** (a test instance; the developer's `letslapse:wipe-account`
+   from the asks, or `tinker` — the 398 real projects re-push cleanly into a
+   named library once C lands, the play-pen's 879 likewise).
+3. **Local, app closed:** in the nested volume library, hard-delete the 879
+   shell folders by the play-pen's uuid list (no tombstones, no journal —
+   the reconciler drops their index rows on the next launch), remove
+   `PicPlace/` (binding, sync state, session); then **un-nest**: move every
+   `libraryItemNames` item from `/Volumes/letslapse/picplace.test/regularsteven/`
+   back to `/Volumes/letslapse/` (same volume, renames) and remove the empty
+   `picplace.test/` folder. The identity file moves with it, so the
+   registry re-points on the next open.
+4. Relaunch on the volume: 398 projects, unbound, named "letslapse"
+   (placeholder — rename it). The play-pen stays as it is.
+
+Step 3 is a script over a uuid list checked against "no source media"
+twice; it is not run without Steven's explicit go, and never on a project
+that has sources.
+
+## 12. Stage A′ — landed 2026-09-16 evening (L13–L20)
+
+**What:** L13 the session is the Mac's again, one per server host
+(`letslapse.picplace.sessions`, v2's single key folded in; a day-old
+`PicPlace/session.json` is removed where found); the card shows **Sign In**
+or **Sign Out…**, the "Sign in as / another account" rows and
+`adoptSession` / `knownAccounts` are gone. L14 *Disconnect…* is a
+visible red button on the current library's row in Settings ▸ Libraries
+(and in its menu; a menu alone was not found — Steven, the same evening);
+iOS keeps it on the PicPlace card, having no list; the copy says what it
+costs; switching never touches the binding. L15 **Switch and Relaunch** /
+**Create and Relaunch** from the confirm; the *Relaunch to finish* screen
+only after a move; `LL_CREATE_LIBRARY` relaunches straight away. L16
+`LibraryIdentity.namedByPerson` (absent → false; a healed library carries
+its folder's name as a placeholder; iOS heals with the device's name); the
+row shows *Unnamed — the folder's name for now* with an accent pencil,
+every reachable row has the pencil, and the connect question carries a
+name field when the library is unnamed. L17 the connect question refuses
+the **merge** case with the numbers until the server scopes libraries
+(clean and fresh stay); L18 sign-in never raises the question — the card's
+row reads *Not on PicPlace — Connect…* and the question states what
+arrives and what goes up. L19 the nest is gone from `connect(with:)`
+(`nest` / `nestedRoot` / `isNested` / `prepareForLibraryNest` /
+`LL_PICPLACE_NEST` removed; the marker's launch half stays for a build of
+those two days). L20 the detail hero shows `poster.jpg` when there is no
+source (never as the editor's asset), the Gallery panel's Edit / Text /
+Shapes / New clip are disabled with *Preview only — download the originals
+to edit*, and both Finder actions reveal the project's folder when there
+is no hero file.
+
+**Verified on scratch roots:** one press on *Switch and Relaunch* relaunched
+onto the other root; a healed library lists as unnamed with the pencil; the
+staged connect question shows the name field prefilled with the folder
+name; the PicPlace card shows the single *Sign In*; Kit 12 tests green;
+Mac and iOS Simulator builds clean. Not exercised here (needs a session):
+the merge refusal's copy on a live account, Disconnect from the row menu.
+
+**Screenshot note:** `LL_SCROLL=libraries` lands past the card in a
+window shorter than ~2,000 px (the anchor is right; the scroll overshoots
+by a constant); the 2,535-px window of the first run landed it. Draw the
+mirrors from a tall window.
+
+## 13. The 2026-09-16 cleanup — done that evening, with Steven's go
+
+Steven had renamed the two libraries ("Prague LetsLapse Shots" = the
+nested volume library, "Holidays" = the play-pen) and asked for the mess to
+be resolved without breaking the volume's structure. Done, app quit,
+everything reversible: Prague's binding and sync records set aside in
+`PicPlace/.disconnected-2026-09-16/` (a file-level Disconnect); the 878
+pulled shells (every one a Holidays project with its sources at home; 348 MB
+of records and posters) **moved**, not deleted, to `<library>/Removed shells
+2026-09-16/` — the safety classifier refused an `rm`, and moving is the
+better tool anyway; @regularsteven's LetsLapse data on picplace.test wiped
+with the developer's `letslapse:wipe-account` (1,276 projects, 167
+tombstones, 6,337 objects; devices and tokens kept); the Release app
+relaunched on Prague: 400 documents, 878 rows dropped, unbound, signed in,
+originals off. One old orphan (`C6F7D8CD…`, a `project.json` from 20 Aug
+with no files) left as it was. Both libraries now read *Not on PicPlace —
+Connect…*; **neither connects until stage C** (the second would be refused
+as a merge under L17).

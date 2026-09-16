@@ -184,6 +184,51 @@ Simulator is device 2; `/Volumes/letslapse` is never a target; physical
 devices only against `picplace.co` after confidence. Server-side status of
 each ask is tracked in the asks file.
 
+### Libraries — several on a Mac, one on a phone until it connects, the server learns what a library is
+
+**Detail:** [libraries-plan.md](libraries-plan.md) (decisions L1–L12, the
+model, the flows, stages A–D, the rig, the traps) · the server contract:
+[libraries-server-asks.md](libraries-server-asks.md) · **Raised:** 2026-09-16
+(Steven: Settings ▸ Storage ▸ Library location can only *move* a library into
+a folder or *adopt* one that is there — no way to start a new, empty library,
+which testing needs; "Move back to the default location" now offers to copy
+the 431 GB volume onto the internal disk because the default location became
+a container the day the play-pen nested. Direction agreed the same day: a
+client works 100 % before any server integration; iPhone/iPad hold ONE library
+until they connect; a Mac can create, open, switch and move several; several
+libraries per account all backed up — so the server gets libraries as rows;
+once connected a phone works in any of them, captures landing in the active
+one; a finished job moves without its originals when PicPlace holds them;
+sharing a library with a client is a later FR the model must not close) ·
+**code-first by decision, server ask included** · **stage A LANDED 2026-09-16** (plan §9) · **Steven's first test the same evening mixed two libraries in one account (plan §10) → decisions L13–L20: session per Mac not per library, one Sign In / Sign Out, switching never disconnects, one-screen switch/create, names required, connect never automatic, the nest retired (recommended), preview-only projects show their poster; **stage A′ LANDED the same evening (plan §12: L13–L20 — session per Mac, one Sign In / Sign Out, Disconnect in the row menu, one-screen switch/create, names with the unnamed state and the connect question's name field, merge refused until the server scopes libraries, no automatic connect question, nest retired, poster in the hero + disabled editor buttons + Finder reveals the folder); the server (stage B, the asks file, handed to the PicPlace developer 2026-09-16) goes FIRST, then stage C; the mixed volume library Steven cleans up by hand (his call)** · large · seams:
+`App/StorageLocation.swift` (identity file, registry, `check` outcomes,
+create), `App/SettingsView.swift` (the Storage section → a Libraries list with
+Create / Open / Switch / Move, a `create` sheet mode), `App/LetsLapseApp.swift`
+(the fallback alert's Open… rows), `App/PicPlace/PicPlaceController.swift` +
+`PicPlaceAutoSync.swift` + `PicPlaceSyncState.swift` + `PicPlaceViews.swift`
+(per-library session pointer and switches, new libraries signed out, the
+replica rule, `library` in the binding), Kit `Library/LibraryIdentity.swift` +
+tests; stage C adds `PicPlaceLibrarySync.swift` / `PicPlaceChangeSync.swift` /
+`PicPlaceAPI.swift`, `ProjectDocument.library`, `ProjectQuery.library`, the iOS
+active-library picker; stage B is handed to the PicPlace side (the asks file).
+
+Stages: **A** (client, local, unblocks testing now) identity file + heal,
+`check` by documents (closes the M4 adopt trap), the registry, Settings ▸
+Storage ▸ **Libraries**, the fallback alert, per-library PicPlace state, the
+interim rule "one bound library per account per install" → **B** (server)
+`letslapse_libraries`, nullable `library_id` on projects (null = the default
+library), `/libraries`, `?library=`, `library` on the PUT and row,
+`status.libraries[]`, `features.libraries`; object keys untouched → **C**
+(client) the connect target chooser, the fresh-device chooser, scoped checks,
+the iOS active library, the rule narrows to one copy per server library per
+install → **D** move without originals (per-project gate on server truth,
+sources stay, blends move, `previewOnly` at the destination), then per-project
+"Free up space" on the same gate. Mirrors owed per screen (🟡): macOS
+`settings-libraries`, the retitled `settings-library-location(.moving)`, a
+`.create` and a `.without-originals`; iOS Settings ▸ PicPlace and the Projects
+toolbar menu. `/Volumes/letslapse` is only ever a *switch* target; scratch
+roots never write the registry.
+
 ### Post-crop vignette centring — the still and blend paths centre the vignette on the whole frame
 
 **Raised:** 2026-09-12 (editor-controls redesign, stage D2) · known

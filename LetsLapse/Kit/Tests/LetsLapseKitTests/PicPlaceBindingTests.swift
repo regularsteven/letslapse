@@ -73,6 +73,22 @@ final class PicPlaceBindingTests: XCTestCase {
                       "a session that does not know the id falls back to the host")
     }
 
+    func testLibraryFieldIsOptionalAndRoundTrips() throws {
+        let root = try scratchRoot()
+        // A record from before the field decodes without it.
+        try record().write(inRoot: root)
+        XCTAssertNil(try XCTUnwrap(PicPlaceBindingRecord.read(inRoot: root)).library)
+
+        var bound = record()
+        bound.library = .init(uuid: UUID(uuidString: "9C1F2A6E-0000-4000-8000-000000000001")!, name: "Field 2026")
+        try bound.write(inRoot: root)
+        let read = try XCTUnwrap(PicPlaceBindingRecord.read(inRoot: root))
+        XCTAssertEqual(read.library?.name, "Field 2026")
+        XCTAssertEqual(read.library?.uuid.uuidString, "9C1F2A6E-0000-4000-8000-000000000001")
+        XCTAssertEqual(read.format, 1, "the field is optional in format 1; older readers ignore it")
+        XCTAssertEqual(PicPlaceBindingRecord.settingsURL(inRoot: root).path, root.appendingPathComponent("PicPlace/settings.json").path)
+    }
+
     func testUnreadableFileReadsAsNil() throws {
         let root = try scratchRoot()
         try FileManager.default.createDirectory(at: PicPlaceBindingRecord.folderURL(inRoot: root), withIntermediateDirectories: true)

@@ -569,7 +569,7 @@ Debug and technical detail is deliberately quarantined in Settings, away from th
 
 ### 4.13 Persistence
 
-Everything lives under one storage root, JSON-manifested, human-inspectable. The root is `Application Support/LetsLapse` by default; **on macOS it is relocatable** — Settings ▸ Storage ▸ Library location nominates any folder (an external drive, typically), resolved once per launch by `StorageRoot` in `App/StorageLocation.swift`, with a copy-based move flow and a session fallback to the default when the nominated volume isn't mounted. Every path below is relative to that root; a new *top-level* item added here must also join `StorageRoot.libraryItemNames` or the move flow will leave it behind. (iOS always uses the sandbox default.)
+Everything lives under one storage root, JSON-manifested, human-inspectable. The root is `Application Support/LetsLapse` by default; **on macOS a Mac can have several** (`docs/libraries-plan.md`, 2026-09-16) — Settings ▸ Storage ▸ **Libraries** lists the ones it knows (`LibraryRegistry`, `storage.libraries` in UserDefaults: a list, never the truth), creates a new empty one (a Save panel; folder + identity + `Projects/`, nothing copied), opens an existing one, switches (a commit + relaunch), or moves the current one (the copy flow). One library is open per launch: `StorageRoot.current` resolves once, in `App/StorageLocation.swift`, with a session fallback to the default when the nominated volume isn't mounted (the alert then offers the other known libraries). **What makes a folder a library is `letslapse-library.json` at its root** (Kit `LibraryIdentity`: a uuid minted once, a name, created-by), healed on the first launch of a library that predates it; `StorageRoot.check` also recognises a `Projects/` folder holding documents (and, until M4, the export), so an older library is still adopted. Every path below is relative to the root; a new *top-level* item added here must also join `StorageRoot.libraryItemNames` or the move flow will leave it behind. (iOS always uses the sandbox default — one library, no folder; the identity file exists there too.)
 
 ```
 <storage root>/                      # Application Support/LetsLapse by default
@@ -605,6 +605,11 @@ Everything lives under one storage root, JSON-manifested, human-inspectable. The
 ├── Thumbnails/                      # disk JPEG thumbnail tier (path + mtime keyed)
 ├── Logs/
 │   └── liveblend-<timestamp>.json   # video-tap Live Blend session logs
+├── PicPlace/
+│   ├── account.json                 # which PicPlace account (and, since 2026-09-16, which of its libraries) this library IS — the binding travels with the folder
+│   ├── sync-state.json              # this device's sync records for the library, keyed by originID (the merge base per project)
+│   └── settings.json                # "Sync changes automatically" / "Upload originals automatically" per DEVICE for this library (originals off by default, never sent to the server; Wi-Fi-only stays per install; the session itself is the Mac's, in UserDefaults)
+├── letslapse-library.json           # the library's identity: {format, id, name, namedByPerson, createdAt, createdByDevice, createdWith} — what makes the folder a library; a healed one carries the folder's name until a person names it
 ├── blend-profiles.json              # learned Psycho/Safe profiles per device × pipeline × bucket
 └── custom_presets.json              # app-wide named colour grades
 ```

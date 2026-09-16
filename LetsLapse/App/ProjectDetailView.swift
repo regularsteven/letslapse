@@ -1600,6 +1600,11 @@ private struct ProjectHeroPane: View {
             // the pane still draws, with the placeholder hero and no button, so
             // the screen doesn't lose its top card.
             let preview = preview(for: capture)
+            // No source on this device (a preview-only project, v2 plan D7):
+            // the poster stands in as the plain picture it is — no grade, no
+            // edit pill (libraries plan L20). Never the editor's asset: a
+            // poster must not be graded as if it were the source.
+            let poster = preview == nil ? model.posterURL(for: capture) : nil
             let grade = model.photoGrade(for: capture)
             // The slot takes the CROPPED shape: the render underneath is cut
             // to the Edit screen's crop, so a slot the source's shape would
@@ -1617,7 +1622,7 @@ private struct ProjectHeroPane: View {
             // that does nothing, and it stays off.
             let span = metrics.dragSpan(in: box)
             VStack(spacing: 0) {
-                imageCard(preview: preview, size: size)
+                imageCard(preview: preview, poster: poster, size: size)
                 if span >= 40 {
                     MediaResizeHandle(
                         scale: $mediaScale,
@@ -1702,15 +1707,16 @@ private struct ProjectHeroPane: View {
         probedAspect = resolved
     }
 
-    private func imageCard(preview: Preview?, size: CGSize) -> some View {
+    private func imageCard(preview: Preview?, poster: URL?, size: CGSize) -> some View {
         ZStack {
             // The ungraded thumbnail stays underneath for the life of the pane:
             // it fills the slot before the first grade lands, and it is what
             // remains if a render fails — so the picture never blanks and never
             // changes size. Filling a crop-shaped slot it shows roughly the
             // cropped region; the cropped render covers it once it lands.
+            // With no source here, the poster is the whole picture.
             ProjectThumbnailView(
-                url: preview?.url,
+                url: preview?.url ?? poster,
                 kind: preview?.isMovie == true ? .video : .image,
                 cornerRadius: 18)
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import LetsLapseKit
 
 // MARK: - Status card (components/picplace-status.<state>.<width>.svg)
 
@@ -356,7 +357,6 @@ struct PicPlaceSettingsCard: View {
     @State private var isConfirmingSignOut = false
     @State private var isConfirmingDisconnect = false
     @State private var serverRejected = false
-
     var body: some View {
         VStack(spacing: 0) {
             if let profile = picplace.profile {
@@ -387,17 +387,22 @@ struct PicPlaceSettingsCard: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                #if os(iOS)
                 if picplace.binding != nil { disconnectRow }
+                #endif
                 Button {
                     isConfirmingSignOut = true
                 } label: {
-                    LLRow(title: "Sign out…", titleColor: .red, showsDivider: false) {
+                    LLRow(title: "Sign Out…", titleColor: .red, showsDivider: false) {
                         EmptyView()
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             } else {
+                // One door (libraries plan L13): the Mac is signed in to a
+                // server or it is not. A bound library names the account
+                // it needs.
                 Button {
                     if picplace.isSigningIn { picplace.cancelSignIn() } else { picplace.signIn() }
                 } label: {
@@ -423,7 +428,9 @@ struct PicPlaceSettingsCard: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    #if os(iOS)
                     disconnectRow
+                    #endif
                 } else if PicPlaceConfiguration.showsServerSetting {
                     Button {
                         serverDraft = picplace.serverString
@@ -486,13 +493,13 @@ struct PicPlaceSettingsCard: View {
     }
 
     private var signInTitle: String {
-        if let binding = picplace.binding { return "Sign in as @\(binding.user.displayHandle)" }
-        return "Sign in with PicPlace"
+        if let binding = picplace.binding { return "Sign In as @\(binding.user.displayHandle)" }
+        return "Sign In"
     }
 
     private var signInSubtitle: String {
-        if let binding = picplace.binding { return "This library belongs to @\(binding.user.displayHandle) on \(binding.server.host)" }
-        return "Keep a copy of your projects on \(PicPlaceConfiguration.serverHost)"
+        if let binding = picplace.binding { return "This library syncs with @\(binding.user.displayHandle) on \(binding.server.host)" }
+        return "PicPlace on \(PicPlaceConfiguration.serverHost) — keep a copy of a library's projects there"
     }
 
     @ViewBuilder
@@ -503,12 +510,9 @@ struct PicPlaceSettingsCard: View {
                 picplace.offerConnect()
             } label: {
                 LLRow(
-                    title: picplace.isConnecting ? "Connecting…" : "Connect this library",
+                    title: picplace.isConnecting ? "Connecting…" : "Not on PicPlace — Connect…",
                     subtitle: picplace.lastConnectError
-                        ?? ([
-                            "Keep this library's projects on \(picplace.sessionHost) as @\(picplace.profile?.username ?? "")",
-                            picplace.connectDestinationDescription,
-                        ].compactMap { $0 }.joined(separator: ". ")),
+                        ?? "Keeps this library's projects on \(picplace.sessionHost) as @\(picplace.profile?.username ?? ""). The library stays in its folder.",
                     titleColor: LL.accent
                 ) {
                     EmptyView()
@@ -669,17 +673,37 @@ struct PicPlaceSettingsCard: View {
 /// card that can show it attaches this, so it appears wherever the person is.
 private struct PicPlaceConnectAlert: ViewModifier {
     @ObservedObject var picplace: PicPlaceController
+    /// The name the library goes up under when it has only its folder's
+    /// name (libraries plan L16) — the server library needs one a person
+    /// chose.
+    @State private var nameDraft = ""
+
+    private var needsName: Bool { StorageRoot.identity?.namedByPerson != true }
 
     func body(content: Content) -> some View {
         content.alert("Connect this library to PicPlace?", isPresented: $picplace.isOfferingConnect) {
-            Button("Connect") { picplace.connectLibrary() }
+            if needsName {
+                TextField("Library name", text: $nameDraft)
+            }
+            Button("Connect") {
+                if needsName {
+                    let name = LibraryIdentity.cleanName(nameDraft)
+                    if !name.isEmpty { try? StorageRoot.renameIdentity(to: name) }
+                }
+                picplace.connectLibrary()
+            }
             Button("Not now", role: .cancel) {}
         } message: {
             Text([
                 "Connect as @\(picplace.profile?.username ?? "") on \(picplace.sessionHost)",
                 picplace.connectCaseText,
-                picplace.connectDestinationDescription,
-            ].compactMap { $0 }.joined(separator: ". "))
+                needsName ? "Give the library a name first — it's what PicPlace and your other devices call it" : nil,
+            ].compactMap { $0 }
+                .map { $0.hasSuffix(".") ? String($0.dropLast()) : $0 }
+                .joined(separator: ". ") + ".")
+        }
+        .onChange(of: picplace.isOfferingConnect) { _, offering in
+            if offering, nameDraft.isEmpty { nameDraft = StorageRoot.identity?.displayName ?? "" }
         }
     }
 }

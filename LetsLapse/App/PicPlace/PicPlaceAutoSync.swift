@@ -42,6 +42,7 @@ extension PicPlaceController {
 
     func armAutoSync() {
         autoTimer?.invalidate()
+        LLog("picplace: auto-sync switches for this device and library — changes \(autoSyncEnabled ? "on" : "off"), originals \(autoOriginalsEnabled ? "ON" : "off"), Wi-Fi only \(wifiOnly ? "on" : "off")")
         #if DEBUG
         // `LL_PICPLACE_RENAME=<uuid>:<name>` renames a project through the
         // real funnel five seconds after launch — the auto-push's cue.

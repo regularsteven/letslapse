@@ -298,7 +298,11 @@ struct GalleryPreviewPanel: View {
     /// a shared design component; the row here is what the code shows until
     /// that component is drawn.
     private var actionGrid: some View {
-        VStack(spacing: 8) {
+        // A preview-only project (its sources are not on this device, v2
+        // plan D7) has nothing to edit: the buttons say so instead of doing
+        // nothing (libraries plan L20).
+        let missing = model.sourcesMissing(capture)
+        return VStack(spacing: 8) {
             actionButton("Open", icon: "arrow.up.forward.square", filled: true) {
                 onOpen()
             }
@@ -306,19 +310,30 @@ struct GalleryPreviewPanel: View {
                 actionButton("Edit", icon: "pencil") {
                     openEditor(page: .editor)
                 }
+                .disabled(missing)
                 actionButton("Text", icon: "textformat") {
                     openEditor(page: .text)
                 }
+                .disabled(missing)
                 if capture.kind == .photos {
                     actionButton("Shapes", icon: "circle.square") {
                         openEditor(page: .masks)
                     }
+                    .disabled(missing)
                 }
                 if !capture.isPhotoCapture {
                     actionButton("New clip", icon: "plus.circle") {
                         onNewClip()
                     }
+                    .disabled(missing)
                 }
+            }
+            .opacity(missing ? 0.45 : 1)
+            if missing {
+                Text("Preview only — download the originals to edit")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -698,8 +713,13 @@ struct GalleryPreviewPanel: View {
             #if os(macOS)
             Divider().frame(height: 20)
             footerButton("Finder", icon: "folder") {
+                // The hero file when there is one; the project's folder
+                // otherwise (a preview-only project has a poster and its
+                // records there) — never a button that does nothing.
                 if let url = model.heroImageURL(for: capture) {
                     NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: "")
+                } else {
+                    NSWorkspace.shared.activateFileViewerSelecting([model.projectFolderURL(for: capture)])
                 }
             }
             #endif

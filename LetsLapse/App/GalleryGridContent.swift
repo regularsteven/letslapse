@@ -245,6 +245,10 @@ struct GalleryGridContent: View {
         Button {
             if let url = model.heroImageURL(for: capture) {
                 NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: "")
+            } else {
+                // A preview-only project has no hero file; its folder holds
+                // the poster and the records.
+                NSWorkspace.shared.activateFileViewerSelecting([model.projectFolderURL(for: capture)])
             }
         } label: {
             Label("Show in Finder", systemImage: "folder")

@@ -61,6 +61,21 @@ public struct PicPlaceBindingRecord: Codable, Equatable, Sendable {
         }
     }
 
+    /// Which of the account's libraries this one is (docs/libraries-plan.md
+    /// L9): the identity file's uuid and the name it had when it bound.
+    /// Optional in format 1 — records written before 2026-09-16 have none,
+    /// and the server ignores it until it learns what a library is (L8);
+    /// then it is the key the requests are scoped by.
+    public struct Library: Codable, Equatable, Sendable {
+        public var uuid: UUID
+        public var name: String
+
+        public init(uuid: UUID, name: String) {
+            self.uuid = uuid
+            self.name = name
+        }
+    }
+
     public struct InitialSync: Codable, Equatable, Sendable {
         public enum State: String, Codable, Sendable { case pending, done }
         public enum Case: String, Codable, Sendable { case clean, fresh, merge }
@@ -81,6 +96,10 @@ public struct PicPlaceBindingRecord: Codable, Equatable, Sendable {
     /// The library-scoped sync records (this device's pushes and pulls, the
     /// merge base per project), beside the binding. Written by the app.
     public static let syncStateFileName = "sync-state.json"
+    /// This library's auto-sync switches, one entry per device (libraries
+    /// plan L7) — beside the binding, written by the app. (A `session.json`
+    /// lived here for a day; the session is the Mac's, L13.)
+    public static let settingsFileName = "settings.json"
 
     public var format: Int
     public var server: Server
@@ -88,15 +107,17 @@ public struct PicPlaceBindingRecord: Codable, Equatable, Sendable {
     public var boundAt: Date
     public var boundByDevice: UUID
     public var initialSync: InitialSync
+    public var library: Library?
 
     public init(server: Server, user: User, boundAt: Date = Date(), boundByDevice: UUID,
-                initialSync: InitialSync = InitialSync()) {
+                initialSync: InitialSync = InitialSync(), library: Library? = nil) {
         self.format = Self.format
         self.server = server
         self.user = user
         self.boundAt = boundAt
         self.boundByDevice = boundByDevice
         self.initialSync = initialSync
+        self.library = library
     }
 
     // MARK: Keys
@@ -131,6 +152,10 @@ public struct PicPlaceBindingRecord: Codable, Equatable, Sendable {
 
     public static func syncStateURL(inRoot root: URL) -> URL {
         folderURL(inRoot: root).appendingPathComponent(syncStateFileName)
+    }
+
+    public static func settingsURL(inRoot root: URL) -> URL {
+        folderURL(inRoot: root).appendingPathComponent(settingsFileName)
     }
 
     /// nil when the library is unbound — or when the file exists but cannot

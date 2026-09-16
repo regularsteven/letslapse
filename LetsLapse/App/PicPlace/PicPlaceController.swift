@@ -22,7 +22,10 @@ import UIKit
 ///
 /// The session at launch follows the library: bound + tokens for that
 /// account → signed in silently; bound + no tokens → "Sign in as …", other
-/// accounts refused; unbound → the last sign-in, and the offer to connect.
+/// accounts refused; unbound → the Mac's sign-in on the library's server
+/// (libraries plan L13: the session is the Mac's, one per server; the
+/// binding decides whether a library syncs with it). Connecting is always
+/// the person's press (L18).
 @MainActor
 final class PicPlaceController: ObservableObject {
 
@@ -89,10 +92,17 @@ final class PicPlaceController: ObservableObject {
     /// What the Projects-list pill shows; nil keeps the card quiet.
     enum ListState { case synced, syncing, failed, previewOnly }
 
-    /// The session's cached profile — shown offline until the server says otherwise.
+    /// The cached profiles, per account — shown offline until the server
+    /// says otherwise, and what "Sign in as @user" offers a signed-out
+    /// library. `profileKey` is the single-profile key from before.
+    private static let profilesKey = "letslapse.picplace.accounts"
     private static let profileKey = "letslapse.picplace.account"
-    /// The account key of the last sign-in, for libraries that are not bound.
+    /// The account key of the last sign-in, for libraries that are not bound
+    /// — v1/v2's single key, folded into `sessionsKey` once.
     private static let sessionKey = "letslapse.picplace.session"
+    /// The Mac's sign-ins, one account key per server host (L13): an unbound
+    /// library uses the one for the server it would sign in to.
+    private static let sessionsKey = "letslapse.picplace.sessions"
     /// v1's device-wide sync records, keyed by capture id; migrated once.
     private static let legacyRecordsKey = "letslapse.picplace.syncStates"
 
@@ -129,14 +139,29 @@ final class PicPlaceController: ObservableObject {
     var lastCheckAt: Date?
     var foregroundObserver: NSObjectProtocol?
     /// Auto-sync (§4.7): the switches, what it is doing, its timers and queues.
-    @Published var autoSyncEnabled: Bool = UserDefaults.standard.object(forKey: PicPlaceController.autoSyncKey) as? Bool ?? true {
-        didSet { UserDefaults.standard.set(autoSyncEnabled, forKey: Self.autoSyncKey); autoSyncSettingChanged() }
+    /// The first two are this DEVICE's for this LIBRARY (`PicPlace/settings.json`,
+    /// one entry per device; libraries plan L7) — *upload originals* starts
+    /// OFF everywhere, is switched on only by the person, and is never sent
+    /// to the server. Wi-Fi-only is the install's.
+    @Published var autoSyncEnabled: Bool = PicPlaceController.librarySettings.autoSync {
+        didSet { saveLibrarySettings(); autoSyncSettingChanged() }
     }
-    @Published var autoOriginalsEnabled: Bool = UserDefaults.standard.bool(forKey: PicPlaceController.autoOriginalsKey) {
-        didSet { UserDefaults.standard.set(autoOriginalsEnabled, forKey: Self.autoOriginalsKey); autoSyncSettingChanged() }
+    @Published var autoOriginalsEnabled: Bool = PicPlaceController.librarySettings.autoOriginals {
+        didSet { saveLibrarySettings(); autoSyncSettingChanged() }
     }
     @Published var wifiOnly: Bool = UserDefaults.standard.object(forKey: PicPlaceController.wifiOnlyKey) as? Bool ?? true {
         didSet { UserDefaults.standard.set(wifiOnly, forKey: Self.wifiOnlyKey); autoSyncSettingChanged() }
+    }
+    private static var librarySettings: PicPlaceLibrarySettings.Switches {
+        PicPlaceLibrarySettings.resolve(root: StorageRoot.current, device: DeviceIdentity.id,
+                                        legacyAutoSyncKey: autoSyncKey, legacyAutoOriginalsKey: autoOriginalsKey)
+    }
+    private func saveLibrarySettings() {
+        do {
+            try PicPlaceLibrarySettings.save(.init(autoSync: autoSyncEnabled, autoOriginals: autoOriginalsEnabled), root: root, device: DeviceIdentity.id)
+        } catch {
+            LLog("picplace: could not write the library's settings: \(error)")
+        }
     }
     /// What auto-sync is doing right now (a spinner beside it), and the
     /// last thing that went wrong (no spinner; cleared by the next success
@@ -167,6 +192,9 @@ final class PicPlaceController: ObservableObject {
     /// reached at all — the queue stops on that rather than fail through
     /// its remaining projects one slow timeout at a time.
     var lastSyncFailedOffline = false
+    /// The first two are legacy install-wide keys: read once into the
+    /// library's `settings.json` (then removed), and still honoured from
+    /// the argument domain for a run.
     static let autoSyncKey = "letslapse.picplace.autoSync"
     static let autoOriginalsKey = "letslapse.picplace.autoOriginals"
     static let wifiOnlyKey = "letslapse.picplace.wifiOnly"
@@ -213,8 +241,12 @@ final class PicPlaceController: ObservableObject {
         migrateLegacyRecords()
         Self.migrateLegacyTokens()
 
-        // The session follows the library (v2 plan §3.1).
-        var sessionKey = binding?.accountKey ?? UserDefaults.standard.string(forKey: Self.sessionKey)
+        // The session follows the library (v2 plan §3.1): a bound library's
+        // is its binding; an unbound one's is the Mac's sign-in on the server
+        // it would sign in to (L13). A day of `PicPlace/session.json` per
+        // library is over: a stale one is removed where found.
+        var sessionKey = binding?.accountKey ?? Self.sessions[PicPlaceConfiguration.serverHost]
+        try? FileManager.default.removeItem(at: PicPlaceBindingRecord.folderURL(inRoot: root).appendingPathComponent("session.json"))
         #if DEBUG && os(macOS)
         // A scratch root (`-storage.libraryRootPath …`) that is not bound is
         // not the person's library and must not borrow their session: a
@@ -229,7 +261,7 @@ final class PicPlaceController: ObservableObject {
         var tokens = sessionKey.flatMap { PicPlaceKeychain.load(account: $0) }
         LLog("picplace: session \(sessionKey ?? "none") — \(tokens == nil ? "no tokens" : "tokens found")\(binding == nil ? "" : ", library bound to @\(binding!.user.displayHandle) on \(binding!.server.host)")")
         var tokensKey = tokens == nil ? nil : sessionKey
-        profile = Self.loadProfile().flatMap { $0.accountKey == sessionKey ? $0 : nil }
+        profile = sessionKey.flatMap { Self.loadProfile(for: $0) }
         #if DEBUG
         // `LL_PICPLACE_TOKENS=<access>:<refresh>` signs the app in with tokens
         // obtained elsewhere (the picplace repo's curl walkthrough), so a
@@ -278,8 +310,9 @@ final class PicPlaceController: ObservableObject {
         } else if tokens != nil {
             Task { await bootstrapSession() }
         } else if profile != nil {
+            // A profile without tokens is stale: drop this library's view
+            // of it (the cached copy stays for "Sign in as" elsewhere).
             profile = nil
-            Self.saveProfile(nil)
         }
         #if DEBUG
         if signOutHook {
@@ -304,24 +337,6 @@ final class PicPlaceController: ObservableObject {
         // only launch and hand-pressed ones — while the Debug Simulator did.
         armChangeChecks()
         armAutoSync()
-        #if DEBUG
-        #if os(macOS)
-        // `LL_PICPLACE_NEST=<host>:<username>` binds an unbound library to a
-        // staged account and runs the Mac nest — the rename into
-        // `<root>/<host>/<username>/` and the relaunch — with no server, so
-        // the mechanics are exercised on a scratch root.
-        if binding == nil, let staged = ProcessInfo.processInfo.environment["LL_PICPLACE_NEST"] {
-            let parts = staged.split(separator: ":", maxSplits: 1).map(String.init)
-            if parts.count == 2 {
-                let record = PicPlaceBindingRecord(
-                    server: .init(url: "https://\(parts[0])"),
-                    user: .init(uuid: "staged-\(parts[1])", username: parts[1], name: "Staged \(parts[1])"),
-                    boundByDevice: DeviceIdentity.id)
-                Task { @MainActor in self.connect(with: record) }
-            }
-        }
-        #endif
-        #endif
     }
 
     // MARK: The library
@@ -347,19 +362,6 @@ final class PicPlaceController: ObservableObject {
     /// The host the cards name: the session's, else the library's, else the setting's.
     var sessionHost: String {
         profile?.host ?? binding?.server.host ?? PicPlaceConfiguration.serverHost
-    }
-
-    /// Where the Mac library would live once connected (v2 plan §3.3) — the
-    /// Settings row's subtitle, so the person knows before saying yes.
-    var connectDestinationDescription: String? {
-        #if os(macOS)
-        guard let profile, binding == nil else { return nil }
-        let destination = StorageRoot.nestedRoot(host: profile.host, username: profile.username)
-        if StorageRoot.isNested(host: profile.host, username: profile.username) { return nil }
-        return "The library moves to \(destination.path) and LetsLapse relaunches."
-        #else
-        return nil
-        #endif
     }
 
     /// A `letslapse://` URL the system delivered — the sign-in callback on
@@ -390,7 +392,10 @@ final class PicPlaceController: ObservableObject {
                 let tokens = try await signInFlow.run(server: signInServer)
                 await client.setTokens(tokens, accountKey: nil)
                 try await establishProfile()
-                if binding == nil { await offerConnectNow() } else { runInitialSyncIfPending() }
+                // An unbound library is not offered the connect question
+                // here (L18): the card says "Not on PicPlace — Connect…" and
+                // the person chooses when.
+                if binding != nil { runInitialSyncIfPending() }
             } catch is PicPlaceSignIn.Cancelled {
                 // Nothing to say: they closed it.
             } catch {
@@ -410,19 +415,41 @@ final class PicPlaceController: ObservableObject {
         syncTasks.removeAll()
         progress.removeAll()
         let deviceID = profile?.deviceID
-        let key = profile?.accountKey ?? binding?.accountKey ?? UserDefaults.standard.string(forKey: Self.sessionKey)
+        let host = profile?.host ?? binding?.server.host ?? PicPlaceConfiguration.serverHost
+        let key = profile?.accountKey ?? binding?.accountKey ?? Self.sessions[host]
         Task {
             if let deviceID {
                 let _: PPEmpty? = try? await client.delete("devices/\(deviceID)")
             }
             await client.setTokens(nil, accountKey: nil)
         }
-        if let key { PicPlaceKeychain.clear(account: key) }
+        if let key {
+            PicPlaceKeychain.clear(account: key)
+            Self.saveProfile(nil, for: key)
+        }
         PicPlaceKeychain.clearLegacy()
         profile = nil
         usage = nil
-        Self.saveProfile(nil)
-        UserDefaults.standard.removeObject(forKey: Self.sessionKey)
+        Self.setSession(nil, forHost: host)
+    }
+
+    /// The Mac's sign-ins by server host (L13), with v2's single key folded
+    /// in once (its host is the account key's prefix).
+    private static var sessions: [String: String] {
+        var map = UserDefaults.standard.dictionary(forKey: sessionsKey) as? [String: String] ?? [:]
+        if let legacy = UserDefaults.standard.string(forKey: sessionKey) {
+            let host = String(legacy.split(separator: "|", maxSplits: 1).first ?? "")
+            if !host.isEmpty, map[host] == nil { map[host] = legacy }
+            UserDefaults.standard.set(map, forKey: sessionsKey)
+            UserDefaults.standard.removeObject(forKey: sessionKey)
+        }
+        return map
+    }
+
+    private static func setSession(_ accountKey: String?, forHost host: String) {
+        var map = sessions
+        map[host.lowercased()] = accountKey
+        UserDefaults.standard.set(map, forKey: sessionsKey)
     }
 
     /// Change the server (only while signed out and unbound — a token names
@@ -488,8 +515,8 @@ final class PicPlaceController: ObservableObject {
         profile = Profile(username: handle, name: status.user.name, userUUID: status.user.uuid,
                           deviceID: device.id, deviceName: device.name, server: tokens.server,
                           serverID: status.server?.id, serverEnvironment: status.server?.environment)
-        Self.saveProfile(profile)
-        UserDefaults.standard.set(key, forKey: Self.sessionKey)
+        Self.saveProfile(profile, for: key)
+        Self.setSession(key, forHost: host)
         upgradeBindingIfServerReportsItself(status)
         noteLimits(status)
         await refreshUsage(status: status)
@@ -579,10 +606,10 @@ final class PicPlaceController: ObservableObject {
         for task in syncTasks.values { task.cancel() }
         syncTasks.removeAll()
         progress.removeAll()
+        if let key = profile?.accountKey { Self.saveProfile(nil, for: key) }
+        if let host = profile?.host { Self.setSession(nil, forHost: host) }
         profile = nil
         usage = nil
-        Self.saveProfile(nil)
-        UserDefaults.standard.removeObject(forKey: Self.sessionKey)
         lastSignInError = "PicPlace signed this device out. Sign in again."
     }
 
@@ -596,7 +623,23 @@ final class PicPlaceController: ObservableObject {
 
     private func offerConnectNow() async {
         lastConnectError = nil
-        connectCaseText = await describeConnectCase()
+        guard let described = await describeConnectCase() else {
+            lastConnectError = "PicPlace couldn't be reached to check what it holds. Try again."
+            return
+        }
+        // Until PicPlace knows what a library is (libraries plan L17), a
+        // library with projects may not connect to an account that already
+        // holds projects: the v2 merge would pour the two into one namespace
+        // — which is exactly what happened on 2026-09-16. Clean (nothing
+        // there) and fresh (nothing here) are safe and stay.
+        if described.isMerge {
+            lastConnectError = "PicPlace already holds \(described.serverCount) project\(described.serverCount == 1 ? "" : "s") "
+                + "and this library has \(described.localCount). Until PicPlace keeps libraries apart, a library can only "
+                + "connect to an account that is empty or into an empty library. Not connected."
+            LLog("picplace: connect refused — merge case (\(described.serverCount) on the server, \(described.localCount) here) until the server scopes libraries")
+            return
+        }
+        connectCaseText = described.text
         isOfferingConnect = true
     }
 
@@ -605,38 +648,47 @@ final class PicPlaceController: ObservableObject {
     /// `<root>/<host>/<username>/` and relaunch. iOS binds in place.
     func connectLibrary() {
         guard let profile, binding == nil else { return }
+        #if os(macOS)
+        // One bound library per account on a Mac until the server knows
+        // what a library is (libraries plan L10): presence is per
+        // (project, device), and two libraries under one account on one
+        // install would overwrite each other's.
+        if let other = Self.otherLibraryBound(to: profile) {
+            lastConnectError = "This Mac already syncs “\(other.name)” (\(other.path)) with @\(profile.username) on \(profile.host). "
+                + "One library per account for now — disconnect that one first, or sign in with another account."
+            LLog("picplace: connect refused — \(other.path) is already bound to \(profile.accountKey)")
+            return
+        }
+        #endif
         let record = PicPlaceBindingRecord(
             server: .init(url: profile.server, id: profile.serverID, environment: profile.serverEnvironment),
             user: .init(uuid: profile.userUUID, username: profile.username, name: profile.name),
-            boundByDevice: DeviceIdentity.id)
+            boundByDevice: DeviceIdentity.id,
+            library: StorageRoot.identity.map { .init(uuid: $0.id, name: $0.displayName) })
         connect(with: record)
     }
 
+    #if os(macOS)
+    /// Another known, reachable library on this Mac whose binding is this
+    /// account's — nil when there is none.
+    private static func otherLibraryBound(to profile: Profile) -> LibraryRegistry.Entry? {
+        let current = StorageRoot.current.standardizedFileURL.resolvingSymlinksInPath().path
+        return LibraryRegistry.entries.first { entry in
+            guard entry.isReachable,
+                  entry.url.standardizedFileURL.resolvingSymlinksInPath().path != current,
+                  let other = PicPlaceBindingRecord.read(inRoot: entry.url) else { return false }
+            return other.matches(host: profile.host, userUUID: profile.userUUID, serverID: profile.serverID)
+        }
+    }
+    #endif
+
+    /// The library binds where it is (libraries plan L19): the identity
+    /// file and this binding say whose it is; no folder is renamed.
     private func connect(with record: PicPlaceBindingRecord) {
         guard binding == nil, !isConnecting else { return }
         isConnecting = true
         lastConnectError = nil
         let username = record.user.displayHandle
-        #if os(macOS)
-        if !StorageRoot.isNested(host: record.server.host, username: username) {
-            // Everything queued lands, nothing further is written, the lock
-            // goes — then the folders move and the app comes back on the
-            // nested root (v2 plan §3.3).
-            model.prepareForLibraryNest(reason: "The library is moving to its PicPlace folder; LetsLapse is relaunching.")
-            do {
-                try StorageRoot.nest(host: record.server.host, username: username, binding: record)
-            } catch {
-                LLog("picplace: nest failed: \(error)")
-                lastConnectError = "Couldn't move the library into its PicPlace folder: \(error.localizedDescription)"
-                model.abandonLibraryNest()
-                isConnecting = false
-                return
-            }
-            LLog("picplace: library bound to @\(username) on \(record.server.host) and nested at \(StorageRoot.nestedRoot(host: record.server.host, username: username).path) — relaunching")
-            AppRelaunch.relaunchNow()
-            return
-        }
-        #endif
         do {
             try record.write(inRoot: root)
             binding = record
@@ -958,17 +1010,37 @@ final class PicPlaceController: ObservableObject {
 
     // MARK: Persistence
 
-    private static func loadProfile() -> Profile? {
-        guard let data = UserDefaults.standard.data(forKey: profileKey) else { return nil }
-        return try? JSONDecoder().decode(Profile.self, from: data)
-    }
-
-    private static func saveProfile(_ profile: Profile?) {
-        if let profile, let data = try? JSONEncoder().encode(profile) {
-            UserDefaults.standard.set(data, forKey: profileKey)
-        } else {
+    /// The cached profiles, one per account key (`letslapse.picplace.accounts`);
+    /// the single-profile key from before is folded in once.
+    private static func loadProfiles() -> [String: Profile] {
+        var profiles: [String: Profile] = [:]
+        if let data = UserDefaults.standard.data(forKey: profilesKey),
+           let decoded = try? JSONDecoder().decode([String: Profile].self, from: data) {
+            profiles = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: profileKey),
+           let legacy = try? JSONDecoder().decode(Profile.self, from: data) {
+            if profiles[legacy.accountKey] == nil { profiles[legacy.accountKey] = legacy }
+            saveProfiles(profiles)
             UserDefaults.standard.removeObject(forKey: profileKey)
         }
+        return profiles
+    }
+
+    private static func saveProfiles(_ profiles: [String: Profile]) {
+        if let data = try? JSONEncoder().encode(profiles) {
+            UserDefaults.standard.set(data, forKey: profilesKey)
+        }
+    }
+
+    private static func loadProfile(for accountKey: String) -> Profile? {
+        loadProfiles()[accountKey]
+    }
+
+    private static func saveProfile(_ profile: Profile?, for accountKey: String) {
+        var profiles = loadProfiles()
+        profiles[accountKey] = profile
+        saveProfiles(profiles)
     }
 
     /// v1 kept the records in `UserDefaults`, device-wide and keyed by
@@ -995,12 +1067,14 @@ final class PicPlaceController: ObservableObject {
     private static func migrateLegacyTokens() {
         guard let legacy = PicPlaceKeychain.loadLegacy() else { return }
         defer { PicPlaceKeychain.clearLegacy() }
-        guard let profile = loadProfile(), PicPlaceConfiguration.host(of: legacy.server) == profile.host else {
+        // v1's single profile (folded into the per-account map by `loadProfiles`).
+        guard let profile = loadProfiles().values.first(where: { PicPlaceConfiguration.host(of: legacy.server) == $0.host }) else {
             LLog("picplace: a v1 sign-in with no matching profile was dropped; sign in again")
             return
         }
         do {
             try PicPlaceKeychain.save(legacy, account: profile.accountKey)
+            // The install-wide pointer; `init` moves it into the library.
             UserDefaults.standard.set(profile.accountKey, forKey: sessionKey)
             LLog("picplace: v1 sign-in moved under \(profile.accountKey)")
         } catch {

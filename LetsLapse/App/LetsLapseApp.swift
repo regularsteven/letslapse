@@ -312,6 +312,16 @@ struct ContentView: View {
     /// Raised once at launch when a nominated library location couldn't be
     /// reached and the session fell back to the default (see `StorageRoot`).
     @State private var showStorageFallbackAlert = false
+    #if os(macOS)
+    /// Reachable libraries other than the unreachable one, for the alert.
+    private var fallbackLibraries: [LibraryRegistry.Entry] {
+        let unreachable = StorageRoot.customPath.map { URL(fileURLWithPath: $0).standardizedFileURL.resolvingSymlinksInPath().path }
+        return LibraryRegistry.entries
+            .filter { $0.isReachable && $0.url.standardizedFileURL.resolvingSymlinksInPath().path != unreachable }
+            .prefix(3)
+            .map { $0 }
+    }
+    #endif
     #endif
 
     var body: some View {
@@ -511,13 +521,27 @@ struct ContentView: View {
             showStorageFallbackAlert = StorageRoot.customRootUnavailable
         }
         .alert("Library location unavailable", isPresented: $showStorageFallbackAlert) {
+            // The other libraries this Mac knows (libraries plan §3.5): open
+            // one instead of sitting on an empty default. Each is a commit
+            // and a relaunch — the unreachable one stays in the list.
+            ForEach(fallbackLibraries) { entry in
+                Button("Open “\(entry.name)”") {
+                    StorageRoot.commit(destination: entry.url)
+                    LLog("storage: fallback session — switching to \(entry.path) on relaunch")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        AppRelaunch.relaunchNow()
+                    }
+                }
+            }
             Button("OK") {}
         } message: {
             Text(
                 "LetsLapse keeps its library at \(StorageRoot.customPath ?? "its nominated location"), "
                     + "which can't be reached right now — the drive may not be connected. Using the "
                     + "default location for this session; reconnect the drive and relaunch to get back "
-                    + "to your library. Settings ▸ Storage has the details.")
+                    + "to your library"
+                    + (fallbackLibraries.isEmpty ? "" : ", or open another library now")
+                    + ". Settings ▸ Storage has the details.")
         }
         #endif
         .tint(LL.accent)

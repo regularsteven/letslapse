@@ -74,6 +74,15 @@ the design index rows marked 🟡.
 6. Server follow-ups with the developer: `PUT /library` for the account
    bundle (presets, ladders, blend profiles, collections), multipart over
    5 GB, an `updated_since` you can trust, the two nits.
+7. **Libraries** ([libraries-plan.md](libraries-plan.md), 2026-09-16):
+   stage A (several libraries on a Mac — identity file, the Settings list,
+   create / open / switch, per-library PicPlace state) is local and can go
+   now; stage B (the server learns what a library is — rows, `library_id`,
+   `?library=`, `status.libraries[]`; keys untouched) and C (the connect
+   chooser, the iOS active library) follow the real-world run; stage D
+   (move without originals) is the first slice of item 3's eviction gate.
+   Note the `PUT /library` name in item 6 is renamed there — the word is
+   taken.
 
 ## 4. What was problematic (so the next agent does not re-learn it)
 

@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 /// Cards a launch hook can scroll the Settings list to (`LL_SCROLL`).
 enum SettingsAnchor: String, Hashable {
     case picplace
+    case libraries
 }
 
 enum SettingsDestination: String, Hashable {
@@ -77,14 +78,18 @@ struct SettingsView: View {
     #endif
     #if os(macOS)
     @State private var cameraAuthorizationStatus = CameraPrivacySettings.authorizationStatus
-    @State private var showLocationPicker = false
     @State private var locationChange: StorageLocationChangeRequest?
     @State private var showRigPicker = false
     @State private var rigVersion = 0
     @State private var locationError: String?
-    /// Bumped after writes to `StorageRoot`'s stored setting, which SwiftUI
-    /// can't observe on its own, so the location rows re-read it.
-    @State private var locationRefresh = 0
+    /// The Libraries list (libraries plan §2.3): the registry's entries with
+    /// what each folder holds, read off the main thread by
+    /// `refreshLibraryRows()` — never in the body, where every row would
+    /// stat a volume on each redraw.
+    @State private var libraryRows: [LibraryRow] = []
+    @State private var renamingLibrary: LibraryRow?
+    @State private var renameDraft = ""
+    @State private var confirmingDisconnect = false
     #endif
 
     /// The variant row's subtitle. It names the axes rather than repeating
@@ -153,6 +158,16 @@ struct SettingsView: View {
                 storageCard
                     .padding(.bottom, 12)
 
+                // The Mac's libraries — which one is open, the others it
+                // knows, and the doors to a new one (libraries plan §2.3).
+                // iOS has one library and no folder, by decision (D3).
+                #if os(macOS)
+                LLSectionHeader("Libraries")
+                    .id(SettingsAnchor.libraries)
+                librariesCard
+                    .padding(.bottom, 12)
+                #endif
+
                 // Between Storage and Advanced because it is about where
                 // projects live, not about the engine (picplace-sync-v1.md).
                 LLSectionHeader("PicPlace")
@@ -180,7 +195,12 @@ struct SettingsView: View {
         .onAppear {
             guard let raw = ProcessInfo.processInfo.environment["LL_SCROLL"],
                   let anchor = SettingsAnchor(rawValue: raw) else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { scroller.scrollTo(anchor, anchor: .top) }
+            // Twice: the cards above the anchor change height as the storage
+            // walk and the AI readiness line land, which moves a target that
+            // was scrolled to early.
+            for delay in [0.5, 3.0, 6.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { scroller.scrollTo(anchor, anchor: .top) }
+            }
         }
         #endif
         // A card asked for from another screen (the sync panel's "All
@@ -216,16 +236,7 @@ struct SettingsView: View {
             IncompleteCapturesView()
         }
         #if os(macOS)
-        .fileImporter(
-            isPresented: $showLocationPicker,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                handlePickedLocation(url)
-            }
-        }
-        .sheet(item: $locationChange) { request in
+        .sheet(item: $locationChange, onDismiss: { refreshLibraryRows() }) { request in
             StorageLocationSheet(request: request)
         }
         .alert(
@@ -236,14 +247,48 @@ struct SettingsView: View {
         } message: {
             Text(locationError ?? "")
         }
+        .alert(
+            "Rename library",
+            isPresented: Binding(get: { renamingLibrary != nil }, set: { if !$0 { renamingLibrary = nil } })
+        ) {
+            TextField("Name", text: $renameDraft)
+            Button("Rename") { renameLibrary() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Only the library's name changes; its folder keeps its own.")
+        }
+        .confirmationDialog("Disconnect this library from PicPlace?", isPresented: $confirmingDisconnect, titleVisibility: .visible) {
+            Button("Disconnect", role: .destructive) {
+                model.picplace.disconnectLibrary()
+                refreshLibraryRows()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The library forgets which PicPlace account it syncs with and what it has synced — the record of what is in step. Every project stays here and on PicPlace; nothing is deleted anywhere. Switching libraries never needs this; connecting it again later exchanges the two sides afresh.")
+        }
         #endif
         .task {
+            #if os(macOS)
+            refreshLibraryRows()
+            #endif
             #if os(macOS) && DEBUG
-            // LL_STORAGE=move|adopt|moving|done|failed — stage the library-
-            // location sheet in one state for screenshots. Nothing on disk is
-            // touched; pair with LL_TAB=settings.
+            // LL_STORAGE=move|adopt|create|list|moving|done|failed — stage the
+            // library sheet in one state, or the Libraries list with demo
+            // rows, for screenshots. Nothing on disk is touched; pair with
+            // LL_TAB=settings. LL_CREATE_LIBRARY=<path>[:<name>] runs a REAL
+            // create on a scratch path and stops on the relaunch screen.
             if let hook = ProcessInfo.processInfo.environment["LL_STORAGE"] {
                 stageStoragePreview(hook)
+            }
+            if let spec = ProcessInfo.processInfo.environment["LL_CREATE_LIBRARY"] {
+                let parts = spec.split(separator: ":", maxSplits: 1).map(String.init)
+                createLibraryForHook(at: URL(fileURLWithPath: parts[0], isDirectory: true), name: parts.count > 1 ? parts[1] : "")
+            }
+            // LL_OPEN_LIBRARY=<path> — what Open Other Library… does with a
+            // picked folder, without the panel: the switch sheet for a
+            // library, the refusal otherwise.
+            if let path = ProcessInfo.processInfo.environment["LL_OPEN_LIBRARY"] {
+                handleOpenPick(URL(fileURLWithPath: path, isDirectory: true))
             }
             #endif
             // Re-scan on every visit: a session that crashed since launch
@@ -831,10 +876,6 @@ struct SettingsView: View {
 
             Divider().padding(.leading, 16)
 
-            #if os(macOS)
-            libraryLocationRows
-            #endif
-
             NavigationLink(value: SettingsDestination.largeOriginals) {
                 LLRow(title: "Review large originals") {
                     Image(systemName: "chevron.right")
@@ -928,59 +969,168 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Library location (macOS)
+    // MARK: - Libraries (macOS)
 
     #if os(macOS)
-    /// Where the library lives, and the door to moving it. A location change
-    /// applies on relaunch (see `StorageRoot`), so every path out of these
-    /// rows ends in an explicit Relaunch rather than a silent switch.
-    @ViewBuilder
-    private var libraryLocationRows: some View {
-        let _ = locationRefresh
-        LLRow(title: "Library location", subtitle: libraryLocationSubtitle) {
-            Button("Change…") { showLocationPicker = true }
-                .buttonStyle(.bordered)
-                .tint(.green)
-                // Never move the floor out from under a running render.
-                .disabled(model.stage == .processing)
-        }
-        if StorageRoot.customRootUnavailable {
-            Button {
-                StorageRoot.forgetCustomPath()
-                locationRefresh += 1
-            } label: {
-                LLRow(
-                    title: "Keep using the default location",
-                    subtitle: "Forgets the unreachable location. The library there isn't touched — nominate it again any time.",
-                    titleColor: LL.accent
-                ) { EmptyView() }
-                .contentShape(Rectangle())
+    /// One known library, as the list shows it. Built off the main thread
+    /// by `refreshLibraryRows()`: the registry entry plus a stat of the
+    /// folder, its live project count and whose it is (the binding).
+    struct LibraryRow: Identifiable, Equatable {
+        var entry: LibraryRegistry.Entry
+        var isCurrent: Bool
+        var isReachable: Bool
+        var projectCount: Int?
+        /// "@regularsteven on picplace.test" when the library is bound.
+        var owner: String?
+        /// The identity carries only the folder's name as a placeholder
+        /// (libraries plan L16): shown as unnamed, with the pencil.
+        var isUnnamed = false
+        var id: String { entry.path }
+    }
+
+    /// Which library is open, the others this Mac knows, and the three
+    /// doors: a new one, an existing one, the current one moved. Every path
+    /// out ends on the Relaunch button — a location change applies on
+    /// relaunch (see `StorageRoot`), never as a silent switch.
+    private var librariesCard: some View {
+        VStack(spacing: 0) {
+            if StorageRoot.customRootUnavailable {
+                Button {
+                    StorageRoot.forgetCustomPath()
+                    refreshLibraryRows()
+                } label: {
+                    LLRow(
+                        title: "Keep using the default location",
+                        subtitle: "\(StorageRoot.customPath ?? "The nominated library") isn't reachable — this session runs on the default location. Forgets it; the library there isn't touched.",
+                        titleColor: LL.accent
+                    ) { EmptyView() }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-        } else if StorageRoot.customPath != nil {
+
+            ForEach(libraryRows) { row in
+                libraryRowView(row)
+            }
+
             Button {
-                handlePickedLocation(StorageRoot.defaultRootURL)
+                createNewLibrary()
             } label: {
-                LLRow(title: "Move back to the default location", titleColor: LL.accent) {
+                LLRow(title: "Create New Library…", subtitle: "An empty library in a folder of your choosing. Nothing is copied.", titleColor: LL.accent) {
                     EmptyView()
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(model.stage == .processing)
+
+            Button {
+                openOtherLibrary()
+            } label: {
+                LLRow(title: "Open Other Library…", subtitle: "A LetsLapse library on any drive — switches to it on relaunch.", titleColor: LL.accent) {
+                    EmptyView()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(model.stage == .processing)
+
+            Button {
+                moveThisLibrary()
+            } label: {
+                LLRow(title: "Move This Library…", subtitle: moveSubtitle, titleColor: LL.accent, showsDivider: false) {
+                    EmptyView()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            // Never move the floor out from under a running render.
+            .disabled(model.stage == .processing || StorageRoot.customRootUnavailable)
+        }
+        .llCard()
+    }
+
+    private func libraryRowView(_ row: LibraryRow) -> some View {
+        LLRow(title: row.entry.name, subtitle: librarySubtitle(row), titleColor: row.isUnnamed ? .secondary : .primary) {
+            // The name is the person's to give (L16): a pencil on every
+            // reachable row, not a context menu they have to know about.
+            Button {
+                renameDraft = row.isUnnamed ? "" : row.entry.name
+                renamingLibrary = row
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(row.isUnnamed ? LL.accent : Color.secondary)
+            .disabled(!row.isReachable)
+            .help(row.isUnnamed ? "Name this library" : "Rename")
+            .accessibilityLabel(row.isUnnamed ? "Name this library" : "Rename library")
+            if row.isCurrent {
+                // Visible, not only in the menu (Steven, 2026-09-16 evening:
+                // he looked for it on the card and could not find it).
+                if model.picplace.binding != nil {
+                    Button("Disconnect…") { confirmingDisconnect = true }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.red)
+                        .help("Stop syncing this library with PicPlace; nothing is deleted")
+                }
+                Text("Current")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            } else {
+                Button("Switch…") { switchTo(row) }
+                    .buttonStyle(.bordered)
+                    .tint(.green)
+                    .disabled(!row.isReachable || model.stage == .processing)
+            }
+        }
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button(row.isUnnamed ? "Name…" : "Rename…") {
+                renameDraft = row.isUnnamed ? "" : row.entry.name
+                renamingLibrary = row
+            }
+            .disabled(!row.isReachable)
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([row.entry.url])
+            }
+            .disabled(!row.isReachable)
+            if row.isCurrent, model.picplace.binding != nil {
+                Divider()
+                // The rare act it is (libraries plan L14): switching never
+                // does this; it is for a library leaving its account.
+                Button("Disconnect from PicPlace…") { confirmingDisconnect = true }
+            }
+            Divider()
+            Button("Remove from List") {
+                LibraryRegistry.remove(path: row.entry.path)
+                refreshLibraryRows()
+            }
+            .disabled(row.isCurrent)
         }
     }
 
-    private var libraryLocationSubtitle: String {
-        if StorageRoot.customRootUnavailable, let custom = StorageRoot.customPath {
-            return "\(custom) isn't reachable — using \(abbreviated(StorageRoot.current.path)) for this "
-                + "session. Reconnect the drive and relaunch to get back to it."
+    private func librarySubtitle(_ row: LibraryRow) -> String {
+        let path = abbreviated(row.entry.path)
+        guard row.isReachable else { return "\(path) — not mounted" }
+        var parts = [path]
+        if row.isUnnamed { parts.insert("Unnamed — the folder's name for now", at: 0) }
+        if let count = row.projectCount {
+            parts.append(count == 1 ? "1 project" : "\(count) projects")
         }
-        if StorageRoot.customPath == nil {
-            return "\(abbreviated(StorageRoot.current.path)) — the default. Nominate a folder on "
-                + "another drive to keep the library there instead."
+        if let owner = row.owner { parts.append(owner) }
+        return parts.joined(separator: " · ")
+    }
+
+    private var moveSubtitle: String {
+        let name = StorageRoot.identity?.displayName ?? LibraryIdentity.defaultName(forRoot: StorageRoot.current)
+        // The walked originals+clips total is the honest "about" figure;
+        // cache lives in temp and stays behind.
+        if let storage, storage.originalsBytes + storage.versionsBytes > 0 {
+            return "Copies “\(name)” — about \(LLFormat.bytes(storage.originalsBytes + storage.versionsBytes)) — to another folder. Nothing is deleted."
         }
-        return abbreviated(StorageRoot.current.path)
+        return "Copies “\(name)” to another folder. Nothing is deleted."
     }
 
     private func abbreviated(_ path: String) -> String {
@@ -988,44 +1138,216 @@ struct SettingsView: View {
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
     }
 
-    /// One gate for both doors — the folder panel and "move back to default".
-    /// `check` decides whether the pick means adopting a library already
-    /// there, moving ours in, or a refusal with a reason.
-    private func handlePickedLocation(_ url: URL) {
-        // fileImporter hands back security-scoped URLs. The Mac build is not
-        // sandboxed so this is a no-op today, but balancing it costs nothing
-        // and keeps the flow correct if the sandbox ever lands.
-        let didAccess = url.startAccessingSecurityScopedResource()
-        defer {
-            if didAccess { url.stopAccessingSecurityScopedResource() }
+    /// The list, off the main thread: a stat per entry, a directory listing
+    /// for the count, the binding file. Current first, then most recently
+    /// opened.
+    private func refreshLibraryRows() {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["LL_STORAGE"] == "list" { return }
+        #endif
+        let entries = LibraryRegistry.entries
+        let current = StorageRoot.current.standardizedFileURL.resolvingSymlinksInPath().path
+        Task.detached(priority: .userInitiated) {
+            let fileManager = FileManager.default
+            var rows: [LibraryRow] = []
+            for entry in entries {
+                let reachable = entry.isReachable
+                var count: Int?
+                var owner: String?
+                if reachable {
+                    let projects = entry.url.appendingPathComponent("Projects", isDirectory: true)
+                    if let names = try? fileManager.contentsOfDirectory(atPath: projects.path) {
+                        count = names.filter { !$0.hasPrefix(".") && UUID(uuidString: $0) != nil }.count
+                    }
+                    if let binding = PicPlaceBindingRecord.read(inRoot: entry.url) {
+                        owner = "@\(binding.user.displayHandle) on \(binding.server.host)"
+                    }
+                }
+                let identity = reachable ? LibraryIdentity.read(inRoot: entry.url) : nil
+                rows.append(LibraryRow(
+                    entry: entry,
+                    isCurrent: entry.url.standardizedFileURL.resolvingSymlinksInPath().path == current,
+                    isReachable: reachable, projectCount: count, owner: owner,
+                    isUnnamed: identity.map { !$0.namedByPerson } ?? false))
+            }
+            rows.sort { a, b in
+                if a.isCurrent != b.isCurrent { return a.isCurrent }
+                let ta = a.entry.lastOpenedAt ?? .distantPast
+                let tb = b.entry.lastOpenedAt ?? .distantPast
+                if ta != tb { return ta > tb }
+                return a.entry.name.localizedStandardCompare(b.entry.name) == .orderedAscending
+            }
+            let built = rows
+            await MainActor.run { libraryRows = built }
         }
-        // The move is the whole library, not just projects — thumbnails and
-        // logs ride along — but cache lives in temp and stays behind, so the
-        // walked originals+clips total is the honest "about" figure.
+    }
+
+    private func renameLibrary() {
+        guard let row = renamingLibrary else { return }
+        renamingLibrary = nil
+        let name = LibraryIdentity.cleanName(renameDraft)
+        guard !name.isEmpty else { return }
+        do {
+            if row.isCurrent {
+                try StorageRoot.renameIdentity(to: name)
+            } else if var identity = LibraryIdentity.read(inRoot: row.entry.url) {
+                identity.name = name
+                identity.namedByPerson = true
+                try identity.write(inRoot: row.entry.url)
+            } else if !LibraryIdentity.exists(inRoot: row.entry.url) {
+                // A library from before the identity file: name it now.
+                _ = try LibraryIdentity.ensure(inRoot: row.entry.url, name: name, device: DeviceIdentity.id)
+            }
+            LibraryRegistry.rename(path: row.entry.path, to: name)
+        } catch {
+            locationError = "Couldn't rename the library: \(error.localizedDescription)"
+        }
+        refreshLibraryRows()
+    }
+
+    // MARK: The three doors
+
+    /// A Save panel, because a new library is a name and a place in one
+    /// go — the folder it names is created. Nothing is copied into it.
+    private func createNewLibrary() {
+        let panel = NSSavePanel()
+        panel.title = "Create New Library"
+        panel.prompt = "Create"
+        panel.nameFieldLabel = "Name:"
+        panel.nameFieldStringValue = "New Library"
+        panel.message = "Choose a name and a place for the new library. It starts empty — nothing is copied."
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        let base = StorageRoot.defaultRootURL
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        panel.directoryURL = base
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            handleCreatePick(url)
+        }
+    }
+
+    private func openOtherLibrary() {
+        let panel = NSOpenPanel()
+        panel.title = "Open Other Library"
+        panel.prompt = "Open"
+        panel.message = "Choose a folder that holds a LetsLapse library. LetsLapse relaunches to use it."
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            handleOpenPick(url)
+        }
+    }
+
+    private func moveThisLibrary() {
+        let panel = NSOpenPanel()
+        panel.title = "Move This Library"
+        panel.prompt = "Move Here"
+        panel.message = "Choose an empty folder. The library is copied there and LetsLapse relaunches to use it; the current copy stays until you delete it."
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            handleMovePick(url)
+        }
+    }
+
+    private func switchTo(_ row: LibraryRow) {
+        guard row.isReachable else { return }
+        locationChange = StorageLocationChangeRequest(
+            mode: .adopt, destination: row.entry.url, librarySizeHint: nil, libraryName: row.entry.name)
+    }
+
+    /// `check` decides what a pick means; each door reads its outcome for
+    /// its own purpose — the same folder is a refusal for one door and the
+    /// right answer for another.
+    private func handleCreatePick(_ url: URL) {
+        switch StorageRoot.check(destination: url) {
+        case .empty:
+            locationChange = StorageLocationChangeRequest(
+                mode: .create(name: url.lastPathComponent), destination: url, librarySizeHint: nil,
+                libraryName: url.lastPathComponent)
+        case .adopt(let identity):
+            locationError = "That folder already holds a LetsLapse library"
+                + (identity.map { " (“\($0.displayName)”)" } ?? "")
+                + ". Use Open Other Library… to switch to it, or choose a new folder."
+        case let other:
+            locationError = refusal(other)
+        }
+    }
+
+    private func handleOpenPick(_ url: URL) {
+        switch StorageRoot.check(destination: url) {
+        case .adopt(let identity):
+            LibraryRegistry.register(root: url, identity: identity)
+            locationChange = StorageLocationChangeRequest(
+                mode: .adopt, destination: url, librarySizeHint: nil,
+                libraryName: identity?.displayName ?? LibraryIdentity.defaultName(forRoot: url))
+        case .empty:
+            locationError = "There's no LetsLapse library in that folder. Use Create New Library… to start one there."
+        case let other:
+            locationError = refusal(other)
+        }
+    }
+
+    private func handleMovePick(_ url: URL) {
         let sizeHint = storage.map { $0.originalsBytes + $0.versionsBytes }
         switch StorageRoot.check(destination: url) {
-        case .alreadyCurrent:
-            locationError = "That's already where the library is."
-        case .insideCurrent:
-            locationError = "That folder is inside the current library. Choose one outside it."
-        case .notWritable:
-            locationError = "LetsLapse can't write there. Check the drive isn't read-only and try again."
-        case .collision(let name):
-            locationError = "That folder already contains “\(name)” without being a LetsLapse "
-                + "library, so moving there would mix the two. Choose an empty folder — or, if a "
-                + "previous move was interrupted, delete its leftovers there first."
+        case .empty:
+            locationChange = StorageLocationChangeRequest(
+                mode: .move, destination: url, librarySizeHint: sizeHint,
+                libraryName: StorageRoot.identity?.displayName)
         case .adopt:
-            locationChange = StorageLocationChangeRequest(
-                mode: .adopt, destination: url, librarySizeHint: sizeHint)
-        case .move:
-            locationChange = StorageLocationChangeRequest(
-                mode: .move, destination: url, librarySizeHint: sizeHint)
+            locationError = "That folder already holds a LetsLapse library, so moving there would mix the two. "
+                + "Choose an empty folder — or, to use that library instead, Open Other Library…"
+        case let other:
+            locationError = refusal(other)
+        }
+    }
+
+    private func refusal(_ check: StorageRoot.DestinationCheck) -> String {
+        switch check {
+        case .alreadyCurrent:
+            return "That's the library you're using now."
+        case .insideCurrent:
+            return "That folder is inside the current library. Choose one outside it."
+        case .containsLibrary(let inside):
+            return "That folder contains a LetsLapse library (\(inside)). Choose the library's own folder, or one that holds no library."
+        case .notWritable:
+            return "LetsLapse can't write there. Check the drive isn't read-only and try again."
+        case .collision(let name):
+            return "That folder already contains “\(name)” without being a LetsLapse library, so using it would mix the two. "
+                + "Choose an empty folder — or, if a previous move was interrupted, delete its leftovers there first."
+        case .adopt, .empty:
+            return "That folder can't be used here."
         }
     }
 
     #if DEBUG
-    /// LL_STORAGE — stage the location sheet for screenshots, no disk touched.
+    /// LL_STORAGE — stage the library sheet or the list for screenshots, no
+    /// disk touched.
     private func stageStoragePreview(_ hook: String) {
+        if hook == "list" {
+            let play = NSHomeDirectory() + "/Library/Application Support/LetsLapse/picplace.test/regularsteven"
+            libraryRows = [
+                LibraryRow(
+                    entry: .init(libraryID: StorageRoot.identity?.id, path: StorageRoot.current.path,
+                                 name: StorageRoot.identity?.displayName ?? "letslapse", lastOpenedAt: Date()),
+                    isCurrent: true, isReachable: true, projectCount: 365, owner: nil),
+                LibraryRow(
+                    entry: .init(libraryID: UUID(), path: play, name: "regularsteven", lastOpenedAt: Date().addingTimeInterval(-86_400)),
+                    isCurrent: false, isReachable: true, projectCount: 12, owner: "@regularsteven on picplace.test"),
+                LibraryRow(
+                    entry: .init(libraryID: UUID(), path: "/Volumes/Field/Field 2026", name: "Field 2026", lastOpenedAt: nil),
+                    isCurrent: false, isReachable: false, projectCount: nil, owner: nil),
+            ]
+            return
+        }
         var staged: StorageMover.Phase?
         switch hook {
         case "moving":
@@ -1041,11 +1363,35 @@ struct SettingsView: View {
         default:
             break
         }
+        let mode: StorageLocationChangeRequest.Mode
+        switch hook {
+        case "adopt": mode = .adopt
+        case "create": mode = .create(name: "Field 2026")
+        default: mode = .move
+        }
         locationChange = StorageLocationChangeRequest(
-            mode: hook == "adopt" ? .adopt : .move,
-            destination: URL(fileURLWithPath: "/Volumes/letslapse"),
+            mode: mode,
+            destination: URL(fileURLWithPath: hook == "create" ? "/Volumes/Field/Field 2026" : "/Volumes/letslapse"),
             librarySizeHint: 148_200_000_000,
+            libraryName: hook == "create" ? "Field 2026" : (hook == "adopt" ? "letslapse" : StorageRoot.identity?.displayName),
             stagedPhase: staged)
+    }
+
+    /// LL_CREATE_LIBRARY — the real engine on a scratch path, then the
+    /// sheet on its relaunch screen (the relaunch itself is the person's).
+    private func createLibraryForHook(at url: URL, name: String) {
+        guard case .empty = StorageRoot.check(destination: url) else {
+            LLog("storage: LL_CREATE_LIBRARY refused — \(url.path) is not empty or not writable")
+            return
+        }
+        let libraryName = name.isEmpty ? url.lastPathComponent : name
+        do {
+            try StorageRoot.create(at: url, name: libraryName)
+            // As the sheet's button does (libraries plan L15): straight on.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { AppRelaunch.relaunchNow() }
+        } catch {
+            LLog("storage: LL_CREATE_LIBRARY failed — \(error)")
+        }
     }
     #endif
     #endif
@@ -1998,11 +2344,14 @@ private struct DiagnosticsView: View {
 /// only after `StorageRoot.check` cleared the pick, so the sheet never has to
 /// re-litigate whether the destination is usable.
 struct StorageLocationChangeRequest: Identifiable {
-    enum Mode {
+    enum Mode: Equatable {
         /// Copy the library into the folder, then relaunch.
         case move
         /// The folder already holds a library — switch to it, no copying.
         case adopt
+        /// Start a new, empty library in the folder (libraries plan §3.1),
+        /// then relaunch. Nothing is copied.
+        case create(name: String)
     }
 
     let id = UUID()
@@ -2011,6 +2360,9 @@ struct StorageLocationChangeRequest: Identifiable {
     /// Settings' walked total when it had one — the confirm screen's "about"
     /// figure. The mover measures exactly before copying regardless.
     let librarySizeHint: Int64?
+    /// The library's name for the copy — the one being switched to, created,
+    /// or moved. nil for a folder whose library has no identity yet.
+    var libraryName: String?
     /// LL_STORAGE screenshot hook only: open with the mover pre-staged.
     var stagedPhase: StorageMover.Phase?
 }
@@ -2024,8 +2376,10 @@ struct StorageLocationSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var mover = StorageMover()
-    /// Adopt commits without copying — flips straight to the relaunch screen.
+    /// Adopt and create commit without copying — straight to the relaunch screen.
     @State private var committed = false
+    /// A create that failed (the mover has no part in it).
+    @State private var createFailure: String?
 
     private var showsRelaunch: Bool { committed || mover.phase == .done }
 
@@ -2076,6 +2430,8 @@ struct StorageLocationSheet: View {
     private var middle: some View {
         if showsRelaunch {
             prose(relaunchProse)
+        } else if let createFailure {
+            prose(createFailure)
         } else {
             switch mover.phase {
             case .idle:
@@ -2115,35 +2471,46 @@ struct StorageLocationSheet: View {
         if showsRelaunch {
             VStack(spacing: 10) {
                 Button("Relaunch LetsLapse") {
-                    // Dismiss BEFORE terminating: NSApp.terminate sent while
-                    // the sheet is still presented is silently swallowed
-                    // (reproduced 2026-08-25 — the action fired and spawned
-                    // the relaunch helper, and the app just stayed up).
-                    // Closing the sheet and terminating on the next turn lets
-                    // terminate land; relaunchNow carries a hard-exit
+                    // The sheet closes and terminate lands on the next turn
+                    // (reproduced 2026-08-25 — sent during the presentation
+                    // it was swallowed); relaunchNow carries a hard-exit
                     // fallback for anything else that swallows it.
-                    dismiss()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        AppRelaunch.relaunchNow()
-                    }
+                    relaunch()
                 }
                 .buttonStyle(LLPrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
                 Button("Not Yet") { dismiss() }
                     .buttonStyle(LLSecondaryButtonStyle())
             }
+        } else if createFailure != nil {
+            Button("Close") { dismiss() }
+                .buttonStyle(LLPrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
         } else {
             switch mover.phase {
             case .idle:
                 VStack(spacing: 10) {
-                    Button(request.mode == .move ? "Move Library" : "Switch to This Library") {
+                    Button(primaryTitle) {
                         switch request.mode {
                         case .move:
                             mover.begin(destination: request.destination)
                         case .adopt:
+                            // Switch and create relaunch from here (libraries
+                            // plan L15): the confirm already said so, and a
+                            // second screen repeating it was a wasted one.
+                            // Only a move — minutes of copying — keeps its
+                            // done screen.
+                            LibraryRegistry.register(root: request.destination, identity: LibraryIdentity.read(inRoot: request.destination))
                             StorageRoot.commit(destination: request.destination)
-                            LLog("storage: adopted library at \(request.destination.path); active from next launch")
-                            committed = true
+                            LLog("storage: switching to the library at \(request.destination.path) — relaunching")
+                            relaunch()
+                        case .create(let name):
+                            do {
+                                try StorageRoot.create(at: request.destination, name: name)
+                                relaunch()
+                            } catch {
+                                createFailure = "Couldn't create the library: \(error.localizedDescription)"
+                            }
                         }
                     }
                     .buttonStyle(LLPrimaryButtonStyle())
@@ -2170,9 +2537,19 @@ struct StorageLocationSheet: View {
         }
     }
 
+    /// Dismiss BEFORE terminating: NSApp.terminate sent while the sheet is
+    /// still presented is silently swallowed (reproduced 2026-08-25).
+    private func relaunch() {
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            AppRelaunch.relaunchNow()
+        }
+    }
+
     // MARK: - Copy
 
     private var isFailure: Bool {
+        if createFailure != nil { return true }
         if case .failed = mover.phase { return true }
         return false
     }
@@ -2180,14 +2557,32 @@ struct StorageLocationSheet: View {
     private var icon: String {
         if isFailure { return "exclamationmark.triangle.fill" }
         if showsRelaunch { return "externaldrive.fill.badge.checkmark" }
+        if case .create = request.mode { return "externaldrive.fill.badge.plus" }
         return "externaldrive.fill"
+    }
+
+    private var quotedName: String? {
+        request.libraryName.map { "“\($0)”" }
+    }
+
+    private var primaryTitle: String {
+        switch request.mode {
+        case .move: return "Move Library"
+        case .adopt: return "Switch and Relaunch"
+        case .create: return "Create and Relaunch"
+        }
     }
 
     private var title: String {
         if showsRelaunch { return "Relaunch to finish" }
+        if createFailure != nil { return "Couldn't create the library" }
         switch mover.phase {
         case .idle:
-            return request.mode == .move ? "Move library?" : "Use this library?"
+            switch request.mode {
+            case .move: return "Move library?"
+            case .adopt: return quotedName.map { "Switch to \($0)?" } ?? "Use this library?"
+            case .create: return "Create library?"
+            }
         case .preparing, .copying:
             return "Moving library"
         case .failed:
@@ -2206,23 +2601,26 @@ struct StorageLocationSheet: View {
                 + "this folder, and LetsLapse relaunches to use it there. Nothing is deleted: the "
                 + "current copy stays at \(from) until you remove it yourself in Finder."
         case .adopt:
+            if let quotedName {
+                return "LetsLapse relaunches on \(quotedName) now. Nothing is copied or moved: the "
+                    + "library you're using now stays at \(from), unchanged, and is still in the list."
+            }
             return "This folder already holds a LetsLapse library, and LetsLapse switches to it "
                 + "on relaunch. It may not match the library you're using now. The current one "
                 + "stays at \(from), unchanged — to move it instead, clear the old library out of "
                 + "this folder first."
+        case .create(let name):
+            return "A new, empty library named “\(name)” is made in this folder, and LetsLapse "
+                + "relaunches on it now. Nothing is copied: the library you're using now stays at "
+                + "\(from), unchanged, and is still in the list."
         }
     }
 
+    /// Only a move reaches this screen (L15).
     private var relaunchProse: String {
-        switch request.mode {
-        case .move:
-            return "The library has been copied. Until the relaunch, anything new still lands at "
-                + "the previous location — relaunch now, and delete the old copy in Finder once "
-                + "you've checked the new one."
-        case .adopt:
-            return "LetsLapse opens this library on its next launch. Until then it keeps using "
-                + "the previous location."
-        }
+        "The library has been copied. Until the relaunch, anything new still lands at "
+            + "the previous location — relaunch now, and delete the old copy in Finder once "
+            + "you've checked the new one."
     }
 
     private func shownPath(_ path: String) -> String {

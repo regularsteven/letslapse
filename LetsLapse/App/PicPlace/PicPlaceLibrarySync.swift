@@ -22,24 +22,37 @@ extension PicPlaceController {
         var failures: [String] = []
     }
 
-    /// The case an unbound library is in, for the connect question's copy
-    /// (§4.1): computed from the server's count and this library's.
-    func describeConnectCase() async -> String? {
+    /// The case an unbound library is in (§4.1), with the numbers.
+    struct ConnectCase {
+        var serverCount: Int
+        var localCount: Int
+        var isMerge: Bool { serverCount > 0 && localCount > 0 }
+        /// The question's copy: what arrives here and what goes up, in
+        /// numbers (libraries plan L18).
+        var text: String {
+            let local = "\(localCount) project\(localCount == 1 ? "" : "s")"
+            let server = "\(serverCount) project\(serverCount == 1 ? "" : "s")"
+            switch (serverCount, localCount) {
+            case (0, _):
+                return "Nothing is on PicPlace yet. This library's \(local) go up — records and a preview each; originals stay here until you upload them. Nothing arrives."
+            case (_, 0):
+                return "PicPlace holds \(server) and this library is empty. All \(serverCount) arrive here as previews; originals download per project. Nothing goes up."
+            default:
+                return "PicPlace holds \(server), this library \(local). Everything on PicPlace that isn't here arrives as previews, everything here that isn't on PicPlace goes up, and projects on both sides stay in step."
+            }
+        }
+    }
+
+    /// Computed from the server's count and this library's; nil when the
+    /// server cannot be reached or nobody is signed in.
+    func describeConnectCase() async -> ConnectCase? {
         guard isSignedIn else { return nil }
         var localCount = 0
         if let counts = try? model.libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery()) {
             localCount = counts.values.reduce(0, +)
         }
         guard let status: PPStatus = try? await client.get("status") else { return nil }
-        let serverCount = status.projects?.count ?? 0
-        switch (serverCount, localCount) {
-        case (0, _):
-            return "Nothing is on PicPlace yet. This library's \(localCount) project\(localCount == 1 ? "" : "s") will be kept there — records and a preview each; originals stay here until you upload them."
-        case (_, 0):
-            return "PicPlace holds \(serverCount) project\(serverCount == 1 ? "" : "s") and this library is empty. They'll appear here as previews; originals download per project."
-        default:
-            return "PicPlace holds \(serverCount) project\(serverCount == 1 ? "" : "s"), this library \(localCount). Projects on both sides stay in step, the rest are exchanged."
-        }
+        return ConnectCase(serverCount: status.projects?.count ?? 0, localCount: localCount)
     }
 
     /// Runs the pending first connection once the library is loaded and the
