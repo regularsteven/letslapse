@@ -63,6 +63,8 @@ extension PicPlaceController {
         /// Failed pushes this check sent again, and those still waiting for their backoff.
         var retried = 0
         var waiting = 0
+        /// Held here, filed in another library of the account on PicPlace (stage C).
+        var elsewhere = 0
         var failures: [String] = []
         var checkedAt = Date()
     }
@@ -130,6 +132,7 @@ extension PicPlaceController {
         if check.waiting > 0 { parts.append("\(check.waiting) waiting to retry") }
         if check.deletedThere > 0 { parts.append("\(check.deletedThere) deleted on PicPlace") }
         if check.deletedHere > 0 { parts.append("\(check.deletedHere) removed here (deleted elsewhere; in the trash)") }
+        if check.elsewhere > 0 { parts.append("\(check.elsewhere) filed in another library on PicPlace") }
         if check.conflicts > 0 { parts.append("\(check.conflicts) to decide") }
         if !check.failures.isEmpty { parts.append(check.failures.joined(separator: "; ")) }
         let when = check.checkedAt.formatted(.relative(presentation: .named))
@@ -164,11 +167,26 @@ extension PicPlaceController {
             for row in (try libraryIndex.projects(listQuery)).rows { localByOrigin[row.originID ?? row.id] = row.id }
             let localTombstones = Set((try? libraryIndex.deletedProjects().map(\.id)) ?? [])
 
+            // Stage C: the account's whole index, scoped here — the exact
+            // full pass (asks §6 Q1). A row filed in another library of the
+            // account is a departure notice for a project held here (noted
+            // on its record, left alone) and nothing for one that is not.
+            var scoped: [PPProject] = []
+            var elsewhere = Set<UUID>()
+            for row in index.projects {
+                if inScope(row) { scoped.append(row); continue }
+                guard let origin = UUID(uuidString: row.uuid), localByOrigin[origin] != nil, !row.isTombstone else { continue }
+                elsewhere.insert(origin)
+                noteElsewhere(origin, library: row.library)
+            }
+            outcome.elsewhere = elsewhere.count
+
             var conflicts: [Conflict] = []
             var seen = Set<UUID>()
-            for row in index.projects {
+            for row in scoped {
                 guard let origin = UUID(uuidString: row.uuid) else { continue }
                 seen.insert(origin)
+                clearElsewhere(origin)
                 let base = records[origin]?.revision
                 if row.isTombstone {
                     guard let localID = localByOrigin[origin], let capture = model.capture(id: localID) else { continue }
@@ -288,7 +306,7 @@ extension PicPlaceController {
             // New here since the last check: up they go (records and a poster).
             // A record whose every push failed is not a push: the project
             // is still new to the server, and goes when its backoff allows.
-            for (origin, localID) in localByOrigin where !seen.contains(origin) {
+            for (origin, localID) in localByOrigin where !seen.contains(origin) && !elsewhere.contains(origin) {
                 guard let capture = model.capture(id: localID) else { continue }
                 if let record = records[origin] {
                     if record.recordsReachedServer || record.policy == "pull" {
@@ -310,7 +328,7 @@ extension PicPlaceController {
             saveSyncState()
             lastCheck = outcome
             updateAutoError()
-            LLog("picplace: check (\(reason)) — \(outcome.pulled) pulled, \(outcome.updated) updated, \(outcome.pushed) pushed, \(outcome.retried) retried, \(outcome.waiting) waiting to retry, \(outcome.deletedThere) deleted there, \(outcome.deletedHere) removed here, \(conflicts.count) conflict(s)\(outcome.failures.isEmpty ? "" : ", failures (\(outcome.failures.count)): \(outcome.failures.prefix(5).joined(separator: "; "))\(outcome.failures.count > 5 ? "; …" : "")")")
+            LLog("picplace: check (\(reason)) — \(outcome.pulled) pulled, \(outcome.updated) updated, \(outcome.pushed) pushed, \(outcome.retried) retried, \(outcome.waiting) waiting to retry, \(outcome.deletedThere) deleted there, \(outcome.deletedHere) removed here, \(outcome.elsewhere) filed elsewhere, \(conflicts.count) conflict(s)\(outcome.failures.isEmpty ? "" : ", failures (\(outcome.failures.count)): \(outcome.failures.prefix(5).joined(separator: "; "))\(outcome.failures.count > 5 ? "; …" : "")")")
             for conflict in conflicts {
                 LLog("picplace: conflict — \(conflict.name) (\(conflict.originID.uuidString.prefix(8))) \(conflict.kind): local \(conflict.localRevision.map(String.init) ?? "-") vs server \(conflict.serverRevision)\(conflict.serverDevice.map { " from \($0)" } ?? "")")
             }

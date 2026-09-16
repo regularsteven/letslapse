@@ -145,6 +145,26 @@ enum StorageRoot {
         LLog("storage: library at \(current.path) renamed “\(cleaned)”")
     }
 
+    /// The open library becomes a copy of a server library (stage C, link)
+    /// — or takes a fresh id after `uuid_taken`: the identity file is
+    /// rewritten with `id` and `name` (as the person's), the registry
+    /// re-keyed. The folder, the projects and the binding are untouched.
+    static func adoptIdentity(id: UUID, name: String) throws {
+        let cleaned = LibraryIdentity.cleanName(name)
+        let previous = identity
+        var record = LibraryIdentity(
+            id: id, name: cleaned.isEmpty ? (previous?.displayName ?? LibraryIdentity.defaultName(forRoot: current)) : cleaned,
+            createdAt: previous?.createdAt ?? Date(), createdByDevice: previous?.createdByDevice ?? DeviceIdentity.id,
+            createdWith: previous?.createdWith ?? appVersionString)
+        record.namedByPerson = true
+        try record.write(inRoot: current)
+        identity = record
+        #if os(macOS)
+        LibraryRegistry.noteOpened(root: current, identity: record)
+        #endif
+        LLog("storage: library at \(current.path) is now \(id.uuidString) “\(record.name)”")
+    }
+
     private static var appVersionString: String? {
         let info = Bundle.main.infoDictionary
         guard let short = info?["CFBundleShortVersionString"] as? String else { return nil }
@@ -303,11 +323,12 @@ extension StorageRoot {
     /// current library is untouched. `loadLibrary()` bootstraps the rest on
     /// that launch.
     @discardableResult
-    static func create(at destination: URL, name: String) throws -> LibraryIdentity {
+    static func create(at destination: URL, name: String, id: UUID = UUID()) throws -> LibraryIdentity {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
         let cleaned = LibraryIdentity.cleanName(name)
         let identity = LibraryIdentity(
+            id: id,
             name: cleaned.isEmpty ? LibraryIdentity.defaultName(forRoot: destination) : cleaned,
             createdByDevice: DeviceIdentity.id, createdWith: appVersionString)
         try identity.write(inRoot: destination)
@@ -316,6 +337,46 @@ extension StorageRoot {
         commit(destination: destination)
         LLog("storage: created library “\(identity.name)” \(identity.id.uuidString) at \(destination.path); active from next launch")
         return identity
+    }
+}
+
+// MARK: - A library from PicPlace (stage C, libraries plan §3.7)
+
+extension StorageRoot {
+    /// Where a library the app places goes: `<container>/<host>/<username>/<name>/`
+    /// when that is free (the convention for folders the app makes, L19),
+    /// else `<container>/<name>/`, else a numbered sibling. Never inside a
+    /// folder that is itself a library.
+    static func placement(forPulled name: String, host: String, username: String, in container: URL) -> URL {
+        let fileManager = FileManager.default
+        let safe = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        let nested = container.appendingPathComponent(host, isDirectory: true).appendingPathComponent(username, isDirectory: true)
+        var candidates: [URL] = []
+        if !LibraryIdentity.detect(root: nested).isLibrary, !LibraryIdentity.detect(root: nested.deletingLastPathComponent()).isLibrary {
+            candidates.append(nested.appendingPathComponent(safe, isDirectory: true))
+        }
+        candidates.append(container.appendingPathComponent(safe, isDirectory: true))
+        for candidate in candidates where !fileManager.fileExists(atPath: candidate.path) { return candidate }
+        var n = 2
+        while fileManager.fileExists(atPath: container.appendingPathComponent("\(safe) \(n)").path) { n += 1 }
+        return container.appendingPathComponent("\(safe) \(n)", isDirectory: true)
+    }
+
+    /// Make a local copy of a server library (fresh case): the folder with
+    /// the server's uuid and name as its identity, the binding pending its
+    /// first pull, registered, and the root from the next launch — which
+    /// pulls it (`runInitialSyncIfPending`).
+    static func createFromPicPlace(library: PicPlaceBindingRecord.Library, binding template: PicPlaceBindingRecord, in container: URL) throws -> URL {
+        let destination = placement(forPulled: library.name, host: template.server.host, username: template.user.displayHandle, in: container)
+        try create(at: destination, name: library.name, id: library.uuid)
+        var record = template
+        record.library = library
+        record.boundAt = Date()
+        record.boundByDevice = DeviceIdentity.id
+        record.initialSync = .init(state: .pending, case: .fresh)
+        try record.write(inRoot: destination)
+        LLog("storage: library “\(library.name)” from PicPlace placed at \(destination.path); pulls on the next launch")
+        return destination
     }
 }
 

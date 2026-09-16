@@ -90,6 +90,8 @@ struct SettingsView: View {
     @State private var renamingLibrary: LibraryRow?
     @State private var renameDraft = ""
     @State private var confirmingDisconnect = false
+    /// Stage C: the account's libraries that are not on this Mac yet.
+    @State private var addingFromPicPlace = false
     #endif
 
     /// The variant row's subtitle. It names the axes rather than repeating
@@ -256,6 +258,9 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Only the library's name changes; its folder keeps its own.")
+        }
+        .sheet(isPresented: $addingFromPicPlace, onDismiss: { refreshLibraryRows() }) {
+            AddLibraryFromPicPlaceSheet(picplace: model.picplace)
         }
         .confirmationDialog("Disconnect this library from PicPlace?", isPresented: $confirmingDisconnect, titleVisibility: .visible) {
             Button("Disconnect", role: .destructive) {
@@ -1035,6 +1040,24 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .disabled(model.stage == .processing)
 
+            // Stage C: a library of the account that is not on this Mac —
+            // a fresh copy here, pulled on the relaunch (libraries plan §3.7).
+            let remote = model.picplace.librariesNotOnThisMac
+            if !remote.isEmpty {
+                Button {
+                    addingFromPicPlace = true
+                } label: {
+                    LLRow(title: "Add Library from PicPlace…",
+                          subtitle: "\(remote.count) of your librar\(remote.count == 1 ? "y is" : "ies are") on \(model.picplace.sessionHost) and not on this Mac: \(remote.map { "“\($0.displayName)”" }.joined(separator: ", ")).",
+                          titleColor: LL.accent) {
+                        EmptyView()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.stage == .processing)
+            }
+
             Button {
                 moveThisLibrary()
             } label: {
@@ -1190,6 +1213,7 @@ struct SettingsView: View {
         do {
             if row.isCurrent {
                 try StorageRoot.renameIdentity(to: name)
+                model.picplace.libraryRenamed(name)
             } else if var identity = LibraryIdentity.read(inRoot: row.entry.url) {
                 identity.name = name
                 identity.namedByPerson = true
@@ -2335,6 +2359,132 @@ private struct DiagnosticsView: View {
         #endif
     }
 }
+
+// MARK: - A library from PicPlace (macOS, stage C)
+
+#if os(macOS)
+
+/// "Add Library from PicPlace": one of the account's libraries that is not
+/// on this Mac becomes a local copy — folder, identity, binding pending
+/// its first pull — and LetsLapse relaunches on it to pull the previews
+/// (libraries plan §3.7). The place is chosen once; the app names the
+/// folder inside it (`<host>/<username>/<name>/` when free).
+struct AddLibraryFromPicPlaceSheet: View {
+    @ObservedObject var picplace: PicPlaceController
+    @Environment(\.dismiss) private var dismiss
+    @State private var chosen: PPLibrary?
+    @State private var container = StorageRoot.defaultRootURL
+    @State private var failure: String?
+
+    private var remote: [PPLibrary] { picplace.librariesNotOnThisMac }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Add a library from PicPlace")
+                .font(.system(size: 19, weight: .semibold))
+                .padding(.top, 26)
+            Text("A copy of the library is made here — its projects arrive as previews; originals download per project. LetsLapse relaunches on it.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+
+            VStack(spacing: 0) {
+                ForEach(remote) { library in
+                    Button {
+                        chosen = library
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: chosen?.id == library.id ? "largecircle.fill.circle" : "circle")
+                                .font(.system(size: 16))
+                                .foregroundStyle(chosen?.id == library.id ? LL.accent : Color.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(library.displayName).font(.system(size: 14.5, weight: chosen?.id == library.id ? .semibold : .regular))
+                                Text("\(library.count) project\(library.count == 1 ? "" : "s") · \(LLFormat.bytes(library.usedBytes ?? 0)) on PicPlace")
+                                    .font(.system(size: 11.5)).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 11)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if library.id != remote.last?.id { Divider().padding(.leading, 44) }
+                }
+            }
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.top, 16)
+
+            HStack(spacing: 10) {
+                Text("Place")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                Text(shownPath(container.path))
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Button("Choose…") { choosePlace() }
+                    .buttonStyle(.bordered)
+            }
+            .padding(.top, 14)
+
+            if let failure {
+                Text(failure).font(.system(size: 12.5)).foregroundStyle(LL.levelOff).padding(.top, 8)
+            }
+
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(LLSecondaryButtonStyle())
+                    .keyboardShortcut(.cancelAction)
+                Button("Add and Relaunch") { add() }
+                    .buttonStyle(LLPrimaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(chosen == nil)
+            }
+            .padding(.top, 20)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+        .frame(width: 460)
+        .background(LL.screenBackground)
+        .onAppear { if chosen == nil { chosen = remote.first } }
+    }
+
+    private func choosePlace() {
+        let panel = NSOpenPanel()
+        panel.title = "Where the library goes"
+        panel.prompt = "Choose"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = container
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            container = url
+        }
+    }
+
+    private func add() {
+        guard let chosen else { return }
+        do {
+            let root = try picplace.addLibraryFromPicPlace(chosen, in: container)
+            StorageRoot.commit(destination: root)
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { AppRelaunch.relaunchNow() }
+        } catch {
+            failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func shownPath(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
+    }
+}
+
+#endif
 
 // MARK: - Library location (macOS)
 

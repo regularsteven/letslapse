@@ -76,6 +76,10 @@ final class PicPlaceController: ObservableObject {
         /// The project's sources are not on this device; its poster is (v2
         /// plan §3.6). Whatever the session, the card says so first.
         case previewOnly(PicPlaceSyncRecord?)
+        /// Stage C: PicPlace holds this project in another library of the
+        /// account (named when known); this library neither pushes nor
+        /// pulls it.
+        case elsewhere(String?)
         /// Stage 4: the project is in the conflicts list.
         case conflict(Conflict.Kind)
         case signedOut
@@ -119,11 +123,19 @@ final class PicPlaceController: ObservableObject {
     @Published private(set) var serverString = PicPlaceConfiguration.serverString
     /// `limits.manifest_max_bytes` from the last `/status`; 1 MB until then.
     private(set) var manifestMaxBytes: Int64 = 1 << 20
-    /// The "Connect this library?" question, raised after a sign-in on an
-    /// unbound library and by the cards' Connect buttons.
+    /// The "Connect this library?" question, raised by the cards' Connect
+    /// buttons (never by a sign-in, libraries plan L18): a sheet with the
+    /// target — a new library on PicPlace, an existing one to link to, or
+    /// the default library to take over — once the server keeps libraries
+    /// apart; the one-line alert of v2 on a server that does not.
     @Published var isOfferingConnect = false
-    /// The question's case-specific line (clean · fresh · merge, §4.1).
+    @Published private(set) var connectOffer: ConnectOffer?
+    /// The v2 question's case line (clean · fresh · merge, §4.1) — the
+    /// server-without-libraries path, and the `LL_PICPLACE_BIND` staging.
     @Published private(set) var connectCaseText: String?
+    /// What the last `/status` said about the account's libraries (stage C).
+    @Published private(set) var serverHasLibraries = false
+    @Published private(set) var serverLibraries: [PPLibrary] = []
     /// The first connection's progress while it runs (§4.1 step 4).
     @Published internal(set) var initialSyncProgress: InitialSyncProgress?
     var initialSyncTask: Task<Void, Never>?
@@ -276,8 +288,26 @@ final class PicPlaceController: ObservableObject {
             }
         }
         stagedState = Self.stagedState(from: ProcessInfo.processInfo.environment["LL_PICPLACE"])
-        // `LL_PICPLACE_BIND=clean|fresh|merge` stages the connect question's
-        // case line with no server.
+        // `LL_PICPLACE_LIBRARIES=<n>` stages the connect sheet (stage C) with
+        // n demo libraries and the unfiled entry, no server.
+        if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_LIBRARIES"], let n = Int(raw) {
+            let names = ["Holidays", "Client X", "Field 2026", "Timelapse gallery"]
+            let demo = (0..<min(n, names.count)).map { i in
+                PPLibrary(uuid: UUID().uuidString.lowercased(), name: names[i], projects: .init(count: [879, 40, 12, 300][i], byType: nil, deleted: nil),
+                          usedBytes: 1_200_000_000, createdBy: nil, updatedBy: nil, deletedBy: nil, createdAt: Date(), updatedAt: Date(), deletedAt: nil)
+            }
+            serverHasLibraries = true
+            serverLibraries = demo
+            connectOffer = ConnectOffer(
+                libraries: demo,
+                defaultEntry: PPLibrary(uuid: nil, name: nil, projects: .init(count: 12, byType: nil, deleted: nil), usedBytes: 0,
+                                        createdBy: nil, updatedBy: nil, deletedBy: nil, createdAt: nil, updatedAt: nil, deletedAt: nil),
+                localCount: 398, suggestedName: StorageRoot.identity?.displayName ?? "Prague LetsLapse Shots",
+                needsName: StorageRoot.identity?.namedByPerson != true)
+            Task { @MainActor in self.isOfferingConnect = true }
+        }
+        // `LL_PICPLACE_BIND=clean|fresh|merge` stages the v2 connect question's
+        // case line with no server (a server without libraries).
         if let staged = ProcessInfo.processInfo.environment["LL_PICPLACE_BIND"] {
             switch staged {
             case "clean": connectCaseText = "Nothing is on PicPlace yet. This library's 12 projects will be kept there — records and a preview each; originals stay here until you upload them."
@@ -286,6 +316,24 @@ final class PicPlaceController: ObservableObject {
             default: break
             }
             Task { @MainActor in self.isOfferingConnect = true }
+        }
+        // `LL_PICPLACE_CONNECT=new:<name>|adopt:<name>|link:<uuid>` presses
+        // Connect with that target once the session is up (stage C bench).
+        if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_CONNECT"] {
+            Task { @MainActor in
+                for _ in 0..<60 where !self.isSignedIn || !self.serverHasLibraries { try? await Task.sleep(nanoseconds: 500_000_000) }
+                guard self.isSignedIn, self.binding == nil else { LLog("picplace hook: LL_PICPLACE_CONNECT — not signed in or already bound"); return }
+                let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+                switch parts.first {
+                case "new": self.connectLibrary(target: .new, name: parts.count > 1 ? parts[1] : nil)
+                case "adopt": self.connectLibrary(target: .adoptDefault, name: parts.count > 1 ? parts[1] : nil)
+                case "link":
+                    if parts.count > 1, let library = self.serverLibraries.first(where: { $0.uuid?.lowercased() == parts[1].lowercased() }) {
+                        self.connectLibrary(target: .link(library), name: nil)
+                    } else { LLog("picplace hook: LL_PICPLACE_CONNECT link — no such library \(parts.count > 1 ? parts[1] : "")") }
+                default: LLog("picplace hook: LL_PICPLACE_CONNECT — unknown target \(raw)")
+                }
+            }
         }
         // `LL_PICPLACE_SIGNIN=1|silent` presses Sign in at launch; `silent`
         // opens no browser, so a test drives the consent page itself and
@@ -352,6 +400,29 @@ final class PicPlaceController: ObservableObject {
     /// Whether a project may be synced from here: signed in, and this
     /// library is this account's.
     var canSync: Bool { isSignedIn && binding != nil && libraryLink == .bound }
+
+    /// The server library this local library syncs (stage C): the binding's
+    /// `library.uuid`. nil for a binding from before libraries — then every
+    /// row of the account is in scope, as in v2.
+    var scope: UUID? { binding?.library?.uuid }
+
+    /// Whether `row` belongs to this library's scope.
+    func inScope(_ row: PPProject) -> Bool {
+        row.isIn(scope: scope, serverHasLibraries: serverHasLibraries)
+    }
+
+    /// The server's entry for this library, when the last `/status` had one.
+    var serverLibrary: PPLibrary? {
+        guard let scope else { return nil }
+        return serverLibraries.first { $0.libraryUUID == scope }
+    }
+
+    /// The name a server library goes by here — its own, else the uuid's stub.
+    func libraryName(for uuid: String?) -> String? {
+        guard let uuid else { return nil }
+        if let known = serverLibraries.first(where: { $0.uuid?.lowercased() == uuid.lowercased() })?.name { return known }
+        return String(uuid.prefix(8))
+    }
 
     /// The server a sign-in goes to: a bound library's own, else the setting.
     var signInServer: URL {
@@ -519,7 +590,14 @@ final class PicPlaceController: ObservableObject {
         Self.setSession(key, forHost: host)
         upgradeBindingIfServerReportsItself(status)
         noteLimits(status)
+        noteLibraries(status)
         await refreshUsage(status: status)
+    }
+
+    /// What the server keeps apart (stage C): the feature and the list.
+    private func noteLibraries(_ status: PPStatus) {
+        serverHasLibraries = status.hasLibraries
+        serverLibraries = status.libraries ?? []
     }
 
     private func noteLimits(_ status: PPStatus) {
@@ -555,6 +633,7 @@ final class PicPlaceController: ObservableObject {
         Task {
             if let status: PPStatus = try? await client.get("status") {
                 noteLimits(status)
+                noteLibraries(status)
                 await refreshUsage(status: status, rows: rows)
             }
         }
@@ -586,19 +665,24 @@ final class PicPlaceController: ObservableObject {
                 LLog("picplace: could not read the account's index: \(error)")
             }
         }
-        let count = status.projects?.count ?? rows.count
+        // With libraries kept apart (stage C) the figures are THIS library's:
+        // its rows on the server, its bytes, and what of it is not here yet.
+        // Without, the account's, as in v2.
+        let scoped = rows.filter { inScope($0) }
+        let count = (serverHasLibraries && scope != nil) ? scoped.count : (status.projects?.count ?? rows.count)
+        let bytes = serverLibrary?.usedBytes ?? status.storage.usedBytes
         var missing: [PPProject] = []
         if let index = model.libraryIndex {
-            missing = rows.filter { row in
+            missing = scoped.filter { row in
                 guard let uuid = UUID(uuidString: row.uuid) else { return true }
                 return ((try? index.projectID(originID: uuid)) ?? nil) == nil
             }
         }
         if !missing.isEmpty {
-            LLog("picplace: \(missing.count) of the account's \(count) project(s) are not in this library: "
+            LLog("picplace: \(missing.count) of the library's \(count) project(s) on PicPlace are not here: "
                  + missing.map { "\($0.name) (\($0.uuid.prefix(8)), \($0.type))" }.joined(separator: "; "))
         }
-        usage = Usage(projects: count, bytes: status.storage.usedBytes, notInLibrary: missing.count)
+        usage = Usage(projects: count, bytes: bytes, notInLibrary: missing.count)
     }
 
     private func handleSignedOutByServer() {
@@ -615,6 +699,50 @@ final class PicPlaceController: ObservableObject {
 
     // MARK: Connect / disconnect the library
 
+    /// Where a library goes on PicPlace (stage C, libraries plan §3.7).
+    enum ConnectTarget: Equatable {
+        /// A new library on PicPlace named after this one: its projects go up, nothing arrives.
+        case new
+        /// Name the account's default library after this one and take its
+        /// projects over — how an account from before libraries becomes a
+        /// named library in one call (`adopt_default`).
+        case adoptDefault
+        /// Link this library to an existing one on PicPlace: the two sides
+        /// are exchanged (fresh when this library is empty, merge otherwise).
+        case link(PPLibrary)
+    }
+
+    /// What the connect sheet shows: the account's libraries, the counts,
+    /// and the name this library would take.
+    struct ConnectOffer: Equatable {
+        var libraries: [PPLibrary]
+        var defaultEntry: PPLibrary?
+        var localCount: Int
+        var suggestedName: String
+        var needsName: Bool
+
+        /// The numbers for a target: what goes up, what arrives.
+        func summary(for target: ConnectTarget) -> String {
+            let local = "\(localCount) project\(localCount == 1 ? "" : "s")"
+            switch target {
+            case .new:
+                return localCount == 0
+                    ? "An empty library on PicPlace; captures and imports go up as you make them."
+                    : "This library's \(local) go up — records and a preview each; originals stay here until you upload them. Nothing arrives."
+            case .adoptDefault:
+                let n = defaultEntry?.count ?? 0
+                return "The \(n) unfiled project\(n == 1 ? "" : "s") on PicPlace become this library"
+                    + (localCount == 0 ? " and arrive here as previews." : "; what is here and not there goes up, what is there and not here arrives as previews, and projects on both sides stay in step.")
+            case .link(let library):
+                let n = library.count
+                if localCount == 0 {
+                    return "All \(n) project\(n == 1 ? "" : "s") of “\(library.displayName)” arrive here as previews; originals download per project. Nothing goes up."
+                }
+                return "“\(library.displayName)” holds \(n) project\(n == 1 ? "" : "s"), this library \(local). Everything there that isn't here arrives as previews, everything here that isn't there goes up, and projects on both sides stay in step."
+            }
+        }
+    }
+
     /// The Connect buttons: raise the question (the cards present it).
     func offerConnect() {
         guard isSignedIn, binding == nil else { return }
@@ -623,55 +751,204 @@ final class PicPlaceController: ObservableObject {
 
     private func offerConnectNow() async {
         lastConnectError = nil
-        guard let described = await describeConnectCase() else {
+        isConnecting = true
+        defer { isConnecting = false }
+        guard let status: PPStatus = try? await client.get("status") else {
             lastConnectError = "PicPlace couldn't be reached to check what it holds. Try again."
             return
         }
-        // Until PicPlace knows what a library is (libraries plan L17), a
-        // library with projects may not connect to an account that already
-        // holds projects: the v2 merge would pour the two into one namespace
-        // — which is exactly what happened on 2026-09-16. Clean (nothing
-        // there) and fresh (nothing here) are safe and stay.
-        if described.isMerge {
-            lastConnectError = "PicPlace already holds \(described.serverCount) project\(described.serverCount == 1 ? "" : "s") "
-                + "and this library has \(described.localCount). Until PicPlace keeps libraries apart, a library can only "
-                + "connect to an account that is empty or into an empty library. Not connected."
-            LLog("picplace: connect refused — merge case (\(described.serverCount) on the server, \(described.localCount) here) until the server scopes libraries")
+        noteLimits(status)
+        noteLibraries(status)
+        var localCount = 0
+        if let counts = try? model.libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery()) {
+            localCount = counts.values.reduce(0, +)
+        }
+        guard serverHasLibraries else {
+            // A server from before libraries: v2's one-line question, the
+            // merge refused (libraries plan L17), one library per account
+            // on this Mac (L10).
+            #if os(macOS)
+            if let other = Self.otherLibraryBound(to: profile) {
+                lastConnectError = "This Mac already syncs “\(other.name)” (\(other.path)) with @\(profile?.username ?? "") on \(sessionHost), and this PicPlace does not keep libraries apart yet."
+                return
+            }
+            #endif
+            let described = ConnectCase(serverCount: status.projects?.count ?? 0, localCount: localCount)
+            if described.isMerge {
+                lastConnectError = "PicPlace already holds \(described.serverCount) project\(described.serverCount == 1 ? "" : "s") "
+                    + "and this library has \(described.localCount). This PicPlace does not keep libraries apart yet, so a library can only "
+                    + "connect to an account that is empty or into an empty library. Not connected."
+                LLog("picplace: connect refused — merge case (\(described.serverCount) on the server, \(described.localCount) here) on a server without libraries")
+                return
+            }
+            connectCaseText = described.text
+            connectOffer = nil
+            isOfferingConnect = true
             return
         }
-        connectCaseText = described.text
+        let libraries = (status.libraries ?? []).filter { !$0.isDefault && !$0.isTombstone }
+        let identity = StorageRoot.identity
+        connectOffer = ConnectOffer(
+            libraries: libraries,
+            defaultEntry: (status.libraries ?? []).first { $0.isDefault && $0.count > 0 },
+            localCount: localCount,
+            suggestedName: identity?.displayName ?? LibraryIdentity.defaultName(forRoot: root),
+            needsName: identity?.namedByPerson != true)
+        connectCaseText = nil
         isOfferingConnect = true
     }
 
-    /// Bind the open library to the signed-in account (v2 plan D2–D3): write
-    /// `PicPlace/account.json`; on the Mac, nest the library into
-    /// `<root>/<host>/<username>/` and relaunch. iOS binds in place.
-    func connectLibrary() {
-        guard let profile, binding == nil else { return }
-        #if os(macOS)
-        // One bound library per account on a Mac until the server knows
-        // what a library is (libraries plan L10): presence is per
-        // (project, device), and two libraries under one account on one
-        // install would overwrite each other's.
-        if let other = Self.otherLibraryBound(to: profile) {
-            lastConnectError = "This Mac already syncs “\(other.name)” (\(other.path)) with @\(profile.username) on \(profile.host). "
-                + "One library per account for now — disconnect that one first, or sign in with another account."
-            LLog("picplace: connect refused — \(other.path) is already bound to \(profile.accountKey)")
-            return
+    /// Bind the open library to the signed-in account (v2 plan D2–D3) at
+    /// `target` on PicPlace (stage C): write `PicPlace/account.json` with the
+    /// server library's uuid; the library stays in its folder (L19).
+    func connectLibrary(target: ConnectTarget = .new, name: String? = nil) {
+        guard let profile, binding == nil, !isConnecting else { return }
+        isConnecting = true
+        lastConnectError = nil
+        Task {
+            defer { isConnecting = false }
+            do {
+                // The name first (L16): it is what PicPlace calls the library.
+                if let name, LibraryIdentity.cleanName(name) != StorageRoot.identity?.name || StorageRoot.identity?.namedByPerson != true {
+                    try StorageRoot.renameIdentity(to: name)
+                }
+                var library: PicPlaceBindingRecord.Library?
+                var initialCase: PicPlaceBindingRecord.InitialSync.Case = .clean
+                if serverHasLibraries {
+                    guard let identity = StorageRoot.identity else { throw PicPlaceSyncRun.Failed(caption: "This library has no identity file.") }
+                    switch target {
+                    case .new, .adoptDefault:
+                        #if os(macOS)
+                        if let other = Self.otherLibraryBound(toServerLibrary: identity.id) {
+                            throw PicPlaceSyncRun.Failed(caption: "This Mac already syncs “\(other.name)” (\(other.path)) as that library.")
+                        }
+                        #endif
+                        let created = try await createServerLibrary(uuid: identity.id, name: identity.displayName, adoptDefault: target == .adoptDefault)
+                        library = .init(uuid: created.uuid, name: identity.displayName)
+                        initialCase = created.adopted > 0 ? (localCountNow() == 0 ? .fresh : .merge) : .clean
+                    case .link(let server):
+                        guard let uuid = server.libraryUUID else { throw PicPlaceSyncRun.Failed(caption: "That library has no id.") }
+                        #if os(macOS)
+                        if let other = Self.otherLibraryBound(toServerLibrary: uuid) {
+                            throw PicPlaceSyncRun.Failed(caption: "This Mac already syncs “\(other.name)” (\(other.path)) as “\(server.displayName)”. One copy per library on a Mac.")
+                        }
+                        #endif
+                        // The local library becomes a copy of that one: its
+                        // identity takes the server library's uuid and name.
+                        try StorageRoot.adoptIdentity(id: uuid, name: server.displayName)
+                        library = .init(uuid: uuid, name: server.displayName)
+                        initialCase = localCountNow() == 0 ? .fresh : .merge
+                    }
+                }
+                let record = PicPlaceBindingRecord(
+                    server: .init(url: profile.server, id: profile.serverID, environment: profile.serverEnvironment),
+                    user: .init(uuid: profile.userUUID, username: profile.username, name: profile.name),
+                    boundByDevice: DeviceIdentity.id,
+                    initialSync: .init(state: .pending, case: initialCase),
+                    library: library)
+                try record.write(inRoot: root)
+                binding = record
+                saveSyncState()
+                LLog("picplace: library bound to @\(profile.username) on \(record.server.host)\(library.map { " as “\($0.name)” \($0.uuid.uuidString.lowercased())" } ?? "") — \(initialCase.rawValue)")
+                isOfferingConnect = false
+                connectOffer = nil
+                runInitialSyncIfPending()
+                scheduleUsageRefresh()
+            } catch {
+                LLog("picplace: could not connect this library: \(error)")
+                lastConnectError = (error as? PicPlaceAPIError)?.cardCaption ?? (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                isOfferingConnect = false
+                connectOffer = nil
+            }
         }
-        #endif
-        let record = PicPlaceBindingRecord(
-            server: .init(url: profile.server, id: profile.serverID, environment: profile.serverEnvironment),
-            user: .init(uuid: profile.userUUID, username: profile.username, name: profile.name),
-            boundByDevice: DeviceIdentity.id,
-            library: StorageRoot.identity.map { .init(uuid: $0.id, name: $0.displayName) })
-        connect(with: record)
+    }
+
+    private func localCountNow() -> Int {
+        (try? model.libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery()))?.values.reduce(0, +) ?? 0
+    }
+
+    /// `PUT /libraries/{uuid}` — create (or rename) the server library this
+    /// one is; `409 uuid_taken` (another account holds the uuid) re-mints the
+    /// local identity and tries once more.
+    private func createServerLibrary(uuid: UUID, name: String, adoptDefault: Bool) async throws -> (uuid: UUID, adopted: Int) {
+        var id = uuid
+        for attempt in 0..<2 {
+            do {
+                let response: PPLibraryResponse = try await client.put("libraries/\(id.uuidString.lowercased())", json: ["name": name, "adopt_default": adoptDefault])
+                if let known = response.library.libraryUUID { id = known }
+                return (id, response.adopted ?? 0)
+            } catch let error as PicPlaceAPIError where error.code == "uuid_taken" && attempt == 0 {
+                let fresh = UUID()
+                LLog("picplace: library id \(id.uuidString.lowercased()) belongs to another account — re-minting as \(fresh.uuidString.lowercased())")
+                try StorageRoot.adoptIdentity(id: fresh, name: name)
+                id = fresh
+            }
+        }
+        throw PicPlaceSyncRun.Failed(caption: "PicPlace refused the library's id twice.")
+    }
+
+    /// The bound library on the server, put back when a push finds it gone
+    /// (`422 library_unknown`): the same uuid and name, no adoption.
+    func ensureServerLibrary() async -> Bool {
+        guard let scope, let binding else { return false }
+        do {
+            let _: PPLibraryResponse = try await client.put("libraries/\(scope.uuidString.lowercased())", json: ["name": binding.library?.name ?? StorageRoot.identity?.displayName ?? "Library", "adopt_default": false])
+            return true
+        } catch {
+            LLog("picplace: could not re-create library \(scope.uuidString.lowercased()): \(error)")
+            return false
+        }
+    }
+
+    /// A rename here reaches the server library it is (last writer wins,
+    /// asks §6 Q6); offline it waits for the next connect-time PUT.
+    func libraryRenamed(_ name: String) {
+        guard var record = binding, record.library != nil else { return }
+        record.library?.name = name
+        try? record.write(inRoot: root)
+        binding = record
+        guard canSync, serverHasLibraries, let scope else { return }
+        Task {
+            do {
+                let _: PPLibraryResponse = try await client.put("libraries/\(scope.uuidString.lowercased())", json: ["name": name, "adopt_default": false])
+                LLog("picplace: library renamed “\(name)” on \(sessionHost)")
+            } catch {
+                LLog("picplace: could not rename the library on the server: \(error)")
+            }
+        }
     }
 
     #if os(macOS)
-    /// Another known, reachable library on this Mac whose binding is this
-    /// account's — nil when there is none.
-    private static func otherLibraryBound(to profile: Profile) -> LibraryRegistry.Entry? {
+    /// The account's libraries that no known library on this Mac is a copy
+    /// of — what "Add Library from PicPlace…" offers (stage C, §3.7).
+    var librariesNotOnThisMac: [PPLibrary] {
+        guard isSignedIn, serverHasLibraries else { return [] }
+        var held = Set<UUID>()
+        if let scope { held.insert(scope) }
+        for entry in LibraryRegistry.entries where entry.isReachable {
+            if let uuid = PicPlaceBindingRecord.read(inRoot: entry.url)?.library?.uuid { held.insert(uuid) }
+        }
+        return serverLibraries.filter { !$0.isDefault && !$0.isTombstone && $0.libraryUUID.map { !held.contains($0) } == true }
+    }
+
+    /// A local copy of `library` in `container`, bound and pending its first
+    /// pull; the caller switches to it (commit + relaunch).
+    func addLibraryFromPicPlace(_ library: PPLibrary, in container: URL) throws -> URL {
+        guard let profile, let uuid = library.libraryUUID else { throw PicPlaceSyncRun.Failed(caption: "That library has no id.") }
+        let template = PicPlaceBindingRecord(
+            server: .init(url: profile.server, id: profile.serverID, environment: profile.serverEnvironment),
+            user: .init(uuid: profile.userUUID, username: profile.username, name: profile.name),
+            boundByDevice: DeviceIdentity.id)
+        let root = try StorageRoot.createFromPicPlace(library: .init(uuid: uuid, name: library.displayName), binding: template, in: container)
+        LibraryRegistry.register(root: root, identity: LibraryIdentity.read(inRoot: root))
+        return root
+    }
+
+    /// Another known, reachable library on this Mac bound to this ACCOUNT —
+    /// v2's one-library-per-account rule, kept only for a server that does
+    /// not keep libraries apart.
+    private static func otherLibraryBound(to profile: Profile?) -> LibraryRegistry.Entry? {
+        guard let profile else { return nil }
         let current = StorageRoot.current.standardizedFileURL.resolvingSymlinksInPath().path
         return LibraryRegistry.entries.first { entry in
             guard entry.isReachable,
@@ -680,27 +957,20 @@ final class PicPlaceController: ObservableObject {
             return other.matches(host: profile.host, userUUID: profile.userUUID, serverID: profile.serverID)
         }
     }
-    #endif
 
-    /// The library binds where it is (libraries plan L19): the identity
-    /// file and this binding say whose it is; no folder is renamed.
-    private func connect(with record: PicPlaceBindingRecord) {
-        guard binding == nil, !isConnecting else { return }
-        isConnecting = true
-        lastConnectError = nil
-        let username = record.user.displayHandle
-        do {
-            try record.write(inRoot: root)
-            binding = record
-            saveSyncState()
-            LLog("picplace: library bound to @\(username) on \(record.server.host)")
-            runInitialSyncIfPending()
-        } catch {
-            LLog("picplace: could not write the binding: \(error)")
-            lastConnectError = "Couldn't connect this library: \(error.localizedDescription)"
+    /// Another known, reachable library on this Mac that is a copy of the
+    /// same SERVER library (stage C's rule: one copy per library per Mac —
+    /// presence is per device, and two copies would overwrite each other's).
+    private static func otherLibraryBound(toServerLibrary uuid: UUID) -> LibraryRegistry.Entry? {
+        let current = StorageRoot.current.standardizedFileURL.resolvingSymlinksInPath().path
+        return LibraryRegistry.entries.first { entry in
+            guard entry.isReachable,
+                  entry.url.standardizedFileURL.resolvingSymlinksInPath().path != current,
+                  let other = PicPlaceBindingRecord.read(inRoot: entry.url) else { return false }
+            return other.library?.uuid == uuid
         }
-        isConnecting = false
     }
+    #endif
 
     /// "Disconnect this library": the binding and the sync records go; the
     /// projects stay, keep their origin ids, and would fork if pushed under
@@ -748,6 +1018,7 @@ final class PicPlaceController: ObservableObject {
         guard canSync else { return .notConnected }
         if let progress = progress[capture.id] { return .syncing(progress) }
         guard let record = records[model.originID(of: capture)] else { return .notSynced }
+        if let other = record.elsewhereLibrary { return .elsewhere(record.elsewhereName ?? libraryName(for: other)) }
         if record.lastError != nil { return .failed(record) }
         if model.lastEdited(capture) > record.syncedAt { return .changes(record) }
         return .synced(record)
@@ -826,6 +1097,16 @@ final class PicPlaceController: ObservableObject {
     // MARK: Sync
 
     func sync(_ capture: AppModel.CaptureProject, policy override: PicPlaceSyncPolicy? = nil) {
+        sync(capture, policy: override, retriedLibrary: false)
+    }
+
+    private func sync(_ capture: AppModel.CaptureProject, policy override: PicPlaceSyncPolicy?, retriedLibrary: Bool) {
+        // Filed in another library of the account on PicPlace (stage C):
+        // this library neither pushes nor pulls it. The card says where it is.
+        if let other = records[model.originID(of: capture)]?.elsewhereLibrary {
+            LLog("picplace: not syncing \(capture.displayTitle) — it is in library \(other) on PicPlace, not this one")
+            return
+        }
         guard canSync, syncTasks[capture.id] == nil else { return }
         let key = model.originID(of: capture)
         let policy = override ?? self.policy
@@ -841,7 +1122,8 @@ final class PicPlaceController: ObservableObject {
             policy: policy,
             originUUID: capture.derivedFromOriginID,
             manifestMaxBytes: manifestMaxBytes,
-            tier: tier)
+            tier: tier,
+            library: serverHasLibraries ? scope : nil)
         let run = PicPlaceSyncRun(client: client, project: project, thisDeviceID: profile?.deviceID) { [weak self] progress in
             self?.progress[capture.id] = progress
         }
@@ -885,6 +1167,22 @@ final class PicPlaceController: ObservableObject {
                 records[key] = record
             } catch is CancellationError {
                 // Cancelled by the user: the card goes back to what it was.
+            } catch let error as PicPlaceAPIError where error.code == "library_unknown" && !retriedLibrary {
+                // The server no longer has this library (deleted or purged
+                // elsewhere): put it back by its uuid and name, then push
+                // once more (asks §6 Q2).
+                LLog("picplace: the server does not know library \(scope?.uuidString ?? "?") — re-creating it and retrying \(capture.displayTitle)")
+                progress[capture.id] = nil
+                syncTasks[capture.id] = nil
+                if await ensureServerLibrary() {
+                    sync(capture, policy: override, retriedLibrary: true)
+                } else {
+                    var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: policy.rawValue)
+                    record.noteFailure("PicPlace no longer has this library, and it could not be re-created.", policy: policy)
+                    records[key] = record
+                    saveSyncState()
+                }
+                return
             } catch let error as PicPlaceAPIError where error.code == "uuid_taken" {
                 // Another account holds this origin id: the project is re-minted
                 // as a fork of it here and pushed under its own id (§4.4).

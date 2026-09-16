@@ -191,6 +191,8 @@ struct PicPlaceStatusCard: View {
             Image(systemName: "exclamationmark.icloud.fill").font(.system(size: size * 0.85)).foregroundStyle(LL.amber)
         case .previewOnly:
             Image(systemName: "icloud.and.arrow.down").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
+        case .elsewhere:
+            Image(systemName: "folder.badge.questionmark").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
         case .signedOut, .notSynced:
             Image(systemName: "icloud").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
         case .notConnected:
@@ -213,6 +215,7 @@ struct PicPlaceStatusCard: View {
             default: return "Needs your decision"
             }
         case .previewOnly: return "Preview only"
+        case .elsewhere(let name): return name.map { "In “\($0)” on PicPlace" } ?? "In another library on PicPlace"
         case .signedOut: return "Keep a copy on PicPlace"
         case .notConnected: return "Library not connected"
         case .notSynced: return "Not on PicPlace"
@@ -240,6 +243,8 @@ struct PicPlaceStatusCard: View {
                 return "The originals — \(files.formatted()) file\(files == 1 ? "" : "s") · \(LLFormat.bytes(bytes)) — are on PicPlace, not on this device"
             }
             return "The originals are on PicPlace, not on this device"
+        case .elsewhere:
+            return "PicPlace files this project under another of your libraries, so this library leaves it alone — it is neither pushed nor pulled from here"
         case .signedOut:
             return "Sign in with PicPlace to sync this project"
         case .notConnected:
@@ -303,6 +308,7 @@ struct PicPlaceStatusCard: View {
             switch state {
             case .conflict: return ("Review…", false)
             case .previewOnly: return (picplace.originalsAction(for: capture) == nil ? "Preview only" : "Download originals", false)
+            case .elsewhere: return ("Elsewhere", false)
             case .signedOut: return (picplace.isSigningIn ? "Signing in…" : "Sign in", false)
             case .notConnected: return (picplace.libraryLink == .mismatch ? "Settings" : "Connect…", false)
             case .notSynced: return ("Sync to PicPlace", false)
@@ -327,7 +333,9 @@ struct PicPlaceStatusCard: View {
                 .foregroundStyle(LL.accent)
         }
         .buttonStyle(.plain)
-        .disabled((picplace.isSigningIn && !isCancel) || { if case .previewOnly = state { return picplace.originalsAction(for: capture) == nil } else { return false } }())
+        .disabled((picplace.isSigningIn && !isCancel)
+                  || { if case .previewOnly = state { return picplace.originalsAction(for: capture) == nil } else { return false } }()
+                  || { if case .elsewhere = state { return true } else { return false } }())
     }
 
     private func progressBar(_ progress: PicPlaceSyncProgress, height: CGFloat) -> some View {
@@ -522,7 +530,8 @@ struct PicPlaceSettingsCard: View {
             .buttonStyle(.plain)
             .disabled(picplace.isConnecting)
         case .bound:
-            LLRow(title: "Library", subtitle: picplace.binding.map { "Connected on \($0.boundAt.formatted(date: .abbreviated, time: .shortened))" }) {
+            LLRow(title: picplace.binding?.library.map { "Library “\($0.name)”" } ?? "Library",
+                  subtitle: picplace.binding.map { "Connected on \($0.boundAt.formatted(date: .abbreviated, time: .shortened))" }) {
                 Text("@\(picplace.binding?.user.displayHandle ?? "") on \(picplace.binding?.server.host ?? "")")
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
@@ -680,8 +689,25 @@ private struct PicPlaceConnectAlert: ViewModifier {
 
     private var needsName: Bool { StorageRoot.identity?.namedByPerson != true }
 
+    /// Stage C: the target chooser is a sheet; the one-line alert stays for
+    /// a server that does not keep libraries apart.
+    private var showsSheet: Binding<Bool> {
+        Binding(get: { picplace.isOfferingConnect && picplace.connectOffer != nil },
+                set: { if !$0 { picplace.isOfferingConnect = false } })
+    }
+    private var showsAlert: Binding<Bool> {
+        Binding(get: { picplace.isOfferingConnect && picplace.connectOffer == nil },
+                set: { if !$0 { picplace.isOfferingConnect = false } })
+    }
+
     func body(content: Content) -> some View {
-        content.alert("Connect this library to PicPlace?", isPresented: $picplace.isOfferingConnect) {
+        content
+        .sheet(isPresented: showsSheet) {
+            if let offer = picplace.connectOffer {
+                PicPlaceConnectSheet(picplace: picplace, offer: offer)
+            }
+        }
+        .alert("Connect this library to PicPlace?", isPresented: showsAlert) {
             if needsName {
                 TextField("Library name", text: $nameDraft)
             }
@@ -711,6 +737,128 @@ private struct PicPlaceConnectAlert: ViewModifier {
 extension View {
     func picplaceConnectAlert(_ picplace: PicPlaceController) -> some View {
         modifier(PicPlaceConnectAlert(picplace: picplace))
+    }
+}
+
+/// "Connect ‘Prague LetsLapse Shots’ to PicPlace" — where on PicPlace it
+/// goes (stage C, libraries plan §3.7): a new library named after it, the
+/// account's unfiled projects taken over, or an existing library linked;
+/// the numbers of what goes up and what arrives per choice; the name it
+/// takes. Blocking, like the other decisions that own the library.
+struct PicPlaceConnectSheet: View {
+    @ObservedObject var picplace: PicPlaceController
+    let offer: PicPlaceController.ConnectOffer
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var target: PicPlaceController.ConnectTarget = .new
+    @State private var name = ""
+
+    private var cleanName: String { LibraryIdentity.cleanName(name) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Connect “\(cleanName.isEmpty ? offer.suggestedName : cleanName)” to PicPlace")
+                    .font(.system(size: 19, weight: .semibold))
+                Text("as @\(picplace.profile?.username ?? "") on \(picplace.sessionHost)")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 26)
+            .padding(.horizontal, 24)
+
+            HStack(spacing: 10) {
+                Text("Name on PicPlace")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                TextField("Library name", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled({ if case .link = target { return true } else { return false } }())
+            }
+            .padding(.top, 18)
+            .padding(.horizontal, 24)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    choice(.new, title: "New library on PicPlace",
+                           detail: offer.summary(for: .new))
+                    if offer.defaultEntry != nil {
+                        Divider().padding(.leading, 44)
+                        choice(.adoptDefault, title: "Take over the \(offer.defaultEntry?.count ?? 0) unfiled project\((offer.defaultEntry?.count ?? 0) == 1 ? "" : "s")",
+                               detail: offer.summary(for: .adoptDefault))
+                    }
+                    ForEach(offer.libraries) { library in
+                        Divider().padding(.leading, 44)
+                        choice(.link(library), title: "Link to “\(library.displayName)” · \(library.count) project\(library.count == 1 ? "" : "s")",
+                               detail: offer.summary(for: .link(library)))
+                    }
+                }
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+            }
+            .frame(maxHeight: 360)
+
+            if let error = picplace.lastConnectError {
+                Text(error)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(LL.levelOff)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 10)
+            }
+
+            HStack {
+                Button("Not now") { dismiss() }
+                    .buttonStyle(LLSecondaryButtonStyle())
+                    .keyboardShortcut(.cancelAction)
+                Button(picplace.isConnecting ? "Connecting…" : "Connect") {
+                    picplace.connectLibrary(target: target, name: cleanName.isEmpty ? offer.suggestedName : cleanName)
+                }
+                .buttonStyle(LLPrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
+                .disabled(picplace.isConnecting || ({ if case .link = target { return false } else { return cleanName.isEmpty && offer.suggestedName.isEmpty } }()))
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+        }
+        #if os(macOS)
+        .frame(width: 460)
+        #endif
+        .background(LL.screenBackground)
+        .interactiveDismissDisabled(picplace.isConnecting)
+        .onAppear { if name.isEmpty { name = offer.suggestedName } }
+        .onChange(of: target) { _, new in
+            // Linking takes the server library's name; the others keep the
+            // person's.
+            if case .link(let library) = new { name = library.displayName } else if name.isEmpty || offer.libraries.contains(where: { $0.displayName == name }) { name = offer.suggestedName }
+        }
+        .onChange(of: picplace.isOfferingConnect) { _, offering in if !offering { dismiss() } }
+    }
+
+    private func choice(_ choice: PicPlaceController.ConnectTarget, title: String, detail: String) -> some View {
+        Button {
+            target = choice
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: target == choice ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(target == choice ? LL.accent : Color.secondary)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 14.5, weight: target == choice ? .semibold : .regular))
+                    Text(detail)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

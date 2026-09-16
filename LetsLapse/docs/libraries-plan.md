@@ -598,3 +598,71 @@ originals off. One old orphan (`C6F7D8CD…`, a `project.json` from 20 Aug
 with no files) left as it was. Both libraries now read *Not on PicPlace —
 Connect…*; **neither connects until stage C** (the second would be refused
 as a merge under L17).
+
+## 14. Stage C1 — landed 2026-09-16 night (the Mac and the shared flows)
+
+Against the PicPlace developer's stage B (picplace `5786a9e`, migrated on
+picplace.test; the answer `picplace/docs/letslapse-libraries.md`).
+
+**What:** `PPLibrary`, `status.libraries[]`, `features.libraries`,
+`library` + `library_changed_at` on the project row (`PicPlaceAPI.swift`).
+The controller's **scope** = the binding's `library.uuid`; `serverLibraries`
+from every `/status`. **Connect** is a sheet (`PicPlaceConnectSheet`): the
+name on PicPlace, then *New library on PicPlace* (default) · *Take over
+the N unfiled projects* (`adopt_default`, when the default library holds
+any) · *Link to “X” · N projects* per existing library — each with what
+goes up and what arrives in numbers; linking makes the local library a
+copy of that one (`StorageRoot.adoptIdentity`: the identity takes the
+server's uuid and name), a new library is `PUT /libraries/{identity.id}`
+(`409 uuid_taken` re-mints once), the binding carries `library`, the first
+sync runs the case (clean / fresh / merge) **within the scope**. The v2
+one-line question and the merge refusal stay for a server without
+libraries. **Every pass is scoped client-side over the account's full
+index** (asks §6 Q1): a row filed in another library is a *departure
+notice* for a project held here — its record says where
+(`elsewhereLibrary` / `elsewhereName`), nothing is pushed or pulled for it,
+the card reads *In “Bench C” on PicPlace*, the person's Sync refuses — and
+nothing for one that is not. The manifest PUT carries `library` only when
+the claim said the project is new or a tombstone (may create); `422
+library_unknown` re-`PUT`s the library and retries once. A rename here
+renames the server library. The replica rule is per server library on a
+Mac. **Add Library from PicPlace…** in Settings ▸ Libraries lists the
+account's libraries not on this Mac; one is placed at
+`<place>/<host>/<username>/<name>/` (or `<place>/<name>/` when that is a
+library), bound `fresh`, registered, and the relaunch pulls it. The
+Settings card's *Library* row names the server library; *On PicPlace* is
+the library's count and bytes.
+
+**Verified on picplace.test** with the throwaway `letslapse-two` (a
+Passport personal-access token minted in tinker; never Steven's tokens),
+three scratch libraries: A connected as **new** "Bench A" (uuid = its
+identity, the one project created with `library` set,
+`library_changed_at` null — a create is not a move); B, empty, **linked**
+to it (identity became Bench A's uuid and name; fresh pull of the preview);
+C connected as **new** "Bench C"; `POST /libraries/{C}/projects` moved A's
+project → A's next check: *is in Bench C on PicPlace, not in this one —
+left alone here*, record marked, nothing pushed back; C's next check
+pulled it. `letslapse:wipe-account letslapse-two` after. Mac and iOS
+Simulator builds clean.
+
+**Hooks:** `LL_PICPLACE_LIBRARIES=<n>` (the sheet, staged),
+`LL_PICPLACE_CONNECT=new:<name>|adopt:<name>|link:<uuid>` (the bench).
+Bench token: `php artisan passport:client --personal` once, then
+`$user->createToken('bench', [the four scopes])->accessToken` in tinker;
+`LL_PICPLACE_TOKENS=<token>:dummy` (personal tokens do not refresh; runs are
+short).
+
+**Owed — C2 (iOS active library):** the phone binds to ONE server library
+at connect (the same chooser); working in several of the account's
+libraries from one phone — an active library, captures and imports into
+it, previews of the others in the same store, a picker in the Projects
+menu and Settings — is C2 (L11). Also owed: a v2-era binding (no `library`)
+on a server that now has libraries is treated as account-wide, as v2; the
+card should offer "choose its library" (adopt or link) — a one-line
+follow-up once such a binding exists (Steven's are both unbound). The
+mirrors: the connect sheet, the Add sheet, the card's states (🟡).
+
+**Steven's next step:** connect "Prague LetsLapse Shots" as a new library,
+"Holidays" as a new library — each from its own Settings card; the merge
+that mixed them cannot recur (a merge is only offered when *linking* to a
+named library, and the sheet says the numbers).

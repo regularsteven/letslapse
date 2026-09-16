@@ -266,6 +266,8 @@ extension PicPlaceController {
         guard capture.deletedAt == nil else { return .nothing }
         let origin = model.originID(of: capture)
         if conflicts.contains(where: { $0.originID == origin }) { return .nothing }
+        // Filed in another library on PicPlace (stage C): not this library's to push.
+        if records[origin]?.elsewhereLibrary != nil { return .nothing }
         // A person's own Sync of it is under way: that push is this push.
         if let running = syncTasks[id] { await running.value; return .nothing }
         let base = records[origin]?.revision
@@ -322,7 +324,7 @@ extension PicPlaceController {
             guard let capture = model.capture(id: row.id), let record = records[model.originID(of: capture)] else { continue }
             // The records go first: a project whose bundle and poster never
             // reached the server is the check's to retry, not this queue's.
-            guard record.recordsReachedServer else { continue }
+            guard record.recordsReachedServer, record.elsewhereLibrary == nil else { continue }
             // A failed upload waits for its backoff, like a failed push.
             if let due = record.retryDueAt, due > now { continue }
             guard !model.sourcesMissing(capture), syncTasks[capture.id] == nil else { continue }

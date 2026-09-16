@@ -9,7 +9,7 @@ struct PPStatus: Decodable {
     /// the server ships it, then the authoritative half of a library binding.
     struct Server: Decodable { var id: String; var environment: String?; var url: String? }
     /// "Has this account synced anything?" without an index pull (asks §7).
-    struct Projects: Decodable { var count: Int; var byType: [String: Int]?; var deleted: Int? }
+    struct Projects: Decodable, Equatable { var count: Int; var byType: [String: Int]?; var deleted: Int? }
     /// The caps the app checks before sending (asks §4, §12): absent on a
     /// server that predates them, in which case the app assumes 1 MB.
     struct Limits: Decodable {
@@ -29,7 +29,44 @@ struct PPStatus: Decodable {
     var server: Server?
     var projects: Projects?
     var limits: Limits?
+    /// The account's libraries (picplace `letslapse-libraries.md` §2.7):
+    /// every live one by name, plus one `uuid: null` entry for the default
+    /// library while it holds a live project. Absent on a server from
+    /// before libraries.
+    var libraries: [PPLibrary]?
+
+    /// Whether this server keeps libraries apart (libraries plan L8).
+    var hasLibraries: Bool { features["libraries"] == true }
 }
+
+/// One of the account's libraries (`letslapse-libraries.md` §2.3). `uuid`
+/// nil is the default library — where every project of a client that never
+/// sends `library` lives.
+struct PPLibrary: Decodable, Equatable, Identifiable {
+    var uuid: String?
+    var name: String?
+    var projects: PPStatus.Projects?
+    var usedBytes: Int64?
+    var createdBy: PPDeviceSummary?
+    var updatedBy: PPDeviceSummary?
+    var deletedBy: PPDeviceSummary?
+    var createdAt: Date?
+    var updatedAt: Date?
+    var deletedAt: Date?
+
+    var id: String { uuid ?? "default" }
+    var isDefault: Bool { uuid == nil }
+    var isTombstone: Bool { deletedAt != nil }
+    var count: Int { projects?.count ?? 0 }
+    var displayName: String { name ?? "Unfiled" }
+    var libraryUUID: UUID? { uuid.flatMap(UUID.init(uuidString:)) }
+}
+
+/// `GET /libraries` and `PUT /libraries/{uuid}`.
+struct PPLibraryList: Decodable { var libraries: [PPLibrary]; var serverTime: Date? }
+struct PPLibraryResponse: Decodable { var library: PPLibrary; var adopted: Int? }
+/// `POST /libraries/{uuid}/projects`.
+struct PPAssignResult: Decodable { var moved: Int; var unchanged: Int?; var unknown: [String]? }
 
 struct PPDevice: Decodable, Equatable {
     var id: String
@@ -77,8 +114,21 @@ struct PPProject: Decodable {
     var deletedAt: Date?
     var deletedBy: PPDeviceSummary?
     var originUuid: String?
+    /// Which library the project is in on the server (`letslapse-libraries.md`
+    /// §2.5): nil = the default library. `libraryChangedAt` is when it last
+    /// moved between libraries — never a create.
+    var library: String?
+    var libraryChangedAt: Date?
 
     var isTombstone: Bool { deletedAt != nil }
+    var libraryUUID: UUID? { library.flatMap(UUID.init(uuidString:)) }
+
+    /// Whether the row is in `scope` — the library this device syncs. A
+    /// server from before libraries has every row in scope.
+    func isIn(scope: UUID?, serverHasLibraries: Bool) -> Bool {
+        guard serverHasLibraries, let scope else { return true }
+        return libraryUUID == scope
+    }
 }
 
 struct PPAsset: Decodable {

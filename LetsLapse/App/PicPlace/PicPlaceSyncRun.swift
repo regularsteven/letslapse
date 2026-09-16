@@ -62,6 +62,12 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     var failedAt: Date?
     var failures: Int?
     var failedPolicy: String?
+    /// Stage C: the server holds this project in ANOTHER library of the
+    /// account (uuid, and its name when known) — a departure notice, or a
+    /// local twin of a project filed elsewhere. Nothing is pushed or pulled
+    /// for it from this library; the card says where it is.
+    var elsewhereLibrary: String?
+    var elsewhereName: String?
 
     /// Whether the records — bundle and poster — of a push by THIS device
     /// reached the server: a record that has only ever failed has none.
@@ -114,6 +120,11 @@ struct PicPlaceSyncRun {
         /// What this device holds of the project, for presence: `original`
         /// when the sources are here, `preview` when only the poster is.
         var tier: String
+        /// The library this device syncs (stage C): sent on a PUT that may
+        /// CREATE the project — a first push, a resurrection — and never on
+        /// an ordinary update, which would move a project back after another
+        /// device moved it (agreed with the server, asks §6 Q2).
+        var library: UUID?
     }
 
     struct Failed: LocalizedError {
@@ -178,14 +189,17 @@ struct PicPlaceSyncRun {
         // PUT below creates it and grants the claim to this device.
         await report { $0.phase = .claiming }
         var lastClaim = Date()
+        var mayCreate = false
         do {
             let _: [String: PPClaim] = try await client.post("projects/\(uuid)/claim", json: ["ttl_seconds": Self.claimTTL])
         } catch let error as PicPlaceAPIError where error.status == 404 {
             // New to the server.
+            mayCreate = true
         } catch let error as PicPlaceAPIError where error.status == 409 && error.code == "project_deleted" {
             // Tombstoned on the server: the PUT below resurrects it (a
             // device that still holds the project is pushing it on purpose).
             LLog("picplace: \(uuid) is a tombstone on the server — the push resurrects it")
+            mayCreate = true
         }
 
         do {
@@ -213,6 +227,7 @@ struct PicPlaceSyncRun {
                 "captured_at": ISO8601DateFormatter().string(from: project.capturedAt),
             ]
             if let origin = project.originUUID { body["origin_uuid"] = origin.uuidString.lowercased() }
+            if mayCreate, let library = project.library { body["library"] = library.uuidString.lowercased() }
             let compactBytes = Int64((try? JSONSerialization.data(withJSONObject: manifest, options: [.withoutEscapingSlashes]).count) ?? manifestData.count)
             if compactBytes <= project.manifestMaxBytes {
                 body["manifest"] = manifest

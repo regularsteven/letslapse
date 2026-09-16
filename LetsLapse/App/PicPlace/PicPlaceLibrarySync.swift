@@ -120,7 +120,12 @@ extension PicPlaceController {
         initialSyncProgress = progress
         do {
             let index: PPProjectIndex = try await client.get("projects")
-            let rows = index.projects
+            // Stage C: only the rows of the library this one is a copy of;
+            // a row of the account filed elsewhere is noted on its local
+            // twin (nothing is pushed or pulled for it) and otherwise left
+            // to whichever library it belongs to.
+            let allRows = index.projects
+            let rows = allRows.filter { inScope($0) }
             guard let libraryIndex = model.libraryIndex else { throw PicPlaceSyncRun.Failed(caption: "The library index is not open.") }
 
             // Every live local project, by origin id.
@@ -129,6 +134,12 @@ extension PicPlaceController {
             query.limit = 100_000
             for row in (try libraryIndex.projects(query)).rows {
                 localByOrigin[row.originID ?? row.id] = row.id
+            }
+            var elsewhere = Set<UUID>()
+            for row in allRows where !inScope(row) {
+                guard let origin = UUID(uuidString: row.uuid), localByOrigin[origin] != nil else { continue }
+                elsewhere.insert(origin)
+                noteElsewhere(origin, library: row.library)
             }
 
             var toPull: [PPProject] = []
@@ -154,10 +165,10 @@ extension PicPlaceController {
                     toPull.append(row)
                 }
             }
-            let toPush = localByOrigin.filter { !serverOrigins.contains($0.key) }.compactMap { model.capture(id: $0.value) }
+            let toPush = localByOrigin.filter { !serverOrigins.contains($0.key) && !elsewhere.contains($0.key) }.compactMap { model.capture(id: $0.value) }
             progress.total = toPull.count + toPush.count
             let caseName: PicPlaceBindingRecord.InitialSync.Case = rows.isEmpty ? .clean : (localByOrigin.isEmpty ? .fresh : .merge)
-            LLog("picplace: initial sync (\(caseName.rawValue)) — \(toPull.count) to pull, \(toPush.count) to push, \(progress.inStep) in step, \(progress.deferred) deferred")
+            LLog("picplace: initial sync (\(caseName.rawValue)) — \(toPull.count) to pull, \(toPush.count) to push, \(progress.inStep) in step, \(progress.deferred) deferred\(elsewhere.isEmpty ? "" : ", \(elsewhere.count) filed in another library on PicPlace")")
             noteInitialSyncCase(caseName)
 
             progress.phase = .pulling
@@ -199,6 +210,29 @@ extension PicPlaceController {
             progress.phase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
             initialSyncProgress = progress
         }
+    }
+
+    /// A local project the server holds in another library of the account
+    /// (stage C): its record says where, and every pass leaves it alone.
+    func noteElsewhere(_ origin: UUID, library: String?) {
+        var record = records[origin] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [],
+                                                            server: profile?.server ?? serverString, lastError: nil, policy: "elsewhere")
+        if record.elsewhereLibrary?.lowercased() != library?.lowercased() {
+            LLog("picplace: \(origin.uuidString.prefix(8)) is in \(libraryName(for: library) ?? "another library") on PicPlace, not in this one — left alone here")
+        }
+        record.elsewhereLibrary = library ?? "default"
+        record.elsewhereName = libraryName(for: library)
+        record.lastError = nil
+        records[origin] = record
+    }
+
+    /// The opposite: the server has it in THIS library again (moved back, or
+    /// the note was stale).
+    func clearElsewhere(_ origin: UUID) {
+        guard var record = records[origin], record.elsewhereLibrary != nil else { return }
+        record.elsewhereLibrary = nil
+        record.elsewhereName = nil
+        if record.policy == "elsewhere" { records[origin] = nil } else { records[origin] = record }
     }
 
     private func noteInitialSyncCase(_ caseName: PicPlaceBindingRecord.InitialSync.Case) {
