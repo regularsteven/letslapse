@@ -373,6 +373,51 @@ enum StorageRoot {
             LLog("storage: could not move the library into \(librariesFolderName)/\(id): \(error) — the marker stays; the next launch tries again")
         }
     }
+
+    /// A new, empty library folder under `Libraries/` (L25): a fresh folder
+    /// id; the identity with `id` — a server library's uuid when this is a
+    /// copy of one, else fresh — and `name`; and `Projects/`.
+    static func makeLibraryFolder(name: String, id: UUID = UUID()) throws -> LibraryFolder {
+        let fileManager = FileManager.default
+        let folderID = UUID().uuidString
+        let url = librariesURL.appendingPathComponent(folderID, isDirectory: true)
+        try fileManager.createDirectory(at: url.appendingPathComponent("Projects", isDirectory: true), withIntermediateDirectories: true)
+        let cleaned = LibraryIdentity.cleanName(name)
+        var identity = LibraryIdentity(id: id, name: cleaned.isEmpty ? LibraryIdentity.defaultName(forRoot: url) : cleaned,
+                                       createdByDevice: DeviceIdentity.id, createdWith: appVersionString)
+        identity.namedByPerson = !cleaned.isEmpty
+        try identity.write(inRoot: url)
+        LLog("storage: library folder \(folderID) made — “\(identity.name)” \(id.uuidString)")
+        return LibraryFolder(id: folderID, url: url, identity: identity)
+    }
+
+    /// A local copy of a server library (the fresh case): its folder with
+    /// the server's uuid and name as its identity, bound and pending its
+    /// first pull — which runs when the folder is opened.
+    static func createFromPicPlace(library: PicPlaceBindingRecord.Library, binding template: PicPlaceBindingRecord) throws -> LibraryFolder {
+        let folder = try makeLibraryFolder(name: library.name, id: library.uuid)
+        var record = template
+        record.library = library
+        record.boundAt = Date()
+        record.boundByDevice = DeviceIdentity.id
+        record.initialSync = .init(state: .pending, case: .fresh)
+        try record.write(inRoot: folder.url)
+        LLog("storage: library “\(library.name)” from PicPlace placed in \(librariesFolderName)/\(folder.id); pulls when opened")
+        return folder
+    }
+
+    struct LibraryFolderInUse: LocalizedError {
+        var errorDescription: String? { "This library is open — switch to another one first." }
+    }
+
+    /// Remove from this iPhone (L25): the folder and everything in it. Never
+    /// the open one, and only after the caller's check that nothing in it
+    /// exists only here.
+    static func removeLibraryFolder(_ folder: LibraryFolder) throws {
+        guard folder.url.path != current.path else { throw LibraryFolderInUse() }
+        try FileManager.default.removeItem(at: folder.url)
+        LLog("storage: library folder \(folder.id) “\(folder.name)” removed from this device")
+    }
     #endif
 
     /// Where a project arriving over the network — and, since Phase 4, a

@@ -529,7 +529,7 @@ struct PicPlaceSettingsCard: View {
                 picplace.offerConnect()
             } label: {
                 LLRow(
-                    title: picplace.isConnecting ? "Connecting…" : "Not on PicPlace — Connect…",
+                    title: picplace.isConnecting ? "Connecting…" : Self.unboundTitle,
                     subtitle: picplace.lastConnectError
                         ?? "Keeps this library's projects on \(picplace.sessionHost) as @\(picplace.profile?.username ?? ""). The library stays in its folder.",
                     titleColor: LL.accent
@@ -690,9 +690,20 @@ struct PicPlaceSettingsCard: View {
         .buttonStyle(.plain)
     }
 
+    /// A phone whose only library is unbound is being asked which library
+    /// it shows (libraries plan §17.4); a Mac, or a phone with others, is
+    /// connecting one library.
+    private static var unboundTitle: String {
+        #if os(iOS)
+        if StorageRoot.libraryFolders().count <= 1 { return "Which library should \(PicPlaceController.deviceWord) show? — Choose…" }
+        #endif
+        return "Not on PicPlace — Connect…"
+    }
+
     private var usageText: String {
         guard let usage = picplace.usage else { return "…" }
-        return "\(usage.projects) project\(usage.projects == 1 ? "" : "s") · \(LLFormat.bytes(usage.bytes))"
+        let projects = "\(usage.projects) project\(usage.projects == 1 ? "" : "s")"
+        return usage.bytes > 0 ? "\(projects) · \(LLFormat.bytes(usage.bytes))" : projects
     }
 
     /// "2 not in this library yet" — the account's total is not the

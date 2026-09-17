@@ -527,3 +527,10 @@ DEBUG hook: `LL_COLLECTIONS=seed|list|detail` — seeds two demo collections fro
 | Diagnostics | — | `App/SettingsView.swift` (`DiagnosticsView`) | 🟡 |
 | Advanced · field-test menu open | — | `App/SettingsView.swift` — the open `Menu` of either field-test row (**Auto blend strategy**: Zone · Latitude · Lumen; **Raw decode path**: Bradford (default) · Forward matrix · Core Image RAW · Adobe DCP), with the selected case carrying its `checkmark` Label. Neither row's open state has ever been drawn, which was harmless while every case was a plain name — but the decode menu now carries text that exists nowhere else in these specs: on iPhone the Adobe DCP case is permanently disabled and labelled with its reason, "Adobe DCP — Adobe camera profiles are not installed. They ship with Lightroom or Camera Raw" (`RawDecodeSettings.label(for:)`, over `RawDecodePathRegistry.unavailabilityNote(for:)`). The row that opens the menu shows only the *selected* value, so [settings.advanced.portrait.svg](settings.advanced.portrait.svg) cannot show it and describes it in its `desc` instead. Worth drawing as one variant covering both rows, since the disabled-with-reason treatment is the reusable part | 🟡 |
 | Capture benchmark (sheet) | — | `App/CaptureBenchmark.swift` | 🟡 |
+
+🟡 **2026-09-17, Libraries on the phone (plan §17.10, C2c) — code first, mirrors OWED:** Settings gained a **Libraries**
+card above PicPlace (`settings.libraries.portrait.svg`): a row per library folder (name · "N projects · @user on host" or
+"not on PicPlace" · *Current* / *Switch*), a long-press menu (Rename…, Remove from this iPhone…), and the doors *Add Library
+from PicPlace…* and *New Library on PicPlace…*; the Add sheet (`settings.libraries.add-from-picplace.svg`), the New Library
+name alert, the Remove confirm with its numbers and the refusal naming what exists only here; the PicPlace card's unbound row
+reads *Which library should this iPhone show? — Choose…* when it is the phone's only library. iPad: the same card at its width.

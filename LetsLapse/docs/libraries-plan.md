@@ -801,7 +801,7 @@ library, when the store holds several?).
 | **0** ✅ 2026-09-17 | L23 + L24 + the copy — LANDED, both platforms; the disconnect confirm with the numbers; eviction at a connect elsewhere, with the numbers on the sheet; the check retries a preview's failed manifest push; the usage line hidden when unbound | Simulator linked to Holidays (877 previews): Disconnect → the confirm says 877 stay and cannot download, 0 with originals; the list still shows 877 as previews; Connect → the sheet leads with Holidays; link Holidays again: "877 in step, nothing arrives, nothing goes up" and no download happens (network log); Disconnect again → link Prague: the sheet says "401 arrive; 877 previews of Holidays removed" → after: 401 rows, `deletedProjects()` empty, the server's counts unchanged throughout. A Mac scratch library with 2 originals + 3 previews: disconnect keeps all 5; connect as a new library: 2 go up, the 3 evicted, no tombstones, `lapse index --verify` clean. Delete a preview on the phone → gone from the list at once → gone on the server after the check. |
 | **C2a** ✅ 2026-09-17 | LANDED — `StorageRoot` on iOS: `Libraries/<id>/`, `storage.activeLibrary`, the folder registry, the one-time migration; `-storage.activeLibrary <id>` for scratch runs | a Simulator with projects launches, migrates, everything intact; a second launch does nothing; a launch killed mid-migration finishes on the next |
 | **C2b** ✅ 2026-09-17 | LANDED — the switch (L22): `ModelHost`, persister re-make, singleton re-root, teardown, refusal while busy, DEBUG `deinit` proof; `LL_OPEN_LIBRARY=<id>` on iOS | two libraries on the Simulator: switch both ways ten times; capture in each — the capture lands in the open one; presets, LUTs, ladders read from the open library; no write reaches the other (watch its folder) |
-| **C2c** | Settings ▸ Libraries on iOS, the doors, Remove's guard, the sheet's phone title | Add Prague from PicPlace → 401 previews → switch → thumbs; Remove Holidays with a downloaded original not on the server → refused by name; upload it → Remove deletes the folder |
+| **C2c** ✅ 2026-09-17 | LANDED — Settings ▸ Libraries on iOS, the doors, Remove's guard, the sheet's phone title | Add Prague from PicPlace → 401 previews → switch → thumbs; Remove Holidays with a downloaded original not on the server → refused by name; upload it → Remove deletes the folder |
 | **C2d** | The Projects header menu; mirrors (iPhone/iPad Settings ▸ Libraries, the sheet, the card, the disconnect confirm) | design INDEX rows |
 
 Stage D (move without originals, "Free up space") follows C2 and shares
@@ -932,3 +932,50 @@ root-caching singletons re-rooted, teardown and refusal while busy,
 Next: **C2c** — Settings ▸ Libraries on iOS with the doors (Add from
 PicPlace, New Library on PicPlace, Remove from this iPhone with its guard),
 the sheet's phone title.
+
+### 17.10 C2c as landed (2026-09-17 night)
+
+- **Settings ▸ Libraries on the phone** (`librariesCardPhone`): a row per
+  folder — name (the placeholder in grey until named), "N projects ·
+  @user on host" or "not on PicPlace", *Current* or a *Switch* button —
+  with a long-press menu: *Rename…* (or *Name this library…*) and, on
+  every row but the open one, *Remove from this iPhone…*. The doors: *Add
+  Library from PicPlace…* (the account's libraries no folder here is a
+  copy of; the sheet lists them, *Add and Open* makes the folder, bound
+  and pending its first pull, and switches to it — the pull runs at once)
+  and *New Library on PicPlace…* (a name; the server library first, then
+  its folder, bound and clean, and the switch). Signed out with one
+  library, a quiet row says what signing in adds. A switch lands the new
+  tree on Settings, not on Create.
+- **Remove's guard** (`LibraryRemoval.check`) reads the folder without
+  opening the library: every project folder's heavy files against its
+  sync record (`serverHeavyFiles` ≥ local, or `originalsMovedAt`); a
+  project whose originals exist only here names itself in the refusal
+  ("Upload the originals first, or keep the library"). The confirm says
+  the numbers: previews that go, originals that go (PicPlace holds them),
+  and that the library stays on PicPlace and the other devices.
+- The PicPlace card of a phone whose only library is unbound asks *Which
+  library should this iPhone show? — Choose…* (§17.4); with other
+  libraries present it is *Not on PicPlace — Connect…* as on the Mac.
+- Shared with the Mac now: `librariesNotOnThisDevice`,
+  `otherLibraryBound(toServerLibrary:)` (one copy per server library per
+  device — the connect sheet's refusal reads "This iPhone already syncs…"),
+  `bindingTemplate()`.
+- Hook: `LL_LIBRARY=switch:<id>|add:<server uuid>|new:<name>|remove:<id>|rename:<id>:<name>`
+  works the doors without a finger, waiting for the session where
+  PicPlace is needed; once per process.
+- Drill (Simulator, letslapse-two with "C2c Lib A" 2 · "C2c Lib B" 1 on
+  the server): the card with its doors and both missing libraries named;
+  *add* → folder made, switch, `fresh — 2 to pull`, two previews; *new*
+  → "Phone Made" on the server, folder, switch, `clean`; an import into
+  it pushed (records only); *remove* of it **refused** — "1 only here";
+  after `LL_PICPLACE_UPLOAD` the same *remove* allowed and the folder
+  gone with the server's copy intact; *remove* of the preview-only
+  library allowed; *rename* took. Server counts unchanged by every
+  removal.
+- Mirrors owed (🟡, iOS INDEX): Settings ▸ Libraries, the Add sheet, the
+  remove confirm and refusal, the New Library alert, the PicPlace card's
+  phone question — C2d draws them with the Mac's.
+
+Next: **C2d** — the Projects header title as a library menu, and the
+mirrors (iPhone/iPad/Mac).

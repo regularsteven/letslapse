@@ -93,6 +93,23 @@ struct SettingsView: View {
     /// Stage C: the account's libraries that are not on this Mac yet.
     @State private var addingFromPicPlace = false
     #endif
+    #if os(iOS)
+    // The phone's libraries (libraries plan L25, C2c): the folders, their
+    // counts and owners, and the doors' state.
+    @EnvironmentObject private var host: ModelHost
+    @State private var phoneLibraries: [StorageRoot.LibraryFolder] = []
+    @State private var phoneCounts: [String: Int] = [:]
+    @State private var phoneOwners: [String: String] = [:]
+    @State private var addingFromPicPlacePhone = false
+    @State private var namingNewLibrary = false
+    @State private var newLibraryName = ""
+    @State private var phoneRenaming: StorageRoot.LibraryFolder?
+    @State private var phoneRenameDraft = ""
+    @State private var phoneRemoving: StorageRoot.LibraryFolder?
+    @State private var phoneRemovalCheck: LibraryRemoval.Check?
+    @State private var phoneLibraryMessage: String?
+    @MainActor private static var phoneHookRan = false
+    #endif
 
     /// The variant row's subtitle. It names the axes rather than repeating
     /// the title, because the axes are what a reader needs to reconcile a
@@ -160,13 +177,16 @@ struct SettingsView: View {
                 storageCard
                     .padding(.bottom, 12)
 
-                // The Mac's libraries — which one is open, the others it
-                // knows, and the doors to a new one (libraries plan §2.3).
-                // iOS has one library and no folder, by decision (D3).
-                #if os(macOS)
+                // The libraries — which one is open, the others this device
+                // holds, and the doors (libraries plan §2.3 on the Mac, L25
+                // on a phone: folders under Libraries/, switched in place).
                 LLSectionHeader("Libraries")
                     .id(SettingsAnchor.libraries)
+                #if os(macOS)
                 librariesCard
+                    .padding(.bottom, 12)
+                #else
+                librariesCardPhone
                     .padding(.bottom, 12)
                 #endif
 
@@ -1042,7 +1062,7 @@ struct SettingsView: View {
 
             // Stage C: a library of the account that is not on this Mac —
             // a fresh copy here, pulled on the relaunch (libraries plan §3.7).
-            let remote = model.picplace.librariesNotOnThisMac
+            let remote = model.picplace.librariesNotOnThisDevice
             if !remote.isEmpty {
                 Button {
                     addingFromPicPlace = true
@@ -2376,7 +2396,7 @@ struct AddLibraryFromPicPlaceSheet: View {
     @State private var container = StorageRoot.defaultRootURL
     @State private var failure: String?
 
-    private var remote: [PPLibrary] { picplace.librariesNotOnThisMac }
+    private var remote: [PPLibrary] { picplace.librariesNotOnThisDevice }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -2814,4 +2834,384 @@ struct StorageLocationSheet: View {
     }
 }
 
+#endif
+
+#if os(iOS)
+// MARK: - The phone's libraries (libraries plan L25, C2c)
+
+extension SettingsView {
+    /// Which library is open, the others on this phone, and the doors: a
+    /// library of the account added from PicPlace, a new one made there,
+    /// and — on a row — rename, or remove from this device. A switch is a
+    /// new model over the other folder, in place (L22).
+    var librariesCardPhone: some View {
+        VStack(spacing: 0) {
+            ForEach(phoneLibraries) { folder in
+                LLRow(title: folder.name, subtitle: phoneLibrarySubtitle(folder),
+                      titleColor: folder.identity?.namedByPerson == false ? .secondary : .primary) {
+                    if folder.isCurrent {
+                        Text("Current").font(.system(size: 15)).foregroundStyle(.secondary)
+                    } else {
+                        Button("Switch") { switchPhoneLibrary(to: folder) }
+                            .buttonStyle(.bordered)
+                            .disabled(model.stage == .processing)
+                    }
+                }
+                .contentShape(Rectangle())
+                .contextMenu {
+                    Button {
+                        phoneRenameDraft = folder.identity?.namedByPerson == false ? "" : folder.name
+                        phoneRenaming = folder
+                    } label: { Label(folder.identity?.namedByPerson == false ? "Name this library…" : "Rename…", systemImage: "pencil") }
+                    if !folder.isCurrent {
+                        Button(role: .destructive) { askToRemove(folder) } label: {
+                            Label("Remove from \(PicPlaceController.deviceWord)…", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+
+            let remote = model.picplace.librariesNotOnThisDevice
+            if !remote.isEmpty {
+                Button { addingFromPicPlacePhone = true } label: {
+                    LLRow(title: "Add Library from PicPlace…",
+                          subtitle: "\(remote.count) of your libraries \(remote.count == 1 ? "is" : "are") on \(model.picplace.sessionHost) and not on \(PicPlaceController.deviceWord): \(remote.map { "“\($0.displayName)”" }.joined(separator: ", ")).",
+                          titleColor: LL.accent) { EmptyView() }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.stage == .processing)
+            }
+
+            if model.picplace.isSignedIn, model.picplace.serverHasLibraries {
+                Button { newLibraryName = ""; namingNewLibrary = true } label: {
+                    LLRow(title: "New Library on PicPlace…",
+                          subtitle: "An empty library on \(model.picplace.sessionHost) as @\(model.picplace.profile?.username ?? ""); \(PicPlaceController.deviceWord) opens it. Nothing is copied.",
+                          titleColor: LL.accent, showsDivider: false) { EmptyView() }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.stage == .processing)
+            } else if phoneLibraries.count <= 1 {
+                LLRow(title: "One library on \(PicPlaceController.deviceWord)",
+                      subtitle: "Sign in with PicPlace to add your other libraries here or start a new one.",
+                      titleColor: .secondary, showsDivider: false) { EmptyView() }
+            }
+        }
+        .llCard()
+        .task {
+            refreshPhoneLibraries()
+            #if DEBUG
+            await runPhoneLibraryHook()
+            #endif
+        }
+        .onReceive(model.picplace.objectWillChange) { _ in refreshPhoneLibraries() }
+        .sheet(isPresented: $addingFromPicPlacePhone) {
+            AddLibraryFromPicPlacePhoneSheet(picplace: model.picplace) { folder in switchPhoneLibrary(to: folder) }
+        }
+        .alert("New library on PicPlace", isPresented: $namingNewLibrary) {
+            TextField("Library name", text: $newLibraryName)
+            Button("Create") { Task { await createLibraryOnPicPlace() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("An empty library named on PicPlace; \(PicPlaceController.deviceWord) opens it and captures land in it.")
+        }
+        .alert(phoneRenaming?.identity?.namedByPerson == false ? "Name this library" : "Rename library",
+               isPresented: Binding(get: { phoneRenaming != nil }, set: { if !$0 { phoneRenaming = nil } })) {
+            TextField("Library name", text: $phoneRenameDraft)
+            Button("Save") { renamePhoneLibrary() }
+            Button("Cancel", role: .cancel) { phoneRenaming = nil }
+        }
+        .confirmationDialog("Remove “\(phoneRemoving?.name ?? "")” from \(PicPlaceController.deviceWord)?",
+                            isPresented: Binding(get: { phoneRemoving != nil }, set: { if !$0 { phoneRemoving = nil } }),
+                            titleVisibility: .visible) {
+            Button("Remove", role: .destructive) { if let folder = phoneRemoving { removePhoneLibrary(folder) } }
+            Button("Cancel", role: .cancel) { phoneRemoving = nil }
+        } message: {
+            Text(removalMessage)
+        }
+        .alert("Libraries", isPresented: Binding(get: { phoneLibraryMessage != nil }, set: { if !$0 { phoneLibraryMessage = nil } })) {
+            Button("OK", role: .cancel) { phoneLibraryMessage = nil }
+        } message: {
+            Text(phoneLibraryMessage ?? "")
+        }
+    }
+
+    private func phoneLibrarySubtitle(_ folder: StorageRoot.LibraryFolder) -> String {
+        var parts: [String] = []
+        if let count = phoneCounts[folder.id] { parts.append("\(count) project\(count == 1 ? "" : "s")") }
+        parts.append(phoneOwners[folder.id] ?? "not on PicPlace")
+        return parts.joined(separator: " · ")
+    }
+
+    private var removalMessage: String {
+        guard let check = phoneRemovalCheck else { return "" }
+        let previews = check.projects - check.originalsHere
+        var parts: [String] = []
+        if check.projects == 0 { parts.append("It is empty.") }
+        if previews > 0 { parts.append("\(previews) preview\(previews == 1 ? "" : "s") go\(previews == 1 ? "es" : "").") }
+        if check.originalsHere > 0 { parts.append("\(check.originalsHere) project\(check.originalsHere == 1 ? "'s" : "s'") originals here go — PicPlace holds them.") }
+        parts.append(check.bound ? "The library stays on PicPlace and on your other devices." : "Nothing is on PicPlace for it.")
+        return parts.joined(separator: " ")
+    }
+
+    /// The folders, their project counts (a listing of `Projects/`) and
+    /// owners, off the main actor.
+    func refreshPhoneLibraries() {
+        let folders = StorageRoot.libraryFolders()
+        Task.detached(priority: .userInitiated) {
+            let fileManager = FileManager.default
+            var counts: [String: Int] = [:]
+            var owners: [String: String] = [:]
+            for folder in folders {
+                let projects = folder.url.appendingPathComponent("Projects", isDirectory: true)
+                if let names = try? fileManager.contentsOfDirectory(atPath: projects.path) {
+                    counts[folder.id] = names.filter { !$0.hasPrefix(".") && UUID(uuidString: $0) != nil }.count
+                }
+                if let binding = PicPlaceBindingRecord.read(inRoot: folder.url) {
+                    owners[folder.id] = "@\(binding.user.displayHandle) on \(binding.server.host)"
+                }
+            }
+            let sorted = folders.sorted { a, b in
+                if a.isCurrent != b.isCurrent { return a.isCurrent }
+                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            }
+            await MainActor.run {
+                phoneLibraries = sorted
+                phoneCounts = counts
+                phoneOwners = owners
+            }
+        }
+    }
+
+    private func switchPhoneLibrary(to folder: StorageRoot.LibraryFolder) {
+        host.landingTab = .settings
+        if !host.switchLibrary(to: folder) { phoneLibraryMessage = host.lastRefusal }
+    }
+
+    private func createLibraryOnPicPlace() async {
+        let name = newLibraryName
+        do {
+            let folder = try await model.picplace.createLibraryOnPicPlace(name: name)
+            switchPhoneLibrary(to: folder)
+        } catch {
+            phoneLibraryMessage = (error as? PicPlaceAPIError)?.cardCaption ?? (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func renamePhoneLibrary() {
+        guard let folder = phoneRenaming else { return }
+        phoneRenaming = nil
+        let name = LibraryIdentity.cleanName(phoneRenameDraft)
+        guard !name.isEmpty else { return }
+        do {
+            if folder.isCurrent {
+                try StorageRoot.renameIdentity(to: name)
+                model.picplace.libraryRenamed(name)
+            } else if var identity = folder.identity {
+                identity.name = name
+                identity.namedByPerson = true
+                try identity.write(inRoot: folder.url)
+            } else {
+                _ = try LibraryIdentity.ensure(inRoot: folder.url, name: name, device: DeviceIdentity.id)
+            }
+        } catch {
+            phoneLibraryMessage = "Couldn't rename the library: \(error.localizedDescription)"
+        }
+        refreshPhoneLibraries()
+    }
+
+    /// The check first, off the main actor — a big library is many folders
+    /// — then the confirm with its numbers, or the refusal naming what
+    /// exists only here.
+    private func askToRemove(_ folder: StorageRoot.LibraryFolder) {
+        Task.detached(priority: .userInitiated) {
+            let check = LibraryRemoval.check(for: folder.url)
+            await MainActor.run {
+                if check.onlyHere.isEmpty {
+                    phoneRemovalCheck = check
+                    phoneRemoving = folder
+                } else {
+                    let names = check.onlyHere.prefix(5).map { "“\($0)”" }.joined(separator: ", ")
+                    phoneLibraryMessage = "\(check.onlyHere.count) project\(check.onlyHere.count == 1 ? "" : "s") in “\(folder.name)” exist\(check.onlyHere.count == 1 ? "s" : "") only on \(PicPlaceController.deviceWord): \(names)\(check.onlyHere.count > 5 ? ", …" : ""). Upload the originals first, or keep the library."
+                    LLog("storage: remove of \(folder.id) refused — \(check.onlyHere.count) project(s) exist only here")
+                }
+            }
+        }
+    }
+
+    private func removePhoneLibrary(_ folder: StorageRoot.LibraryFolder) {
+        phoneRemoving = nil
+        do {
+            try StorageRoot.removeLibraryFolder(folder)
+        } catch {
+            phoneLibraryMessage = "Couldn't remove the library: \(error.localizedDescription)"
+        }
+        refreshPhoneLibraries()
+    }
+
+    #if DEBUG
+    /// `LL_LIBRARY=switch:<id>|add:<server uuid>|new:<name>|remove:<id>|rename:<id>:<name>`
+    /// — the doors without a finger (the bench); waits for the session when
+    /// PicPlace is needed. Once per process.
+    private func runPhoneLibraryHook() async {
+        guard let raw = ProcessInfo.processInfo.environment["LL_LIBRARY"], !Self.phoneHookRan else { return }
+        Self.phoneHookRan = true
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        let parts = raw.split(separator: ":", maxSplits: 2).map(String.init)
+        guard parts.count >= 2 else { return }
+        func folder(_ id: String) -> StorageRoot.LibraryFolder? { StorageRoot.libraryFolders().first { $0.id == id } }
+        func awaitSession() async -> Bool {
+            for _ in 0..<60 where !(model.picplace.isSignedIn && model.picplace.serverHasLibraries) { try? await Task.sleep(nanoseconds: 500_000_000) }
+            return model.picplace.isSignedIn && model.picplace.serverHasLibraries
+        }
+        switch parts[0] {
+        case "switch":
+            if let target = folder(parts[1]) { switchPhoneLibrary(to: target) } else { LLog("libraries hook: no folder \(parts[1])") }
+        case "add":
+            guard await awaitSession() else { LLog("libraries hook: no session"); return }
+            if let library = model.picplace.librariesNotOnThisDevice.first(where: { $0.libraryUUID?.uuidString.lowercased() == parts[1].lowercased() }) {
+                do { let made = try model.picplace.addLibraryFromPicPlace(library); switchPhoneLibrary(to: made) }
+                catch { LLog("libraries hook: add failed — \(error)") }
+            } else { LLog("libraries hook: \(parts[1]) is not a library of the account that is missing here") }
+        case "new":
+            guard await awaitSession() else { LLog("libraries hook: no session"); return }
+            newLibraryName = parts[1]
+            await createLibraryOnPicPlace()
+        case "remove":
+            if let target = folder(parts[1]) {
+                let check = LibraryRemoval.check(for: target.url)
+                LLog("libraries hook: remove check for \(target.id) — \(check.projects) project(s), \(check.originalsHere) with originals here, \(check.onlyHere.count) only here")
+                if check.onlyHere.isEmpty { removePhoneLibrary(target) } else { LLog("libraries hook: remove refused — only here: \(check.onlyHere)") }
+            }
+        case "rename":
+            if parts.count == 3, let target = folder(parts[1]) { phoneRenameDraft = parts[2]; phoneRenaming = target; renamePhoneLibrary() }
+        default:
+            LLog("libraries hook: unknown action \(parts[0])")
+        }
+    }
+    #endif
+}
+
+/// What Remove from this iPhone would take, read off the folder without
+/// opening the library (L25): how many projects, how many with originals
+/// here, and the names of those whose originals exist only here — no
+/// record says PicPlace holds them.
+enum LibraryRemoval {
+    struct Check {
+        var projects = 0
+        var originalsHere = 0
+        var onlyHere: [String] = []
+        var bound = false
+    }
+
+    static func check(for root: URL) -> Check {
+        var check = Check()
+        check.bound = PicPlaceBindingRecord.read(inRoot: root)?.library != nil
+        let records = PicPlaceSyncState.load(root: root).records
+        let projects = root.appendingPathComponent("Projects", isDirectory: true)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: projects.path)) ?? []
+        for name in names {
+            guard !name.hasPrefix("."), let id = UUID(uuidString: name) else { continue }
+            check.projects += 1
+            let folder = projects.appendingPathComponent(name, isDirectory: true)
+            let entries = (try? PicPlaceSyncRun.listFiles(in: folder)) ?? []
+            let summary = PicPlaceSyncInventory.summary(of: PicPlaceSyncInventory.classify(entries), policy: .minimal)
+            guard summary.heavyFiles > 0 else { continue }
+            check.originalsHere += 1
+            let onServer = records[id].map { ($0.serverHeavyFiles ?? 0) >= summary.heavyFiles || $0.originalsMovedAt != nil } ?? false
+            if !onServer { check.onlyHere.append(projectName(in: folder) ?? String(name.prefix(8))) }
+        }
+        return check
+    }
+
+    private static func projectName(in folder: URL) -> String? {
+        guard let data = try? Data(contentsOf: folder.appendingPathComponent(ProjectFileRegistry.projectDocumentName)),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return ((object["capture"] as? [String: Any])?["name"] as? String) ?? (object["name"] as? String)
+    }
+}
+
+/// "Add a library from PicPlace" on a phone: the account's libraries not
+/// here; the chosen one is copied as a folder and opened at once.
+struct AddLibraryFromPicPlacePhoneSheet: View {
+    @ObservedObject var picplace: PicPlaceController
+    var onAdded: (StorageRoot.LibraryFolder) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var chosen: PPLibrary?
+    @State private var failure: String?
+
+    private var remote: [PPLibrary] { picplace.librariesNotOnThisDevice }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Add a library from PicPlace")
+                .font(.system(size: 19, weight: .semibold))
+                .padding(.top, 26)
+            Text("A copy of the library is made on \(PicPlaceController.deviceWord) — its projects arrive as previews; originals download per project. It opens right away.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(remote) { library in
+                        Button { chosen = library } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: chosen?.id == library.id ? "largecircle.fill.circle" : "circle")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(chosen?.id == library.id ? LL.accent : Color.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(library.displayName).font(.system(size: 14.5, weight: chosen?.id == library.id ? .semibold : .regular))
+                                    Text("\(library.count) project\(library.count == 1 ? "" : "s") · \(LLFormat.bytes(library.usedBytes ?? 0)) on PicPlace")
+                                        .font(.system(size: 11.5)).foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 11)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if library.id != remote.last?.id { Divider().padding(.leading, 44) }
+                    }
+                }
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.top, 16)
+            }
+            .frame(maxHeight: 360)
+
+            if let failure {
+                Text(failure).font(.system(size: 12.5)).foregroundStyle(LL.levelOff).padding(.top, 8)
+            }
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Button("Not now") { dismiss() }
+                    .buttonStyle(LLSecondaryButtonStyle())
+                Button("Add and Open") { add() }
+                    .buttonStyle(LLPrimaryButtonStyle())
+                    .disabled(chosen == nil)
+            }
+            .padding(.top, 20)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+        .background(LL.screenBackground)
+        .onAppear { if chosen == nil { chosen = remote.first } }
+    }
+
+    private func add() {
+        guard let chosen else { return }
+        do {
+            let folder = try picplace.addLibraryFromPicPlace(chosen)
+            dismiss()
+            onAdded(folder)
+        } catch {
+            failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+}
 #endif

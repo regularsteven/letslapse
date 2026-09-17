@@ -19,6 +19,9 @@ final class ModelHost: ObservableObject {
     @Published private(set) var generation = 0
     /// Why the last switch was refused, for whatever asked.
     @Published var lastRefusal: String?
+    /// Where the new tree lands after the next switch — Settings, when the
+    /// switch was made there — rather than on the first tab.
+    var landingTab: LLTab?
 
     init() {
         model = AppModel()
@@ -58,6 +61,10 @@ final class ModelHost: ObservableObject {
         AppModel.resetSharedPersister()
         LibrarySwitch.rerootStores()
         model = AppModel()
+        if let landingTab {
+            model.requestedTab = landingTab
+            self.landingTab = nil
+        }
         generation += 1
         LLog("storage: switched to library “\(folder.name)” (\(folder.id)) — generation \(generation)")
         #if DEBUG
@@ -529,6 +536,14 @@ struct ContentView: View {
             guard let requested else { return }
             model.requestedTab = nil
             selectedTab = requested
+        }
+        // A tree made over a new model (a library switch, L22) lands where
+        // the switch asked — Settings — rather than on the first tab.
+        .onAppear {
+            if let requested = model.requestedTab {
+                model.requestedTab = nil
+                selectedTab = requested
+            }
         }
         // A card of the Settings list asked for from the sync panel: the
         // list itself scrolls there (and clears the request) once it is up.

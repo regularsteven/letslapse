@@ -1078,21 +1078,17 @@ final class PicPlaceController: ObservableObject {
                     guard let identity = StorageRoot.identity else { throw PicPlaceSyncRun.Failed(caption: "This library has no identity file.") }
                     switch target {
                     case .new, .adoptDefault:
-                        #if os(macOS)
                         if let other = Self.otherLibraryBound(toServerLibrary: identity.id) {
-                            throw PicPlaceSyncRun.Failed(caption: "This Mac already syncs “\(other.name)” (\(other.path)) as that library.")
+                            throw PicPlaceSyncRun.Failed(caption: "\(Self.deviceWordCapitalized) already syncs “\(other.name)” (\(other.place)) as that library.")
                         }
-                        #endif
                         let created = try await createServerLibrary(uuid: identity.id, name: identity.displayName, adoptDefault: target == .adoptDefault)
                         library = .init(uuid: created.uuid, name: identity.displayName)
                         initialCase = created.adopted > 0 ? (localCountNow() == 0 ? .fresh : .merge) : .clean
                     case .link(let server):
                         guard let uuid = server.libraryUUID else { throw PicPlaceSyncRun.Failed(caption: "That library has no id.") }
-                        #if os(macOS)
                         if let other = Self.otherLibraryBound(toServerLibrary: uuid) {
-                            throw PicPlaceSyncRun.Failed(caption: "This Mac already syncs “\(other.name)” (\(other.path)) as “\(server.displayName)”. One copy per library on a Mac.")
+                            throw PicPlaceSyncRun.Failed(caption: "\(Self.deviceWordCapitalized) already syncs “\(other.name)” (\(other.place)) as “\(server.displayName)”. One copy per library per device.")
                         }
-                        #endif
                         // The local library becomes a copy of that one: its
                         // identity takes the server library's uuid and name.
                         try StorageRoot.adoptIdentity(id: uuid, name: server.displayName)
@@ -1189,28 +1185,60 @@ final class PicPlaceController: ObservableObject {
         }
     }
 
-    #if os(macOS)
-    /// The account's libraries that no known library on this Mac is a copy
+    /// The account's libraries that no library on this device is a copy
     /// of — what "Add Library from PicPlace…" offers (stage C, §3.7).
-    var librariesNotOnThisMac: [PPLibrary] {
+    var librariesNotOnThisDevice: [PPLibrary] {
         guard isSignedIn, serverHasLibraries else { return [] }
-        var held = Set<UUID>()
+        var held = Set(Self.serverLibrariesHeldElsewhere().map(\.uuid))
         if let scope { held.insert(scope) }
-        for entry in LibraryRegistry.entries where entry.isReachable {
-            if let uuid = PicPlaceBindingRecord.read(inRoot: entry.url)?.library?.uuid { held.insert(uuid) }
-        }
         return serverLibraries.filter { !$0.isDefault && !$0.isTombstone && $0.libraryUUID.map { !held.contains($0) } == true }
     }
 
-    /// A local copy of `library` in `container`, bound and pending its first
-    /// pull; the caller switches to it (commit + relaunch).
-    func addLibraryFromPicPlace(_ library: PPLibrary, in container: URL) throws -> URL {
-        guard let profile, let uuid = library.libraryUUID else { throw PicPlaceSyncRun.Failed(caption: "That library has no id.") }
-        let template = PicPlaceBindingRecord(
+    /// The binding a library made from this session's account starts with.
+    private func bindingTemplate() throws -> PicPlaceBindingRecord {
+        guard let profile else { throw PicPlaceSyncRun.Failed(caption: "Sign in first.") }
+        return PicPlaceBindingRecord(
             server: .init(url: profile.server, id: profile.serverID, environment: profile.serverEnvironment),
             user: .init(uuid: profile.userUUID, username: profile.username, name: profile.name),
             boundByDevice: DeviceIdentity.id)
-        let root = try StorageRoot.createFromPicPlace(library: .init(uuid: uuid, name: library.displayName), binding: template, in: container)
+    }
+
+    #if os(iOS)
+    /// A local copy of `library` under `Libraries/`, bound and pending its
+    /// first pull; the caller opens it (the switch), which pulls.
+    func addLibraryFromPicPlace(_ library: PPLibrary) throws -> StorageRoot.LibraryFolder {
+        guard let uuid = library.libraryUUID else { throw PicPlaceSyncRun.Failed(caption: "That library has no id.") }
+        return try StorageRoot.createFromPicPlace(library: .init(uuid: uuid, name: library.displayName), binding: try bindingTemplate())
+    }
+
+    /// New Library on PicPlace… (L25): the server library first — a fresh
+    /// uuid, the person's name — then its folder here, bound and clean; the
+    /// caller opens it.
+    func createLibraryOnPicPlace(name: String) async throws -> StorageRoot.LibraryFolder {
+        let template = try bindingTemplate()
+        let cleaned = LibraryIdentity.cleanName(name)
+        guard !cleaned.isEmpty else { throw PicPlaceSyncRun.Failed(caption: "Give the library a name.") }
+        let id = UUID()
+        let response: PPLibraryResponse = try await client.put("libraries/\(id.uuidString.lowercased())", json: ["name": cleaned, "adopt_default": false])
+        let uuid = response.library.libraryUUID ?? id
+        let folder = try StorageRoot.makeLibraryFolder(name: cleaned, id: uuid)
+        var record = template
+        record.library = .init(uuid: uuid, name: cleaned)
+        record.boundAt = Date()
+        record.initialSync = .init(state: .pending, case: .clean)
+        try record.write(inRoot: folder.url)
+        LLog("picplace: library “\(cleaned)” \(uuid.uuidString.lowercased()) created on \(template.server.host) and placed in Libraries/\(folder.id)")
+        scheduleUsageRefresh()
+        return folder
+    }
+    #endif
+
+    #if os(macOS)
+    /// A local copy of `library` in `container`, bound and pending its first
+    /// pull; the caller switches to it (commit + relaunch).
+    func addLibraryFromPicPlace(_ library: PPLibrary, in container: URL) throws -> URL {
+        guard let uuid = library.libraryUUID else { throw PicPlaceSyncRun.Failed(caption: "That library has no id.") }
+        let root = try StorageRoot.createFromPicPlace(library: .init(uuid: uuid, name: library.displayName), binding: try bindingTemplate(), in: container)
         LibraryRegistry.register(root: root, identity: LibraryIdentity.read(inRoot: root))
         return root
     }
@@ -1229,19 +1257,40 @@ final class PicPlaceController: ObservableObject {
         }
     }
 
-    /// Another known, reachable library on this Mac that is a copy of the
-    /// same SERVER library (stage C's rule: one copy per library per Mac —
-    /// presence is per device, and two copies would overwrite each other's).
-    private static func otherLibraryBound(toServerLibrary uuid: UUID) -> LibraryRegistry.Entry? {
-        let current = StorageRoot.current.standardizedFileURL.resolvingSymlinksInPath().path
-        return LibraryRegistry.entries.first { entry in
-            guard entry.isReachable,
-                  entry.url.standardizedFileURL.resolvingSymlinksInPath().path != current,
-                  let other = PicPlaceBindingRecord.read(inRoot: entry.url) else { return false }
-            return other.library?.uuid == uuid
-        }
-    }
     #endif
+
+    /// The server libraries the OTHER libraries on this device are copies
+    /// of, by their bindings — the Mac's list, the phone's folders.
+    static func serverLibrariesHeldElsewhere() -> [(uuid: UUID, name: String, place: String)] {
+        let current = StorageRoot.current.standardizedFileURL.resolvingSymlinksInPath().path
+        var held: [(uuid: UUID, name: String, place: String)] = []
+        #if os(macOS)
+        for entry in LibraryRegistry.entries where entry.isReachable {
+            guard entry.url.standardizedFileURL.resolvingSymlinksInPath().path != current,
+                  let uuid = PicPlaceBindingRecord.read(inRoot: entry.url)?.library?.uuid else { continue }
+            held.append((uuid, entry.name, entry.path))
+        }
+        #else
+        for folder in StorageRoot.libraryFolders() where folder.url.path != current {
+            guard let uuid = PicPlaceBindingRecord.read(inRoot: folder.url)?.library?.uuid else { continue }
+            held.append((uuid, folder.name, folder.id))
+        }
+        #endif
+        return held
+    }
+
+    /// Another library on this device that is a copy of the same SERVER
+    /// library (stage C's rule: one copy per library per device — presence
+    /// is per device, and two copies would overwrite each other's).
+    static func otherLibraryBound(toServerLibrary uuid: UUID) -> (name: String, place: String)? {
+        serverLibrariesHeldElsewhere().first { $0.uuid == uuid }.map { ($0.name, $0.place) }
+    }
+
+    /// "This Mac" · "This iPhone" — the sentence's subject.
+    @MainActor static var deviceWordCapitalized: String {
+        let word = deviceWord
+        return word.prefix(1).uppercased() + word.dropFirst()
+    }
 
     /// "this Mac" · "this iPhone" · "this iPad" — for copy about what stays here.
     @MainActor static var deviceWord: String {
