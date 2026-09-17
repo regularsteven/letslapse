@@ -50,7 +50,7 @@ final class LadderWindowWriter {
     }()
 
     init(runStartedAt: Date) {
-        let directory = StorageRoot.current.appendingPathComponent("Logs", isDirectory: true)
+        let directory = StorageRoot.logsURL
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let stamp = ISO8601DateFormatter().string(from: runStartedAt)
             .replacingOccurrences(of: ":", with: "-")

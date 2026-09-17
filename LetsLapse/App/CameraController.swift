@@ -73,7 +73,7 @@ final class LLogFileSink {
 
     private func open() {
         opened = true
-        let directory = StorageRoot.current.appendingPathComponent("Logs", isDirectory: true)
+        let directory = StorageRoot.logsURL
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -9729,8 +9729,7 @@ final class CameraController: NSObject, ObservableObject {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let logsDirectory = StorageRoot.current
-            .appendingPathComponent("Logs", isDirectory: true)
+        let logsDirectory = StorageRoot.logsURL
         try? FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
         return logsDirectory.appendingPathComponent("liveblend-\(formatter.string(from: Date())).json")
     }

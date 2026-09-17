@@ -799,7 +799,7 @@ library, when the store holds several?).
 | Step | What | Test |
 |---|---|---|
 | **0** ✅ 2026-09-17 | L23 + L24 + the copy — LANDED, both platforms; the disconnect confirm with the numbers; eviction at a connect elsewhere, with the numbers on the sheet; the check retries a preview's failed manifest push; the usage line hidden when unbound | Simulator linked to Holidays (877 previews): Disconnect → the confirm says 877 stay and cannot download, 0 with originals; the list still shows 877 as previews; Connect → the sheet leads with Holidays; link Holidays again: "877 in step, nothing arrives, nothing goes up" and no download happens (network log); Disconnect again → link Prague: the sheet says "401 arrive; 877 previews of Holidays removed" → after: 401 rows, `deletedProjects()` empty, the server's counts unchanged throughout. A Mac scratch library with 2 originals + 3 previews: disconnect keeps all 5; connect as a new library: 2 go up, the 3 evicted, no tombstones, `lapse index --verify` clean. Delete a preview on the phone → gone from the list at once → gone on the server after the check. |
-| **C2a** | `StorageRoot` on iOS: `Libraries/<id>/`, `storage.activeLibrary`, the folder registry, the one-time migration; `-storage.activeLibrary <id>` for scratch runs | a Simulator with projects launches, migrates, everything intact; a second launch does nothing; a launch killed mid-migration finishes on the next |
+| **C2a** ✅ 2026-09-17 | LANDED — `StorageRoot` on iOS: `Libraries/<id>/`, `storage.activeLibrary`, the folder registry, the one-time migration; `-storage.activeLibrary <id>` for scratch runs | a Simulator with projects launches, migrates, everything intact; a second launch does nothing; a launch killed mid-migration finishes on the next |
 | **C2b** | The switch (L22): `ModelHost`, persister re-make, singleton re-root, teardown, refusal while busy, DEBUG `deinit` proof; `LL_OPEN_LIBRARY=<id>` on iOS | two libraries on the Simulator: switch both ways ten times; capture in each — the capture lands in the open one; presets, LUTs, ladders read from the open library; no write reaches the other (watch its folder) |
 | **C2c** | Settings ▸ Libraries on iOS, the doors, Remove's guard, the sheet's phone title | Add Prague from PicPlace → 401 previews → switch → thumbs; Remove Holidays with a downloaded original not on the server → refused by name; upload it → Remove deletes the folder |
 | **C2d** | The Projects header menu; mirrors (iPhone/iPad Settings ▸ Libraries, the sheet, the card, the disconnect confirm) | design INDEX rows |
@@ -855,3 +855,38 @@ New hook: `LL_PICPLACE_OFFER=1|new|adopt|link:<uuid>` opens the real
 connect sheet once signed in, with that target selected — the numbers off
 the server — so the sheet can be photographed before Connect is pressed
 through accessibility (the card's row is not reachable by AX title).
+
+### 17.8 C2a as landed (2026-09-17 evening)
+
+- iOS `StorageRoot`: `containerURL` (the sandbox's LetsLapse folder),
+  `librariesURL` = `<container>/Libraries/`, one folder per library named by
+  the id it was made with; `current` resolved once at first touch; the
+  registry is `libraryFolders()` — the folder listing with each identity
+  file; `storage.activeLibrary` holds the open folder's id (never a path);
+  `-storage.activeLibrary <id>` as a launch argument opens a folder for one
+  run without writing the setting (`rootCameFromArguments`, as the Mac's
+  root argument).
+- The one-time move: a library found at the container is moved into
+  `Libraries/<id>/` — `id` = the identity file's uuid when there is one,
+  else fresh — item by item (`libraryItemNames` minus `Logs`), behind
+  `<container>/.letslapse-migrating` holding the id; a launch that finds the
+  marker finishes the move under that id. An item present on both sides is
+  kept beside the library as `<name>.before-libraries-<stamp>`, never merged.
+- `Logs/` stays at the container on the phone (`StorageRoot.logsURL`; the
+  Mac keeps them with the library) — a later switch never splits the log.
+- `libraryItemNames` is shared by both platforms now (it was macOS-only).
+- Drill on a Simulator carrying a bound library with 2 originals, records,
+  index and thumbnails in the old layout: first launch moved `Projects,
+  Collections, Thumbnails, Index, PicPlace, letslapse-library.json`, the
+  binding and records read (the check had nothing to do), every fixture
+  file accounted for under `Libraries/<id>/`; the second launch moved
+  nothing; two items put back at the container with the marker were moved
+  again by the next launch. A Mac scratch library still opens and logs
+  into its own `Logs/`.
+- Trap for the bench: reinstalling a differently signed build re-homes the
+  Simulator's data container — resolve the container by search after every
+  install, not once.
+
+Next: **C2b** — the switch (L22): `ModelHost`, the persister re-made, the
+root-caching singletons re-rooted, teardown and refusal while busy,
+`LL_OPEN_LIBRARY=<id>` on iOS.

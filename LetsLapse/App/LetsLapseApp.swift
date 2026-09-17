@@ -36,7 +36,7 @@ struct LetsLapseApp: App {
         // used to accumulate for ever — 277 files / 39 MB on the iPhone
         // (Part 1 R5). The newest 50 of each stay, as the console log keeps
         // its newest 12 (W11).
-        let logs = StorageRoot.current.appendingPathComponent("Logs", isDirectory: true)
+        let logs = StorageRoot.logsURL
         ExperimentLog.prune(directory: logs, prefix: "liveblend-", keep: 50)
         ExperimentLog.prune(directory: logs, prefix: "ladder-", keep: 50)
 

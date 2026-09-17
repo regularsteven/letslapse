@@ -29,12 +29,12 @@ enum StorageRoot {
         return base.appendingPathComponent("LetsLapse", isDirectory: true)
     }
 
-    #if os(macOS)
     /// The top-level items that ARE the library — the set a location change
-    /// carries. A custom root can be a drive's own root, full of system and
-    /// unrelated folders, so moving works from this list rather than
-    /// "everything in the folder". A new top-level item under the root must be
-    /// added here, or a later move leaves it behind.
+    /// carries on the Mac, and the set a phone's one-time move into
+    /// `Libraries/<id>/` carries (C2a). A custom root can be a drive's own
+    /// root, full of system and unrelated folders, so moving works from this
+    /// list rather than "everything in the folder". A new top-level item
+    /// under the root must be added here, or a later move leaves it behind.
     static let libraryItemNames = [
         "Projects", "Collections", "Thumbnails", "SceneMasks", "CaptureLogs", "Logs",
         "Incoming",
@@ -56,6 +56,18 @@ enum StorageRoot {
         LibraryIdentity.fileName,
     ]
 
+    /// Where the console and experiment logs go: with the library on the
+    /// Mac (a location change carries them), with the container on a phone
+    /// (a switch must not split the log).
+    static var logsURL: URL {
+        #if os(macOS)
+        return current.appendingPathComponent("Logs", isDirectory: true)
+        #else
+        return containerURL.appendingPathComponent("Logs", isDirectory: true)
+        #endif
+    }
+
+    #if os(macOS)
     /// True when a nominated location could not be reached at launch (drive
     /// not mounted, folder gone) and this session runs on the default location
     /// instead. The setting itself is kept: reconnecting the drive and
@@ -211,7 +223,145 @@ enum StorageRoot {
         customRootUnavailable = false
     }
     #else
-    static var current: URL { defaultRootURL }
+    // MARK: iOS — several libraries in the sandbox, one open (libraries plan L21, C2a)
+
+    /// The sandbox's LetsLapse folder: the container of the libraries, and
+    /// of what is the app's rather than a library's (`Logs/`).
+    static var containerURL: URL { defaultRootURL }
+
+    /// `<container>/Libraries/` — one folder per library, named by the id it
+    /// was made with. The name never changes; the identity file inside
+    /// carries the library's uuid and name (a link adopts the server's uuid
+    /// there, not in the folder name).
+    static let librariesFolderName = "Libraries"
+    static var librariesURL: URL { containerURL.appendingPathComponent(librariesFolderName, isDirectory: true) }
+
+    /// The defaults key holding the open library's folder id. Never a path:
+    /// the sandbox's path changes across reinstalls and restores.
+    static let activeLibraryKey = "storage.activeLibrary"
+
+    /// The marker the move into `Libraries/` writes before the first item
+    /// and removes after the last: a launch that finds it finishes the move
+    /// under the same id.
+    static let migrationMarkerName = ".letslapse-migrating"
+
+    /// What is the container's, not a library's — left where it is by the
+    /// move and by a switch.
+    static let containerItemNames = ["Logs"]
+
+    /// True when this launch's library came from the launch arguments
+    /// (`-storage.activeLibrary <id>`, the bench): the setting is then never
+    /// written, so a test run never points the person's app elsewhere.
+    static var rootCameFromArguments: Bool {
+        UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)[activeLibraryKey] != nil
+    }
+
+    /// Resolved at first touch — `AppModel.init` loading the library — once
+    /// per process: a library from before C2a is moved into `Libraries/`
+    /// first; then the open library is the setting's folder when it exists,
+    /// else the first library by name, else a fresh empty one.
+    static let current: URL = resolveActiveLibrary()
+
+    /// One folder of `Libraries/`, with its identity when readable.
+    struct LibraryFolder: Identifiable {
+        let id: String
+        let url: URL
+        let identity: LibraryIdentity?
+        var name: String { identity?.displayName ?? LibraryIdentity.defaultName(forRoot: url) }
+        var isCurrent: Bool { url.path == StorageRoot.current.path }
+    }
+
+    /// The registry on a phone is the `Libraries/` folder itself.
+    static func libraryFolders() -> [LibraryFolder] {
+        let fileManager = FileManager.default
+        let names = (try? fileManager.contentsOfDirectory(atPath: librariesURL.path)) ?? []
+        var folders: [LibraryFolder] = []
+        for name in names where !name.hasPrefix(".") {
+            let url = librariesURL.appendingPathComponent(name, isDirectory: true)
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue else { continue }
+            folders.append(LibraryFolder(id: name, url: url, identity: LibraryIdentity.read(inRoot: url)))
+        }
+        return folders.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private static func resolveActiveLibrary() -> URL {
+        let fileManager = FileManager.default
+        migrateLegacyFolderIfNeeded()
+        try? fileManager.createDirectory(at: librariesURL, withIntermediateDirectories: true)
+        migrateContainerLibraryIfNeeded()
+        let folders = libraryFolders()
+        let defaults = UserDefaults.standard
+        if let id = defaults.string(forKey: activeLibraryKey), let match = folders.first(where: { $0.id == id }) {
+            return match.url
+        }
+        if let first = folders.first {
+            if !rootCameFromArguments { defaults.set(first.id, forKey: activeLibraryKey) }
+            LLog("storage: no open library on record — opening “\(first.name)” (\(first.id))")
+            return first.url
+        }
+        let id = UUID().uuidString
+        let url = librariesURL.appendingPathComponent(id, isDirectory: true)
+        try? fileManager.createDirectory(at: url.appendingPathComponent("Projects", isDirectory: true), withIntermediateDirectories: true)
+        if !rootCameFromArguments { defaults.set(id, forKey: activeLibraryKey) }
+        LLog("storage: first launch — library folder \(id) made")
+        return url
+    }
+
+    /// The pre-2025 "Let's Lapse" folder becomes the container, before the
+    /// container is made — `AppModel` keeps the same check for the Mac.
+    private static func migrateLegacyFolderIfNeeded() {
+        let fileManager = FileManager.default
+        let legacyName = ["Let", "s Lapse"].joined(separator: "'")
+        let legacy = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(legacyName, isDirectory: true)
+        guard fileManager.fileExists(atPath: legacy.path), !fileManager.fileExists(atPath: containerURL.path) else { return }
+        try? fileManager.moveItem(at: legacy, to: containerURL)
+    }
+
+    /// A library from before C2a lived at the container itself. It moves
+    /// into `Libraries/<id>/` once — a rename of each library item on the
+    /// same volume, behind a marker: interrupted, the next launch finishes
+    /// it under the same id. The id is the identity file's uuid when there
+    /// is one (a folder made by the app keeps that id for ever, whatever the
+    /// identity later becomes), else a fresh one. `Logs/` stays with the
+    /// container.
+    private static func migrateContainerLibraryIfNeeded() {
+        let fileManager = FileManager.default
+        let marker = containerURL.appendingPathComponent(migrationMarkerName)
+        let itemNames = libraryItemNames.filter { !containerItemNames.contains($0) }
+        let pending = itemNames.filter { fileManager.fileExists(atPath: containerURL.appendingPathComponent($0).path) }
+        let markerID = (try? String(contentsOf: marker, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resuming = markerID.map { !$0.isEmpty } ?? false
+        guard !pending.isEmpty || resuming else { return }
+        let id = (resuming ? markerID : nil) ?? LibraryIdentity.read(inRoot: containerURL)?.id.uuidString ?? UUID().uuidString
+        let destination = librariesURL.appendingPathComponent(id, isDirectory: true)
+        do {
+            if !resuming { try id.write(to: marker, atomically: true, encoding: .utf8) }
+            try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+            var moved: [String] = []
+            for name in pending {
+                let from = containerURL.appendingPathComponent(name)
+                let to = destination.appendingPathComponent(name)
+                if fileManager.fileExists(atPath: to.path) {
+                    // Both sides exist: made at the container after the
+                    // marker (a launch that ran on the old root meanwhile).
+                    // Kept beside the library's own, never merged over it.
+                    let aside = destination.appendingPathComponent("\(name).before-libraries-\(Int(Date().timeIntervalSince1970))")
+                    try fileManager.moveItem(at: from, to: aside)
+                    LLog("storage: \(name) existed on both sides of the move — the container's kept as \(aside.lastPathComponent)")
+                    continue
+                }
+                try fileManager.moveItem(at: from, to: to)
+                moved.append(name)
+            }
+            try fileManager.removeItem(at: marker)
+            if !rootCameFromArguments { UserDefaults.standard.set(id, forKey: activeLibraryKey) }
+            LLog("storage: library moved into \(librariesFolderName)/\(id) — \(moved.isEmpty ? "nothing left to move" : moved.joined(separator: ", "))\(resuming ? " (finishing an interrupted move)" : "")")
+        } catch {
+            LLog("storage: could not move the library into \(librariesFolderName)/\(id): \(error) — the marker stays; the next launch tries again")
+        }
+    }
     #endif
 
     /// Where a project arriving over the network — and, since Phase 4, a
