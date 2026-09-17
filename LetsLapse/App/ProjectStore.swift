@@ -144,6 +144,15 @@ final class ProjectStore: @unchecked Sendable {
         persister.removeProject(id: id)
     }
 
+    /// Every document out of the cache — a retired model's (libraries plan
+    /// L22): what a switch leaves behind holds no library in memory.
+    func forgetAll() {
+        lock.lock(); defer { lock.unlock() }
+        cache.removeAll()
+        owners.removeAll()
+        recency.removeAll()
+    }
+
     /// Out of the cache only — the next read finds the file wherever the
     /// index says it is now.
     func forget(id: UUID) {

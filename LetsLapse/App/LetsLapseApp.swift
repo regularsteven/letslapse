@@ -8,9 +8,115 @@ import SwiftUI
 @MainActor private var llHookKeyFired = false
 #endif
 
+#if os(iOS)
+/// The open library's model, replaceable in-process (libraries plan L22,
+/// C2b): a phone cannot relaunch itself, and a fresh `AppModel` over
+/// another folder is what a launch is. The view tree hangs off
+/// `generation`, so a switch rebuilds every view and its state.
+@MainActor
+final class ModelHost: ObservableObject {
+    @Published private(set) var model: AppModel
+    @Published private(set) var generation = 0
+    /// Why the last switch was refused, for whatever asked.
+    @Published var lastRefusal: String?
+
+    init() {
+        model = AppModel()
+        #if DEBUG
+        scheduleHookSwitches()
+        #endif
+    }
+
+    /// Why a switch cannot happen now — nil when it can. The capture flow
+    /// must be home (a shoot being written is one library's), and no
+    /// project may be on its way to a nearby device.
+    func refusal() -> String? {
+        if model.stage != .home { return "Finish the shoot first — the library can switch once it is saved." }
+        if let transfer = model.transferServerIfLoaded, transfer.activeTransfer != nil {
+            return "A project is being copied to a nearby device; switch once it has arrived."
+        }
+        return nil
+    }
+
+    /// Open another library folder: the open model stands down, the root
+    /// and the setting move, the process-wide stores are re-made over the
+    /// new root, and a new model takes over.
+    @discardableResult
+    func switchLibrary(to folder: StorageRoot.LibraryFolder) -> Bool {
+        guard folder.url.path != StorageRoot.current.path else { return true }
+        if let why = refusal() {
+            lastRefusal = why
+            LLog("storage: switch to \(folder.id) refused — \(why)")
+            return false
+        }
+        lastRefusal = nil
+        model.prepareForSwitch()
+        #if DEBUG
+        weak var retired: AppModel? = model
+        #endif
+        StorageRoot.switchActiveLibrary(to: folder)
+        AppModel.resetSharedPersister()
+        LibrarySwitch.rerootStores()
+        model = AppModel()
+        generation += 1
+        LLog("storage: switched to library “\(folder.name)” (\(folder.id)) — generation \(generation)")
+        #if DEBUG
+        // The retired model should be gone once the tree has re-rooted; a
+        // model still alive five seconds on is being held by something
+        // that outlived its library (plan §17.6 trap 2).
+        let retiredGeneration = generation - 1
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            LLog("storage: model of generation \(retiredGeneration) \(retired == nil ? "released" : "STILL ALIVE five seconds after the switch")")
+        }
+        #endif
+        return true
+    }
+
+    #if DEBUG
+    /// `LL_OPEN_LIBRARY=<id>[,<id>…]` on a phone: switches to each folder
+    /// in turn, four seconds apart from launch — the bench's way to exercise
+    /// the switch (the Mac's hook takes a path and shows the switch sheet).
+    /// Once per process. The other launch hooks run again for each library
+    /// switched to, because a new model reads them at its own start.
+    private func scheduleHookSwitches() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_OPEN_LIBRARY"] else { return }
+        let ids = raw.split(separator: ",").map(String.init)
+        Task { @MainActor [weak self] in
+            for id in ids {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                guard let self else { return }
+                guard let folder = StorageRoot.libraryFolders().first(where: { $0.id == id }) else {
+                    LLog("storage hook: no library folder \(id) — not switching")
+                    continue
+                }
+                self.switchLibrary(to: folder)
+            }
+        }
+    }
+    #endif
+}
+
+/// The process-wide stores that latch the root: made again between models.
+enum LibrarySwitch {
+    @MainActor static func rerootStores() {
+        CustomPresetStore.reroot()
+        LightLadderStore.reroot()
+        LUTStore.reroot()
+        BlendProfileStore.reroot()
+        ShapemationStore.reroot()
+    }
+}
+#endif
+
 @main
 struct LetsLapseApp: App {
+    #if os(iOS)
+    @StateObject private var host = ModelHost()
+    private var model: AppModel { host.model }
+    #else
     @StateObject private var model = AppModel()
+    #endif
     @Environment(\.scenePhase) private var scenePhase
     #if os(macOS)
     // Purely to catch files opened while the app is already running — see
@@ -162,6 +268,10 @@ struct LetsLapseApp: App {
         #else
         WindowGroup {
             root
+                // A library switch re-roots the whole tree (L22): every
+                // view and its state is made again over the new model.
+                .id(host.generation)
+                .environmentObject(host)
                 .onAppear {
                     WatchRemoteControlReceiver.shared.setAppActive(scenePhase != .background)
                 }

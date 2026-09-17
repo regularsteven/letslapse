@@ -65,7 +65,7 @@ extension PicPlaceController {
     /// Runs the pending first connection once the library is loaded and the
     /// session is up — at launch, and right after an in-place connect on iOS.
     func runInitialSyncIfPending() {
-        guard let binding, canSync, initialSyncTask == nil else { return }
+        guard !isShutDown, let binding, canSync, initialSyncTask == nil else { return }
         guard binding.initialSync.state == .pending else {
             // Connected before: this launch checks what changed (stage 4).
             Task { [weak self] in

@@ -9,7 +9,10 @@ import LetsLapseKit
 /// Application Support/LetsLapse/ beside the session logs, rewritten
 /// atomically on every recorded interval (it stays tiny).
 final class BlendProfileStore {
-    static let shared = BlendProfileStore()
+    /// Replaced between models by a library switch (libraries plan L22):
+    /// the table is read at init from the open library's file.
+    nonisolated(unsafe) static private(set) var shared = BlendProfileStore()
+    static func reroot() { shared = BlendProfileStore() }
 
     /// One profile prepared for display in Settings.
     struct ProfileSummary: Identifiable {

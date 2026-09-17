@@ -41,6 +41,7 @@ extension PicPlaceController {
     // MARK: Arming
 
     func armAutoSync() {
+        guard !isShutDown else { return }
         autoTimer?.invalidate()
         LLog("picplace: auto-sync switches for this device and library — changes \(autoSyncEnabled ? "on" : "off"), originals \(autoOriginalsEnabled ? "ON" : "off"), Wi-Fi only \(wifiOnly ? "on" : "off")")
         #if DEBUG

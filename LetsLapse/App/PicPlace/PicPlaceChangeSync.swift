@@ -87,7 +87,7 @@ extension PicPlaceController {
     /// A check, unless one runs, the first connection is still pending, or
     /// a shoot is being written (its project must not be pushed mid-write).
     func checkForChanges(reason: String) {
-        guard canSync, binding?.initialSync.state == .done, checkTask == nil, initialSyncTask == nil else { return }
+        guard !isShutDown, canSync, binding?.initialSync.state == .done, checkTask == nil, initialSyncTask == nil else { return }
         if model.stage == .processing { LLog("picplace: check (\(reason)) skipped — a capture is running"); return }
         // Only a person's press runs on mobile data; every automatic reason
         // waits for Wi-Fi and is picked up when the network changes.

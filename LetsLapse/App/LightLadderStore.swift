@@ -16,7 +16,9 @@ import LetsLapseKit
 /// Mac storage move carries it. See `docs/light-ladder.md` §5.
 @MainActor
 final class LightLadderStore: ObservableObject {
-    static let shared = LightLadderStore()
+    /// Replaced between models by a library switch (libraries plan L22).
+    static private(set) var shared = LightLadderStore()
+    static func reroot() { shared = LightLadderStore() }
     static let fileName = "light_ladders.json"
 
     /// The user's ladders, in the order they were made. Never contains the
@@ -38,6 +40,7 @@ final class LightLadderStore: ObservableObject {
     init(fileURL: URL? = nil) {
         self.fileURL = fileURL ?? StorageRoot.current.appendingPathComponent(Self.fileName)
         load()
+        LLog("ladders: \(userLadders.count) user ladder(s) at \(self.fileURL.path)")
     }
 
     // MARK: - Reading

@@ -13,7 +13,9 @@ import LetsLapseKit
 
 @MainActor
 final class ShapemationStore: ObservableObject {
-    static let shared = ShapemationStore()
+    /// Replaced between models by a library switch (libraries plan L22).
+    static private(set) var shared = ShapemationStore()
+    static func reroot() { shared = ShapemationStore() }
     static let folderName = "Shapemations"
     private static let indexName = "shapemations.json"
 

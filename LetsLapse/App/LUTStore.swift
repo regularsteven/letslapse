@@ -53,7 +53,9 @@ struct LUTFile: Identifiable, Codable, Equatable {
 /// renders on a device that never imported the cube.
 @MainActor
 final class LUTStore: ObservableObject {
-    static let shared = LUTStore()
+    /// Replaced between models by a library switch (libraries plan L22).
+    static private(set) var shared = LUTStore()
+    static func reroot() { shared = LUTStore() }
 
     @Published private(set) var files: [LUTFile] = []
     /// Set when a write failed, for the sheet to say so.
@@ -68,6 +70,7 @@ final class LUTStore: ObservableObject {
         indexURL = root.appendingPathComponent(Self.indexName)
         load()
         Self.installResolver()
+        LLog("luts: \(files.count) imported LUT(s) at \(folderURL.path)")
     }
 
     nonisolated static let folderName = "luts"

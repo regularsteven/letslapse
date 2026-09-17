@@ -32,7 +32,10 @@ struct CustomPreset: Identifiable, Codable, Equatable {
 /// use and hold in memory; every mutation rewrites the file atomically.
 @MainActor
 final class CustomPresetStore: ObservableObject {
-    static let shared = CustomPresetStore()
+    /// Replaced between models by a library switch (libraries plan L22):
+    /// the file URL is latched at init, so a switch makes a new store.
+    static private(set) var shared = CustomPresetStore()
+    static func reroot() { shared = CustomPresetStore() }
 
     @Published private(set) var presets: [CustomPreset] = []
 
@@ -47,6 +50,7 @@ final class CustomPresetStore: ObservableObject {
         // where AppModel keeps everything else.
         self.fileURL = fileURL ?? StorageRoot.current.appendingPathComponent("custom_presets.json")
         load()
+        LLog("presets: \(presets.count) custom preset(s) at \(self.fileURL.path)")
     }
 
     // MARK: - Reading

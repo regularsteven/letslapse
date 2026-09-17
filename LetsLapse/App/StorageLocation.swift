@@ -260,7 +260,18 @@ enum StorageRoot {
     /// per process: a library from before C2a is moved into `Libraries/`
     /// first; then the open library is the setting's folder when it exists,
     /// else the first library by name, else a fresh empty one.
-    static let current: URL = resolveActiveLibrary()
+    private(set) static var current: URL = resolveActiveLibrary()
+
+    /// Open another folder for the rest of the process (L22, C2b): the root
+    /// and the setting move; the identity is read again by the next
+    /// model's `healIdentity`. Only between models — `ModelHost` is the one
+    /// caller, after the old model stood down.
+    static func switchActiveLibrary(to folder: LibraryFolder) {
+        current = folder.url
+        identity = nil
+        if !rootCameFromArguments { UserDefaults.standard.set(folder.id, forKey: activeLibraryKey) }
+        LLog("storage: root is now \(folder.url.path)")
+    }
 
     /// One folder of `Libraries/`, with its identity when readable.
     struct LibraryFolder: Identifiable {

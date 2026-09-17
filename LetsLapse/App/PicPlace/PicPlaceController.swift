@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import SwiftUI
 import LetsLapseKit
 #if os(macOS)
@@ -202,6 +203,8 @@ final class PicPlaceController: ObservableObject {
     var heldCheck = false
     var forcedNetwork = false
     var autoTimer: Timer?
+    /// Stood down for a library switch (L22): nothing re-arms, nothing runs.
+    private(set) var isShutDown = false
     var originalsQueueTask: Task<Void, Never>?
     var pathMonitorBox: AnyObject?
     /// One usage refresh for a whole run of syncs, not two requests per project.
@@ -1277,6 +1280,34 @@ final class PicPlaceController: ObservableObject {
         }
         parts.append("Nothing changes on PicPlace. Switching libraries never needs this.")
         return parts.joined(separator: " ")
+    }
+
+    /// Stands the controller down for a library switch (libraries plan
+    /// L22): every timer, monitor and task cancelled, the sync state saved,
+    /// and nothing re-armed after — the next model makes its own controller
+    /// over the other folder.
+    func shutDown() {
+        isShutDown = true
+        autoTimer?.invalidate()
+        autoTimer = nil
+        (pathMonitorBox as? NWPathMonitor)?.cancel()
+        pathMonitorBox = nil
+        checkTask?.cancel(); checkTask = nil
+        initialSyncTask?.cancel(); initialSyncTask = nil
+        pushQueueTask?.cancel(); pushQueueTask = nil
+        originalsQueueTask?.cancel(); originalsQueueTask = nil
+        usageRefreshTask?.cancel(); usageRefreshTask = nil
+        for task in pendingPushes.values { task.cancel() }
+        pendingPushes.removeAll()
+        for task in syncTasks.values { task.cancel() }
+        syncTasks.removeAll()
+        for task in summaryTasks.values { task.cancel() }
+        summaryTasks.removeAll()
+        pushQueue.removeAll()
+        heldPushes.removeAll()
+        progress.removeAll()
+        saveSyncState()
+        LLog("picplace: stood down for a library switch")
     }
 
     /// "Disconnect this library": the binding and the sync records go; the

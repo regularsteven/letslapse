@@ -800,7 +800,7 @@ library, when the store holds several?).
 |---|---|---|
 | **0** ✅ 2026-09-17 | L23 + L24 + the copy — LANDED, both platforms; the disconnect confirm with the numbers; eviction at a connect elsewhere, with the numbers on the sheet; the check retries a preview's failed manifest push; the usage line hidden when unbound | Simulator linked to Holidays (877 previews): Disconnect → the confirm says 877 stay and cannot download, 0 with originals; the list still shows 877 as previews; Connect → the sheet leads with Holidays; link Holidays again: "877 in step, nothing arrives, nothing goes up" and no download happens (network log); Disconnect again → link Prague: the sheet says "401 arrive; 877 previews of Holidays removed" → after: 401 rows, `deletedProjects()` empty, the server's counts unchanged throughout. A Mac scratch library with 2 originals + 3 previews: disconnect keeps all 5; connect as a new library: 2 go up, the 3 evicted, no tombstones, `lapse index --verify` clean. Delete a preview on the phone → gone from the list at once → gone on the server after the check. |
 | **C2a** ✅ 2026-09-17 | LANDED — `StorageRoot` on iOS: `Libraries/<id>/`, `storage.activeLibrary`, the folder registry, the one-time migration; `-storage.activeLibrary <id>` for scratch runs | a Simulator with projects launches, migrates, everything intact; a second launch does nothing; a launch killed mid-migration finishes on the next |
-| **C2b** | The switch (L22): `ModelHost`, persister re-make, singleton re-root, teardown, refusal while busy, DEBUG `deinit` proof; `LL_OPEN_LIBRARY=<id>` on iOS | two libraries on the Simulator: switch both ways ten times; capture in each — the capture lands in the open one; presets, LUTs, ladders read from the open library; no write reaches the other (watch its folder) |
+| **C2b** ✅ 2026-09-17 | LANDED — the switch (L22): `ModelHost`, persister re-make, singleton re-root, teardown, refusal while busy, DEBUG `deinit` proof; `LL_OPEN_LIBRARY=<id>` on iOS | two libraries on the Simulator: switch both ways ten times; capture in each — the capture lands in the open one; presets, LUTs, ladders read from the open library; no write reaches the other (watch its folder) |
 | **C2c** | Settings ▸ Libraries on iOS, the doors, Remove's guard, the sheet's phone title | Add Prague from PicPlace → 401 previews → switch → thumbs; Remove Holidays with a downloaded original not on the server → refused by name; upload it → Remove deletes the folder |
 | **C2d** | The Projects header menu; mirrors (iPhone/iPad Settings ▸ Libraries, the sheet, the card, the disconnect confirm) | design INDEX rows |
 
@@ -813,9 +813,14 @@ L23's eviction.
    `libraryIndex.deletedProjects()` (its line ~221); a preview evicted at
    a connect elsewhere (L23) or a Remove must leave no tombstone, or the
    next link deletes it on the server.
-2. **Two models alive.** The old `AppModel` is released when the last view
-   drops it; until then it must not write — `refuseWrites` at the switch,
-   a DEBUG `deinit` log to prove the release (none exists today).
+2. **Two models alive — and the retired one is NOT released.** Heap-traced
+   2026-09-17: UIKit's tab-bar button labels cache the old tree's
+   environment (`SwiftUIEnvironmentWrapper` in a `UITraitCollection`), and
+   that environment holds the model. 12 `AppModel`s alive after 11
+   switches. So a retired model is made inert and light at stand-down
+   (PicPlace shut down, writes refused, documents dropped from its store);
+   its index connection stays open (closing it under a task still winding
+   down would be a use after free). ≈1 MB per switch on the fixture.
 3. **`AppModel.sharedPersister` is a `private static let`** — re-made only
    between models, never under one.
 4. **No paths in defaults on iOS** — the sandbox path changes on reinstall
@@ -890,3 +895,40 @@ through accessibility (the card's row is not reachable by AX title).
 Next: **C2b** — the switch (L22): `ModelHost`, the persister re-made, the
 root-caching singletons re-rooted, teardown and refusal while busy,
 `LL_OPEN_LIBRARY=<id>` on iOS.
+
+### 17.9 C2b as landed (2026-09-17 night)
+
+- `ModelHost` (iOS, `LetsLapseApp.swift`) owns the model; `switchLibrary(to:)`
+  refuses while the capture flow is not home or a project is on its way to
+  a nearby device, then: the old model stands down (`prepareForSwitch`:
+  PicPlace `shutDown()` — timers, monitor, every task; the transfer server
+  stopped if it was ever started; flush + export; `refuseWrites`; the
+  documents dropped from its store), `StorageRoot.switchActiveLibrary` moves
+  the root and the setting, `AppModel.resetSharedPersister()` makes the
+  next persister over the new root, the five root-latching stores are
+  re-made (`CustomPresetStore`, `LightLadderStore`, `LUTStore`,
+  `BlendProfileStore`, `ShapemationStore` — each logs what it read and
+  from where), a new `AppModel()` takes over and `.id(generation)` re-roots
+  the tree. The host is in the environment for C2c's screen.
+- `LL_OPEN_LIBRARY=<id>[,<id>…]` on a phone switches to each folder in
+  turn, four seconds apart, once per process. The other launch hooks run
+  again for each library switched to (a new model reads them at its own
+  start) — `LL_IMPORT_STILLS` after a switch is how "a capture lands in
+  the open library" is exercised on a Simulator.
+- Drill (Simulator, two libraries): eleven switches, none refused, the
+  document walk alternating between the two, presets/ladders/LUTs read
+  from the open folder each time; nothing written into A while B was open
+  (full-tree hash); an import at launch landed in B and the re-run import
+  after the switch in A; a plain relaunch opened the last switched-to
+  library; a Mac scratch library unaffected.
+- Retention (trap 2): the retired model is held by UIKit's cached trait
+  collections; made light instead. On the fixture (three documents) the
+  process grows ≈2 MB per switch either way — that is the old view tree,
+  not documents; dropping the documents matters for a real library's
+  cache (hundreds of documents), which is what `forgetAll` is for. A
+  person switches a few times a day; C2c/C2d may still look at whether a
+  different re-rooting frees the old tree.
+
+Next: **C2c** — Settings ▸ Libraries on iOS with the doors (Add from
+PicPlace, New Library on PicPlace, Remove from this iPhone with its guard),
+the sheet's phone title.

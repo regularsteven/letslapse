@@ -930,12 +930,21 @@ final class AppModel: ObservableObject {
     /// projects this device pushed, and the pushes in flight. Main-actor
     /// state the cards observe directly; nothing else in the model reads it.
     @MainActor lazy var picplace = PicPlaceController(model: self)
+    private var transferServerStorage: ProjectTransferServer?
+    /// The server when something has started it — a library switch stops
+    /// it and never makes one only to stop it.
+    @MainActor var transferServerIfLoaded: ProjectTransferServer? { transferServerStorage }
     /// The library's nearby-device server (`Shared/ProjectTransferServer`),
     /// one per app: the sync pill in the Projects header and the one in the
     /// Gallery header open the same panel over the same listener, so the
     /// server cannot belong to either tab's view (it was `ProjectsView`'s
     /// `@StateObject` until 2026-09-15). Armed by `.armsProjectSharing`.
-    @MainActor lazy var transferServer = ProjectTransferServer(model: self)
+    @MainActor var transferServer: ProjectTransferServer {
+        if let transferServerStorage { return transferServerStorage }
+        let server = ProjectTransferServer(model: self)
+        transferServerStorage = server
+        return server
+    }
     /// Bumped on the main actor whenever the index changed — after a
     /// persist's rows landed, after the launch pass, after the asset store
     /// re-indexed a project — so a list re-asks its question (M2).
@@ -9016,10 +9025,21 @@ final class AppModel: ObservableObject {
     /// One persister per process: the model and its store share it, and it
     /// is made before either (a `let` cannot reach another instance
     /// property while the instance is being made).
-    private static let sharedPersister = LibraryPersister(
-        projectsRoot: StorageRoot.current.appendingPathComponent("Projects", isDirectory: true),
-        collectionsURL: ProjectDocumentFormat.collectionsURL(inRoot: StorageRoot.current),
-        indexURL: LibraryIndex.url(inRoot: StorageRoot.current))
+    private static var sharedPersister = AppModel.makePersister()
+
+    private static func makePersister() -> LibraryPersister {
+        LibraryPersister(
+            projectsRoot: StorageRoot.current.appendingPathComponent("Projects", isDirectory: true),
+            collectionsURL: ProjectDocumentFormat.collectionsURL(inRoot: StorageRoot.current),
+            indexURL: LibraryIndex.url(inRoot: StorageRoot.current))
+    }
+
+    /// Between models only (libraries plan L22): the next `AppModel()` gets
+    /// a persister over the root that is current now. Never under a live
+    /// model — its `persister` and `store` hold the one it was made with.
+    static func resetSharedPersister() {
+        sharedPersister = makePersister()
+    }
 
     /// The library's index (Phase 3): paged lists, tag counts and full-text
     /// search over every project and asset record, kept current by the
@@ -10794,6 +10814,32 @@ final class AppModel: ObservableObject {
         }
         #endif
     }
+
+    #if os(iOS)
+    /// The open library's model stands down for a switch (libraries plan
+    /// L22): PicPlace and the nearby-device server stop, the queued writes
+    /// land and the export is regenerated, nothing is written from here
+    /// on, and the lock goes. The views let go of this model when the tree
+    /// re-roots; a DEBUG build logs its release.
+    func prepareForSwitch() {
+        picplace.shutDown()
+        transferServerIfLoaded?.stop()
+        flushLibraryPersistsAndExport()
+        persister.refuseWrites = "This library was switched away from; the old model writes nothing."
+        releaseLibraryLock()
+        // UIKit's tab-bar labels cache the old tree's environment, and the
+        // environment holds this model (heap-traced 2026-09-17): a retired
+        // model is not released, so it is made light — the documents go
+        // out of memory; the index connection stays (closing it under a
+        // task still winding down would be a use after free).
+        store.forgetAll()
+        LLog("model: stood down for a library switch")
+    }
+    #endif
+
+    #if DEBUG
+    deinit { LLog("model: released") }
+    #endif
 
     /// Lets the lock go — at termination, after the last persist.
     func releaseLibraryLock() {
