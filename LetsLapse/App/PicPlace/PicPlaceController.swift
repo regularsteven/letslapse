@@ -68,6 +68,12 @@ final class PicPlaceController: ObservableObject {
         case unbound
         /// Bound to the signed-in account — or bound and nobody signed in.
         case bound
+        /// Bound to the account from before PicPlace kept libraries apart
+        /// (no library uuid) on a server that now does: nothing runs until
+        /// the person says which library this is — new, unfiled taken
+        /// over, or an existing one linked (stage C). Never account-wide:
+        /// that is how a phone pulled every unfiled project on 2026-09-17.
+        case needsLibrary
         /// Bound to another account or server than the session's.
         case mismatch
     }
@@ -392,7 +398,9 @@ final class PicPlaceController: ObservableObject {
     var libraryLink: LibraryLink {
         guard let binding else { return .unbound }
         guard let profile else { return .bound }
-        return binding.matches(host: profile.host, userUUID: profile.userUUID, serverID: profile.serverID) ? .bound : .mismatch
+        guard binding.matches(host: profile.host, userUUID: profile.userUUID, serverID: profile.serverID) else { return .mismatch }
+        if serverHasLibraries, binding.library == nil { return .needsLibrary }
+        return .bound
     }
 
     var isSignedIn: Bool { profile != nil }
@@ -640,15 +648,10 @@ final class PicPlaceController: ObservableObject {
     private var unfiledCountSeen: Int?
 
     func repairBindingLibraryIfMissing(_ status: PPStatus) async {
-        guard status.hasLibraries, canSync, var record = binding else { return }
-        if record.library == nil {
-            guard let identity = StorageRoot.identity else { return }
-            record.library = .init(uuid: identity.id, name: identity.displayName)
-            try? record.write(inRoot: root)
-            binding = record
-            LLog("picplace: this library was connected before PicPlace kept libraries apart — it becomes “\(identity.displayName)” \(identity.id.uuidString.lowercased())")
-        }
-        guard let library = record.library else { return }
+        // A binding without a library is `.needsLibrary`: the person chooses
+        // on the sheet (`connectLibrary(target:)` fills the binding in);
+        // nothing is minted or assigned on their behalf.
+        guard status.hasLibraries, canSync, let record = binding, let library = record.library else { return }
         let uuid = library.uuid.uuidString.lowercased()
         var libraries = status.libraries ?? []
         do {
@@ -661,10 +664,15 @@ final class PicPlaceController: ObservableObject {
             if unfiled > 0, unfiled != unfiledCountSeen {
                 unfiledCountSeen = unfiled
                 let rows: PPProjectIndex = try await client.get("projects", query: ["library": "null"])
+                // "Held here" means the ORIGINALS are here: a preview pulled
+                // from the account is some other library's project, never
+                // this one's to file (the 2026-09-17 Simulator lesson).
                 var mine: [String] = []
                 if let index = model.libraryIndex {
                     for row in rows.projects where !row.isTombstone {
-                        guard let origin = UUID(uuidString: row.uuid), ((try? index.projectID(originID: origin)) ?? nil) != nil else { continue }
+                        guard let origin = UUID(uuidString: row.uuid),
+                              let localID = (try? index.projectID(originID: origin)) ?? nil,
+                              let capture = model.capture(id: localID), !model.sourcesMissing(capture) else { continue }
                         mine.append(row.uuid.lowercased())
                     }
                 }
@@ -803,9 +811,11 @@ final class PicPlaceController: ObservableObject {
         }
     }
 
-    /// The Connect buttons: raise the question (the cards present it).
+    /// The Connect buttons: raise the question (the cards present it) —
+    /// for an unbound library, and for one bound before libraries that
+    /// has to say which library it is (`.needsLibrary`).
     func offerConnect() {
-        guard isSignedIn, binding == nil else { return }
+        guard isSignedIn, binding == nil || libraryLink == .needsLibrary else { return }
         Task { await offerConnectNow() }
     }
 
@@ -862,7 +872,8 @@ final class PicPlaceController: ObservableObject {
     /// `target` on PicPlace (stage C): write `PicPlace/account.json` with the
     /// server library's uuid; the library stays in its folder (L19).
     func connectLibrary(target: ConnectTarget = .new, name: String? = nil) {
-        guard let profile, binding == nil, !isConnecting else { return }
+        guard let profile, binding == nil || libraryLink == .needsLibrary, !isConnecting else { return }
+        let choosingForExistingBinding = binding != nil
         isConnecting = true
         lastConnectError = nil
         Task {
@@ -900,16 +911,21 @@ final class PicPlaceController: ObservableObject {
                         initialCase = localCountNow() == 0 ? .fresh : .merge
                     }
                 }
-                let record = PicPlaceBindingRecord(
+                var record = binding ?? PicPlaceBindingRecord(
                     server: .init(url: profile.server, id: profile.serverID, environment: profile.serverEnvironment),
                     user: .init(uuid: profile.userUUID, username: profile.username, name: profile.name),
-                    boundByDevice: DeviceIdentity.id,
-                    initialSync: .init(state: .pending, case: initialCase),
-                    library: library)
+                    boundByDevice: DeviceIdentity.id)
+                record.library = library
+                record.initialSync = .init(state: .pending, case: initialCase)
+                if choosingForExistingBinding {
+                    // Records from the account-wide days describe rows this
+                    // library may not own: the scoped first sync rebuilds them.
+                    records = [:]
+                }
                 try record.write(inRoot: root)
                 binding = record
                 saveSyncState()
-                LLog("picplace: library bound to @\(profile.username) on \(record.server.host)\(library.map { " as “\($0.name)” \($0.uuid.uuidString.lowercased())" } ?? "") — \(initialCase.rawValue)")
+                LLog("picplace: library \(choosingForExistingBinding ? "filed" : "bound") to @\(profile.username) on \(record.server.host)\(library.map { " as “\($0.name)” \($0.uuid.uuidString.lowercased())" } ?? "") — \(initialCase.rawValue)")
                 isOfferingConnect = false
                 connectOffer = nil
                 runInitialSyncIfPending()

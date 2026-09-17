@@ -251,6 +251,8 @@ struct PicPlaceStatusCard: View {
             switch picplace.libraryLink {
             case .mismatch:
                 return "This library belongs to @\(picplace.binding?.user.displayHandle ?? "someone else") on \(picplace.binding?.server.host ?? "PicPlace")"
+            case .needsLibrary:
+                return "PicPlace now keeps libraries apart — say which library this is to sync its projects"
             default:
                 return "Connect this library to \(picplace.sessionHost) to sync its projects"
             }
@@ -323,7 +325,7 @@ struct PicPlaceStatusCard: View {
             case .conflict: picplace.isReviewingConflicts = true
             case .previewOnly: picplace.downloadOriginals(capture)
             case .signedOut: picplace.signIn()
-            case .notConnected: if picplace.libraryLink == .unbound { picplace.offerConnect() } else { model.requestedTab = .settings }
+            case .notConnected: if picplace.libraryLink == .unbound || picplace.libraryLink == .needsLibrary { picplace.offerConnect() } else { model.requestedTab = .settings }
             case .syncing: picplace.cancelSync(capture.id)
             default: picplace.sync(capture)
             }
@@ -521,6 +523,22 @@ struct PicPlaceSettingsCard: View {
                     title: picplace.isConnecting ? "Connecting…" : "Not on PicPlace — Connect…",
                     subtitle: picplace.lastConnectError
                         ?? "Keeps this library's projects on \(picplace.sessionHost) as @\(picplace.profile?.username ?? ""). The library stays in its folder.",
+                    titleColor: LL.accent
+                ) {
+                    EmptyView()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(picplace.isConnecting)
+        case .needsLibrary:
+            Button {
+                picplace.offerConnect()
+            } label: {
+                LLRow(
+                    title: picplace.isConnecting ? "Connecting…" : "Which library is this? — Choose…",
+                    subtitle: picplace.lastConnectError
+                        ?? "Connected before \(picplace.sessionHost) kept libraries apart. Nothing syncs until you say whether this is a new library there, one to link to, or the unfiled projects taken over.",
                     titleColor: LL.accent
                 ) {
                     EmptyView()

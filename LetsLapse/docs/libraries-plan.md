@@ -690,3 +690,34 @@ library and filed the project; the check clean) and wiped after.
 **For Steven:** relaunch the Xcode build on Prague — the launch heals it
 (the card: *On PicPlace · 398 projects*); then Holidays → Connect → *New
 library on PicPlace*. Nothing on the server side.
+
+## 16. The Simulator's claim (2026-09-17 morning) — two rules corrected
+
+What Steven saw on `/letslapse`: *Holidays 878 · LetsLapse 398 · Prague
+LetsLapse Shots 3*. The **iPhone 16 Pro Simulator**, bound to the account
+in the v2 days (a binding with no library uuid), had been account-wide under
+C1 and pulled the unfiled 398 as previews; at 09:22 it ran §15's heal,
+which took its healed identity ("LetsLapse", the sandbox folder's name) as
+its library, created it on the server, and filed "the unfiled rows it
+holds" — its preview shells — into it. The Mac's 09:15 run was C1 without
+the heal. The 3 in "Prague LetsLapse Shots" were last night's new projects,
+pushed through the `422 → re-create → retry` path.
+
+**Corrected:** (1) *held here* means the **originals** are here
+(`!sourcesMissing`) — a preview pulled from the account is some other
+library's project and is never filed by the heal; (2) **a binding without a
+library is `.needsLibrary`**, not account-wide: `canSync` is false (no
+pass, no pull), the card reads *Which library is this? — Choose…* and the
+connect sheet fills the binding in (new · take over the unfiled · link);
+choosing clears the account-wide-era sync records so the scoped first
+sync rebuilds them. Verified on the bench: a scratch library with its
+`library` removed from the binding ran the handshake and nothing else.
+
+**Data fix on picplace.test (tinker, with Steven):** the 398 rows moved
+back into `77c35103` "Prague LetsLapse Shots" (stamped `library_changed_at`
+so other devices' passes see the move), the empty "LetsLapse" library
+tombstoned. After: Prague 401 · Holidays 878 · nothing unfiled.
+
+**The Simulator** still holds ~1,276 preview shells from its account-wide
+days; on the new build its card asks which library it is. It is a
+throwaway: erase it (`tools/sim-fresh.sh`) rather than choose.
