@@ -245,11 +245,14 @@ extension PicPlaceController {
                     }
                     let record = records[origin]
                     let failedRecords = record?.lastError != nil && record?.failedPolicy != PicPlaceSyncPolicy.originals.rawValue
-                    if !model.sourcesMissing(capture), failedRecords, syncTasks[capture.id] == nil {
+                    if failedRecords, syncTasks[capture.id] == nil {
                         // The manifest got through and the rest of the push
                         // did not (the bundle, the poster, the confirms):
                         // the same push again finishes it — a replay of the
-                        // manifest, uploads of what is still missing.
+                        // manifest, uploads of what is still missing. A
+                        // preview's failed push — a rename, a tag — is
+                        // retried the same way (L24: managing a library
+                        // never needs the originals here).
                         if retryDue(record) {
                             await syncAndWait(capture)
                             if records[origin]?.lastError == nil { outcome.retried += 1; LLog("picplace: \(capture.displayTitle) — push retried, done") }

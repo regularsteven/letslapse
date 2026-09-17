@@ -269,7 +269,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The library forgets which PicPlace account it syncs with and what it has synced — the record of what is in step. Every project stays here and on PicPlace; nothing is deleted anywhere. Switching libraries never needs this; connecting it again later exchanges the two sides afresh.")
+            Text(model.picplace.disconnectMessage())
         }
         #endif
         .task {
@@ -1048,7 +1048,7 @@ struct SettingsView: View {
                     addingFromPicPlace = true
                 } label: {
                     LLRow(title: "Add Library from PicPlace…",
-                          subtitle: "\(remote.count) of your librar\(remote.count == 1 ? "y is" : "ies are") on \(model.picplace.sessionHost) and not on this Mac: \(remote.map { "“\($0.displayName)”" }.joined(separator: ", ")).",
+                          subtitle: "\(remote.count) of your libraries \(remote.count == 1 ? "is" : "are") on \(model.picplace.sessionHost) and not on this Mac: \(remote.map { "“\($0.displayName)”" }.joined(separator: ", ")).",
                           titleColor: LL.accent) {
                         EmptyView()
                     }

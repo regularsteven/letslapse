@@ -827,6 +827,7 @@ final class AppModel: ObservableObject {
     enum LibraryDeletionError: LocalizedError {
         case activeCapture
         case unsafeBlendPath
+        case notAPreview
 
         var errorDescription: String? {
             switch self {
@@ -834,6 +835,8 @@ final class AppModel: ObservableObject {
                 return "This capture is currently being processed. Cancel the job before deleting it."
             case .unsafeBlendPath:
                 return "The blend file is outside its capture folder and could not be deleted safely."
+            case .notAPreview:
+                return "This project's sources are on this device; only a preview pulled from PicPlace can be removed this way."
             }
         }
     }
@@ -1967,6 +1970,29 @@ final class AppModel: ObservableObject {
         if currentCaptureID == capture.id {
             reset()
         }
+    }
+
+    /// Removes a preview-only project — its folder and its index row —
+    /// WITHOUT a tombstone (libraries plan L23): a preview pulled from
+    /// PicPlace is a cache entry of the server library that holds its
+    /// originals, and a tombstone would carry a deletion to the server on
+    /// the next check. Nothing goes to `.trash` either — the reconciler
+    /// stamps a document found there as deleted. Refused for a project
+    /// whose sources are on this device.
+    func evictPreview(_ capture: CaptureProject) throws {
+        guard store.exists(id: capture.id) else { return }
+        guard sourcesMissing(capture) else { throw LibraryDeletionError.notAPreview }
+        let folder = captureFolderURL(for: capture.id)
+        let blendIDs = Set(store.allBlends(for: capture.id).map(\.id))
+        store.remove(id: capture.id)
+        removeCollectionEntries(blendIDs: blendIDs)
+        persistCollectionsQuietly()
+        assetStore.forget(projectFolder: folder)
+        if FileManager.default.fileExists(atPath: folder.path) {
+            try FileManager.default.removeItem(at: folder)
+        }
+        noteFilesChanged(for: capture.id)
+        noteIndexChanged()
     }
 
     /// `Projects/.trash/` — deleted projects (`<id>/`), deleted blend outputs

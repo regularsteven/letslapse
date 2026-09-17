@@ -18,6 +18,8 @@ extension PicPlaceController {
         var pushed = 0
         var inStep = 0
         var deferred = 0
+        /// Previews this library cannot account for, removed (L23).
+        var evicted = 0
         var total = 0
         var failures: [String] = []
     }
@@ -47,9 +49,14 @@ extension PicPlaceController {
     /// server cannot be reached or nobody is signed in.
     func describeConnectCase() async -> ConnectCase? {
         guard isSignedIn else { return nil }
+        // Only what can go up counts (L24): the projects with originals here.
         var localCount = 0
-        if let counts = try? model.libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery()) {
-            localCount = counts.values.reduce(0, +)
+        if let libraryIndex = model.libraryIndex {
+            var query = LibraryIndex.ProjectQuery()
+            query.limit = 100_000
+            for row in (try? libraryIndex.projects(query))?.rows ?? [] {
+                if let capture = model.capture(id: row.id), !model.sourcesMissing(capture) { localCount += 1 }
+            }
         }
         guard let status: PPStatus = try? await client.get("status") else { return nil }
         return ConnectCase(serverCount: status.projects?.count ?? 0, localCount: localCount)
@@ -135,9 +142,13 @@ extension PicPlaceController {
             for row in (try libraryIndex.projects(query)).rows {
                 localByOrigin[row.originID ?? row.id] = row.id
             }
+            // A local twin of a row filed elsewhere is noted on its record —
+            // when its originals are here. A PREVIEW of one is removed below
+            // (L23): it belongs to the library that holds its originals.
             var elsewhere = Set<UUID>()
             for row in allRows where !inScope(row) {
-                guard let origin = UUID(uuidString: row.uuid), localByOrigin[origin] != nil else { continue }
+                guard let origin = UUID(uuidString: row.uuid), let localID = localByOrigin[origin],
+                      let capture = model.capture(id: localID), !isPreviewOnly(capture) else { continue }
                 elsewhere.insert(origin)
                 noteElsewhere(origin, library: row.library)
             }
@@ -165,10 +176,38 @@ extension PicPlaceController {
                     toPull.append(row)
                 }
             }
-            let toPush = localByOrigin.filter { !serverOrigins.contains($0.key) && !elsewhere.contains($0.key) }.compactMap { model.capture(id: $0.value) }
+            // What goes up (L24): a project with its originals here that
+            // PicPlace holds nowhere. A preview this library cannot account
+            // for — filed elsewhere, or gone from PicPlace — is removed here:
+            // its folder and index row, never a tombstone (L23). A project
+            // whose files simply went missing is neither, and stays.
+            var toPush: [AppModel.CaptureProject] = []
+            for (origin, localID) in localByOrigin where !serverOrigins.contains(origin) {
+                guard let capture = model.capture(id: localID) else { continue }
+                if isPreviewOnly(capture) {
+                    do {
+                        try model.evictPreview(capture)
+                        records[origin] = nil
+                        progress.evicted += 1
+                    } catch {
+                        progress.failures.append("\(capture.displayTitle): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+                    }
+                    continue
+                }
+                if elsewhere.contains(origin) { continue }
+                guard !model.sourcesMissing(capture) else {
+                    LLog("picplace: initial sync — \(capture.displayTitle) (\(origin.uuidString.prefix(8))) has no sources on this device and is not a preview; not pushed")
+                    continue
+                }
+                toPush.append(capture)
+            }
+            if progress.evicted > 0 {
+                saveSyncState()
+                LLog("picplace: initial sync — \(progress.evicted) preview(s) removed: not this library's on PicPlace (folders and index rows only; no tombstones)")
+            }
             progress.total = toPull.count + toPush.count
             let caseName: PicPlaceBindingRecord.InitialSync.Case = rows.isEmpty ? .clean : (localByOrigin.isEmpty ? .fresh : .merge)
-            LLog("picplace: initial sync (\(caseName.rawValue)) — \(toPull.count) to pull, \(toPush.count) to push, \(progress.inStep) in step, \(progress.deferred) deferred\(elsewhere.isEmpty ? "" : ", \(elsewhere.count) filed in another library on PicPlace")")
+            LLog("picplace: initial sync (\(caseName.rawValue)) — \(toPull.count) to pull, \(toPush.count) to push, \(progress.inStep) in step, \(progress.deferred) deferred\(elsewhere.isEmpty ? "" : ", \(elsewhere.count) filed in another library on PicPlace")\(progress.evicted == 0 ? "" : ", \(progress.evicted) preview(s) removed")")
             noteInitialSyncCase(caseName)
 
             progress.phase = .pulling

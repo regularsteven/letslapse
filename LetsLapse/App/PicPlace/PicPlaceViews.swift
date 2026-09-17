@@ -237,6 +237,11 @@ struct PicPlaceStatusCard: View {
             }
         case .previewOnly(let record):
             if let error = record?.lastError { return error }
+            if picplace.binding == nil {
+                // Kept through a disconnect (L23); nothing can fetch it until
+                // the library connects again.
+                return "Connect this library again to download the originals"
+            }
             let files = record?.serverHeavyFiles ?? record?.heavyFiles ?? 0
             let bytes = record?.serverHeavyBytes ?? record?.heavyBytes ?? 0
             if files > 0 {
@@ -381,10 +386,14 @@ struct PicPlaceSettingsCard: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                LLRow(title: "On PicPlace", subtitle: usageSubtitle) {
-                    Text(usageText)
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
+                // The library's numbers on PicPlace — a bound library's;
+                // after a disconnect the last ones would mislead.
+                if picplace.binding != nil {
+                    LLRow(title: "On PicPlace", subtitle: usageSubtitle) {
+                        Text(usageText)
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 libraryRow
                 initialSyncRow
@@ -498,7 +507,7 @@ struct PicPlaceSettingsCard: View {
             Button("Disconnect", role: .destructive) { picplace.disconnectLibrary() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The library forgets which account it belongs to and what it has synced. Every project stays on this device and on PicPlace; nothing is deleted anywhere.")
+            Text(picplace.disconnectMessage())
         }
     }
 
@@ -663,6 +672,7 @@ struct PicPlaceSettingsCard: View {
         if progress.pulled > 0 || progress.phase == .pulling { parts.append("\(progress.pulled) brought here") }
         if progress.pushed > 0 || progress.phase == .pushing { parts.append("\(progress.pushed) sent") }
         if progress.inStep > 0 { parts.append("\(progress.inStep) in step") }
+        if progress.evicted > 0 { parts.append("\(progress.evicted) \(progress.evicted == 1 ? "preview" : "previews") of other libraries removed") }
         if progress.deferred > 0 { parts.append("\(progress.deferred) need a merge (a later stage)") }
         if !progress.failures.isEmpty { parts.append(progress.failures.joined(separator: "; ")) }
         return parts.isEmpty ? "Nothing to exchange" : parts.joined(separator: " · ")
@@ -781,6 +791,14 @@ struct PicPlaceConnectSheet: View {
                 Text("as @\(picplace.profile?.username ?? "") on \(picplace.sessionHost)")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
+                if let former = offer.former {
+                    // L23: a folder that was a server library before leads
+                    // with linking to it again — its previews are then in step.
+                    Text("This library was “\(former.displayName)” on PicPlace.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
             }
             .padding(.top, 26)
             .padding(.horizontal, 24)
@@ -844,7 +862,17 @@ struct PicPlaceConnectSheet: View {
         #endif
         .background(LL.screenBackground)
         .interactiveDismissDisabled(picplace.isConnecting)
-        .onAppear { if name.isEmpty { name = offer.suggestedName } }
+        .onAppear {
+            if let initial = offer.initialTarget {
+                target = initial
+                if case .link(let library) = initial { name = library.displayName } else if name.isEmpty { name = offer.suggestedName }
+            } else if let former = offer.former {
+                target = .link(former)
+                name = former.displayName
+            } else if name.isEmpty {
+                name = offer.suggestedName
+            }
+        }
         .onChange(of: target) { _, new in
             // Linking takes the server library's name; the others keep the
             // person's.

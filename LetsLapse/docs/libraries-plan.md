@@ -721,3 +721,137 @@ tombstoned. After: Prague 401 · Holidays 878 · nothing unfiled.
 **The Simulator** still holds ~1,276 preview shells from its account-wide
 days; on the new build its card asks which library it is. It is a
 throwaway: erase it (`tools/sim-fresh.sh`) rather than choose.
+
+## 17. What the phone showed (2026-09-17) — and what C2 is
+
+### 17.1 Steven's walk
+
+A fresh Simulator (`tools/sim-fresh.sh --new`), signed in as regularsteven,
+"Holidays" chosen on the sheet: 877 previews arrived, the gallery showed
+them, no originals — right. Then, looking for the way to "Prague LetsLapse
+Shots": **Disconnect this library…** → confirm. The card read *Not on
+PicPlace — Connect…* and the sheet offered: *New library* — "this library's
+877 projects go up"; *Link to "Holidays"* — "holds 877, this library 877";
+*Link to "Prague LetsLapse Shots"* — "holds 401, this library 877 …
+everything here that isn't there goes up".
+
+Three faults, none the server's:
+
+1. **The counts.** `localCountNow()` and `describeConnectCase()` count
+   every row of the index — the 877 pulled previews included. A preview
+   has no originals; nothing of it can go up. (§16 made the heal count
+   originals only; the sheet still counts shells.)
+2. **Disconnect keeps the previews.** `disconnectLibrary()` removes the
+   binding and the records and leaves the shells: 877 posters that can
+   never be opened or downloaded (no binding) and that poison every later
+   connect.
+3. **The copy** of the merge line reads as a riddle.
+
+What would actually have happened on *New library*: the initial sync reads
+the account's whole index, finds all 877 origins filed in Holidays, marks
+them `elsewhere`, pushes **0**. The server would have stayed clean; the
+phone would have kept 877 shells reading as previews (poster present) with
+nothing behind them. "877 go up" was the count lying, not the run. The
+genuinely bad case is a library **purged** from the server (past
+retention): its shells are then in nobody's scope, `toPush` takes them (it
+filters `elsewhere`, not `sourcesMissing`), and the run creates poster-only
+projects in the new library. That path exists today and closes in step 0.
+
+### 17.2 Why C2 as recorded would not have fixed it
+
+L11 made the phone's library a *filter*: one store, every document tagged
+with its library, an account-scoped binding, passes over the account's
+index scoped by tag. That is a second sync regime beside the Mac's (store =
+library) — and it is the shape that produced §16: an account-wide pass over
+rows whose library is a per-row attribute. The three faults above are
+outside L11's scope altogether (they are the sheet's and the disconnect's),
+and L11 makes "disconnect" on a phone harder to define, not easier (which
+library, when the store holds several?).
+
+### 17.3 Decisions
+
+| # | Decision | Why |
+|---|---|---|
+| **L21** | **iOS gets the Mac's model: a library is a folder; the phone holds several, one open. Supersedes L11.** Libraries live at `<App Support>/LetsLapse/Libraries/<folder id>/` — identity file, `Projects/`, `PicPlace/`, caches, everything in `libraryItemNames`, per folder. The folder id is minted when the folder is made and never changes; the identity file inside carries the library's uuid and name (a link adopts the server's uuid there, not in the folder name). The open one is `storage.activeLibrary` = the folder id (never a path — sandbox paths change across reinstalls). The registry on iOS is the `Libraries/` folder itself, read by identity file; no `storage.libraries`. | One regime everywhere: binding, records, scope, departures, the per-(device, library) originals switch, disconnect — all already per folder, all proven on the Mac. The phone never runs an account-wide pass again. |
+| **L22** | **A switch on iOS replaces the model, not the process.** `LetsLapseApp` holds a `ModelHost`; a switch flushes the open library (`flushLibraryPersistsAndExport`, `releaseLibraryLock`, PicPlace tasks cancelled, `persister.refuseWrites` set), points `StorageRoot.current` at the other folder, re-makes the shared persister and the singletons that cache the root at init (`CustomPresetStore`, `LightLadderStore`, `LUTStore`; the others read it at use), makes a new `AppModel()` and re-roots the view tree (`.id(generation)`). Refused while a capture, an export or a render runs; a pull in flight is cancelled and resumes when that library is next opened (its binding keeps `initialSync.pending`). The Mac keeps its relaunch — its editor windows are per library. | iOS cannot relaunch itself; a fresh model over another root *is* a launch. |
+| **L23** | **Disconnect keeps everything; a connect that cannot account for a preview evicts it.** (Rewritten 2026-09-17 after Steven's question — the first cut evicted at disconnect.) Under L21 the everyday actions are *Switch* (nothing evicted, nothing on the server changes) and *Remove from this iPhone* (the folder goes — that is "take my phone out of this library"). *Disconnect* is the rare unlink of a folder from its account (wrong account or library, leaving PicPlace, undoing a connect): the binding and the records go, **the previews stay** — shown as "Preview — connect to download", counted as projects — and a later link to the **same** library finds them in step (origin id and revision match), so nothing downloads again. A connect to a **different** library or account evicts the previews that connection cannot account for (a preview belongs to the server library that holds its originals), and the sheet says so per option: "Link to Prague — 401 arrive as previews; 877 previews of Holidays are removed from this iPhone (they stay on PicPlace)". An eviction is **never a tombstone**: the check honours `libraryIndex.deletedProjects()`, and a tombstone would carry the deletion to the server. The disconnect confirm says the numbers: "The library stops syncing. 877 previews stay on this iPhone but can't download until you connect it again; 3 projects with originals here stay. Nothing changes on PicPlace." The sheet for a folder that was a server library before (its identity still carries that uuid) leads with "This library was “Holidays” on PicPlace — link to it". Same rule on the Mac. | A thousand previews take minutes to fetch; disconnect must not throw the cache away when a re-link would find it in step. What poisoned the sheet was the counting (L24) and the missing eviction at a connect elsewhere, not the previews' existence. |
+| **L24** | **"Goes up" counts originals only — the library's count stays whole.** The library's project count (Settings, the Projects list, the card) includes previews: on a fresh phone linked to Holidays it reads 877, and a deleted project — preview or not — leaves the count at once and reaches the server on the next check (its tombstone → `deleteOnServer` when unchanged there since the base, a conflict card otherwise). Renaming, tagging and rating a preview push today too (the push queue takes a preview at tier `preview`; verified 2026-09-17) — managing a library never needs the originals here. Originals-only applies to exactly two numbers: the connect sheet's "N go up" and the first pass's push list, because going up means creating a project the server does not have, and a preview came *from* the server. `toPush` filters `sourcesMissing` (17.1's purged case closes). One gap found while checking: the check's retry of a *failed* push is originals-only (`PicPlaceChangeSync` ~248), so a failed metadata push of a preview is not retried until the next edit — step 0 lifts that guard for the manifest half. | A preview never goes up as a new project (§16's rule, applied wherever one is counted); everything else about a preview is an ordinary project's. |
+| **L25** | **The phone's doors: Add Library from PicPlace…, New Library on PicPlace…, Remove from this iPhone….** No folder pickers; no second *local* library — an unconnected phone keeps one library, as agreed. Remove deletes the folder, allowed when every project with originals here has them on the server (its record's `serverHeavyFiles` covers them), else it names the N that exist only here and refuses. The phone's first library moves into `Libraries/<id>/` once, at the first C2 launch: a same-volume rename of each `libraryItemNames` item behind a marker, finished on the next launch if interrupted (precedent: `migrateLegacyApplicationSupportFolderIfNeeded`). One copy per server library per device (the Mac's rule, over the folder registry). | Uniform folders make Remove a folder delete; the migration is the one risky step and it is a rename, not a copy. |
+
+### 17.4 The phone after C2
+
+- Fresh phone → sign in → the card: *Which library should this iPhone
+  show?* — the same sheet (new / take over the unfiled / link), binding
+  the one library the phone has.
+- Settings ▸ Libraries: name · count · size, Current / Switch, the doors of
+  L25. A switch re-opens the model on the other folder — a second or two,
+  no relaunch screen. Second step: the Projects header title as a menu with
+  the same list.
+- Captures and imports land in the open library — its folder, its binding,
+  its push — exactly as on the Mac.
+- Disconnect on any library: L23. Sign out: the device's session; every
+  library keeps its binding (L13).
+- Each library keeps its own *Upload originals automatically*, OFF by
+  default (the rule).
+
+### 17.5 Steps
+
+| Step | What | Test |
+|---|---|---|
+| **0** ✅ 2026-09-17 | L23 + L24 + the copy — LANDED, both platforms; the disconnect confirm with the numbers; eviction at a connect elsewhere, with the numbers on the sheet; the check retries a preview's failed manifest push; the usage line hidden when unbound | Simulator linked to Holidays (877 previews): Disconnect → the confirm says 877 stay and cannot download, 0 with originals; the list still shows 877 as previews; Connect → the sheet leads with Holidays; link Holidays again: "877 in step, nothing arrives, nothing goes up" and no download happens (network log); Disconnect again → link Prague: the sheet says "401 arrive; 877 previews of Holidays removed" → after: 401 rows, `deletedProjects()` empty, the server's counts unchanged throughout. A Mac scratch library with 2 originals + 3 previews: disconnect keeps all 5; connect as a new library: 2 go up, the 3 evicted, no tombstones, `lapse index --verify` clean. Delete a preview on the phone → gone from the list at once → gone on the server after the check. |
+| **C2a** | `StorageRoot` on iOS: `Libraries/<id>/`, `storage.activeLibrary`, the folder registry, the one-time migration; `-storage.activeLibrary <id>` for scratch runs | a Simulator with projects launches, migrates, everything intact; a second launch does nothing; a launch killed mid-migration finishes on the next |
+| **C2b** | The switch (L22): `ModelHost`, persister re-make, singleton re-root, teardown, refusal while busy, DEBUG `deinit` proof; `LL_OPEN_LIBRARY=<id>` on iOS | two libraries on the Simulator: switch both ways ten times; capture in each — the capture lands in the open one; presets, LUTs, ladders read from the open library; no write reaches the other (watch its folder) |
+| **C2c** | Settings ▸ Libraries on iOS, the doors, Remove's guard, the sheet's phone title | Add Prague from PicPlace → 401 previews → switch → thumbs; Remove Holidays with a downloaded original not on the server → refused by name; upload it → Remove deletes the folder |
+| **C2d** | The Projects header menu; mirrors (iPhone/iPad Settings ▸ Libraries, the sheet, the card, the disconnect confirm) | design INDEX rows |
+
+Stage D (move without originals, "Free up space") follows C2 and shares
+L23's eviction.
+
+### 17.6 Traps to carry
+
+1. **Eviction ≠ deletion.** `PicPlaceChangeSync` honours
+   `libraryIndex.deletedProjects()` (its line ~221); a preview evicted at
+   a connect elsewhere (L23) or a Remove must leave no tombstone, or the
+   next link deletes it on the server.
+2. **Two models alive.** The old `AppModel` is released when the last view
+   drops it; until then it must not write — `refuseWrites` at the switch,
+   a DEBUG `deinit` log to prove the release (none exists today).
+3. **`AppModel.sharedPersister` is a `private static let`** — re-made only
+   between models, never under one.
+4. **No paths in defaults on iOS** — the sandbox path changes on reinstall
+   and restore. Folder ids only.
+5. **Logs**: `LetsLapseApp` opens `<root>/Logs` at launch; on iOS they go to
+   the container, or a switch splits the log.
+6. **The card's usage line** ("On PicPlace: 877 projects") after a
+   disconnect is the last binding's; hidden when unbound.
+7. **`libraryItemNames` is the migration's manifest** — a store that writes
+   a new file at the root and forgets the list leaves it behind (the Mac's
+   `check` collides on the same list, so the Mac catches it first).
+8. **A bench run on a bound scratch root read the Keychain** for the
+   binding's account before `LL_PICPLACE_TOKENS` applied — an unsigned
+   build asking for a stored session raises a SecurityAgent prompt on the
+   person's screen and the launch blocks behind it (2026-09-17). Injected
+   tokens now skip the stored session altogether.
+9. **A 35 s outage does not fail a push**: the client's in-place request
+   retries outlast it and the push lands late. To stage a *failed* push
+   (`lastError`, the check's retry), the outage must outlast the request
+   retries — see §17.7.
+
+### 17.7 Step 0 as landed (2026-09-17 afternoon)
+
+Commit: see the log. Bench (letslapse-two on picplace.test, scratch roots
+`lib-s0a` "Step0 A" · `lib-s0b` the phone stand-in · `lib-s0c` "Step0 C";
+the Simulator "Step0 Bench" for the phone's screens):
+
+| Test | Result |
+|---|---|
+| T1 disconnect (2 previews + 1 original) | confirm: "2 previews pulled from PicPlace stay on this Mac but cannot download until you connect it again. 1 project with originals here stays as it is. Nothing changes on PicPlace." — binding gone, 3 folders kept, every index row live |
+| T2 re-link the same library | the sheet leads with "This library was “Step0 A” on PicPlace", link preselected: "3 already here stay in step. Nothing arrives. Nothing goes up." — pass: `merge — 0 to pull, 0 to push, 3 in step`, no pull |
+| T3 link elsewhere | the sheet: "1 arrives here as a preview … 1 here is filed in other libraries on PicPlace and stays as it is. 2 previews of “Step0 A” are removed from this Mac; they stay on PicPlace. Nothing goes up." — pass: `2 preview(s) removed … no tombstones`, `1 to pull … 1 filed in another library`; folders = the original + Step0 C's preview, `.trash` empty, rows live, server counts unchanged |
+| T4 delete a preview | `1 deleted there`; Step0 C 1 → 0 on the server; the row tombstoned here (a real deletion) |
+| iOS | bound card with *On PicPlace* and "3 brought here"; unbound card without it; a preview's detail after a disconnect: "Connect this library again to download the originals"; the sheet with the *was* line and the removal numbers ("3 previews of “Step0 A” are removed from this iPhone") |
+
+New hook: `LL_PICPLACE_OFFER=1|new|adopt|link:<uuid>` opens the real
+connect sheet once signed in, with that target selected — the numbers off
+the server — so the sheet can be photographed before Connect is pressed
+through accessibility (the card's row is not reachable by AX title).

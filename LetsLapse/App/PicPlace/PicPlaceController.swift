@@ -276,6 +276,16 @@ final class PicPlaceController: ObservableObject {
             sessionKey = nil
         }
         #endif
+        #if DEBUG
+        // A run with injected tokens (`LL_PICPLACE_TOKENS`, the bench) never
+        // reads the Keychain: an unsigned build asking for a stored session
+        // raises a SecurityAgent prompt on the person's screen and blocks
+        // the launch behind it (2026-09-17, a bound scratch root).
+        if ProcessInfo.processInfo.environment["LL_PICPLACE_TOKENS"] != nil, sessionKey != nil {
+            LLog("picplace: injected tokens — the stored session is not read")
+            sessionKey = nil
+        }
+        #endif
         var tokens = sessionKey.flatMap { PicPlaceKeychain.load(account: $0) }
         LLog("picplace: session \(sessionKey ?? "none") — \(tokens == nil ? "no tokens" : "tokens found")\(binding == nil ? "" : ", library bound to @\(binding!.user.displayHandle) on \(binding!.server.host)")")
         var tokensKey = tokens == nil ? nil : sessionKey
@@ -304,12 +314,34 @@ final class PicPlaceController: ObservableObject {
             }
             serverHasLibraries = true
             serverLibraries = demo
+            // The two sides by origin id, so every sentence the sheet can say
+            // shows: 398 originals here, 12 previews of the first library
+            // here, each library's rows on the server, 12 unfiled.
+            var serverRows: [UUID: UUID?] = [:]
+            var demoNames: [UUID: String] = [:]
+            var previews = Set<UUID>()
+            for (i, library) in demo.enumerated() {
+                guard let uuid = library.libraryUUID else { continue }
+                demoNames[uuid] = library.displayName
+                for k in 0..<library.count {
+                    let origin = UUID()
+                    serverRows[origin] = .some(uuid)
+                    if i == 0, k < 12 { previews.insert(origin) }
+                }
+            }
+            for _ in 0..<12 { serverRows[UUID()] = .some(nil) }
             connectOffer = ConnectOffer(
                 libraries: demo,
                 defaultEntry: PPLibrary(uuid: nil, name: nil, projects: .init(count: 12, byType: nil, deleted: nil), usedBytes: 0,
                                         createdBy: nil, updatedBy: nil, deletedBy: nil, createdAt: nil, updatedAt: nil, deletedAt: nil),
-                localCount: 398, suggestedName: StorageRoot.identity?.displayName ?? "Prague LetsLapse Shots",
-                needsName: StorageRoot.identity?.namedByPerson != true)
+                suggestedName: StorageRoot.identity?.displayName ?? "Prague LetsLapse Shots",
+                needsName: StorageRoot.identity?.namedByPerson != true,
+                former: nil,
+                originalsHere: Set((0..<398).map { _ in UUID() }),
+                previewsHere: previews,
+                serverRows: serverRows,
+                libraryNames: demoNames,
+                deviceWord: Self.deviceWord)
             Task { @MainActor in self.isOfferingConnect = true }
         }
         // `LL_PICPLACE_BIND=clean|fresh|merge` stages the v2 connect question's
@@ -322,6 +354,24 @@ final class PicPlaceController: ObservableObject {
             default: break
             }
             Task { @MainActor in self.isOfferingConnect = true }
+        }
+        // `LL_PICPLACE_OFFER=1|new|adopt|link:<uuid>` opens the REAL connect
+        // sheet once the session is up — the numbers off the server — with
+        // that target selected: the bench's way to look at the sheet before
+        // pressing Connect through accessibility.
+        if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_OFFER"] {
+            Task { @MainActor in
+                for _ in 0..<60 where !self.isSignedIn || !self.serverHasLibraries { try? await Task.sleep(nanoseconds: 500_000_000) }
+                switch raw {
+                case "new": self.hookInitialTarget = .new
+                case "adopt": self.hookInitialTarget = .adoptDefault
+                default:
+                    if raw.hasPrefix("link:"), let uuid = UUID(uuidString: String(raw.dropFirst(5))) {
+                        self.hookInitialTarget = self.serverLibraries.first { $0.libraryUUID == uuid }.map { .link($0) }
+                    }
+                }
+                self.offerConnect()
+            }
         }
         // `LL_PICPLACE_CONNECT=new:<name>|adopt:<name>|link:<uuid>` presses
         // Connect with that target once the session is up (stage C bench).
@@ -780,34 +830,132 @@ final class PicPlaceController: ObservableObject {
         case link(PPLibrary)
     }
 
-    /// What the connect sheet shows: the account's libraries, the counts,
-    /// and the name this library would take.
+    /// What the connect sheet shows: the account's libraries, this
+    /// library's rows and the server's, and the name this library would
+    /// take. The numbers per target come from the two sides' origin ids
+    /// (libraries plan L23, L24): what goes up is what has its originals
+    /// here and is on PicPlace nowhere; what arrives is what the target
+    /// holds and this library does not; a preview here that the target
+    /// cannot account for is removed.
+    #if DEBUG
+    /// `LL_PICPLACE_OFFER`'s target, copied into the offer it opens.
+    var hookInitialTarget: ConnectTarget?
+    #endif
+
     struct ConnectOffer: Equatable {
         var libraries: [PPLibrary]
         var defaultEntry: PPLibrary?
-        var localCount: Int
         var suggestedName: String
         var needsName: Bool
+        /// The server library this folder was before — its identity carries
+        /// that library's uuid (a link adopted it, a create minted it): the
+        /// sheet leads with linking to it again.
+        var former: PPLibrary?
+        /// This library's live rows by origin id: those whose originals are
+        /// here, and the previews pulled from PicPlace.
+        var originalsHere: Set<UUID> = []
+        var previewsHere: Set<UUID> = []
+        /// The account's live rows: origin id → the library each is filed in
+        /// (nil = unfiled). Absent = not on PicPlace.
+        var serverRows: [UUID: UUID?] = [:]
+        var libraryNames: [UUID: String] = [:]
+        /// "this Mac" · "this iPhone" · "this iPad".
+        var deviceWord: String = "this device"
+        /// The target the sheet opens on when a launch hook chose one
+        /// (`LL_PICPLACE_OFFER`); else the sheet leads with `former`.
+        var initialTarget: ConnectTarget?
 
-        /// The numbers for a target: what goes up, what arrives.
+        /// What can go up — the projects with their originals here.
+        var localCount: Int { originalsHere.count }
+
+        struct Numbers: Equatable {
+            var arrive = 0
+            var alreadyHere = 0
+            var goUp = 0
+            var elsewhere = 0
+            var evicted = 0
+            /// The removed previews by the library PicPlace files them in;
+            /// "" for one no longer on PicPlace.
+            var evictedFrom: [String: Int] = [:]
+        }
+
+        /// The rows the target holds: none for a new library, the unfiled
+        /// for the default, the library's for a link.
+        private func held(by target: ConnectTarget) -> Set<UUID> {
+            switch target {
+            case .new: return []
+            case .adoptDefault: return Set(serverRows.filter { $0.value == nil }.map(\.key))
+            case .link(let library):
+                guard let uuid = library.libraryUUID else { return [] }
+                return Set(serverRows.filter { $0.value == uuid }.map(\.key))
+            }
+        }
+
+        func numbers(for target: ConnectTarget) -> Numbers {
+            let held = held(by: target)
+            let here = originalsHere.union(previewsHere)
+            var n = Numbers()
+            n.arrive = held.subtracting(here).count
+            n.alreadyHere = held.intersection(here).count
+            n.goUp = originalsHere.filter { serverRows[$0] == nil }.count
+            n.elsewhere = originalsHere.filter { serverRows[$0] != nil && !held.contains($0) }.count
+            for origin in previewsHere where !held.contains(origin) {
+                n.evicted += 1
+                let name: String
+                if let filed = serverRows[origin] {
+                    name = filed.flatMap { libraryNames[$0] } ?? (filed == nil ? "unfiled" : "another library")
+                } else {
+                    name = ""
+                }
+                n.evictedFrom[name, default: 0] += 1
+            }
+            return n
+        }
+
+        /// The numbers for a target, as a sentence or three.
         func summary(for target: ConnectTarget) -> String {
-            let local = "\(localCount) project\(localCount == 1 ? "" : "s")"
+            let n = numbers(for: target)
+            var parts: [String] = []
             switch target {
             case .new:
-                return localCount == 0
-                    ? "An empty library on PicPlace; captures and imports go up as you make them."
-                    : "This library's \(local) go up — records and a preview each; originals stay here until you upload them. Nothing arrives."
-            case .adoptDefault:
-                let n = defaultEntry?.count ?? 0
-                return "The \(n) unfiled project\(n == 1 ? "" : "s") on PicPlace become this library"
-                    + (localCount == 0 ? " and arrive here as previews." : "; what is here and not there goes up, what is there and not here arrives as previews, and projects on both sides stay in step.")
-            case .link(let library):
-                let n = library.count
-                if localCount == 0 {
-                    return "All \(n) project\(n == 1 ? "" : "s") of “\(library.displayName)” arrive here as previews; originals download per project. Nothing goes up."
+                if n.goUp == 0, n.evicted == 0, n.elsewhere == 0 {
+                    return "An empty library on PicPlace; captures and imports go up as you make them."
                 }
-                return "“\(library.displayName)” holds \(n) project\(n == 1 ? "" : "s"), this library \(local). Everything there that isn't here arrives as previews, everything here that isn't there goes up, and projects on both sides stay in step."
+            case .adoptDefault:
+                let count = defaultEntry?.count ?? 0
+                parts.append("The \(count) unfiled \(count == 1 ? "project" : "projects") on PicPlace become this library.")
+            case .link:
+                break
             }
+            if n.arrive > 0 {
+                let all = n.alreadyHere == 0 && n.arrive > 1 ? "All " : ""
+                parts.append("\(all)\(n.arrive) \(n.arrive == 1 ? "arrives here as a preview" : "arrive here as previews"); originals download per project.")
+            }
+            if n.alreadyHere > 0 {
+                parts.append("\(n.alreadyHere) already here \(n.alreadyHere == 1 ? "stays" : "stay") in step.")
+            }
+            if n.goUp > 0 {
+                parts.append("\(n.goUp) here \(n.goUp == 1 ? "goes" : "go") up — records and a preview each; originals stay here until you upload them.")
+            }
+            if n.elsewhere > 0 {
+                parts.append("\(n.elsewhere) here \(n.elsewhere == 1 ? "is" : "are") filed in other libraries on PicPlace and \(n.elsewhere == 1 ? "stays as it is" : "stay as they are").")
+            }
+            if n.evicted > 0 {
+                let from: String
+                let named = n.evictedFrom.keys.filter { !$0.isEmpty }
+                if n.evictedFrom.count == 1, let only = named.first {
+                    from = " of “\(only)”"
+                } else if n.evictedFrom.count == 1 {
+                    from = " no longer on PicPlace"
+                } else {
+                    from = " of other libraries"
+                }
+                let stay = n.evictedFrom.keys.contains("") && n.evictedFrom.count == 1 ? "" : "; they stay on PicPlace"
+                parts.append("\(n.evicted) \(n.evicted == 1 ? "preview" : "previews")\(from) \(n.evicted == 1 ? "is" : "are") removed from \(deviceWord)\(stay).")
+            }
+            if n.arrive == 0 { parts.append("Nothing arrives.") }
+            if n.goUp == 0 { parts.append("Nothing goes up.") }
+            return parts.joined(separator: " ")
         }
     }
 
@@ -829,10 +977,24 @@ final class PicPlaceController: ObservableObject {
         }
         noteLimits(status)
         noteLibraries(status)
-        var localCount = 0
-        if let counts = try? model.libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery()) {
-            localCount = counts.values.reduce(0, +)
+        // This library's rows by origin id — what has its originals here
+        // and what is a preview pulled from PicPlace (L24: only the first
+        // can go up). A project whose files simply went missing is neither.
+        var originalsHere = Set<UUID>()
+        var previewsHere = Set<UUID>()
+        if let libraryIndex = model.libraryIndex {
+            var query = LibraryIndex.ProjectQuery()
+            query.limit = 100_000
+            for row in (try? libraryIndex.projects(query))?.rows ?? [] {
+                guard let capture = model.capture(id: row.id) else { continue }
+                if isPreviewOnly(capture) {
+                    previewsHere.insert(model.originID(of: capture))
+                } else if !model.sourcesMissing(capture) {
+                    originalsHere.insert(model.originID(of: capture))
+                }
+            }
         }
+        let localCount = originalsHere.count
         guard serverHasLibraries else {
             // A server from before libraries: v2's one-line question, the
             // merge refused (libraries plan L17), one library per account
@@ -857,13 +1019,37 @@ final class PicPlaceController: ObservableObject {
             return
         }
         let libraries = (status.libraries ?? []).filter { !$0.isDefault && !$0.isTombstone }
+        // The account's rows and where each is filed: what the sheet says
+        // per target — arrives, in step, goes up, removed — comes from these
+        // and this library's, by origin id (L23, L24).
+        guard let index: PPProjectIndex = try? await client.get("projects") else {
+            lastConnectError = "PicPlace couldn't be reached to check what it holds. Try again."
+            return
+        }
+        var serverRows: [UUID: UUID?] = [:]
+        for row in index.projects where !row.isTombstone {
+            guard let origin = UUID(uuidString: row.uuid) else { continue }
+            serverRows[origin] = .some(row.libraryUUID)
+        }
+        var names: [UUID: String] = [:]
+        for library in status.libraries ?? [] {
+            if let uuid = library.libraryUUID { names[uuid] = library.displayName }
+        }
         let identity = StorageRoot.identity
         connectOffer = ConnectOffer(
             libraries: libraries,
             defaultEntry: (status.libraries ?? []).first { $0.isDefault && $0.count > 0 },
-            localCount: localCount,
             suggestedName: identity?.displayName ?? LibraryIdentity.defaultName(forRoot: root),
-            needsName: identity?.namedByPerson != true)
+            needsName: identity?.namedByPerson != true,
+            former: identity.flatMap { id in libraries.first { $0.libraryUUID == id.id } },
+            originalsHere: originalsHere,
+            previewsHere: previewsHere,
+            serverRows: serverRows,
+            libraryNames: names,
+            deviceWord: Self.deviceWord)
+        #if DEBUG
+        connectOffer?.initialTarget = hookInitialTarget
+        #endif
         connectCaseText = nil
         isOfferingConnect = true
     }
@@ -939,8 +1125,14 @@ final class PicPlaceController: ObservableObject {
         }
     }
 
+    /// The projects here that can go up — those with their originals here
+    /// (L24): a preview came from PicPlace and never goes up as new.
     private func localCountNow() -> Int {
-        (try? model.libraryIndex?.categoryCounts(LibraryIndex.ProjectQuery()))?.values.reduce(0, +) ?? 0
+        guard let libraryIndex = model.libraryIndex else { return 0 }
+        var query = LibraryIndex.ProjectQuery()
+        query.limit = 100_000
+        let rows = (try? libraryIndex.projects(query))?.rows ?? []
+        return rows.filter { row in model.capture(id: row.id).map { !model.sourcesMissing($0) } ?? false }.count
     }
 
     /// `PUT /libraries/{uuid}` — create (or rename) the server library this
@@ -1048,9 +1240,50 @@ final class PicPlaceController: ObservableObject {
     }
     #endif
 
+    /// "this Mac" · "this iPhone" · "this iPad" — for copy about what stays here.
+    @MainActor static var deviceWord: String {
+        #if os(macOS)
+        return "this Mac"
+        #else
+        return UIDevice.current.userInterfaceIdiom == .pad ? "this iPad" : "this iPhone"
+        #endif
+    }
+
+    /// What a disconnect leaves (libraries plan L23): the previews pulled
+    /// from PicPlace, which stay but cannot download until the library
+    /// connects again, and the projects with their originals here.
+    func disconnectSummary() -> (previews: Int, originals: Int) {
+        guard let libraryIndex = model.libraryIndex else { return (0, 0) }
+        var query = LibraryIndex.ProjectQuery()
+        query.limit = 100_000
+        var previews = 0
+        var originals = 0
+        for row in (try? libraryIndex.projects(query))?.rows ?? [] {
+            guard let capture = model.capture(id: row.id) else { continue }
+            if isPreviewOnly(capture) { previews += 1 } else if !model.sourcesMissing(capture) { originals += 1 }
+        }
+        return (previews, originals)
+    }
+
+    /// The disconnect confirm's copy, with the numbers.
+    func disconnectMessage() -> String {
+        let n = disconnectSummary()
+        var parts = ["The library stops syncing and forgets its account and what it has synced."]
+        if n.previews > 0 {
+            parts.append("\(n.previews) \(n.previews == 1 ? "preview" : "previews") pulled from PicPlace \(n.previews == 1 ? "stays" : "stay") on \(Self.deviceWord) but cannot download until you connect it again.")
+        }
+        if n.originals > 0 {
+            parts.append("\(n.originals) \(n.originals == 1 ? "project" : "projects") with originals here \(n.originals == 1 ? "stays as it is" : "stay as they are").")
+        }
+        parts.append("Nothing changes on PicPlace. Switching libraries never needs this.")
+        return parts.joined(separator: " ")
+    }
+
     /// "Disconnect this library": the binding and the sync records go; the
-    /// projects stay, keep their origin ids, and would fork if pushed under
-    /// another account (v2 plan §4.6). The session is untouched.
+    /// projects stay — the previews too (L23: a later link to the same
+    /// library finds them in step; a link elsewhere removes them then) —
+    /// keep their origin ids, and would fork if pushed under another
+    /// account (v2 plan §4.6). The session is untouched.
     func disconnectLibrary() {
         for task in syncTasks.values { task.cancel() }
         syncTasks.removeAll()
