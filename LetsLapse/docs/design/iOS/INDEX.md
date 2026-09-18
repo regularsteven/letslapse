@@ -528,9 +528,20 @@ DEBUG hook: `LL_COLLECTIONS=seed|list|detail` — seeds two demo collections fro
 | Advanced · field-test menu open | — | `App/SettingsView.swift` — the open `Menu` of either field-test row (**Auto blend strategy**: Zone · Latitude · Lumen; **Raw decode path**: Bradford (default) · Forward matrix · Core Image RAW · Adobe DCP), with the selected case carrying its `checkmark` Label. Neither row's open state has ever been drawn, which was harmless while every case was a plain name — but the decode menu now carries text that exists nowhere else in these specs: on iPhone the Adobe DCP case is permanently disabled and labelled with its reason, "Adobe DCP — Adobe camera profiles are not installed. They ship with Lightroom or Camera Raw" (`RawDecodeSettings.label(for:)`, over `RawDecodePathRegistry.unavailabilityNote(for:)`). The row that opens the menu shows only the *selected* value, so [settings.advanced.portrait.svg](settings.advanced.portrait.svg) cannot show it and describes it in its `desc` instead. Worth drawing as one variant covering both rows, since the disabled-with-reason treatment is the reusable part | 🟡 |
 | Capture benchmark (sheet) | — | `App/CaptureBenchmark.swift` | 🟡 |
 
-🟡 **2026-09-17, Libraries on the phone (plan §17.10, C2c) — code first, mirrors OWED:** Settings gained a **Libraries**
-card above PicPlace (`settings.libraries.portrait.svg`): a row per library folder (name · "N projects · @user on host" or
-"not on PicPlace" · *Current* / *Switch*), a long-press menu (Rename…, Remove from this iPhone…), and the doors *Add Library
-from PicPlace…* and *New Library on PicPlace…*; the Add sheet (`settings.libraries.add-from-picplace.svg`), the New Library
-name alert, the Remove confirm with its numbers and the refusal naming what exists only here; the PicPlace card's unbound row
-reads *Which library should this iPhone show? — Choose…* when it is the phone's only library. iPad: the same card at its width.
+✅ **2026-09-17/18, Libraries on the phone (plan §17.10–17.11, C2c + C2d) — code first, mirrors drawn 2026-09-18:**
+Settings gained a **Libraries** card above PicPlace — [settings.libraries.portrait.svg](settings.libraries.portrait.svg) (a
+row per library folder: name · "N projects · @user on host" / "not on PicPlace" · *Current* or a *Switch* pill; long-press
+Rename… / Remove from this iPhone…; the doors *Add Library from PicPlace…* and *New Library on PicPlace…*) — with its
+sheets: [settings.libraries.add-from-picplace.portrait.svg](settings.libraries.add-from-picplace.portrait.svg),
+[settings.libraries.new.portrait.svg](settings.libraries.new.portrait.svg) (the name alert),
+[settings.libraries.remove.portrait.svg](settings.libraries.remove.portrait.svg) (the confirm with its numbers) and
+[settings.libraries.remove.refused.portrait.svg](settings.libraries.remove.refused.portrait.svg) (the guard naming what
+exists only here). The PicPlace card asks *Which library should this iPhone show? — Choose…* while the phone's only library
+is unbound — [settings.picplace.choose-library.portrait.svg](settings.picplace.choose-library.portrait.svg) — and its
+Disconnect confirm carries the numbers — [settings.picplace.disconnect.portrait.svg](settings.picplace.disconnect.portrait.svg).
+The connect sheet with the numbers per target and the *was* line —
+[picplace.connect.portrait.svg](picplace.connect.portrait.svg). The Projects header's library menu under the title —
+[projects.libraries.portrait.svg](projects.libraries.portrait.svg) (the chip verified on the Simulator, the open menu drawn
+from the code). The card, the question, the connect sheet and the chip were mirrored from Simulator screenshots; the
+sheets and alerts from the code (the Simulator MCP tool needed a device-access approval no one was at the keyboard for).
+iPad: the same cards and sheets at its width (see ../iPadOS/INDEX.md). The tab bar in these files is drawn simplified.

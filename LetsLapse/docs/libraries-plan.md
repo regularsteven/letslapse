@@ -802,7 +802,7 @@ library, when the store holds several?).
 | **C2a** ✅ 2026-09-17 | LANDED — `StorageRoot` on iOS: `Libraries/<id>/`, `storage.activeLibrary`, the folder registry, the one-time migration; `-storage.activeLibrary <id>` for scratch runs | a Simulator with projects launches, migrates, everything intact; a second launch does nothing; a launch killed mid-migration finishes on the next |
 | **C2b** ✅ 2026-09-17 | LANDED — the switch (L22): `ModelHost`, persister re-make, singleton re-root, teardown, refusal while busy, DEBUG `deinit` proof; `LL_OPEN_LIBRARY=<id>` on iOS | two libraries on the Simulator: switch both ways ten times; capture in each — the capture lands in the open one; presets, LUTs, ladders read from the open library; no write reaches the other (watch its folder) |
 | **C2c** ✅ 2026-09-17 | LANDED — Settings ▸ Libraries on iOS, the doors, Remove's guard, the sheet's phone title | Add Prague from PicPlace → 401 previews → switch → thumbs; Remove Holidays with a downloaded original not on the server → refused by name; upload it → Remove deletes the folder |
-| **C2d** | The Projects header menu; mirrors (iPhone/iPad Settings ▸ Libraries, the sheet, the card, the disconnect confirm) | design INDEX rows |
+| **C2d** ✅ 2026-09-18 | LANDED — the Projects header menu; mirrors (iPhone/iPad Settings ▸ Libraries, the sheet, the card, the disconnect confirm) | design INDEX rows |
 
 Stage D (move without originals, "Free up space") follows C2 and shares
 L23's eviction.
@@ -979,3 +979,31 @@ the sheet's phone title.
 
 Next: **C2d** — the Projects header title as a library menu, and the
 mirrors (iPhone/iPad/Mac).
+
+### 17.11 C2d as landed (2026-09-18) — and the programme closed
+
+- **The Projects header's library menu** (iOS): with more than one library
+  on the phone, the open library's name sits under the title as an accent
+  capsule (books.vertical · name · chevron); its menu lists the others —
+  a switch in place that lands back on Projects — and *Manage libraries…*,
+  which opens the Settings card. One library, no chip.
+- **Mirrors drawn** (the design contract, `docs/design/README.md`): iOS —
+  `settings.libraries.portrait.svg`, `.add-from-picplace`, `.new`,
+  `.remove`, `.remove.refused`, `settings.picplace.choose-library`,
+  `settings.picplace.disconnect`, `picplace.connect.portrait.svg`,
+  `projects.libraries.portrait.svg`; macOS — `settings-libraries.svg`,
+  `.create`, `.move`, `.moving` (renamed from the retired
+  `settings-library-location`), `.disconnect`, `picplace.connect.svg`,
+  `settings-libraries.add-from-picplace.svg`; the iPad shares the phone's.
+  INDEX rows ✅ on all three. Cards, the question, the connect sheet and
+  the chip were mirrored from screenshots; sheets and alerts from the code.
+- **The staging hook's demo values** (`LL_STORAGE=move|create|failed`)
+  are now `/Volumes/Demo Drive/LetsLapse` and 12,4 GB: a staged sheet on a
+  bench run had shown Steven's real volume and "148,2 GB" and alarmed him
+  (2026-09-18) — a staged screen must never read as real.
+- **What stays owed after C2:** stage D (move without originals, "Free up
+  space"); trap 2's retained model (UIKit holds the old tree's environment
+  — made light, not freed); the Simulator MCP tool's device-access
+  approval, without which sheets on the phone are drawn from the code.
+
+The libraries programme (L1–L25, stages A → C2) is closed with this entry.

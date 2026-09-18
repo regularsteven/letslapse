@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · Libraries · Add a library from PicPlace (sheet) · portrait</title>
+  <desc>Mirrors AddLibraryFromPicPlacePhoneSheet (App/SettingsView.swift, iOS) raised by the Libraries card's Add Library from PicPlace… row — libraries plan L25, C2c (2026-09-17, code first; drawn from the code, the card verified on the Simulator). A .sheet over Settings: title 'Add a library from PicPlace' (19pt semibold), one line of secondary prose — 'A copy of the library is made on this iPhone — its projects arrive as previews; originals download per project. It opens right away.' — then the account's libraries no folder here is a copy of (PicPlaceController.librariesNotOnThisDevice) as radio rows in a 4 %-tinted 12pt card: name (14.5pt, semibold when chosen) over 'N projects · bytes on PicPlace' (11.5pt secondary); the first is chosen on appear. A failure line in LL.levelOff above the buttons when the folder could not be made. Buttons: Not now (secondary) · Add and Open (primary, disabled with nothing chosen). Add and Open makes the folder — the server library's uuid and name as its identity, the binding pending its first pull — dismisses, and switches to it; the pull runs as the new model comes up. On the Mac the same door is AddLibraryFromPicPlaceSheet, which also asks where to place the folder and relaunches (macOS/settings-libraries.add-from-picplace.svg).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <g clip-path="url(#scroll)"><g transform="translate(0,0)">
+        <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.35"/>
+        <rect x="0" y="120" width="393" height="732" rx="40" fill="#F2F2F7"/>
+        <rect x="178" y="128" width="36" height="5" rx="2.5" fill="#000" fill-opacity="0.18"/>
+        <text x="24" y="172" font-size="19" fill="#000" font-weight="600">Add a library from PicPlace</text>
+        <text x="24" y="194" font-size="13" fill="#6D6D72">A copy of the library is made on this iPhone — its projects</text>
+        <text x="24" y="210" font-size="13" fill="#6D6D72">arrive as previews; originals download per project. It opens</text>
+        <text x="24" y="226" font-size="13" fill="#6D6D72">right away.</text>
+        <rect x="24" y="238" width="345" height="132" rx="12" fill="#000" fill-opacity="0.04"/>
+        <circle cx="46" cy="269" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+        <circle cx="46" cy="269" r="4.5" fill="#C36A00"/>
+        <text x="68" y="265" font-size="14.5" fill="#000" font-weight="600">Client X</text>
+        <text x="68" y="283" font-size="11.5" fill="#6D6D72">12 projects · 1,2 GB on PicPlace</text>
+        <line x1="68" y1="304" x2="369" y2="304" stroke="#000" stroke-opacity="0.08"/>
+        <circle cx="46" cy="335" r="8" fill="none" stroke="#8E8E93" stroke-width="1.6"/>
+        <text x="68" y="331" font-size="14.5" fill="#000">Timelapse gallery</text>
+        <text x="68" y="349" font-size="11.5" fill="#6D6D72">300 projects · 9,8 GB on PicPlace</text>
+        <rect x="24" y="760" width="164" height="56" rx="28.0" fill="#FFF"/>
+        <text x="106.0" y="793.5" font-size="17" fill="#C36A00" font-weight="600" text-anchor="middle">Not now</text>
+        <rect x="205" y="760" width="164" height="56" rx="28.0" fill="#C36A00"/>
+        <text x="287.0" y="793.5" font-size="17" fill="#FFF" font-weight="600" text-anchor="middle">Add and Open</text>
+      </g></g>
+    </g>
+  </g>
+</svg>

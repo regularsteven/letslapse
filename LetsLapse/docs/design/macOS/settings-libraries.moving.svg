@@ -1,6 +1,6 @@
 <svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Settings · library location · moving · 760×680</title>
-  <desc>Mirrors App/SettingsView.swift (StorageLocationSheet, the .copying phase) over App/StorageLocation.swift (StorageMover). The progress state of the library move drawn in settings-library-location.svg — that file's desc carries the whole flow; this one is the shape of the wait. The bar is HAND-DRAWN like the import sheet's and for the same reason: the system linear ProgressView(value:) fills in control grey on macOS whatever the tint says. Progress is BYTES, not files — the mover plans the whole copy first (every file with its size), so the caption's denominator is the real total and the free-space check ran against it before the first byte moved. The third line names the file currently copying (11pt tertiary, middle-truncated): DNG libraries stream thousands of small files through it, but a single multi-gigabyte ProRes original holds the bar still for as long as it takes — the filename is what says the sheet is not hung. Progress updates are throttled to ~5/s on the main actor. Cancel stops between files, removes exactly the top-level items this move created at the destination, and dismisses — the setting is untouched and the session continues on the current root. The preparing moment before the plan exists shows an indeterminate system linear bar (accent) captioned "Sizing up the library…", desc-only. Staged for screenshots with LL_TAB=settings LL_STORAGE=moving (96,5 of 148,2 GB, IMG_0412.dng — the values drawn here); verified against the running Mac app 2026-08-25.</desc>
+  <desc>Mirrors App/SettingsView.swift (StorageLocationSheet, the .copying phase) over App/StorageLocation.swift (StorageMover). The progress state of the library move drawn in settings-libraries.svg — that file's desc carries the whole flow; this one is the shape of the wait. The bar is HAND-DRAWN like the import sheet's and for the same reason: the system linear ProgressView(value:) fills in control grey on macOS whatever the tint says. Progress is BYTES, not files — the mover plans the whole copy first (every file with its size), so the caption's denominator is the real total and the free-space check ran against it before the first byte moved. The third line names the file currently copying (11pt tertiary, middle-truncated): DNG libraries stream thousands of small files through it, but a single multi-gigabyte ProRes original holds the bar still for as long as it takes — the filename is what says the sheet is not hung. Progress updates are throttled to ~5/s on the main actor. Cancel stops between files, removes exactly the top-level items this move created at the destination, and dismisses — the setting is untouched and the session continues on the current root. The preparing moment before the plan exists shows an indeterminate system linear bar (accent) captioned "Sizing up the library…", desc-only. Staged for screenshots with LL_TAB=settings LL_STORAGE=moving (96,5 of 12,4 GB, IMG_0412.dng — the values drawn here); verified against the running Mac app 2026-08-25.</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
     <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%">
@@ -68,7 +68,7 @@
       </g>
 
       <text x="400" y="289" font-size="19" class="sb" text-anchor="middle" fill="#000">Moving library</text>
-      <text x="400" y="311" font-size="14" text-anchor="middle" fill="#6D6D72">/Volumes/letslapse</text>
+      <text x="400" y="311" font-size="14" text-anchor="middle" fill="#6D6D72">/Volumes/Demo Drive/LetsLapse</text>
 
       <!-- 6pt capsule; track Color.primary 12%, fill LL.accent. Inset 48 each
            side: the VStack's own 24 plus the bar's 24. 65% here. -->
@@ -76,7 +76,7 @@
         <rect x="258" y="339" width="284" height="6" rx="3" fill="#000" fill-opacity="0.12"/>
         <rect x="258" y="339" width="185" height="6" rx="3" fill="#C36A00"/>
       </g>
-      <text x="400" y="363" font-size="12.5" class="mono" text-anchor="middle" fill="#6D6D72">96,5 GB of 148,2 GB</text>
+      <text x="400" y="363" font-size="12.5" class="mono" text-anchor="middle" fill="#6D6D72">8,1 GB of 12,4 GB</text>
       <text x="400" y="381" font-size="11" text-anchor="middle" fill="#B5B5BA">IMG_0412.dng</text>
 
       <!-- LLSecondaryButtonStyle, ⎋. Stops between files, removes what this
@@ -88,5 +88,5 @@
 
   <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
   <text x="400" y="722" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Settings · library location · moving · 760×680 pt window</text>
-  <text x="400" y="740" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/SettingsView.swift (StorageLocationSheet .copying) — preparing state desc-only; the flow's home file is settings-library-location.svg</text>
+  <text x="400" y="740" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/SettingsView.swift (StorageLocationSheet .copying) — preparing state desc-only; the flow's home file is settings-libraries.svg</text>
 </svg>

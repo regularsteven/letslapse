@@ -1,0 +1,32 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Settings · Libraries · Move library? (sheet) · 760×680</title>
+  <desc>Mirrors StorageLocationSheet in its .move mode (App/SettingsView.swift, raised by Move This Library…) over StorageMover (App/StorageLocation.swift) — the copy-never-delete mover of 2026-08-25, retitled for the Libraries card 2026-09-16 (captured 2026-09-18 with LL_TAB=settings LL_STORAGE=move; the hook's demo destination and size are /Volumes/Demo Drive/LetsLapse and 12,4 GB since 2026-09-18 — they had been a real-looking drive and 148 GB, which alarmed a person watching a bench run). 'Move library?' with the destination under it, prose 'Your library — about 12,4 GB of projects, thumbnails and capture logs — is copied to this folder, and LetsLapse relaunches to use it there. Nothing is deleted: the current copy stays at &lt;current path&gt; until you remove it yourself in Finder.' — Move Library (primary) · Cancel. The move carries StorageRoot.libraryItemNames only, checks free space against the walked total first, and on success commits the path and flips to the Relaunch screen; the progress variant is settings-libraries.moving.svg.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Settings</text>
+    </g>
+    <rect x="20" y="60" width="760" height="640" fill="#000" fill-opacity="0.18"/>
+    <rect x="190.0" y="135.0" width="420" height="470" rx="14" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+    <g transform="translate(386,157.0)" fill="#C36A00" data-symbol="externaldrive.fill"><rect x="0" y="6" width="28" height="12" rx="3"/><rect x="4" y="0" width="20" height="8" rx="2"/></g>
+    <text x="400" y="199.0" font-size="20" fill="#000" font-weight="700" text-anchor="middle">Move library?</text>
+    <text x="400" y="221.0" font-size="13" fill="#6D6D72" text-anchor="middle">/Volumes/Demo Drive/LetsLapse</text>
+    <text x="400" y="247.0" font-size="13" fill="#000" text-anchor="middle">Your library — about 12,4 GB of projects, thumbnails and</text>
+    <text x="400" y="263.0" font-size="13" fill="#000" text-anchor="middle">capture logs — is copied to this folder, and LetsLapse</text>
+    <text x="400" y="279.0" font-size="13" fill="#000" text-anchor="middle">relaunches to use it there. Nothing is deleted: the current</text>
+    <text x="400" y="295.0" font-size="13" fill="#000" text-anchor="middle">copy stays at ~/Library/Application Support/LetsLapse until</text>
+    <text x="400" y="311.0" font-size="13" fill="#000" text-anchor="middle">you remove it yourself in Finder.</text>
+    <rect x="214.0" y="339.0" width="372" height="44" rx="10" fill="#C36A00"/>
+    <text x="400" y="367.0" font-size="15" fill="#FFF" font-weight="700" text-anchor="middle">Move Library</text>
+    <rect x="214.0" y="391.0" width="372" height="44" rx="10" fill="#FFF"/>
+    <text x="400" y="419.0" font-size="15" fill="#C36A00" font-weight="700" text-anchor="middle">Cancel</text>
+  </g>
+</svg>

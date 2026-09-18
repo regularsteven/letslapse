@@ -1,0 +1,49 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Settings · Libraries card — three libraries, the four doors · 760×680</title>
+  <desc>Mirrors App/SettingsView.swift (librariesCard, libraryRowView, refreshLibraryRows, the doors) over App/StorageLocation.swift (StorageRoot, LibraryRegistry) — libraries plan §2.3, §3.1–3.4, L13–L20 (stages A/A′, 2026-09-16; mirrored 2026-09-18 from the running Mac bench). Settings scrolled to the LIBRARIES section. One row per known library (LibraryRegistry: storage.libraries, seeded by discover() from the default location and its &lt;host&gt;/&lt;username&gt;/ folders): title = the identity file's name (grey placeholder with an accent pencil while unnamed — L16), subtitle = the ~-abbreviated path · N projects · @user on host when bound (or 'path — not mounted'), truncated at the width the buttons leave; a pencil to rename on every reachable row (an alert with a text field; the open library's rename also renames it on PicPlace); on the open row 'Current' and — visible, not only in the menu (L14) — a red Disconnect… while it is bound; on the others a bordered Switch… (disabled when unreachable or while a render runs). The row's context menu: Rename…, Show in Finder, Disconnect from PicPlace… (open row, bound), Remove from List (the folder is never touched). THE DOORS: Create New Library… (an NSSavePanel — a name and a place in one go; settings-libraries.create.svg), Open Other Library… (an NSOpenPanel; StorageRoot.check decides — a library switches, an empty folder is refused as such, a folder inside the current one or holding a same-named non-library item is refused), Add Library from PicPlace… (only while the account has libraries no known library here is a copy of; settings-libraries.add-from-picplace.svg), Move This Library… (the copy-never-delete mover; its subtitle says the library's walked size; settings-libraries.move.svg). Every switch or create ends on the Relaunch button — a location applies on relaunch (StorageRoot.current is resolved once per process). LL_SCROLL=libraries lands here; LL_STORAGE=list stages the rows with no disk touched; LL_CREATE_LIBRARY / LL_OPEN_LIBRARY run the real create / open on a scratch path.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Settings</text>
+    </g>
+    <text x="36" y="76" font-size="12" fill="#6D6D72" font-weight="600">LIBRARIES</text>
+    <rect id="libraries-card" x="36" y="86" width="728" height="386" rx="12" fill="#FFF"/>
+    <text x="52" y="110" font-size="16" fill="#000">Prague LetsLapse Shots</text>
+    <text x="52" y="126" font-size="11.5" fill="#6D6D72">/Volumes/letslapse/picplace.test/regularsteven · 401 projects · @regularsteven on picplace.test</text>
+    <text x="586" y="110" font-size="13" fill="#6D6D72" text-anchor="middle">✎</text>
+    <text x="686" y="110" font-size="13" fill="#FF3B30" text-anchor="end">Disconnect…</text>
+    <text x="748" y="110" font-size="13" fill="#6D6D72" text-anchor="end">Current</text>
+    <line x1="52" y1="136" x2="748" y2="136" stroke="#000" stroke-opacity="0.08"/>
+    <text x="52" y="160" font-size="16" fill="#000">Holidays</text>
+    <text x="52" y="176" font-size="11.5" fill="#6D6D72">~/Library/Application Support/LetsLapse/picplace.test/regularsteven · 877 projects · @r…</text>
+    <text x="676" y="160" font-size="13" fill="#6D6D72" text-anchor="middle">✎</text>
+    <rect x="692" y="148" width="56" height="24" rx="6" fill="#000" fill-opacity="0.06"/>
+    <text x="720.0" y="164.5" font-size="13" fill="#000" text-anchor="middle">Switch…</text>
+    <line x1="52" y1="186" x2="748" y2="186" stroke="#000" stroke-opacity="0.08"/>
+    <text x="52" y="210" font-size="16" fill="#6D6D72">LetsLapse</text>
+    <text x="52" y="226" font-size="11.5" fill="#6D6D72">~/Library/Application Support/LetsLapse · 0 projects</text>
+    <text x="676" y="210" font-size="13" fill="#C36A00" text-anchor="middle">✎</text>
+    <rect x="692" y="198" width="56" height="24" rx="6" fill="#000" fill-opacity="0.06"/>
+    <text x="720.0" y="214.5" font-size="13" fill="#000" text-anchor="middle">Switch…</text>
+    <line x1="52" y1="236" x2="748" y2="236" stroke="#000" stroke-opacity="0.08"/>
+    <text x="52" y="260" font-size="16" fill="#C36A00">Create New Library…</text>
+    <text x="52" y="276" font-size="11.5" fill="#6D6D72">An empty library in a folder of your choosing. Nothing is copied.</text>
+    <line x1="52" y1="294" x2="748" y2="294" stroke="#000" stroke-opacity="0.08"/>
+    <text x="52" y="318" font-size="16" fill="#C36A00">Open Other Library…</text>
+    <text x="52" y="334" font-size="11.5" fill="#6D6D72">A LetsLapse library on any drive — switches to it on relaunch.</text>
+    <line x1="52" y1="352" x2="748" y2="352" stroke="#000" stroke-opacity="0.08"/>
+    <text x="52" y="376" font-size="16" fill="#C36A00">Add Library from PicPlace…</text>
+    <text x="52" y="392" font-size="11.5" fill="#6D6D72">1 of your libraries is on picplace.test and not on this Mac: “Client X”.</text>
+    <line x1="52" y1="410" x2="748" y2="410" stroke="#000" stroke-opacity="0.08"/>
+    <text x="52" y="434" font-size="16" fill="#C36A00">Move This Library…</text>
+    <text x="52" y="450" font-size="11.5" fill="#6D6D72">Copies “Prague LetsLapse Shots” — about 12,4 GB — to another folder. Nothing is deleted.</text>
+  </g>
+</svg>

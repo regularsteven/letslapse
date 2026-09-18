@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · Libraries · Remove from this iPhone (confirm) · portrait</title>
+  <desc>Mirrors the Libraries card's long-press Remove from this iPhone… (App/SettingsView.swift, librariesCardPhone: askToRemove → phoneRemoving; the confirmationDialog) over LibraryRemoval.check — libraries plan L25, C2c (2026-09-17, code first; drawn from the code, the guard verified on the Simulator). The check first, off the main actor: every project folder's heavy files (PicPlaceSyncInventory over PicPlaceSyncRun.listFiles) against its sync record — held on PicPlace when serverHeavyFiles covers them or originalsMovedAt is set. When nothing exists only here, THIS SHEET: 'Remove “Holidays” from this iPhone?' and the numbers — '877 previews go. 3 projects' originals here go — PicPlace holds them. The library stays on PicPlace and on your other devices.' ('It is empty.' for an empty one; 'Nothing is on PicPlace for it.' for an unbound one, which can only pass the guard when it holds no originals). Remove (destructive) deletes the folder — StorageRoot.removeLibraryFolder, never the open library — and the card refreshes; Cancel. When a project's originals exist only here the sheet is not offered: an alert instead — settings.libraries.remove.refused.portrait.svg.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <g clip-path="url(#scroll)"><g transform="translate(0,0)">
+        <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.35"/>
+        <rect x="8" y="597" width="377" height="181" rx="14" fill="#F2F2F7" fill-opacity="0.96"/>
+        <text x="196.5" y="625" font-size="13" fill="#6D6D72" font-weight="600" text-anchor="middle">Remove “Holidays” from this iPhone?</text>
+        <text x="196.5" y="645" font-size="13" fill="#6D6D72" text-anchor="middle">877 previews go. 3 projects' originals here go — PicPlace</text>
+        <text x="196.5" y="660" font-size="13" fill="#6D6D72" text-anchor="middle">holds them. The library stays on PicPlace and on your</text>
+        <text x="196.5" y="675" font-size="13" fill="#6D6D72" text-anchor="middle">other devices.</text>
+        <line x1="8" y1="720" x2="385" y2="720" stroke="#000" stroke-opacity="0.08"/>
+        <text x="196.5" y="757" font-size="20" fill="#FF3B30" text-anchor="middle">Remove</text>
+        <rect x="8" y="786" width="377" height="58" rx="14" fill="#FFF"/>
+        <text x="196.5" y="823" font-size="20" fill="#C36A00" font-weight="600" text-anchor="middle">Cancel</text>
+      </g></g>
+    </g>
+  </g>
+</svg>

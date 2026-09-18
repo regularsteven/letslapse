@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Projects · the library menu under the title (open) · portrait</title>
+  <desc>Mirrors App/ProjectsView.swift (header: the Menu under the title, iOS only) over ModelHost.switchLibrary and StorageRoot.libraryFolders — libraries plan L21, C2d (2026-09-17, code first; the chip verified on the running Simulator, the open menu drawn from the code). With MORE THAN ONE library on the phone, the open library's name sits under the 34pt title as an accent capsule — books.vertical · the name (14pt semibold) · chevron.down — 12 % accent fill, 10pt horizontal padding, 5pt vertical, 4pt in from the leading edge, 2pt under the title row. It is a Menu: one row per OTHER library (books.vertical · name) that switches in place — the tree re-roots on the new model and lands back on Projects (host.landingTab = .projects) — a divider, then 'Manage libraries…' (gearshape), which sets model.requestedSettingsAnchor = .libraries and lands on the Settings card. A refusal (a shoot being written, a project on its way to a nearby device) is a Libraries alert with the host's reason. One library, no chip: the header is as projects.portrait.svg draws it. The sharing glyph, search, sort and the filter bar are unchanged and sit 46pt lower while the chip is present. On the Mac there is no chip — its libraries switch by relaunch from Settings.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <g clip-path="url(#scroll)"><g transform="translate(0,0)">
+        <text x="20" y="106" font-size="34" fill="#000" font-weight="700">Projects</text>
+        <g id="sharing-pill"><circle cx="353" cy="97" r="14" fill="#FF3B30" fill-opacity="0.12"/><path d="M347 92 l12 12 M353 91.5 a6 6 0 0 1 4.5 8.5 M353 91.5 a6 6 0 0 0 -4.5 8.5" stroke="#FF3B30" stroke-width="1.6" fill="none" stroke-linecap="round"/></g>
+        <g id="library-chip"><rect x="20" y="118" width="222" height="26" rx="13" fill="#C36A00" fill-opacity="0.12"/>
+        <g transform="translate(30,124)" fill="none" stroke="#C36A00" stroke-width="1.6" data-symbol="books.vertical"><rect x="0" y="1" width="3.5" height="12" rx="0.8"/><rect x="5" y="1" width="3.5" height="12" rx="0.8"/><path d="M10.5 3 l3.2 -1 3 11.5 -3.2 1z"/></g>
+        <text x="49" y="135" font-size="14" fill="#C36A00" font-weight="600">Prague LetsLapse Shots</text>
+        <path d="M228 128 l4 4 4 -4" stroke="#C36A00" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/></g>
+        <g id="search" transform="translate(0,46)"><rect x="16" y="120" width="234" height="40" rx="20" fill="#000" fill-opacity="0.06"/><g transform="translate(29,132)" stroke="#8A8A90" stroke-width="1.6" fill="none" data-symbol="magnifyingglass"><circle cx="6" cy="6" r="5"/><path d="M10 10 l4 4"/></g><text x="50" y="145" font-size="17" fill="#8A8A90">Search projects</text>
+        <rect x="258" y="120" width="86" height="40" rx="20" fill="#000" fill-opacity="0.06"/><text x="301" y="145" font-size="17" fill="#C36A00" text-anchor="middle">Capture ⌄</text><rect x="350" y="120" width="27" height="40" rx="14" fill="#000" fill-opacity="0.06"/><text x="363.5" y="146" font-size="15" fill="#C36A00" text-anchor="middle">▼</text></g>
+        <g id="filter" transform="translate(0,46)"><rect x="16" y="172" width="361" height="32" rx="16" fill="#000" fill-opacity="0.06"/><rect x="18" y="174" width="86" height="28" rx="14" fill="#FFF"/>
+        <text x="61" y="193" font-size="15" fill="#000" font-weight="600" text-anchor="middle">All</text>
+        <text x="151" y="193" font-size="15" fill="#000" text-anchor="middle">Photos</text>
+        <text x="241" y="193" font-size="15" fill="#000" text-anchor="middle">Interval</text>
+        <text x="331" y="193" font-size="15" fill="#000" text-anchor="middle">Video</text>
+        </g>
+        <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.12"/>
+        <rect x="20" y="152" width="250" height="132" rx="13" fill="#F6F6F8" filter="url(#soft)"/>
+        <g transform="translate(36,166)" fill="none" stroke="#000" stroke-width="1.5" data-symbol="books.vertical"><rect x="0" y="1" width="3.5" height="12" rx="0.8"/><rect x="5" y="1" width="3.5" height="12" rx="0.8"/><path d="M10.5 3 l3.2 -1 3 11.5 -3.2 1z"/></g>
+        <text x="62" y="178" font-size="16" fill="#000">Holidays</text>
+        <line x1="20" y1="196" x2="270" y2="196" stroke="#000" stroke-opacity="0.08"/>
+        <g transform="translate(36,210)" fill="none" stroke="#000" stroke-width="1.5" data-symbol="books.vertical"><rect x="0" y="1" width="3.5" height="12" rx="0.8"/><rect x="5" y="1" width="3.5" height="12" rx="0.8"/><path d="M10.5 3 l3.2 -1 3 11.5 -3.2 1z"/></g>
+        <text x="62" y="222" font-size="16" fill="#000">Client X</text>
+        <rect x="20" y="240" width="250" height="8" fill="#000" fill-opacity="0.06"/>
+        <g transform="translate(36,256)" fill="none" stroke="#000" stroke-width="1.5" data-symbol="gearshape"><circle cx="8" cy="8" r="3"/><circle cx="8" cy="8" r="7" stroke-dasharray="2.5 2.2"/></g>
+        <text x="62" y="268" font-size="16" fill="#000">Manage libraries…</text>
+        <g id="tab-bar" transform="translate(0,0)">
+        <rect x="20" y="776" width="353" height="62" rx="31" fill="#FFF" fill-opacity="0.92" filter="url(#soft)"/>
+        <text x="55.0" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Create</text>
+        <text x="125.5" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Gallery</text>
+        <rect x="165.0" y="781" width="62" height="52" rx="26" fill="#C36A00" fill-opacity="0.12"/>
+        <text x="196.0" y="826" font-size="10.5" fill="#C36A00" font-weight="600" text-anchor="middle">Projects</text>
+        <text x="266.5" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Collections</text>
+        <text x="337.0" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Settings</text>
+        </g>
+      </g></g>
+    </g>
+  </g>
+</svg>

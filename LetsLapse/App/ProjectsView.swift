@@ -230,6 +230,12 @@ struct ProjectsView: View {
     /// Projects carries search and Gallery does not: search matches a project's
     /// name and what the on-device analysis found in it, and the Gallery shows
     /// assets rather than projects.
+    #if os(iOS)
+    @EnvironmentObject private var host: ModelHost
+    @State private var phoneLibraries: [StorageRoot.LibraryFolder] = []
+    @State private var switchRefusal: String?
+    #endif
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 0) {
             // The sharing control sits opposite the title rather than in a row
@@ -249,6 +255,56 @@ struct ProjectsView: View {
             .padding(.leading, 4)
             .padding(.trailing, 4)
             .padding(.top, 8)
+            #if os(iOS)
+            .task { phoneLibraries = StorageRoot.libraryFolders() }
+            #endif
+
+            #if os(iOS)
+            // The phone's libraries (libraries plan L21, C2d): with more than
+            // one on the device, the open one's name under the title is a
+            // menu — the others switch in place, and Manage… opens the
+            // Settings card. One library, no chip: the header is as it was.
+            if phoneLibraries.count > 1, let open = phoneLibraries.first(where: { $0.isCurrent }) {
+                Menu {
+                    ForEach(phoneLibraries.filter { !$0.isCurrent }) { folder in
+                        Button {
+                            host.landingTab = .projects
+                            if !host.switchLibrary(to: folder) { switchRefusal = host.lastRefusal }
+                        } label: {
+                            Label(folder.name, systemImage: "books.vertical")
+                        }
+                    }
+                    Divider()
+                    Button {
+                        model.requestedSettingsAnchor = .libraries
+                    } label: {
+                        Label("Manage libraries…", systemImage: "gearshape")
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "books.vertical")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(open.name)
+                            .font(.system(size: 14, weight: .semibold))
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(LL.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(LL.accent.opacity(0.12), in: Capsule())
+                }
+                .padding(.leading, 4)
+                .padding(.top, 2)
+                .accessibilityLabel("Library: \(open.name)")
+                .alert("Libraries", isPresented: Binding(get: { switchRefusal != nil }, set: { if !$0 { switchRefusal = nil } })) {
+                    Button("OK", role: .cancel) { switchRefusal = nil }
+                } message: {
+                    Text(switchRefusal ?? "")
+                }
+            }
+            #endif
 
             // Same segmented filter the Gallery grid uses, so the two tabs
             // narrow a library the same way.

@@ -1,0 +1,40 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Settings · Libraries · Add a library from PicPlace (sheet, 460pt) · 760×680</title>
+  <desc>Mirrors AddLibraryFromPicPlaceSheet (App/SettingsView.swift, macOS) raised by the Libraries card's Add Library from PicPlace… row over PicPlaceController.librariesNotOnThisDevice and addLibraryFromPicPlace(_:in:) — libraries plan §3.7 / stage C1 (2026-09-16; drawn from the code 2026-09-18, the door verified on the Mac bench). Title 'Add a library from PicPlace', prose 'A copy of the library is made here — its projects arrive as previews; originals download per project. LetsLapse relaunches on it.', the account's libraries no known library here is a copy of as radio rows (name · N projects · bytes on PicPlace; the first chosen on appear), a Place line — the default location, Choose… opens an NSOpenPanel; the app names the folder &lt;host&gt;/&lt;username&gt;/&lt;name&gt;/ inside it (L19) — a failure line in LL.levelOff, then Cancel · Add and Relaunch: StorageRoot.createFromPicPlace makes the folder with the server library's uuid and name as its identity and the binding pending its first pull, registers it, commits the root and relaunches; the pull runs at the next launch. The phone's door (../iOS/settings.libraries.add-from-picplace.portrait.svg) has no Place line and opens the library at once.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Settings</text>
+    </g>
+    <rect x="20" y="60" width="760" height="640" fill="#000" fill-opacity="0.18"/>
+    <rect x="170" y="170" width="460" height="360" rx="14" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+    <text x="194" y="210" font-size="19" fill="#000" font-weight="600">Add a library from PicPlace</text>
+    <text x="194" y="230" font-size="13" fill="#6D6D72">A copy of the library is made here — its projects arrive as previews;</text>
+    <text x="194" y="245" font-size="13" fill="#6D6D72">originals download per project. LetsLapse relaunches on it.</text>
+    <rect x="194" y="270" width="412" height="112" rx="12" fill="#000" fill-opacity="0.04"/>
+    <circle cx="214" cy="298" r="7.5" fill="none" stroke="#C36A00" stroke-width="1.5"/>
+    <circle cx="214" cy="298" r="4" fill="#C36A00"/>
+    <text x="232" y="295" font-size="14.5" fill="#000" font-weight="600">Client X</text>
+    <text x="232" y="311" font-size="11.5" fill="#6D6D72">12 projects · 1,2 GB on PicPlace</text>
+    <line x1="232" y1="326" x2="596" y2="326" stroke="#000" stroke-opacity="0.08"/>
+    <circle cx="214" cy="354" r="7.5" fill="none" stroke="#8E8E93" stroke-width="1.5"/>
+    <text x="232" y="351" font-size="14.5" fill="#000">Timelapse gallery</text>
+    <text x="232" y="367" font-size="11.5" fill="#6D6D72">300 projects · 9,8 GB on PicPlace</text>
+    <text x="194" y="410" font-size="13" fill="#6D6D72">Place</text>
+    <text x="238" y="410" font-size="13" fill="#000">~/Library/Application Support/LetsLapse</text>
+    <rect x="530" y="396" width="76" height="24" rx="6" fill="#000" fill-opacity="0.06"/>
+    <text x="568.0" y="412.5" font-size="13" fill="#000" text-anchor="middle">Choose…</text>
+    <rect x="194" y="450" width="200" height="44" rx="10" fill="#FFF"/>
+    <text x="294" y="478" font-size="15" fill="#C36A00" font-weight="700" text-anchor="middle">Cancel</text>
+    <rect x="406" y="450" width="200" height="44" rx="10" fill="#C36A00"/>
+    <text x="506" y="478" font-size="15" fill="#FFF" font-weight="700" text-anchor="middle">Add and Relaunch</text>
+  </g>
+</svg>

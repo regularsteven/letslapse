@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · PicPlace card · signed in, the phone's only library unbound — Which library should this iPhone show? · portrait</title>
+  <desc>Mirrors App/PicPlace/PicPlaceViews.swift (PicPlaceSettingsCard, libraryRow's .unbound state; unboundTitle) — libraries plan §17.4, C2c (2026-09-17, mirrored from the running Simulator). Signed in, on a server that keeps libraries apart, with the phone's ONLY library unbound, the accent row asks 'Which library should this iPhone show? — Choose…' (subtitle 'Keeps this library's projects on picplace.test as @regularsteven. The library stays in its folder.'); with other libraries on the phone it reads 'Not on PicPlace — Connect…' as on the Mac. The On PicPlace usage row is hidden while unbound (step 0, plan §17.7) — the card is Account · This device · the question · Server · Sign Out…. The row opens the connect sheet (picplace.connect.portrait.svg). Above it the Libraries card in its one-library, signed-in state: the row and both doors. The tab bar is drawn simplified (labels only).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <g clip-path="url(#scroll)"><g transform="translate(0,0)">
+        <text x="20" y="76" font-size="13" fill="#6D6D72" font-weight="600" class="hdr">LIBRARIES</text>
+        <rect id="libraries-card" x="16" y="84" width="361" height="214" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="111" font-size="16" fill="#6D6D72">iPhone</text>
+        <text x="32" y="128" font-size="11.5" fill="#6D6D72">0 projects · not on PicPlace</text>
+        <text x="361" y="111" font-size="15" fill="#6D6D72" text-anchor="end">Current</text>
+        <line x1="32" y1="147" x2="361" y2="147" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="174" font-size="16" fill="#C36A00">Add Library from PicPlace…</text>
+        <text x="32" y="191" font-size="11.5" fill="#6D6D72">2 of your libraries are on picplace.test and not on</text>
+        <text x="32" y="206" font-size="11.5" fill="#6D6D72">this iPhone: “Prague LetsLapse Shots”, “Holidays”.</text>
+        <line x1="32" y1="225" x2="361" y2="225" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="252" font-size="16" fill="#C36A00">New Library on PicPlace…</text>
+        <text x="32" y="269" font-size="11.5" fill="#6D6D72">An empty library on picplace.test as @regularsteven;</text>
+        <text x="32" y="284" font-size="11.5" fill="#6D6D72">this iPhone opens it. Nothing is copied.</text>
+        <text x="20" y="359" font-size="13" fill="#6D6D72" font-weight="600" class="hdr">PICPLACE</text>
+        <rect id="picplace-card" x="16" y="367" width="361" height="250" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="394" font-size="16" fill="#000">Account</text>
+        <text x="361" y="394" font-size="15" fill="#6D6D72" text-anchor="end">@regularsteven</text>
+        <line x1="32" y1="411" x2="361" y2="411" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="438" font-size="16" fill="#000">This device</text>
+        <text x="361" y="438" font-size="15" fill="#6D6D72" text-anchor="end">iPhone</text>
+        <line x1="32" y1="455" x2="361" y2="455" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="482" font-size="16" fill="#C36A00">Which library should this iPhone show?</text>
+        <text x="32" y="501" font-size="16" fill="#C36A00">— Choose…</text>
+        <text x="32" y="519" font-size="11.5" fill="#6D6D72">Keeps this library's projects on picplace.test as</text>
+        <text x="32" y="534" font-size="11.5" fill="#6D6D72">@regularsteven. The library stays in its folder.</text>
+        <line x1="32" y1="553" x2="361" y2="553" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="580" font-size="16" fill="#000">Server</text>
+        <text x="361" y="580" font-size="15" fill="#6D6D72" text-anchor="end">picplace.test</text>
+        <line x1="32" y1="597" x2="361" y2="597" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="624" font-size="16" fill="#FF3B30">Sign Out…</text>
+        <g id="tab-bar" transform="translate(0,0)">
+        <rect x="20" y="776" width="353" height="62" rx="31" fill="#FFF" fill-opacity="0.92" filter="url(#soft)"/>
+        <text x="55.0" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Create</text>
+        <text x="125.5" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Gallery</text>
+        <text x="196.0" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Projects</text>
+        <text x="266.5" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Collections</text>
+        <rect x="306.0" y="781" width="62" height="52" rx="26" fill="#C36A00" fill-opacity="0.12"/>
+        <text x="337.0" y="826" font-size="10.5" fill="#C36A00" font-weight="600" text-anchor="middle">Settings</text>
+        </g>
+      </g></g>
+    </g>
+  </g>
+</svg>

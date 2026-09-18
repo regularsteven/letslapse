@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · Libraries · Remove refused — originals exist only here (alert) · portrait</title>
+  <desc>Mirrors the refusal LibraryRemoval.check raises before the confirm (App/SettingsView.swift, askToRemove → phoneLibraryMessage) — libraries plan L25, C2c (2026-09-17; verified on the Simulator: an import into a new library, records pushed and originals kept, was refused by name; after LL_PICPLACE_UPLOAD the same Remove went through). The alert names up to five of the projects whose originals PicPlace does not hold — no record, or a record whose serverHeavyFiles does not cover the folder's heavy files and no originalsMovedAt — and says what to do: '1 project in “Holidays” exists only on this iPhone: “Prague dusk”. Upload the originals first, or keep the library.' OK. The library is untouched; the count and the names are the check's, read off the folder without opening the library.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <g clip-path="url(#scroll)"><g transform="translate(0,0)">
+        <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.35"/>
+        <rect x="61" y="348.0" width="271" height="156" rx="14" fill="#F2F2F7" fill-opacity="0.97"/>
+        <text x="196.5" y="378.0" font-size="17" fill="#000" font-weight="600" text-anchor="middle">Libraries</text>
+        <text x="196.5" y="400.0" font-size="13" fill="#000" text-anchor="middle">1 project in “Holidays” exists only on this</text>
+        <text x="196.5" y="416.0" font-size="13" fill="#000" text-anchor="middle">iPhone: “Prague dusk”. Upload the originals</text>
+        <text x="196.5" y="432.0" font-size="13" fill="#000" text-anchor="middle">first, or keep the library.</text>
+        <line x1="61" y1="456.0" x2="332" y2="456.0" stroke="#000" stroke-opacity="0.08"/>
+        <text x="196.5" y="486.0" font-size="17" fill="#C36A00" font-weight="600" text-anchor="middle">OK</text>
+      </g></g>
+    </g>
+  </g>
+</svg>

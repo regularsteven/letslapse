@@ -1,0 +1,31 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Settings · Libraries · Create library? (sheet) · 760×680</title>
+  <desc>Mirrors StorageLocationSheet in its .create(name:) mode (App/SettingsView.swift) — libraries plan §3.1 / L15 (2026-09-16; captured 2026-09-18 with LL_TAB=settings LL_STORAGE=create, which stages it with demo values — /Volumes/Field/Field 2026 — and touches no disk). After the NSSavePanel: an externaldrive.fill.badge.plus glyph, 'Create library?' with the chosen path under it, prose 'A new, empty library named “Field 2026” is made in this folder, and LetsLapse relaunches on it now. Nothing is copied: the library you're using now stays at &lt;current path&gt;, unchanged, and is still in the list.' — Create and Relaunch (primary; StorageRoot.create writes the identity file and Projects/, registers the library, commits the root, dismisses the sheet FIRST and relaunches 0.4 s later — NSApp.terminate under a presented sheet is swallowed) · Cancel. The one-screen form is L15: no separate 'Relaunch to finish' step for a create or a switch; that screen remains only after a move, which has copied.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Settings</text>
+    </g>
+    <rect x="20" y="60" width="760" height="640" fill="#000" fill-opacity="0.18"/>
+    <rect x="190.0" y="135.0" width="420" height="470" rx="14" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+    <g transform="translate(386,157.0)" fill="#C36A00" data-symbol="externaldrive.fill"><rect x="0" y="6" width="28" height="12" rx="3"/><rect x="4" y="0" width="20" height="8" rx="2"/></g>
+    <text x="400" y="199.0" font-size="20" fill="#000" font-weight="700" text-anchor="middle">Create library?</text>
+    <text x="400" y="221.0" font-size="13" fill="#6D6D72" text-anchor="middle">/Volumes/Field/Field 2026</text>
+    <text x="400" y="247.0" font-size="13" fill="#000" text-anchor="middle">A new, empty library named “Field 2026” is made in this</text>
+    <text x="400" y="263.0" font-size="13" fill="#000" text-anchor="middle">folder, and LetsLapse relaunches on it now. Nothing is copied:</text>
+    <text x="400" y="279.0" font-size="13" fill="#000" text-anchor="middle">the library you're using now stays at ~/Library/Application</text>
+    <text x="400" y="295.0" font-size="13" fill="#000" text-anchor="middle">Support/LetsLapse, unchanged, and is still in the list.</text>
+    <rect x="214.0" y="323.0" width="372" height="44" rx="10" fill="#C36A00"/>
+    <text x="400" y="351.0" font-size="15" fill="#FFF" font-weight="700" text-anchor="middle">Create and Relaunch</text>
+    <rect x="214.0" y="375.0" width="372" height="44" rx="10" fill="#FFF"/>
+    <text x="400" y="403.0" font-size="15" fill="#C36A00" font-weight="700" text-anchor="middle">Cancel</text>
+  </g>
+</svg>

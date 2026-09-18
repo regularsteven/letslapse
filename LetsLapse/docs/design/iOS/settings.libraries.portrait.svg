@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · Libraries card · three libraries, the doors · portrait</title>
+  <desc>Mirrors App/SettingsView.swift (librariesCardPhone, the iOS extension at the foot of the file) over App/StorageLocation.swift (StorageRoot's iOS block: libraryFolders, makeLibraryFolder, createFromPicPlace, removeLibraryFolder) and App/LetsLapseApp.swift (ModelHost.switchLibrary) — libraries plan L21/L25, C2c (2026-09-17, code first, mirrored from the running Simulator). Settings scrolled so the LIBRARIES header sits under the status bar, the card in full and the PICPLACE card following. THE CARD: one LLRow per folder of &lt;App Support&gt;/LetsLapse/Libraries/ — title = the identity file's name (grey while it is only the healed placeholder, namedByPerson false), subtitle = 'N projects' (a listing of Projects/) · '@user on host' from the folder's binding, or 'not on PicPlace' (it wraps under the button, as the row's HStack gives the title side the width that is left) — trailing 'Current' (15pt secondary) on the open one and a bordered SWITCH button on the others (disabled while a render runs). Rows sort: the open one first, then by name. A long press opens the row's menu: Rename… (Name this library… while unnamed) and — never on the open one — Remove from this iPhone… (settings.libraries.remove.portrait.svg). THE DOORS, accent LLRows: Add Library from PicPlace… (only while librariesNotOnThisDevice is non-empty; the subtitle names them) and New Library on PicPlace… (signed in on a server with libraries). Signed out with one library the two doors give way to one quiet row, 'One library on this iPhone — Sign in with PicPlace to add your other libraries here or start a new one.' A SWITCH is a new model over the other folder, in place (L22): the tree re-roots and lands back on Settings. The Libraries header carries SettingsAnchor.libraries, so LL_SCROLL=libraries lands here; LL_LIBRARY=switch:|add:|new:|remove:|rename: works the doors without a finger. Verified 2026-09-17 on the Simulator 'C2c Bench' with the throwaway account (the drawn names are Steven's world: Prague LetsLapse Shots open, Holidays and the phone's own library beside it). The tab bar is drawn simplified (labels only).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <g clip-path="url(#scroll)"><g transform="translate(0,0)">
+        <text x="20" y="76" font-size="13" fill="#6D6D72" font-weight="600" class="hdr">LIBRARIES</text>
+        <rect id="libraries-card" x="16" y="84" width="361" height="392" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="111" font-size="16" fill="#000">Prague LetsLapse Shots</text>
+        <text x="32" y="128" font-size="11.5" fill="#6D6D72">401 projects · @regularsteven on picplace.test</text>
+        <text x="361" y="111" font-size="15" fill="#6D6D72" text-anchor="end">Current</text>
+        <line x1="32" y1="147" x2="361" y2="147" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="174" font-size="16" fill="#000">Holidays</text>
+        <text x="32" y="191" font-size="11.5" fill="#6D6D72">877 projects · @regularsteven on</text>
+        <text x="32" y="206" font-size="11.5" fill="#6D6D72">picplace.test</text>
+        <rect x="287" y="159" width="74" height="30" rx="15.0" fill="#F3E2CC"/>
+        <text x="324.0" y="179.5" font-size="15" fill="#C36A00" font-weight="600" text-anchor="middle">Switch</text>
+        <line x1="32" y1="225" x2="361" y2="225" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="252" font-size="16" fill="#6D6D72">iPhone</text>
+        <text x="32" y="269" font-size="11.5" fill="#6D6D72">0 projects · not on PicPlace</text>
+        <rect x="287" y="237" width="74" height="30" rx="15.0" fill="#F3E2CC"/>
+        <text x="324.0" y="257.5" font-size="15" fill="#C36A00" font-weight="600" text-anchor="middle">Switch</text>
+        <line x1="32" y1="288" x2="361" y2="288" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="315" font-size="16" fill="#C36A00">Add Library from PicPlace…</text>
+        <text x="32" y="332" font-size="11.5" fill="#6D6D72">1 of your libraries is on picplace.test and not on</text>
+        <text x="32" y="347" font-size="11.5" fill="#6D6D72">this iPhone: “Client X”.</text>
+        <line x1="32" y1="366" x2="361" y2="366" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="393" font-size="16" fill="#C36A00">New Library on PicPlace…</text>
+        <text x="32" y="410" font-size="11.5" fill="#6D6D72">An empty library on picplace.test as @regularsteven;</text>
+        <text x="32" y="425" font-size="11.5" fill="#6D6D72">this iPhone opens it. Nothing is copied.</text>
+        <text x="20" y="500" font-size="13" fill="#6D6D72" font-weight="600" class="hdr">PICPLACE</text>
+        <rect id="picplace-card" x="16" y="508" width="361" height="200" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="535" font-size="16" fill="#000">Account</text>
+        <text x="361" y="535" font-size="15" fill="#6D6D72" text-anchor="end">@regularsteven</text>
+        <line x1="32" y1="552" x2="361" y2="552" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="579" font-size="16" fill="#000">This device</text>
+        <text x="361" y="579" font-size="15" fill="#6D6D72" text-anchor="end">iPhone</text>
+        <line x1="32" y1="596" x2="361" y2="596" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="623" font-size="16" fill="#000">On PicPlace</text>
+        <text x="361" y="623" font-size="15" fill="#6D6D72" text-anchor="end">401 projects · 300,9 MB</text>
+        <line x1="32" y1="640" x2="361" y2="640" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="667" font-size="16" fill="#000">Library “Prague</text>
+        <text x="32" y="686" font-size="16" fill="#000">LetsLapse Shots”</text>
+        <text x="361" y="676" font-size="15" fill="#6D6D72" text-anchor="end">@regularsteven on pic…</text>
+        <text x="32" y="704" font-size="11.5" fill="#6D6D72">Connected on 17. 9. 2026 at 14:23</text>
+        <g id="tab-bar" transform="translate(0,0)">
+        <rect x="20" y="776" width="353" height="62" rx="31" fill="#FFF" fill-opacity="0.92" filter="url(#soft)"/>
+        <text x="55.0" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Create</text>
+        <text x="125.5" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Gallery</text>
+        <text x="196.0" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Projects</text>
+        <text x="266.5" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Collections</text>
+        <rect x="306.0" y="781" width="62" height="52" rx="26" fill="#C36A00" fill-opacity="0.12"/>
+        <text x="337.0" y="826" font-size="10.5" fill="#C36A00" font-weight="600" text-anchor="middle">Settings</text>
+        </g>
+      </g></g>
+    </g>
+  </g>
+</svg>

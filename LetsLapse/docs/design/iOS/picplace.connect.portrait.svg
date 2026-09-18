@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · PicPlace · Connect “Holidays” to PicPlace (sheet) — a folder that was a server library before · portrait</title>
+  <desc>Mirrors PicPlaceConnectSheet (App/PicPlace/PicPlaceViews.swift) over PicPlaceController.ConnectOffer (offerConnectNow, numbers(for:), summary(for:)) — libraries plan §3.7 with step 0's L23/L24 (2026-09-17; mirrored from the running Simulator). Raised by the PicPlace card's Connect / Which library… row. Title 'Connect “Holidays” to PicPlace' (19pt semibold), 'as @regularsteven on picplace.test', and — for a folder whose identity carries a server library's uuid, a link or a create before — 'This library was “Holidays” on PicPlace.' A 'Name on PicPlace' field (disabled while linking: the link takes the server library's name). Then the radio list in a 4 %-tinted 12pt card, one row per target with THE NUMBERS from the two sides' origin ids: New library on PicPlace — what goes up (originals here and on PicPlace nowhere), what is filed elsewhere and stays, and the previews this target cannot account for and would remove ('877 previews of “Holidays” are removed from this iPhone; they stay on PicPlace.'); Take over the N unfiled projects (only while the default library holds any); Link to “X” · N projects — 'N arrive here as previews; originals download per project', 'M already here stay in step', 'K here go up', 'Nothing arrives.' / 'Nothing goes up.' as each applies; a long title wraps. The link to the former library is preselected. Not now · Connect. A connect elsewhere evicts the previews it cannot account for — folder and index row, never a tombstone — and the first pass says so ('N preview(s) removed'). The Mac's sheet is the same view at 460pt (macOS/picplace.connect.svg); LL_PICPLACE_OFFER=1|new|adopt|link:&lt;uuid&gt; opens the real sheet with a target selected.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <g clip-path="url(#scroll)"><g transform="translate(0,0)">
+        <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.35"/>
+        <rect x="0" y="96" width="393" height="756" rx="40" fill="#F2F2F7"/>
+        <rect x="178" y="104" width="36" height="5" rx="2.5" fill="#000" fill-opacity="0.18"/>
+        <text x="24" y="156" font-size="19" fill="#000" font-weight="600">Connect “Holidays” to PicPlace</text>
+        <text x="24" y="178" font-size="13" fill="#6D6D72">as @regularsteven on picplace.test</text>
+        <text x="24" y="197" font-size="13" fill="#6D6D72">This library was “Holidays” on PicPlace.</text>
+        <text x="24" y="234" font-size="13" fill="#6D6D72">Name on PicPlace</text>
+        <rect x="150" y="216" width="219" height="30" rx="6" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+        <text x="158" y="236" font-size="14" fill="#6D6D72">Holidays</text>
+        <rect x="24" y="264" width="345" height="320" rx="12" fill="#000" fill-opacity="0.04"/>
+        <circle cx="46" cy="291" r="8" fill="none" stroke="#8E8E93" stroke-width="1.6"/>
+        <text x="68" y="295" font-size="14.5" fill="#000">New library on PicPlace</text>
+        <text x="68" y="314" font-size="11.5" fill="#6D6D72">877 previews of “Holidays” are removed from this</text>
+        <text x="68" y="328" font-size="11.5" fill="#6D6D72">iPhone; they stay on PicPlace. Nothing arrives.</text>
+        <text x="68" y="342" font-size="11.5" fill="#6D6D72">Nothing goes up.</text>
+        <line x1="68" y1="364" x2="369" y2="364" stroke="#000" stroke-opacity="0.08"/>
+        <circle cx="46" cy="391" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+        <circle cx="46" cy="391" r="4.5" fill="#C36A00"/>
+        <text x="68" y="395" font-size="14.5" fill="#000" font-weight="600">Link to “Holidays” · 877 projects</text>
+        <text x="68" y="414" font-size="11.5" fill="#6D6D72">877 already here stay in step. Nothing arrives.</text>
+        <text x="68" y="428" font-size="11.5" fill="#6D6D72">Nothing goes up.</text>
+        <line x1="68" y1="450" x2="369" y2="450" stroke="#000" stroke-opacity="0.08"/>
+        <circle cx="46" cy="477" r="8" fill="none" stroke="#8E8E93" stroke-width="1.6"/>
+        <text x="68" y="481" font-size="14.5" fill="#000">Link to “Prague LetsLapse Shots” ·</text>
+        <text x="68" y="501" font-size="14.5" fill="#000">401 projects</text>
+        <text x="68" y="520" font-size="11.5" fill="#6D6D72">All 401 arrive here as previews; originals download</text>
+        <text x="68" y="534" font-size="11.5" fill="#6D6D72">per project. 877 previews of “Holidays” are removed</text>
+        <text x="68" y="548" font-size="11.5" fill="#6D6D72">from this iPhone; they stay on PicPlace. Nothing goes</text>
+        <text x="68" y="562" font-size="11.5" fill="#6D6D72">up.</text>
+        <rect x="24" y="760" width="164" height="56" rx="28.0" fill="#FFF"/>
+        <text x="106.0" y="793.5" font-size="17" fill="#C36A00" font-weight="600" text-anchor="middle">Not now</text>
+        <rect x="205" y="760" width="164" height="56" rx="28.0" fill="#C36A00"/>
+        <text x="287.0" y="793.5" font-size="17" fill="#FFF" font-weight="600" text-anchor="middle">Connect</text>
+      </g></g>
+    </g>
+  </g>
+</svg>

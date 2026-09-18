@@ -1396,13 +1396,13 @@ struct SettingsView: View {
         switch hook {
         case "moving":
             staged = .copying(
-                copiedBytes: 96_500_000_000, totalBytes: 148_200_000_000,
+                copiedBytes: 8_100_000_000, totalBytes: 12_400_000_000,
                 itemName: "IMG_0412.dng")
         case "done":
             staged = .done
         case "failed":
             staged = .failed(
-                "Not enough space there. The library is 148.2 GB and only 96.5 GB is free at "
+                "Not enough space there. The library is 12.4 GB and only 8.1 GB is free at "
                     + "that location.")
         default:
             break
@@ -1415,8 +1415,8 @@ struct SettingsView: View {
         }
         locationChange = StorageLocationChangeRequest(
             mode: mode,
-            destination: URL(fileURLWithPath: hook == "create" ? "/Volumes/Field/Field 2026" : "/Volumes/letslapse"),
-            librarySizeHint: 148_200_000_000,
+            destination: URL(fileURLWithPath: hook == "create" ? "/Volumes/Field/Field 2026" : "/Volumes/Demo Drive/LetsLapse"),
+            librarySizeHint: 12_400_000_000,
             libraryName: hook == "create" ? "Field 2026" : (hook == "adopt" ? "letslapse" : StorageRoot.identity?.displayName),
             stagedPhase: staged)
     }

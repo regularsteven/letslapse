@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · Libraries · New Library on PicPlace (alert with a name) · portrait</title>
+  <desc>Mirrors the Libraries card's New Library on PicPlace… (App/SettingsView.swift, namingNewLibrary → createLibraryOnPicPlace; PicPlaceController.createLibraryOnPicPlace) — libraries plan L25, C2c (2026-09-17; verified on the Simulator with the throwaway account: 'Phone Made' created on the server, its folder made, opened). An alert with a text field: title 'New library on PicPlace', prose 'An empty library named on PicPlace; this iPhone opens it and captures land in it.', the field 'Library name', Create (bold) · Cancel. Create PUTs /libraries/{uuid} with a fresh uuid and the name first — a failure (no session, an empty name, the server unreachable) shows in the Libraries alert and nothing is made here — then makes the folder under Libraries/ with that uuid and name as its identity, writes the binding (clean, pending), and switches to it; the first pass has nothing to exchange and the card reads 'Library in step with PicPlace — Nothing to exchange'.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <g clip-path="url(#scroll)"><g transform="translate(0,0)">
+        <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.35"/>
+        <rect x="61" y="334.0" width="271" height="184" rx="14" fill="#F2F2F7" fill-opacity="0.97"/>
+        <text x="196.5" y="364.0" font-size="17" fill="#000" font-weight="600" text-anchor="middle">New library on PicPlace</text>
+        <text x="196.5" y="386.0" font-size="13" fill="#000" text-anchor="middle">An empty library named on PicPlace; this</text>
+        <text x="196.5" y="402.0" font-size="13" fill="#000" text-anchor="middle">iPhone opens it and captures land in it.</text>
+        <rect x="77" y="426.0" width="239" height="30" rx="6" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+        <text x="85" y="446.0" font-size="14" fill="#000">Client X</text>
+        <line x1="61" y1="470.0" x2="332" y2="470.0" stroke="#000" stroke-opacity="0.08"/>
+        <text x="128.75" y="500.0" font-size="17" fill="#C36A00" text-anchor="middle">Cancel</text>
+        <line x1="196.5" y1="470.0" x2="196.5" y2="518.0" stroke="#000" stroke-opacity="0.08"/>
+        <text x="264.25" y="500.0" font-size="17" fill="#C36A00" font-weight="600" text-anchor="middle">Create</text>
+      </g></g>
+    </g>
+  </g>
+</svg>
