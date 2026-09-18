@@ -1,0 +1,599 @@
+[
+ {
+  "id": "city.clear.approach.01",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.12,
+  "cx": 0.42
+ },
+ {
+  "id": "city.clear.approach.02",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.145,
+  "cx": 0.436
+ },
+ {
+  "id": "city.clear.approach.03",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.176,
+  "cx": 0.453
+ },
+ {
+  "id": "city.clear.approach.04",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.212,
+  "cx": 0.469
+ },
+ {
+  "id": "city.clear.approach.05",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.255,
+  "cx": 0.485
+ },
+ {
+  "id": "city.clear.approach.06",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.303,
+  "cx": 0.502
+ },
+ {
+  "id": "city.clear.approach.07",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.358,
+  "cx": 0.518
+ },
+ {
+  "id": "city.clear.approach.08",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.419,
+  "cx": 0.535
+ },
+ {
+  "id": "city.clear.approach.09",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.485,
+  "cx": 0.551
+ },
+ {
+  "id": "city.clear.approach.10",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.557,
+  "cx": 0.567
+ },
+ {
+  "id": "city.clear.approach.11",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.636,
+  "cx": 0.584
+ },
+ {
+  "id": "city.clear.approach.12",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "clear",
+  "track": "right",
+  "camera": "left",
+  "size": 0.72,
+  "cx": 0.6
+ },
+ {
+  "id": "oldtown.golden.approach.01",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.1,
+  "cx": 0.55
+ },
+ {
+  "id": "oldtown.golden.approach.02",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.144,
+  "cx": 0.541
+ },
+ {
+  "id": "oldtown.golden.approach.03",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.187,
+  "cx": 0.532
+ },
+ {
+  "id": "oldtown.golden.approach.04",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.231,
+  "cx": 0.523
+ },
+ {
+  "id": "oldtown.golden.approach.05",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.275,
+  "cx": 0.514
+ },
+ {
+  "id": "oldtown.golden.approach.06",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.318,
+  "cx": 0.505
+ },
+ {
+  "id": "oldtown.golden.approach.07",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.362,
+  "cx": 0.495
+ },
+ {
+  "id": "oldtown.golden.approach.08",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.405,
+  "cx": 0.486
+ },
+ {
+  "id": "oldtown.golden.approach.09",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.449,
+  "cx": 0.477
+ },
+ {
+  "id": "oldtown.golden.approach.10",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.493,
+  "cx": 0.468
+ },
+ {
+  "id": "oldtown.golden.approach.11",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.536,
+  "cx": 0.459
+ },
+ {
+  "id": "oldtown.golden.approach.12",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "golden",
+  "track": "left",
+  "camera": "right",
+  "size": 0.58,
+  "cx": 0.45
+ },
+ {
+  "id": "hills.dusk.right.01",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "dusk",
+  "track": "right",
+  "camera": "centre",
+  "size": 0.16,
+  "cx": 0.5
+ },
+ {
+  "id": "hills.dusk.right.02",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "dusk",
+  "track": "right",
+  "camera": "centre",
+  "size": 0.231,
+  "cx": 0.511
+ },
+ {
+  "id": "hills.dusk.right.03",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "dusk",
+  "track": "right",
+  "camera": "centre",
+  "size": 0.303,
+  "cx": 0.523
+ },
+ {
+  "id": "hills.dusk.right.04",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "dusk",
+  "track": "right",
+  "camera": "centre",
+  "size": 0.374,
+  "cx": 0.534
+ },
+ {
+  "id": "hills.dusk.right.05",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "dusk",
+  "track": "right",
+  "camera": "centre",
+  "size": 0.446,
+  "cx": 0.546
+ },
+ {
+  "id": "hills.dusk.right.06",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "dusk",
+  "track": "right",
+  "camera": "centre",
+  "size": 0.517,
+  "cx": 0.557
+ },
+ {
+  "id": "hills.dusk.right.07",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "dusk",
+  "track": "right",
+  "camera": "centre",
+  "size": 0.589,
+  "cx": 0.569
+ },
+ {
+  "id": "hills.dusk.right.08",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "dusk",
+  "track": "right",
+  "camera": "centre",
+  "size": 0.66,
+  "cx": 0.58
+ },
+ {
+  "id": "mountains.clouds.mixed.01",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "clouds",
+  "track": "left",
+  "camera": "left",
+  "tram": "high",
+  "size": 0.18
+ },
+ {
+  "id": "mountains.clouds.mixed.02",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "clouds",
+  "track": "left",
+  "camera": "left",
+  "tram": "front",
+  "size": 0.243
+ },
+ {
+  "id": "mountains.clouds.mixed.03",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "clouds",
+  "track": "left",
+  "camera": "left",
+  "tram": "low",
+  "size": 0.306
+ },
+ {
+  "id": "mountains.clouds.mixed.04",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "clouds",
+  "track": "left",
+  "camera": "left",
+  "tram": "front",
+  "size": 0.369
+ },
+ {
+  "id": "mountains.clouds.mixed.05",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "clouds",
+  "track": "left",
+  "camera": "left",
+  "tram": "high",
+  "size": 0.431
+ },
+ {
+  "id": "mountains.clouds.mixed.06",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "clouds",
+  "track": "left",
+  "camera": "left",
+  "tram": "front",
+  "size": 0.494
+ },
+ {
+  "id": "mountains.clouds.mixed.07",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "clouds",
+  "track": "left",
+  "camera": "left",
+  "tram": "low",
+  "size": 0.557
+ },
+ {
+  "id": "mountains.clouds.mixed.08",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "clouds",
+  "track": "left",
+  "camera": "left",
+  "tram": "front",
+  "size": 0.62
+ },
+ {
+  "id": "depot.night.approach.01",
+  "aspect": "2:3",
+  "scene": "depot",
+  "sky": "night",
+  "track": -1.75,
+  "camera": "centre",
+  "size": 0.14,
+  "cx": 0.5
+ },
+ {
+  "id": "depot.night.approach.02",
+  "aspect": "2:3",
+  "scene": "depot",
+  "sky": "night",
+  "track": -1.75,
+  "camera": "centre",
+  "size": 0.217,
+  "cx": 0.5
+ },
+ {
+  "id": "depot.night.approach.03",
+  "aspect": "2:3",
+  "scene": "depot",
+  "sky": "night",
+  "track": -1.75,
+  "camera": "centre",
+  "size": 0.294,
+  "cx": 0.5
+ },
+ {
+  "id": "depot.night.approach.04",
+  "aspect": "2:3",
+  "scene": "depot",
+  "sky": "night",
+  "track": -1.75,
+  "camera": "centre",
+  "size": 0.371,
+  "cx": 0.5
+ },
+ {
+  "id": "depot.night.approach.05",
+  "aspect": "2:3",
+  "scene": "depot",
+  "sky": "night",
+  "track": -1.75,
+  "camera": "centre",
+  "size": 0.449,
+  "cx": 0.5
+ },
+ {
+  "id": "depot.night.approach.06",
+  "aspect": "2:3",
+  "scene": "depot",
+  "sky": "night",
+  "track": -1.75,
+  "camera": "centre",
+  "size": 0.526,
+  "cx": 0.5
+ },
+ {
+  "id": "depot.night.approach.07",
+  "aspect": "2:3",
+  "scene": "depot",
+  "sky": "night",
+  "track": -1.75,
+  "camera": "centre",
+  "size": 0.603,
+  "cx": 0.5
+ },
+ {
+  "id": "depot.night.approach.08",
+  "aspect": "2:3",
+  "scene": "depot",
+  "sky": "night",
+  "track": -1.75,
+  "camera": "centre",
+  "size": 0.68,
+  "cx": 0.5
+ },
+ {
+  "id": "single.city.sun.left-cell",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "sun",
+  "track": "left",
+  "camera": "right",
+  "size": 0.26,
+  "cx": 0.17
+ },
+ {
+  "id": "single.city.sun.right-cell",
+  "aspect": "3:2",
+  "scene": "city",
+  "sky": "sun",
+  "track": "right",
+  "camera": "left",
+  "size": 0.26,
+  "cx": 0.83
+ },
+ {
+  "id": "single.hills.clear.centre",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "clear",
+  "track": 0,
+  "camera": "centre",
+  "size": 0.3
+ },
+ {
+  "id": "single.hills.sun.high",
+  "aspect": "3:2",
+  "scene": "hills",
+  "sky": "sun",
+  "track": "right",
+  "camera": "centre",
+  "tram": "high",
+  "size": 0.5
+ },
+ {
+  "id": "single.mountains.golden.low",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "golden",
+  "track": "left",
+  "camera": "centre",
+  "tram": "low",
+  "size": 0.55
+ },
+ {
+  "id": "single.oldtown.clouds.far",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "clouds",
+  "track": "right",
+  "camera": "centre",
+  "size": 0.1
+ },
+ {
+  "id": "single.oldtown.dusk.near",
+  "aspect": "2:3",
+  "scene": "oldtown",
+  "sky": "dusk",
+  "track": "left",
+  "camera": "right",
+  "size": 0.75,
+  "cx": 0.45
+ },
+ {
+  "id": "single.depot.clear.left",
+  "aspect": "3:2",
+  "scene": "depot",
+  "sky": "clear",
+  "track": -5.25,
+  "camera": "centre",
+  "size": 0.45,
+  "cx": 0.3
+ },
+ {
+  "id": "single.depot.golden.right",
+  "aspect": "3:2",
+  "scene": "depot",
+  "sky": "golden",
+  "track": 5.25,
+  "camera": "centre",
+  "size": 0.45,
+  "cx": 0.7
+ },
+ {
+  "id": "single.city.night.front",
+  "aspect": "2:3",
+  "scene": "city",
+  "sky": "night",
+  "track": "right",
+  "camera": 1.75,
+  "size": 0.5
+ },
+ {
+  "id": "single.mountains.dusk.tiny",
+  "aspect": "3:2",
+  "scene": "mountains",
+  "sky": "dusk",
+  "track": "left",
+  "camera": "centre",
+  "size": 0.08
+ },
+ {
+  "id": "single.hills.night.high",
+  "aspect": "2:3",
+  "scene": "hills",
+  "sky": "night",
+  "track": "right",
+  "camera": "right",
+  "tram": "high",
+  "size": 0.42,
+  "cx": 0.5
+ }
+]
