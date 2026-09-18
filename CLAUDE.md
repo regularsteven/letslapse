@@ -5,6 +5,7 @@
 - `main` branch: the original Raspberry Pi LetsLapse project (Python capture/blend scripts + web UI). **Untouchable** — never modify it from Swift-app work.
 - `ios-app` branch: the native Swift app in `LetsLapse/` (universal iOS/iPadOS/macOS target + watchOS companion + `LetsLapseKit` package). Architecture handover doc: `LetsLapse/docs/letslapse-app-overview.md`.
 - Open, scoped-but-unstarted work lives in `LetsLapse/docs/TODO.md` — one entry per job, long jobs in their own document alongside it. Add a job there rather than leaving it in a conversation.
+- Fresh Mac / newcomer build guide: `LetsLapse/docs/building.md` (Xcode components, package resolution, signing, every first-run error decoded). The app project links `MLXVLM`/`MLXLMCommon` from a **committed** patched copy of `mlx-swift-lm` at `LetsLapse/tools/mlx-vlm-spike/vendor/mlx-swift-lm/` — regenerate it with `vendor/refresh.sh`, never edit it by hand, and never gitignore it again: with it absent Xcode fails the whole package graph ("Missing package product" for every product, `LetsLapseKit` included).
 
 ## Design-sync requirement (ALL iOS / iPadOS / macOS / watchOS UI work)
 

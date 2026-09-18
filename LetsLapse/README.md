@@ -64,9 +64,18 @@ Tests: `swift test` (inside `Kit/`).
 
 ## App (Xcode)
 
+**First checkout, new Mac, or not a developer? Start with
+[`docs/building.md`](docs/building.md)** — it walks from GitHub Desktop to the
+app running on an iPhone, iPad or Mac, and decodes the signing and package
+errors a fresh machine shows.
+
 Open `LetsLapse/LetsLapse.xcodeproj`. One `LetsLapse` target builds for
-iPhone, iPad, and Mac. To run on a device, select your development team under
-Signing & Capabilities — no team is checked in.
+iPhone, iPad, and Mac; `LetsLapse Watch App` rides inside the iOS build.
+Steven's team and bundle identifiers are checked in; anyone else picks their
+own team and identifiers under Signing & Capabilities (`docs/building.md`
+step 4). Every dependency is a Swift package Xcode resolves on open — the
+patched `mlx-swift-lm` the AI engine needs is committed under
+`tools/mlx-vlm-spike/vendor/`, so a checkout needs no extra step.
 
 - **iOS/iPadOS**: capture video (with a high-frame-rate toggle that picks the
   camera's fastest 1080p format) or interval photos; or import from the photo

@@ -17,8 +17,9 @@ xcodebuild -scheme mlx-vlm-spike -configuration Release \
 Binary: `.build/xcode/Build/Products/Release/vlm-spike` (keep its sibling
 `mlx-swift_Cmlx.bundle` next to it).
 
-First run `vendor/README.md`'s clone+patch recipe — the build depends on a vendored, patched
-mlx-swift-lm (not committed).
+The build depends on the vendored, patched mlx-swift-lm in `vendor/mlx-swift-lm/` — committed
+since 2026-09-18 (the app project links it too); `vendor/README.md` has the why and
+`vendor/refresh.sh` is the only way it changes.
 
 ## craft-probe — text-only generation for Crafted Text
 

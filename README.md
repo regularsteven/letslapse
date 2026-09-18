@@ -1,6 +1,12 @@
 # LetsLapse
 ### A DIY time-lapse system, built around Raspberry Pi hardware
 
+> **On this branch (`ios-app`)** the native LetsLapse app for iPhone, iPad, Mac
+> and Apple Watch lives in [`LetsLapse/`](LetsLapse/). To build it yourself —
+> no developer background needed — start at
+> [`LetsLapse/docs/building.md`](LetsLapse/docs/building.md). The Raspberry Pi
+> project below is unchanged and lives on `main`.
+
 LetsLapse allows you to capture day to night time-lapses sequences on affordable hardare, while producing outstanding results.
 
 To get started, you will need a Raspberry Pi device, a compatible camera, MicroSD card and power source. As for specifics, you can run this from a Pi 3, 4, 4B or Pi Zero W, with a range of cameras.

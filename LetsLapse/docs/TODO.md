@@ -11,6 +11,66 @@ live inline.
 
 ## Open
 
+### Un-vendor mlx-swift-lm — return the AI engine's LM library to a normal package pin
+
+**Raised:** 2026-09-18 (the first checkout on a second Mac: Xcode reported every
+package product missing, `LetsLapseKit` included, because the app project links
+`MLXVLM`/`MLXLMCommon` from `tools/mlx-vlm-spike/vendor/mlx-swift-lm`, which was
+gitignored) · **Done so far:** the patched 3.31.4 tree is committed (2026-09-18),
+so a checkout builds with no extra step; `vendor/refresh.sh` regenerates it ·
+**Size:** small · owner: `LetsLapse.xcodeproj`, `tools/mlx-vlm-spike/Package.swift`,
+`tools/mlx-vlm-spike/vendor/`
+
+Four megabytes of someone else's source in the tree is a stopgap, not a home.
+Two exits, either is fine:
+
+- **Fork, pinned by revision.** Push the same two patches (`vendor/pr384.diff`'s
+  `Gemma4.swift` hunks, then `vendor/multi-image-fix.diff`) onto a branch of a
+  fork of `ml-explore/mlx-swift-lm` and reference it from the app project and
+  the spike's `Package.swift` as a remote package at that revision. No
+  toolchain change, no vendored source, and `Package.resolved` records the
+  exact commit. The quicker exit; can happen any day.
+- **Upstream release.** Pin the first tagged mlx-swift-lm release that
+  includes #384. That needs mlx-swift 0.31.5+, i.e. a Swift 6.3 toolchain on
+  *every* Mac that builds the app — check `swift --version` on the new Mac: if
+  its Xcode is past 26.1.1 it may already be there, and then the old Mac must
+  move too or lose the build. Check whether the release still has the
+  multi-image bug; if so, upstream `multi-image-fix.diff` or keep the fork.
+
+Done when: the `XCLocalSwiftPackageReference` for the vendor path is gone from
+the project, `vendor/mlx-swift-lm/` and `refresh.sh` are deleted, the pins are
+in `Package.resolved`, and a fresh clone builds. Update `docs/building.md`
+("Why the project looks like this") and `CLAUDE.md`'s layout bullet.
+
+### Newcomer builds — one place for the team and the bundle identifiers
+
+**Raised:** 2026-09-18 (Steven: a curious non-developer with GitHub Desktop
+should be able to build for Mac, iPhone or iPad without a bag of madness) ·
+**Size:** small, but it is project-file surgery that needs a build on each
+platform to verify — not done blind in the 2026-09-18 commit · owner:
+`LetsLapse.xcodeproj`, `App/LetsLapse-Simulator.entitlements`,
+`docs/building.md`
+
+Today anyone not on team `S546K64836` changes five things by hand — the team on
+two targets, two bundle identifiers, and the Watch target's companion
+identifier (`INFOPLIST_KEY_WKCompanionAppBundleIdentifier`); `docs/building.md`
+step 4 walks them through it. The job: one project-level `LL_BUNDLE_ID_BASE`
+(`com.regularsteven.letslapse`) with `PRODUCT_BUNDLE_IDENTIFIER =
+$(LL_BUNDLE_ID_BASE)` on the app, `$(LL_BUNDLE_ID_BASE).watchkitapp` and
+`INFOPLIST_KEY_WKCompanionAppBundleIdentifier = $(LL_BUNDLE_ID_BASE)` on the
+Watch, `DEVELOPMENT_TEAM` at project level, all overridable from a gitignored
+`Local.xcconfig` pulled in with `#include? "Local.xcconfig"` from a committed
+base xcconfig — so a newcomer edits two lines in one file and never opens the
+project settings. The Simulator entitlements hardcode
+`S546K64836.com.regularsteven.letslapse`; try `$(AppIdentifierPrefix)$(CFBundleIdentifier)`
+and confirm the ad-hoc Simulator signing still substitutes it (the PicPlace
+sign-in must still store its tokens — 2026-09-15's `-34018`). Steven's own
+tooling (`testflight.sh`, `driver.py`, `sim-fresh.sh`, `devices.json`) keeps
+the real identifiers; it is not for newcomers.
+
+Done when `docs/building.md` step 4 reads "edit `Local.xcconfig`", and a
+free-Apple-ID build runs on an iPhone, an iPad, the Simulator and the Mac.
+
 ### Remote listener dies on return from the background and never re-advertises
 
 **Raised:** 2026-09-18 (seen three times in one evening's console log while

@@ -1,0 +1,5 @@
+ml-explore/mlx-swift-lm tag 3.31.4 (bd4b7434e6bdb588c7ef55706ff8904cb7fd4c57)
++ pr384.diff (Libraries/MLXVLM/Models/Gemma4.swift hunks only)
++ multi-image-fix.diff
+Upstream-only files dropped: .git .github .gitignore .pre-commit-config.yaml .spi.yml .swift-format
+Regenerate with vendor/refresh.sh; never edit this tree by hand.
