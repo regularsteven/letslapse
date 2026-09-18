@@ -16,11 +16,12 @@ def library_row(k, r, name, sub, current, unnamed=False):
 
 def picplace_tail(k, y, user="regularsteven", host="picplace.test", name_lines=("Library “Prague", "LetsLapse Shots”"), count="401 projects · 300,9 MB"):
     k.header(y + 30, "PICPLACE")
-    k.card(y + 38, 200, "picplace-card")
+    k.card(y + 38, 218, "picplace-card")
     r = y + 38
     r = k.row(r, "Account", trailing="@" + user)
     r = k.row(r, "This device", trailing="iPhone")
-    r = k.row(r, "On PicPlace", trailing=count)
+    k.text(32, r + 27, "On PicPlace", 16); k.text(361, r + 27, count, 15, SEC, anchor="end")
+    k.text(32, r + 44, "originals for 98", 11.5, SEC); k.hair(r + 62); r += 62
     k.text(32, r + 27, name_lines[0], 16); k.text(32, r + 46, name_lines[1], 16)
     k.text(361, r + 36, "@%s on pic…" % user, 15, SEC, anchor="end")
     k.text(32, r + 64, "Connected on 17. 9. 2026 at 14:23", 11.5, SEC)

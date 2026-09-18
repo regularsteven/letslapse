@@ -65,6 +65,8 @@ extension PicPlaceController {
         var waiting = 0
         /// Held here, filed in another library of the account on PicPlace (stage C).
         var elsewhere = 0
+        /// Previews of other libraries' projects removed from this one (L23).
+        var evicted = 0
         var failures: [String] = []
         var checkedAt = Date()
     }
@@ -132,7 +134,8 @@ extension PicPlaceController {
         if check.waiting > 0 { parts.append("\(check.waiting) waiting to retry") }
         if check.deletedThere > 0 { parts.append("\(check.deletedThere) deleted on PicPlace") }
         if check.deletedHere > 0 { parts.append("\(check.deletedHere) removed here (deleted elsewhere; in the trash)") }
-        if check.elsewhere > 0 { parts.append("\(check.elsewhere) filed in another library on PicPlace") }
+        if check.evicted > 0 { parts.append("\(check.evicted) preview\(check.evicted == 1 ? "" : "s") of other libraries removed") }
+        if check.elsewhere > 0 { parts.append("\(check.elsewhere) here filed under other libraries on PicPlace") }
         if check.conflicts > 0 { parts.append("\(check.conflicts) to decide") }
         if !check.failures.isEmpty { parts.append(check.failures.joined(separator: "; ")) }
         let when = check.checkedAt.formatted(.relative(presentation: .named))
@@ -181,11 +184,35 @@ extension PicPlaceController {
             var elsewhere = Set<UUID>()
             for row in index.projects {
                 if inScope(row) { scoped.append(row); continue }
-                guard let origin = UUID(uuidString: row.uuid), localByOrigin[origin] != nil, !row.isTombstone else { continue }
+                guard let origin = UUID(uuidString: row.uuid), let localID = localByOrigin[origin], !row.isTombstone else { continue }
+                // A PREVIEW filed under another library does not belong
+                // here (L23): it cannot sync from this library and its own
+                // library has it — removed, folder and index row, never a
+                // tombstone — never while another instance holds the library
+                // (read-only). Kept, and noted, when a person edited it since
+                // it was pulled (that edit would be lost) — and always when
+                // the originals are here: a departure a person decides.
+                if model.libraryReadOnly == nil, let capture = model.capture(id: localID), isPreviewOnly(capture) {
+                    let record = records[origin]
+                    let edited = (record?.revision ?? 0) > 0 && model.lastEdited(capture) > (record?.syncedAt ?? .distantPast)
+                    if !edited {
+                        do {
+                            try model.evictPreview(capture)
+                            records[origin] = nil
+                            outcome.evicted += 1
+                            continue
+                        } catch {
+                            outcome.failures.append("\(capture.displayTitle): \(Self.describe(error))")
+                        }
+                    }
+                }
                 elsewhere.insert(origin)
                 noteElsewhere(origin, library: row.library)
             }
             outcome.elsewhere = elsewhere.count
+            if outcome.evicted > 0 {
+                LLog("picplace: check — \(outcome.evicted) preview(s) of other libraries' projects removed from this library (folders and index rows only; no tombstones)")
+            }
 
             var conflicts: [Conflict] = []
             var seen = Set<UUID>()
@@ -337,7 +364,7 @@ extension PicPlaceController {
             saveSyncState()
             lastCheck = outcome
             updateAutoError()
-            LLog("picplace: check (\(reason)) — \(outcome.pulled) pulled, \(outcome.updated) updated, \(outcome.pushed) pushed, \(outcome.retried) retried, \(outcome.waiting) waiting to retry, \(outcome.deletedThere) deleted there, \(outcome.deletedHere) removed here, \(outcome.elsewhere) filed elsewhere, \(conflicts.count) conflict(s)\(outcome.failures.isEmpty ? "" : ", failures (\(outcome.failures.count)): \(outcome.failures.prefix(5).joined(separator: "; "))\(outcome.failures.count > 5 ? "; …" : "")")")
+            LLog("picplace: check (\(reason)) — \(outcome.pulled) pulled, \(outcome.updated) updated, \(outcome.pushed) pushed, \(outcome.retried) retried, \(outcome.waiting) waiting to retry, \(outcome.deletedThere) deleted there, \(outcome.deletedHere) removed here, \(outcome.elsewhere) filed elsewhere, \(outcome.evicted) other libraries' previews removed, \(conflicts.count) conflict(s)\(outcome.failures.isEmpty ? "" : ", failures (\(outcome.failures.count)): \(outcome.failures.prefix(5).joined(separator: "; "))\(outcome.failures.count > 5 ? "; …" : "")")")
             for conflict in conflicts {
                 LLog("picplace: conflict — \(conflict.name) (\(conflict.originID.uuidString.prefix(8))) \(conflict.kind): local \(conflict.localRevision.map(String.init) ?? "-") vs server \(conflict.serverRevision)\(conflict.serverDevice.map { " from \($0)" } ?? "")")
             }

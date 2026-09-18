@@ -700,17 +700,31 @@ struct PicPlaceSettingsCard: View {
         return "Not on PicPlace — Connect…"
     }
 
+    /// "518 of 879 projects · 854,2 MB" — how many of this library's
+    /// projects PicPlace has as this library, and their size; "518
+    /// projects" when it has them all (libraries plan §17.12).
     private var usageText: String {
         guard let usage = picplace.usage else { return "…" }
-        let projects = "\(usage.projects) project\(usage.projects == 1 ? "" : "s")"
+        let projects: String
+        if let t = picplace.tally, t.onPicPlace != t.here {
+            projects = "\(t.onPicPlace) of \(t.here) projects"
+        } else {
+            projects = "\(usage.projects) project\(usage.projects == 1 ? "" : "s")"
+        }
         return usage.bytes > 0 ? "\(projects) · \(LLFormat.bytes(usage.bytes))" : projects
     }
 
     /// "2 not in this library yet" — the account's total is not the
     /// library's; the difference is what a later merge brings here.
+    /// One line under it: the originals PicPlace holds, and the gap —
+    /// never another library's name.
     private var usageSubtitle: String? {
-        guard let usage = picplace.usage, usage.notInLibrary > 0 else { return nil }
-        return "\(usage.notInLibrary) not in this library yet"
+        guard let t = picplace.tally else { return nil }
+        var parts: [String] = []
+        if t.onPicPlace > 0 { parts.append("originals for \(t.originalsOnPicPlace)") }
+        if t.notYet > 0 { parts.append("\(t.notYet) not on PicPlace yet") }
+        if t.elsewhere > 0 { parts.append("\(t.elsewhere) here \(t.elsewhere == 1 ? "is" : "are") filed under other libraries on PicPlace") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 

@@ -1007,3 +1007,37 @@ mirrors (iPhone/iPad/Mac).
   approval, without which sheets on the phone are drawn from the code.
 
 The libraries programme (L1–L25, stages A → C2) is closed with this entry.
+
+### 17.12 The card's numbers, simplified (2026-09-18) — Steven's read of "518 of 879"
+
+Steven's Mac read *On PicPlace · 518 projects* under a Libraries row
+saying *879 projects*, and took 361 for originals not yet uploaded. The
+records said otherwise: 518 were this library's on PicPlace (originals
+held for 98 of them), 360 were **Holidays' previews** left in the Prague
+folder by the 16th's mix — filed under Holidays on PicPlace, no originals,
+never syncable from here — and 1 was not on PicPlace yet. Three different
+truths behind one bare number.
+
+Decisions (his: simple, and never another library's name):
+
+- **One row, one line.** *On PicPlace — 518 of 879 projects · 854,2 MB*
+  ("518 projects" when PicPlace has them all), and under it *originals for
+  98 · 1 not on PicPlace yet* — the originals count from this library's own
+  records (`serverHeavyFiles` / `originalsMovedAt`), the gap only when
+  there is one. `PicPlaceController.LibraryTally`, computed after every
+  usage refresh (which follows every check). The old *N not in this
+  library yet* line — the account's other libraries' count — is gone.
+- **Previews filed under another library are removed by the check** (the
+  L23 rule at every pass, not only at a connect elsewhere): folder and
+  index row, never a tombstone, unless a person edited the preview since
+  it was pulled — that one is kept and counted. Projects with originals
+  here that PicPlace files elsewhere stay, noted on their record, and the
+  line says *N here are filed under other libraries on PicPlace* — a
+  count, no names; a person decides those.
+- Bench: a previews library whose one project was moved server-side into
+  another library — `1 preview removed … no tombstones`, one folder left,
+  the row *1 project*; an originals library in the same state — kept,
+  `1 filed elsewhere`, the row *1 of 2 projects* with the line. Steven's
+  Prague library will read *518 of 519 projects* after its next check.
+- The `LL_STORAGE` demo values and the phone's *On PicPlace* row share the
+  §17.11 rule: a staged or summarised number must never mislead.

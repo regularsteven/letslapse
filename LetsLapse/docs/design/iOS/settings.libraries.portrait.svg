@@ -43,7 +43,7 @@
         <text x="32" y="410" font-size="11.5" fill="#6D6D72">An empty library on picplace.test as @regularsteven;</text>
         <text x="32" y="425" font-size="11.5" fill="#6D6D72">this iPhone opens it. Nothing is copied.</text>
         <text x="20" y="500" font-size="13" fill="#6D6D72" font-weight="600" class="hdr">PICPLACE</text>
-        <rect id="picplace-card" x="16" y="508" width="361" height="200" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <rect id="picplace-card" x="16" y="508" width="361" height="218" rx="16" fill="#FFF" filter="url(#soft)"/>
         <text x="32" y="535" font-size="16" fill="#000">Account</text>
         <text x="361" y="535" font-size="15" fill="#6D6D72" text-anchor="end">@regularsteven</text>
         <line x1="32" y1="552" x2="361" y2="552" stroke="#000" stroke-opacity="0.08"/>
@@ -52,11 +52,12 @@
         <line x1="32" y1="596" x2="361" y2="596" stroke="#000" stroke-opacity="0.08"/>
         <text x="32" y="623" font-size="16" fill="#000">On PicPlace</text>
         <text x="361" y="623" font-size="15" fill="#6D6D72" text-anchor="end">401 projects · 300,9 MB</text>
-        <line x1="32" y1="640" x2="361" y2="640" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="667" font-size="16" fill="#000">Library “Prague</text>
-        <text x="32" y="686" font-size="16" fill="#000">LetsLapse Shots”</text>
-        <text x="361" y="676" font-size="15" fill="#6D6D72" text-anchor="end">@regularsteven on pic…</text>
-        <text x="32" y="704" font-size="11.5" fill="#6D6D72">Connected on 17. 9. 2026 at 14:23</text>
+        <text x="32" y="640" font-size="11.5" fill="#6D6D72">originals for 98</text>
+        <line x1="32" y1="658" x2="361" y2="658" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="685" font-size="16" fill="#000">Library “Prague</text>
+        <text x="32" y="704" font-size="16" fill="#000">LetsLapse Shots”</text>
+        <text x="361" y="694" font-size="15" fill="#6D6D72" text-anchor="end">@regularsteven on pic…</text>
+        <text x="32" y="722" font-size="11.5" fill="#6D6D72">Connected on 17. 9. 2026 at 14:23</text>
         <g id="tab-bar" transform="translate(0,0)">
         <rect x="20" y="776" width="353" height="62" rx="31" fill="#FFF" fill-opacity="0.92" filter="url(#soft)"/>
         <text x="55.0" y="826" font-size="10.5" fill="#6D6D72" text-anchor="middle">Create</text>

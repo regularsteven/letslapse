@@ -54,6 +54,20 @@ final class PicPlaceController: ObservableObject {
         var notInLibrary: Int = 0
     }
 
+    /// The card's one line (libraries plan §17.12): this library's projects
+    /// here, how many of them PicPlace has as this library (the server's
+    /// count), the originals it holds, and the gap — not on PicPlace yet,
+    /// and held here but filed under other libraries (originals, or a
+    /// preview edited since it was pulled; other previews are removed by
+    /// the check). Nothing about other libraries by name.
+    struct LibraryTally: Equatable {
+        var here = 0
+        var onPicPlace = 0
+        var originalsOnPicPlace = 0
+        var notYet = 0
+        var elsewhere = 0
+    }
+
     struct FolderSummary: Equatable {
         /// Objects the policy sends (the records bundle counts as one) and their bytes.
         var files: Int
@@ -120,6 +134,7 @@ final class PicPlaceController: ObservableObject {
     @Published internal(set) var binding: PicPlaceBindingRecord?
     @Published private(set) var profile: Profile?
     @Published private(set) var usage: Usage?
+    @Published private(set) var tally: LibraryTally?
     @Published internal(set) var records: [UUID: PicPlaceSyncRecord] = [:]
     @Published private(set) var progress: [UUID: PicPlaceSyncProgress] = [:]
     @Published private(set) var summaries: [UUID: FolderSummary] = [:]
@@ -804,6 +819,28 @@ final class PicPlaceController: ObservableObject {
                  + missing.map { "\($0.name) (\($0.uuid.prefix(8)), \($0.type))" }.joined(separator: "; "))
         }
         usage = Usage(projects: count, bytes: bytes, notInLibrary: missing.count)
+        updateTally()
+    }
+
+    /// The tally from this library's rows and records, after every usage
+    /// refresh (which follows every check and the first pass).
+    func updateTally() {
+        guard let usage, let libraryIndex = model.libraryIndex else { tally = nil; return }
+        var query = LibraryIndex.ProjectQuery()
+        query.limit = 100_000
+        let rows = (try? libraryIndex.projects(query))?.rows ?? []
+        var t = LibraryTally(here: rows.count, onPicPlace: usage.projects)
+        for row in rows {
+            guard let capture = model.capture(id: row.id) else { continue }
+            let record = records[model.originID(of: capture)]
+            if let record, record.elsewhereLibrary != nil { t.elsewhere += 1; continue }
+            if let record, record.recordsReachedServer {
+                if (record.serverHeavyFiles ?? 0) > 0 || record.originalsMovedAt != nil { t.originalsOnPicPlace += 1 }
+            } else if !model.sourcesMissing(capture) {
+                t.notYet += 1
+            }
+        }
+        tally = t
     }
 
     private func handleSignedOutByServer() {
@@ -1374,6 +1411,7 @@ final class PicPlaceController: ObservableObject {
         PicPlaceBindingRecord.remove(inRoot: root)
         binding = nil
         records = [:]
+        tally = nil
         LLog("picplace: library disconnected")
     }
 
