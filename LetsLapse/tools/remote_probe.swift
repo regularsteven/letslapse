@@ -21,6 +21,9 @@
 //   setAutoInterval#1           a command with a numeric `value`
 //   scheduleStop:minutes#60     both at once — the device owns the deadline
 //                               and stops itself with no link held open
+//   selectStop#5                a lens chip by display factor (0.5 · 1 · 2 ·
+//                               5 · 10) — idle only, refused if not offered
+//   setAutoShapes:on            Photo's Find Shapes toggle (on | off)
 //   wait@3                      sleep 3 seconds
 //   poll@2x8                    send `state` 8 times, 2 seconds apart
 //
@@ -56,6 +59,7 @@ func extraKey(for command: String) -> String? {
     case "scheduleStop": return WatchMessageKey.stopAtUnit
     case "setBlendStrategy": return WatchMessageKey.blendStrategy
     case "setFramesPerBlend": return WatchMessageKey.blendDepth
+    case "setAutoShapes": return WatchMessageKey.autoShapes
     default: return nil
     }
 }
@@ -70,6 +74,8 @@ func digest(_ body: [String: Any]) -> String {
     if let auto = string(WatchMessageKey.intervalAuto) { parts.append("auto=" + auto) }
     if let every = string(WatchMessageKey.intervalSeconds) { parts.append("every=" + every) }
     if let count = string(WatchMessageKey.captureCount) { parts.append("count=" + count) }
+    if let stop = string(WatchMessageKey.zoomStop) { parts.append("stop=" + stop + "x") }
+    if let shapes = string(WatchMessageKey.autoShapes) { parts.append("shapes=" + shapes) }
     // Holy Grail
     if let shutter = body[WatchMessageKey.holyGrailShutter] as? Double {
         let iso = body[WatchMessageKey.holyGrailISO] as? Double ?? 0

@@ -96,6 +96,11 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var availableBaseFPS: [Int] = []
     private var plannedSpeed = 0
     private var outputFPS = 0
+    /// The viewfinder's own controls: the lens stop (display factor) and
+    /// the stops on offer, and Photo's Find Shapes toggle.
+    private var zoomStop: Double?
+    private var availableZoomStops: [Double] = []
+    private var autoShapes = false
     private var isExposureLocked = false
     private var lockedISO: Float = 0
     private var lockedShutter: Double = 0
@@ -335,6 +340,22 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         }
     }
 
+    /// The viewfinder's own controls — the lens stop and Photo's Find Shapes
+    /// toggle — so a scripted test can verify a `selectStop` or a
+    /// `setAutoShapes` landed, the way it verifies a `setBlendStrategy`.
+    @MainActor
+    func setViewfinderContext(zoomStop: Double?, availableZoomStops: [Double], autoShapes: Bool) {
+        let changed = self.zoomStop != zoomStop
+            || self.availableZoomStops != availableZoomStops
+            || self.autoShapes != autoShapes
+        self.zoomStop = zoomStop
+        self.availableZoomStops = availableZoomStops
+        self.autoShapes = autoShapes
+        if changed {
+            publishState()
+        }
+    }
+
     /// What the phone is doing when it isn't being a camera — the flow it's
     /// in, and how far through a blend it is.
     ///
@@ -500,6 +521,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         var logged: [String: Any] = ["command": command.rawValue]
         if let value = message[WatchMessageKey.value] as? Double { logged["value"] = value }
         if let token = message[WatchMessageKey.captureMode] as? String { logged["captureMode"] = token }
+        if let token = message[WatchMessageKey.autoShapes] as? String { logged["autoShapes"] = token }
         if let unit = message[WatchMessageKey.stopAtUnit] as? String { logged["stopAtUnit"] = unit }
 
         guard commandHandler(command, message) else {
@@ -560,6 +582,11 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.plannedSpeed] = plannedSpeed
         payload[WatchMessageKey.outputFPS] = outputFPS
         payload[WatchMessageKey.captureMode] = captureMode.rawValue
+        if let zoomStop {
+            payload[WatchMessageKey.zoomStop] = zoomStop
+        }
+        payload[WatchMessageKey.availableZoomStops] = availableZoomStops
+        payload[WatchMessageKey.autoShapes] = autoShapes ? "on" : "off"
         payload[WatchMessageKey.intervalSeconds] = intervalSeconds
         payload[WatchMessageKey.framesPerBlend] = framesPerBlend
         payload[WatchMessageKey.blendDepth] = blendDepthToken

@@ -536,6 +536,9 @@ struct CaptureView: View {
             // is left traced, on starts from nothing — which is the reset.
             liveShapes.reset()
             updateShapeWatch()
+            #if os(iOS)
+            updateWatchViewfinderContext()
+            #endif
         }
         .onChange(of: shapeFamilyToken) { _ in liveShapes.search = shapeSearch }
         .onChange(of: shapeSensitivityToken) { _ in liveShapes.search = shapeSearch }
@@ -902,6 +905,10 @@ struct CaptureView: View {
             updateWatchModeContext()
             updateWatchContext()
         }
+        // The lens stop and Find Shapes travel too, so a remote that set
+        // them (`selectStop`, `setAutoShapes`) sees its own change confirmed.
+        .onChange(of: camera.selectedStop) { _ in updateWatchViewfinderContext() }
+        .onChange(of: camera.availableStops) { _ in updateWatchViewfinderContext() }
         .onChange(of: model.intervalOutputFormat) { _ in updateWatchContext() }
         .onChange(of: camera.liveBlendDNGSupport) { _ in updateWatchContext() }
         .onChange(of: interval) { _ in updateWatchModeContext() }
@@ -5953,6 +5960,26 @@ struct CaptureView: View {
         case .cancelScheduledStop:
             camera.cancelScheduledStop()
             return true
+        case .selectStop:
+            // The chip's own path, by display factor — refused when the stop
+            // is not offered (the chips hide what the hardware lacks) and
+            // mid-run like the chip. `selectStop` declines a running capture
+            // silently; the guard here makes that refusal an honest reply.
+            guard !isCapturing, let value,
+                  let stop = camera.availableStops.first(where: { abs($0.displayFactor - value) < 0.01 })
+            else { return false }
+            camera.selectStop(stop)
+            return true
+        case .setAutoShapes:
+            // Photo-only and idle-only: the toggle attaches a preview tap,
+            // which is a session transaction. Writes the same `@AppStorage`
+            // the on-screen toggle does, so its `.onChange` runs the same
+            // watch and the two surfaces cannot disagree.
+            guard mode == .photo, !isCapturing,
+                  let token = (payload[WatchMessageKey.autoShapes] as? String)?.lowercased(),
+                  token == "on" || token == "off" else { return false }
+            autoShapesEnabled = token == "on"
+            return true
         case .state:
             // Never reached: the receiver answers `state` from its cache
             // before consulting this handler. Kept for exhaustiveness.
@@ -6061,6 +6088,16 @@ struct CaptureView: View {
             captureCount: count,
             intervalMode: intervalMode,
             intervalAuto: intervalIsAuto)
+        updateWatchViewfinderContext()
+    }
+
+    /// The viewfinder's own controls, for the remote's state digest and for
+    /// a scripted test to confirm a `selectStop` / `setAutoShapes` landed.
+    private func updateWatchViewfinderContext() {
+        watchRemote.setViewfinderContext(
+            zoomStop: camera.selectedStop?.displayFactor,
+            availableZoomStops: camera.availableStops.map(\.displayFactor),
+            autoShapes: mode == .photo && autoShapesEnabled)
     }
 
     /// Mirrors whichever MODE readout is live to the remotes, so a Mac driving

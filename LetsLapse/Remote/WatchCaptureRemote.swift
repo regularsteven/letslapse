@@ -798,6 +798,10 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 }
                 playHaptic(.click)
             }
+        case .selectStop, .setAutoShapes:
+            // Bench commands with nothing to mirror on the wrist: the next
+            // state snapshot carries the stop and the toggle.
+            break
         case .previewFrame:
             // A poll. Its frame is taken in `apply`, alongside the state
             // snapshot the same reply carries.

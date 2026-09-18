@@ -103,6 +103,19 @@ enum WatchCaptureCommand: String {
     /// An optional `value` in seconds asks the phone to place the OUT on its
     /// own timer, so it lands even if the watch sleeps.
     case toggleMark
+    /// A lens stop by its display factor (`value` = 0.5 · 1 · 2 · 5 · 10 —
+    /// the chip's label, never the device's raw factor). Refused unless the
+    /// stop is one the camera offers right now, and refused mid-run like
+    /// the chip itself. Exists so a bench can drive the viewfinder's lenses
+    /// without a hand on the screen — the 2026-09-18 zoom punch-in repro
+    /// needed one, which is exactly the walk to the phone the remote exists
+    /// to avoid.
+    case selectStop
+    /// Photo mode's Find Shapes toggle (`WatchMessageKey.autoShapes` = on |
+    /// off). Photo-only and idle-only — the toggle attaches a preview tap,
+    /// which is a session transaction — and it writes the same `@AppStorage`
+    /// the on-screen toggle does, so the two surfaces cannot disagree.
+    case setAutoShapes
     /// A state poll, not an action. The receiver answers it before its
     /// app-active and command-handler guards, so it stays truthful about a
     /// backgrounded phone rather than being refused by it.
@@ -130,7 +143,8 @@ extension WatchCaptureCommand {
              .setIntervalMode, .setLadder, .setAutoInterval, .deleteLastFrame,
              .setBurstFPS, .setBaseFPS, .setSequenceMode, .toggleMark,
              .scheduleStop, .cancelScheduledStop, .setDimDuringShoot,
-             .armCamera, .cancelExport, .simulateTooHot:
+             .armCamera, .cancelExport, .simulateTooHot,
+             .selectStop, .setAutoShapes:
             return true
         }
     }
@@ -182,6 +196,10 @@ extension WatchCaptureCommand {
             return "Screen dimming is unchanged."
         case .simulateTooHot:
             return "The shoot is still running."
+        case .selectStop:
+            return "The lens is unchanged."
+        case .setAutoShapes:
+            return "Find Shapes is unchanged."
         case .setISO, .setLensPosition, .state, .previewFrame:
             return nil
         }

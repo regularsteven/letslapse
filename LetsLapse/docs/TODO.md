@@ -11,26 +11,6 @@ live inline.
 
 ## Open
 
-### Camera remote — lens stops and the Find Shapes toggle as commands
-
-**Raised:** 2026-09-18 (Steven, benching the Photo zoom punch-in: "half the
-point of the remote logic is to enable more testing" — and the test needed
-his hands, because the vocabulary has no lens command and no Find Shapes
-command) · **Size:** small · owner: `Shared/WatchCaptureCommand.swift`,
-`App/CaptureView.swift` (the command handler), `tools/remote_probe.swift`
-
-Today the link drives capture (modes, rates, blend, ladder, start/stop,
-schedule) and reads the camera (`state`, `previewFrame`); the viewfinder's
-own controls are out of reach. Wanted: `selectStop` with the display factor
-(`selectStop#5`, `selectStop#0.5` — refused when the stop is not offered,
-same guards as the chip), `setAutoShapes:on|off` (the Photo-mode toggle,
-`capture.autoShapes`), and the current stop + toggle in the `state` digest.
-With those, the 2026-09-18 repro is one probe script —
-`selectStop#5,wait@3,setAutoShapes:on,wait@3,selectStop#1,wait@3,setAutoShapes:off,previewFrame`
-— and `tools/zoom_curve.py` on the frames replaces the eyes. Watch
-`WatchMessageKey` for the payload keys and keep `extraKey(for:)` in the probe
-in step.
-
 ### Remote listener dies on return from the background and never re-advertises
 
 **Raised:** 2026-09-18 (seen three times in one evening's console log while

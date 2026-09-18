@@ -158,6 +158,17 @@ enum WatchMessageKey {
     /// frame. Absent when motion data isn't available yet — the remote hides
     /// the horizon bar rather than drawing a confident zero.
     static let previewRollDegrees = "previewRollDegrees"
+
+    // MARK: The viewfinder's own controls
+
+    /// The selected lens stop's display factor (0.5 · 1 · 2 · 5 · 10), and
+    /// every stop the camera offers, so a remote picks from what exists —
+    /// and a scripted test can verify a `selectStop` landed.
+    static let zoomStop = "zoomStop"
+    static let availableZoomStops = "availableZoomStops"
+    /// Photo mode's Find Shapes toggle, "on" | "off". The `setAutoShapes`
+    /// command's payload key AND the state key, like `captureMode`.
+    static let autoShapes = "autoShapes"
     static let stopAtUnit = "stopAtUnit"
     static let stopAtDeadline = "stopAtDeadline"
     static let stopAtTargetCount = "stopAtTargetCount"
