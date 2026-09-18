@@ -11,6 +11,43 @@ live inline.
 
 ## Open
 
+### Camera remote — lens stops and the Find Shapes toggle as commands
+
+**Raised:** 2026-09-18 (Steven, benching the Photo zoom punch-in: "half the
+point of the remote logic is to enable more testing" — and the test needed
+his hands, because the vocabulary has no lens command and no Find Shapes
+command) · **Size:** small · owner: `Shared/WatchCaptureCommand.swift`,
+`App/CaptureView.swift` (the command handler), `tools/remote_probe.swift`
+
+Today the link drives capture (modes, rates, blend, ladder, start/stop,
+schedule) and reads the camera (`state`, `previewFrame`); the viewfinder's
+own controls are out of reach. Wanted: `selectStop` with the display factor
+(`selectStop#5`, `selectStop#0.5` — refused when the stop is not offered,
+same guards as the chip), `setAutoShapes:on|off` (the Photo-mode toggle,
+`capture.autoShapes`), and the current stop + toggle in the `state` digest.
+With those, the 2026-09-18 repro is one probe script —
+`selectStop#5,wait@3,setAutoShapes:on,wait@3,selectStop#1,wait@3,setAutoShapes:off,previewFrame`
+— and `tools/zoom_curve.py` on the frames replaces the eyes. Watch
+`WatchMessageKey` for the payload keys and keep `extraKey(for:)` in the probe
+in step.
+
+### Remote listener dies on return from the background and never re-advertises
+
+**Raised:** 2026-09-18 (seen three times in one evening's console log while
+benching the Photo zoom punch-in: 21:42:19, 21:55:30, 22:08:44) · **Size:**
+small · owner: `Shared/CaptureRemoteListener.swift`
+
+Each time the app came back from the background (`InterruptionEnded`,
+`DidStartRunning`), the listener logged `remote-listener failed: -65569:
+DefunctConnection`, went to `.failed` and stayed there: nothing restarts it,
+so the camera stops advertising and `tools/remote_probe` (or the Mac remote)
+finds nothing until the capture screen is torn down and rebuilt — which also
+mints a new pairing code. Expected: a `.failed` from a defunct connection is a
+restart cue, not a terminal state; the listener should come back on the same
+code when the session resumes (`resume(interruptionEnded)` is the natural
+place to check). Repro: open the capture screen, lock the phone or start a
+screen recording from Control Center, come back, browse with `remote_probe`.
+
 ### PicPlace first connection — done with failures, Try again, transfer retries, a background assertion
 
 **Raised:** 2026-09-18 (Steven's first run against picplace.co with S3: 669 of

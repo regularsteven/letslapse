@@ -2158,9 +2158,16 @@ final class CameraController: NSObject, ObservableObject {
     /// defaults once — the prime suspect in the Photo-JPEG tele report
     /// (2026-08-04): the wide was observed serving the 5×/10× stops.
     private var constituentObservation: NSKeyValueObservation?
+    /// The ramp's start and end with the factor at each — the timing that
+    /// `selectStop` used to guess (2026-09-18: 0.5–0.6 s for 1×↔5× on a 16 Pro).
+    private var zoomRampObservation: NSKeyValueObservation?
 
     private func installConstituentLogging(on device: AVCaptureDevice) {
         constituentObservation = nil
+        zoomRampObservation = device.observe(\.isRampingVideoZoom, options: [.new]) { device, _ in
+            LLog(String(format: "optics: ramp %@ at zoom %.2f",
+                        device.isRampingVideoZoom ? "started" : "ended", device.videoZoomFactor))
+        }
         guard device.isVirtualDevice else { return }
         LLog("optics: switching policy=\(device.primaryConstituentDeviceSwitchingBehavior.rawValue)"
             + " active=\(device.activePrimaryConstituentDeviceSwitchingBehavior.rawValue)"
@@ -2376,11 +2383,15 @@ final class CameraController: NSObject, ObservableObject {
                 self.applyZoom(stop, animated: true)
                 // The burst menu is read from the lens this stop would pin to,
                 // so changing stops can change the answer (4K120 exists on the
-                // wide and not on the tele). Deferred past the ramp:
-                // `refreshCaptureOptions` re-applies `activeFormat`, which
-                // resets the zoom factor and would snap the animation.
-                self.sessionQueue.asyncAfter(deadline: .now() + 0.35) {
-                    guard !self.captureIsRunning else { return }
+                // wide and not on the tele). Deferred past the ramp — the
+                // whole ramp, not a guessed 0.35 s: `refreshCaptureOptions`
+                // re-applies the format and re-asserts the zoom, and doing
+                // that under a ramp still in flight cut every lens change
+                // short and left the device's zoom record stale (2026-09-18,
+                // see `reassertStopZoom`).
+                self.stopSelectionGeneration += 1
+                self.afterZoomRamp(generation: self.stopSelectionGeneration) {
+                    guard !self.captureIsRunning, self.activeSequence == nil else { return }
                     self.refreshCaptureOptions()
                     // A new lens is a new shot: hand focus back for it rather
                     // than carry the last one's plane across a re-crop, or a
@@ -2544,15 +2555,21 @@ final class CameraController: NSObject, ObservableObject {
     }
     #endif
 
-    /// sessionQueue-confined. Rate 8 (powers of two per second) crosses the
-    /// 1×→5× jump in ~0.29 s — the native app's kind of snap.
+    /// sessionQueue-confined. Rate 8 (powers of two per second) is the
+    /// nominal speed; the device smooths it with its own acceleration limit,
+    /// so on an iPhone 16 Pro the 1×↔5× walk takes 0.5–0.6 s end to end
+    /// (the ramp KVO's own stamps, 2026-09-18 — not the 0.29 s the
+    /// arithmetic promises). Whatever runs next must let it finish: an
+    /// assignment to `videoZoomFactor` under a ramp is what left the device's
+    /// zoom record out of step with the picture (see `reassertStopZoom`).
     private func applyZoom(_ stop: DerivedOpticsStop, animated: Bool) {
         guard let device = videoDevice else { return }
         #if os(iOS)
         let raw = min(CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
         do {
             try device.lockForConfiguration()
-            if animated, session.isRunning {
+            if (animated && session.isRunning) || device.isRampingVideoZoom {
+                // A ramp already in flight is retargeted, never overwritten.
                 device.ramp(toVideoZoomFactor: raw, withRate: 8)
             } else {
                 device.videoZoomFactor = raw
@@ -2569,12 +2586,118 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// sessionQueue-confined. Puts `videoZoomFactor` back on the selected
+    /// stop — the run's lens pin when one holds, else `currentStop` in the
+    /// optics device's own factor space — after anything that can have
+    /// disturbed it: an `activeFormat` write, a device-input swap, and a
+    /// session transaction that adds or removes a preview tap. Never writes
+    /// `activeFormat`. Returns the factor written, nil when it declined.
+    ///
+    /// Declines while a ramp is in flight unless the caller has just written
+    /// the format. The ramp is already heading for `currentStop`, and an
+    /// assignment under it "cancels the ramp and snaps" — which on an iPhone
+    /// 16 Pro left the device's zoom record at the ramp's value (raw 5.0 of
+    /// a 10→2 walk) while the picture showed 1×; the next
+    /// `commitConfiguration` (the Find Shapes tap joining or leaving the
+    /// session) re-sent that record and the viewfinder punched in 2.5×
+    /// (2026-09-18, measured from a screen recording with
+    /// tools/zoom_curve.py). A format write kills the ramp itself, so there
+    /// the assignment is mandatory — it is what brings a viewfinder back
+    /// from a ramp run at 0.5× (2026-08-11).
+    @discardableResult
+    private func reassertStopZoom(
+        on device: AVCaptureDevice, deviceIsLocked: Bool, formatChanged: Bool, reason: String
+    ) -> CGFloat? {
+        #if os(iOS)
+        let ceiling = device.activeFormat.videoMaxZoomFactor
+        let target: CGFloat
+        if let pin = sequenceLensPin, device === pin.device {
+            // Pinned run: the stop is a crop of this one lens, and the
+            // factor was worked out in that lens's own space at pin time.
+            target = min(pin.zoomFactor, ceiling)
+        } else if !physicalWorldActive, let stop = currentStop {
+            target = min(CGFloat(stop.rawFactor), ceiling)
+        } else {
+            return nil
+        }
+        let before = device.videoZoomFactor
+        if !formatChanged, device.isRampingVideoZoom {
+            LLog(String(format: "optics: zoom re-assert (%@) deferred — ramp in flight at %.2f, target %.2f",
+                        reason, before, target))
+            return nil
+        }
+        if deviceIsLocked {
+            device.videoZoomFactor = target
+        } else {
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = target
+                device.unlockForConfiguration()
+            } catch {
+                LLog("optics: zoom re-assert (\(reason)) could not lock — \(error.localizedDescription)")
+                return nil
+            }
+        }
+        LLog(String(format: "optics: zoom re-assert (%@) %.2f → %.2f · %@",
+                    reason, before, device.videoZoomFactor, opticsStateLine(device)))
+        return target
+        #else
+        return nil
+        #endif
+    }
+
+    #if os(iOS)
+    /// One line of the optics device's state for the console — what the
+    /// zoom re-assert and the tap transactions log around themselves.
+    private func opticsStateLine(_ device: AVCaptureDevice) -> String {
+        let dims = device.activeFormat.formatDescription.dimensions
+        let stabilization = movieOutput.connection(with: .video)?.activeVideoStabilizationMode.rawValue ?? -1
+        return String(format: "zoom %.2f · ramping %@ · fmt %d×%d · stab %d",
+                      device.videoZoomFactor, device.isRampingVideoZoom ? "yes" : "no",
+                      Int(dims.width), Int(dims.height), stabilization)
+    }
+    #endif
+
     // MARK: - DNG-world lens transitions
 
     /// Cover token: every covered transition bumps the generation so an
     /// overlapping switch keeps the dip up until the last one settles.
     /// sessionQueue-confined.
     private var lensCoverGeneration = 0
+
+    /// Stop-selection token: a chip tapped while an earlier tap's ramp is
+    /// still settling replaces that tap's deferred refresh with its own.
+    /// sessionQueue-confined.
+    private var stopSelectionGeneration = 0
+
+    /// Runs `body` on the session queue once the optics device's zoom ramp
+    /// has finished — no sooner than `floor` (the 0.35 s the refresh always
+    /// waited, kept so a device that never reports a ramp behaves exactly as
+    /// before), polled every 50 ms while `isRampingVideoZoom` holds, and by
+    /// `deadline` at the latest. Dropped if a newer stop selection has
+    /// bumped the generation. sessionQueue-confined.
+    private func afterZoomRamp(
+        generation: Int, floor: TimeInterval = 0.35, deadline: TimeInterval = 1.5,
+        _ body: @escaping () -> Void
+    ) {
+        let started = Date()
+        func poll(after delay: TimeInterval) {
+            sessionQueue.asyncAfter(deadline: .now() + delay) {
+                guard generation == self.stopSelectionGeneration else { return }
+                #if os(iOS)
+                if let device = self.videoDevice, device.isRampingVideoZoom {
+                    if Date().timeIntervalSince(started) < deadline {
+                        poll(after: 0.05)
+                        return
+                    }
+                    LLog(String(format: "optics: ramp still in flight after %.1f s — refreshing anyway", deadline))
+                }
+                #endif
+                body()
+            }
+        }
+        poll(after: floor)
+    }
 
     private func beginLensCover() {
         lensCoverGeneration += 1
@@ -3233,6 +3356,9 @@ final class CameraController: NSObject, ObservableObject {
         guard let device = videoDevice,
               let match = captureFormatMatch(for: device, resolution: resolution, fps: fps)
         else { return false }
+        #if os(iOS)
+        LLog("applyCaptureFormat: enter · \(opticsStateLine(device)) → \(resolution.width)×\(resolution.height)@\(fps)")
+        #endif
 
         do {
             try device.lockForConfiguration()
@@ -3279,19 +3405,14 @@ final class CameraController: NSObject, ObservableObject {
             // Setting `activeFormat` resets `videoZoomFactor` to 1 — and so
             // does re-adding a device input (the pin release swaps the
             // virtual camera back in at 1.0 = ultra-wide framing). Re-assert
-            // the selected stop UNCONDITIONALLY: on the fast path the write
-            // is a no-op, and gating it on `formatChanged` shipped a
-            // viewfinder that came back from every ramp run at 0.5×
-            // (2026-08-11). Only the `activeFormat` skip is the fast path.
-            if let pin = sequenceLensPin, device === pin.device {
-                // Pinned run: the stop is a crop of this one lens, and the
-                // factor was worked out in that lens's own space at pin time.
-                device.videoZoomFactor = min(
-                    pin.zoomFactor, device.activeFormat.videoMaxZoomFactor)
-            } else if !physicalWorldActive, let stop = currentStop {
-                device.videoZoomFactor = min(
-                    CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
-            }
+            // the selected stop on every path: gating it on `formatChanged`
+            // shipped a viewfinder that came back from every ramp run at
+            // 0.5× (2026-08-11). Only the `activeFormat` skip is the fast
+            // path — and there the helper declines while a zoom ramp is in
+            // flight, because the write is NOT a no-op under a ramp: it cut
+            // every lens change short and left the device's zoom record
+            // stale (2026-09-18, see `reassertStopZoom`).
+            reassertStopZoom(on: device, deviceIsLocked: true, formatChanged: formatChanged, reason: "format")
             // Same rule for the colour space: re-assert Apple Log if Capture
             // Flat is on and the format supports it (otherwise sRGB). Goes
             // through `assertColorSpace` so the session's wide-colour
@@ -5470,13 +5591,13 @@ final class CameraController: NSObject, ObservableObject {
                 self.testCardOutput = output
             }
             if !self.session.outputs.contains(output) {
-                self.session.beginConfiguration()
-                if self.session.canAddOutput(output) {
-                    self.session.addOutput(output)
-                } else {
-                    LLog("testcard: session refused the preview tap")
+                self.runTapTransaction("testcard tap attached") {
+                    if self.session.canAddOutput(output) {
+                        self.session.addOutput(output)
+                    } else {
+                        LLog("testcard: session refused the preview tap")
+                    }
                 }
-                self.session.commitConfiguration()
             }
             output.setSampleBufferDelegate(tap, queue: tap.queue)
         }
@@ -5521,13 +5642,13 @@ final class CameraController: NSObject, ObservableObject {
                 self.framingOutput = output
             }
             if !self.session.outputs.contains(output) {
-                self.session.beginConfiguration()
-                if self.session.canAddOutput(output) {
-                    self.session.addOutput(output)
-                } else {
-                    LLog("framing: session refused the preview tap")
+                self.runTapTransaction("framing tap attached") {
+                    if self.session.canAddOutput(output) {
+                        self.session.addOutput(output)
+                    } else {
+                        LLog("framing: session refused the preview tap")
+                    }
                 }
-                self.session.commitConfiguration()
             }
             output.setSampleBufferDelegate(tap, queue: tap.queue)
         }
@@ -5565,13 +5686,13 @@ final class CameraController: NSObject, ObservableObject {
                 self.shapeOutput = output
             }
             if !self.session.outputs.contains(output) {
-                self.session.beginConfiguration()
-                if self.session.canAddOutput(output) {
-                    self.session.addOutput(output)
-                } else {
-                    LLog("shapes: session refused the preview tap")
+                self.runTapTransaction("shapes tap attached") {
+                    if self.session.canAddOutput(output) {
+                        self.session.addOutput(output)
+                    } else {
+                        LLog("shapes: session refused the preview tap")
+                    }
                 }
-                self.session.commitConfiguration()
             }
             output.setSampleBufferDelegate(tap, queue: tap.queue)
             LLog("shapes: tap attached (outputs \(self.session.outputs.count), inputs \(self.session.inputs.count), connection \(output.connection(with: .video) != nil), device \(self.videoDevice != nil))")
@@ -5595,6 +5716,33 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// The one way a preview tap joins or leaves the session: the transaction,
+    /// bracketed by the zoom re-assert every other session transaction in this
+    /// file already ends in (`applyCaptureFormat`, `restoreStandardCaptureFormat`,
+    /// `deriveStops`). The three taps were the only ones without it, and a
+    /// `commitConfiguration` re-sends the device's zoom record to the pipeline
+    /// — so a record left stale by a cut-short ramp came back as a 2.5×
+    /// punch-in the moment Find Shapes was pressed (2026-09-18). Re-asserted
+    /// BEFORE the commit so the configuration it sends already carries the
+    /// stop, and again after in case the commit itself reset it.
+    /// sessionQueue-confined.
+    private func runTapTransaction(_ reason: String, _ body: () -> Void) {
+        #if os(iOS)
+        if let device = videoDevice {
+            LLog("optics: \(reason) — before · \(opticsStateLine(device))")
+            reassertStopZoom(on: device, deviceIsLocked: false, formatChanged: false, reason: "\(reason), pre-commit")
+        }
+        #endif
+        session.beginConfiguration()
+        body()
+        session.commitConfiguration()
+        #if os(iOS)
+        if let device = videoDevice {
+            reassertStopZoom(on: device, deviceIsLocked: false, formatChanged: false, reason: reason)
+        }
+        #endif
+    }
+
     /// sessionQueue-confined, synchronous detach — called inline from every
     /// capture start beside the other two.
     private func detachShapeTapNow() {
@@ -5602,9 +5750,7 @@ final class CameraController: NSObject, ObservableObject {
         guard let output = shapeOutput else { return }
         output.setSampleBufferDelegate(nil, queue: nil)
         if session.outputs.contains(output) {
-            session.beginConfiguration()
-            session.removeOutput(output)
-            session.commitConfiguration()
+            runTapTransaction("shapes tap detached") { session.removeOutput(output) }
             LLog("shapes: tap detached")
         }
     }
@@ -5615,9 +5761,7 @@ final class CameraController: NSObject, ObservableObject {
         guard let output = framingOutput else { return }
         output.setSampleBufferDelegate(nil, queue: nil)
         if session.outputs.contains(output) {
-            session.beginConfiguration()
-            session.removeOutput(output)
-            session.commitConfiguration()
+            runTapTransaction("framing tap detached") { session.removeOutput(output) }
             LLog("framing: tap detached")
         }
     }
@@ -5633,9 +5777,7 @@ final class CameraController: NSObject, ObservableObject {
         guard let output = testCardOutput else { return }
         output.setSampleBufferDelegate(nil, queue: nil)
         if session.outputs.contains(output) {
-            session.beginConfiguration()
-            session.removeOutput(output)
-            session.commitConfiguration()
+            runTapTransaction("testcard tap detached") { session.removeOutput(output) }
             LLog("testcard: tap detached")
         }
     }
