@@ -1218,6 +1218,14 @@ a queue with per-project progress and resume, and the matching batch `.lapse`
 export. The cabled fast path (USB via devicectl) is a Mac-side nicety, not
 the product path.
 
+**2026-09-18:** the picker half shipped in its smallest form — a **Select:**
+menu on the device-import list (Custom · Today · Yesterday · This Week · All)
+over the existing tap-order batch and Hide imported, both platforms, mirrors
+redrawn, `LL_TRANSFER_LIST` stages the list with no peer. Still open: a queue
+with per-project progress and **resume** (a failed pull keeps what landed and
+stops), the matching batch `.lapse` export, and the same presets on the
+archive door.
+
 
 ### Presets — the photo × preset matrix's remaining doors
 

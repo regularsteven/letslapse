@@ -246,6 +246,12 @@ struct CreateView: View {
             if environment["LL_TRANSFER_PAIR"] != nil {
                 showDeviceImport = true
             }
+            // `LL_TRANSFER_LIST[=1|old]` — the same sheet, parked on the
+            // project list of a device that isn't there, its rows staged. See
+            // `ProjectTransferClient.stageList`.
+            if environment["LL_TRANSFER_LIST"] != nil {
+                showDeviceImport = true
+            }
             #endif
             // `LL_LADDERS=list|editor|rung` — the Interval ladders sheet on the
             // requested screen. `editor` opens the built-in; `rung` opens its

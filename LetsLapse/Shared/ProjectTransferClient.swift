@@ -89,6 +89,23 @@ final class ProjectTransferClient: ObservableObject {
         stopBrowsing()
         phase = .enteringCode(device)
     }
+
+    /// Park the flow on the project list for a device that isn't there.
+    ///
+    /// The list is two screens past a peer that has to exist, so until now
+    /// its mirror was only ever checked against the code. Same shape as
+    /// `stagePairing`, one screen further: no link, so a row's thumbnail is
+    /// never asked for (`requestThumbnailIfNeeded` guards on it) and Import
+    /// is a no-op (`requestProjects` does too). What the rows say is the
+    /// caller's — `ProjectTransferImportView.stagedProjects`.
+    func stageList(peerName: String, projects: [PTProjectInfo]) {
+        stopBrowsing()
+        self.peerName = peerName
+        thumbnails = [:]
+        thumbnailsAsked = []
+        self.projects = projects
+        phase = .selectingProject
+    }
     #endif
     @Published private(set) var libraries: [DiscoveredLibrary] = []
     @Published private(set) var projects: [PTProjectInfo] = []

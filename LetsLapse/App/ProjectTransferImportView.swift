@@ -4,6 +4,8 @@
 import SwiftUI
 // `NWEndpoint`, for the DEBUG-staged pairing device at the foot of this file.
 import Network
+// `LibraryIndex.ProjectQuery`, for the DEBUG-staged list beside it.
+import LetsLapseKit
 #if os(macOS)
 import AppKit
 #else
@@ -30,6 +32,10 @@ struct ProjectTransferImportView: View {
     /// not remembered between sessions: the default answer is the useful one
     /// every time, and a box left unticked weeks ago is a puzzle.
     @State private var hidesImported = true
+    /// The Select menu's last answer — see `hideImportedRow`. Custom is where
+    /// it rests: a bucket describes the selection only until a hand changes
+    /// it, so every hand change puts it back.
+    @State private var preset: SelectionPreset = .custom
     /// Why the last scanned QR was not used — it belongs to another device, or
     /// the code has rotated since it was drawn. Cleared by any deliberate
     /// attempt, so it never outlives the mistake it describes.
@@ -85,7 +91,7 @@ struct ProjectTransferImportView: View {
             if showsBackButton {
                 Button("Back") {
                     code = ""
-                    selectedProjects = []
+                    clearSelection()
                     client.backToBrowsing()
                 }
                 .buttonStyle(.plain)
@@ -568,38 +574,86 @@ struct ProjectTransferImportView: View {
     /// answers with its whole library every time, and after the first session
     /// most of it is already here. The count is named rather than left to be
     /// worked out from a shorter list.
+    ///
+    /// The trailing end of the same band is the SELECT menu — Custom, Today,
+    /// Yesterday, This Week, All — a sibling of the checkbox's button, never
+    /// inside its label, so the pop-up owns its own clicks. The checkbox keeps
+    /// everything to the left of the label as its hit area: its Spacer is
+    /// inside the button.
     private var hideImportedRow: some View {
-        Button {
-            hidesImported.toggle()
-            // A hidden row cannot be deselected by tapping it, so re-ticking
-            // the box takes its selection with it — otherwise the footer would
-            // count bytes for projects nobody can see.
-            if hidesImported {
-                selectedProjects.removeAll { model.hasImported(originID: $0.originID ?? $0.captureID) }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: hidesImported ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 13))
-                    .foregroundStyle(hidesImported ? LL.accent : .secondary)
-                Text("Hide imported")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if importedCount > 0 {
-                    Text(hidesImported
-                        ? "\(importedCount) hidden"
-                        : "\(importedCount) already here")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+        HStack(spacing: 8) {
+            Button {
+                hidesImported.toggle()
+                // The visible set just changed, so a bucket no longer
+                // describes the selection.
+                preset = .custom
+                // A hidden row cannot be deselected by tapping it, so re-ticking
+                // the box takes its selection with it — otherwise the footer would
+                // count bytes for projects nobody can see.
+                if hidesImported {
+                    selectedProjects.removeAll { model.hasImported(originID: $0.originID ?? $0.captureID) }
                 }
-                Spacer(minLength: 0)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: hidesImported ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 13))
+                        .foregroundStyle(hidesImported ? LL.accent : .secondary)
+                    Text("Hide imported")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if importedCount > 0 {
+                        Text(hidesImported
+                            ? "\(importedCount) hidden"
+                            : "\(importedCount) already here")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(hidesImported ? [.isButton, .isSelected] : .isButton)
+
+            Text("Select:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            #if os(macOS)
+            Picker("Select", selection: presetBinding) {
+                ForEach(offeredPresets) { Text($0.label).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            // An 11 pt band; the regular pop-up is 13 pt and reads heavy.
+            .controlSize(.small)
+            .fixedSize()
+            .disabled(visibleProjects.isEmpty)
+            #else
+            // The phone's `.menu` picker draws its label at body size, which
+            // shouts beside a caption. The Gallery header's idiom instead: a
+            // Menu around the Picker, with a caption label of our own.
+            Menu {
+                Picker("Select", selection: presetBinding) {
+                    ForEach(offeredPresets) { Text($0.label).tag($0) }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(presetBinding.wrappedValue.label)
+                        .font(.caption.weight(.medium))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .foregroundStyle(LL.accent)
+            }
+            .fixedSize()
+            .disabled(visibleProjects.isEmpty)
+            .accessibilityLabel("Select")
+            #endif
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(hidesImported ? [.isButton, .isSelected] : .isButton)
+        .padding(.horizontal, 14)
     }
 
     /// What the list draws: everything, or only what this device has never
@@ -613,9 +667,55 @@ struct ProjectTransferImportView: View {
         client.projects.filter { model.hasImported(originID: $0.originID ?? $0.captureID) }.count
     }
 
+    /// What the Select menu offers: Custom and All always, a date bucket only
+    /// while it would pick at least one VISIBLE row — a menu item that does
+    /// nothing is the puzzling kind, and "Today" with every today's shoot
+    /// already imported is exactly that.
+    private var offeredPresets: [SelectionPreset] {
+        let visible = visibleProjects
+        let calendar = Calendar.current
+        let now = Date()
+        return SelectionPreset.allCases.filter { candidate in
+            switch candidate {
+            case .custom, .all: return true
+            case .today, .yesterday, .thisWeek:
+                return visible.contains { candidate.matches($0, calendar: calendar, now: now) }
+            }
+        }
+    }
+
+    /// Reads Custom whenever the chosen bucket is no longer offered (the
+    /// visible set changed under it), so the menu never holds a tag it lacks.
+    private var presetBinding: Binding<SelectionPreset> {
+        Binding(
+            get: { offeredPresets.contains(preset) ? preset : .custom },
+            set: { apply($0) })
+    }
+
+    /// A bucket REPLACES the selection with the matching visible rows, in list
+    /// order (newest first — the pulls run in it); the batch is then trimmed
+    /// or grown by hand like any other. Custom applies nothing: it is where
+    /// the menu rests once a hand has been in.
+    private func apply(_ chosen: SelectionPreset) {
+        preset = chosen
+        guard chosen != .custom else { return }
+        let calendar = Calendar.current
+        let now = Date()
+        selectedProjects = visibleProjects.filter { chosen.matches($0, calendar: calendar, now: now) }
+    }
+
+    /// Every door out of the list — Back, Cancel, Import another, Try again —
+    /// goes through here: the `@State` outlives the phase, and the next list
+    /// would otherwise open on a bucket nobody chose for it.
+    private func clearSelection() {
+        selectedProjects = []
+        preset = .custom
+    }
+
     private func projectRow(_ project: PTProjectInfo) -> some View {
         let isSelected = selectedProjects.contains { $0.captureID == project.captureID }
         return Button {
+            preset = .custom
             // Tap toggles membership: one tap + Import is still the
             // single-project flow, and a second row is just a second tap.
             if isSelected {
@@ -733,7 +833,7 @@ struct ProjectTransferImportView: View {
             HStack {
                 Spacer()
                 Button("Cancel") {
-                    selectedProjects = []
+                    clearSelection()
                     client.cancelTransfer()
                 }
                 #if os(macOS)
@@ -795,7 +895,7 @@ struct ProjectTransferImportView: View {
             HStack {
                 Spacer()
                 Button("Import another") {
-                    selectedProjects = []
+                    clearSelection()
                     client.backToBrowsing()
                 }
                 Button("Done") { dismiss() }
@@ -818,7 +918,7 @@ struct ProjectTransferImportView: View {
                 Spacer()
                 Button("Try again") {
                     code = ""
-                    selectedProjects = []
+                    clearSelection()
                     client.backToBrowsing()
                 }
                 #if os(macOS)
@@ -863,6 +963,21 @@ struct ProjectTransferImportView: View {
     /// not bypass. DEBUG-only.
     private func autoRunIfRequested() {
         let environment = ProcessInfo.processInfo.environment
+        // `LL_TRANSFER_LIST=1` — park on the project list for a device that
+        // isn't there. The list is otherwise two screens past a peer that has
+        // to exist, which is why its mirror was only ever checked against the
+        // code. Nine rows spread across today, yesterday, earlier this week
+        // and older, two of them wearing this library's own origin ids so
+        // "Hide imported" has something to hide; `=old` shifts every row back
+        // a week — no Today, no Yesterday — so the Select menu's pruning can
+        // be seen. No link, so thumbnails are never asked for and Import is a
+        // no-op.
+        if let hook = environment["LL_TRANSFER_LIST"] {
+            client.stageList(
+                peerName: "Steven's iPhone",
+                projects: stagedProjects(shiftedBack: hook == "old"))
+            return
+        }
         // `LL_TRANSFER_PAIR=1` — park on the pairing screen with no peer in
         // the room, so the QR scanner can be screenshotted against its design
         // mirror and checked for rotation on each platform. The scanner is
@@ -912,7 +1027,77 @@ struct ProjectTransferImportView: View {
             }
         }
     }
+
+    /// Nine `PTProjectInfo` rows for `LL_TRANSFER_LIST`, dated relative to
+    /// now. Two carry the origin ids of the two newest local projects — the
+    /// same `originID ?? id` the serving side sends — so the filter has two
+    /// to hide; on an empty library they carry nothing and read as not
+    /// imported, which is the honest answer there too.
+    private func stagedProjects(shiftedBack: Bool) -> [PTProjectInfo] {
+        var query = LibraryIndex.ProjectQuery()
+        query.limit = 2
+        let local = ((try? model.libraryIndex?.projects(query).rows) ?? nil) ?? []
+        let localOrigins = local.map { $0.originID ?? $0.id }
+        let names = ["Sunset over harbour", "Tram morning", "Overheat 1", "Kitchen build",
+                     "Storm front", "Dawn run", "Harbour cranes", "Rooftop clouds", "Snow melt"]
+        let hoursAgo: [Double] = [1, 6, 26, 31, 3 * 24, 5 * 24, 12 * 24, 30 * 24, 75 * 24]
+        let frames = [1184, 3, 612, 240, 90, 410, 1, 58, 720]
+        let gigabytes = [12.4, 2.05, 5.9, 1.2, 0.4, 3.3, 0.02, 0.6, 4.1]
+        let shift: TimeInterval = shiftedBack ? 7 * 86_400 : 0
+        return names.indices.map { i in
+            PTProjectInfo(
+                captureID: UUID(),
+                name: names[i],
+                createdAt: Date(timeIntervalSinceNow: -(hoursAgo[i] * 3_600) - shift),
+                frameCount: frames[i],
+                totalBytes: Int64(gigabytes[i] * 1_000_000_000),
+                originID: (i == 0 && localOrigins.count > 0) ? localOrigins[0]
+                    : (i == 5 && localOrigins.count > 1) ? localOrigins[1] : nil)
+        }
+    }
     #endif
+}
+
+// MARK: - Select presets
+
+/// The list's bulk selection, by the shoot's date. Custom is the resting
+/// state — rows picked by hand, as before — and the rest REPLACE the
+/// selection with the matching visible rows, so the batch can still be
+/// trimmed or grown before Import.
+///
+/// Buckets are `createdAt` — the instant the row caption prints — in THIS
+/// device's calendar: today is today here, not on the phone, and the week is
+/// the locale's (Monday-first over most of Europe, Sunday-first in the US),
+/// not a rolling seven days. Yesterday is that day alone, not "since".
+private enum SelectionPreset: String, CaseIterable, Identifiable {
+    case custom, today, yesterday, thisWeek, all
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .custom: return "Custom"
+        case .today: return "Today"
+        case .yesterday: return "Yesterday"
+        case .thisWeek: return "This Week"
+        case .all: return "All"
+        }
+    }
+
+    /// Never true for `.custom`, which applies nothing.
+    func matches(_ project: PTProjectInfo, calendar: Calendar, now: Date) -> Bool {
+        switch self {
+        case .custom: return false
+        case .all: return true
+        case .today: return calendar.isDateInToday(project.createdAt)
+        case .yesterday: return calendar.isDateInYesterday(project.createdAt)
+        case .thisWeek:
+            // `DateInterval.contains` is closed at `end`: a shoot on the
+            // stroke of next Monday must not answer to two weeks.
+            guard let week = calendar.dateInterval(of: .weekOfYear, for: now) else { return false }
+            return week.start <= project.createdAt && project.createdAt < week.end
+        }
+    }
 }
 
 // MARK: - Platform image
