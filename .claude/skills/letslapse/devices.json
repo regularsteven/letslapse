@@ -19,25 +19,57 @@
     {
       "alias": "iphone-16",
       "marketingName": "iPhone 16 Pro",
-      "aka": ["iphone 16 pro", "iphone 16", "16 pro", "16pro"],
+      "aka": [
+        "iphone 16 pro",
+        "iphone 16",
+        "16 pro",
+        "16pro"
+      ],
       "notes": "Primary dev device. Fastest arm; survives short intervals."
+    },
+    {
+      "alias": "iphone-18",
+      "marketingName": "iPhone 18 Pro",
+      "aka": [
+        "iphone 18 pro",
+        "iphone 18",
+        "18 pro",
+        "18pro",
+        "steve iphone 18 pro"
+      ],
+      "notes": "Steven's phone from 2026-09-18, registered before devicectl had seen it: if `driver.py devices` says not visible while it is plugged in and unlocked, check the marketingName devicectl reports and correct it here."
     },
     {
       "alias": "iphone-12",
       "marketingName": "iPhone 12 Pro",
-      "aka": ["iphone 12 pro", "iphone 12", "12 pro", "12pro"],
+      "aka": [
+        "iphone 12 pro",
+        "iphone 12",
+        "12 pro",
+        "12pro"
+      ],
       "notes": "Slowest arm. Blend+author median ran 3.35-9.05s, so it sets the fleet's interval floor."
     },
     {
       "alias": "ipad-m1",
       "marketingName": "iPad Air (5th generation)",
-      "aka": ["ipad air m1", "ipad m1", "ipad air 11", "ipad air (m1)"],
+      "aka": [
+        "ipad air m1",
+        "ipad m1",
+        "ipad air 11",
+        "ipad air (m1)"
+      ],
       "notes": "Custom exposure durations below ~1/253s never latch on this panel - watch V3."
     },
     {
       "alias": "ipad-m3",
       "marketingName": "iPad Air 13-inch (M3)",
-      "aka": ["ipad air m3", "ipad m3", "ipad air 13", "ipad air (m3)"],
+      "aka": [
+        "ipad air m3",
+        "ipad m3",
+        "ipad air 13",
+        "ipad air (m3)"
+      ],
       "notes": "Fourth arm. Usually the duplicate-strategy control."
     }
   ]
