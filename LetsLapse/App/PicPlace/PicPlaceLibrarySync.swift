@@ -64,6 +64,18 @@ extension PicPlaceController {
 
     /// Runs the pending first connection once the library is loaded and the
     /// session is up — at launch, and right after an in-place connect on iOS.
+    /// The card's Try again: a first connection that could not start goes
+    /// again; one that finished with failed pushes hands them to a check,
+    /// which retries every failed push at once (a person's check ignores
+    /// the backoff).
+    func retryFirstConnection() {
+        if binding?.initialSync.state == .pending {
+            runInitialSyncIfPending()
+        } else {
+            checkForChanges(reason: "manual")
+        }
+    }
+
     func runInitialSyncIfPending() {
         guard !isShutDown, let binding, canSync, initialSyncTask == nil else { return }
         guard binding.initialSync.state == .pending else {
@@ -117,6 +129,8 @@ extension PicPlaceController {
             if !model.isLibraryLoaded {
                 for await loaded in model.$isLibraryLoaded.values where loaded { break }
             }
+            let activity = PicPlaceBackgroundActivity("PicPlace first connection")
+            defer { activity.end() }
             await runInitialSync()
             initialSyncTask = nil
         }
@@ -240,9 +254,18 @@ extension PicPlaceController {
             saveSyncState()
             progress.phase = .done
             initialSyncProgress = progress
-            if progress.failures.isEmpty, progress.deferred == 0 {
-                markInitialSyncDone()
+            // Done means the comparison ran and every row had its turn —
+            // not that every push landed. A project whose push failed keeps
+            // its `lastError` and the check retries it with its backoff
+            // (handover §7); the rows that differ are the merge's. Until
+            // 2026-09-18 a single failure kept the library "pending", and
+            // pending hides the switches, the check and its retries: one
+            // lost poster out of 670 hid the whole of auto-sync.
+            markInitialSyncDone()
+            if !progress.failures.isEmpty {
+                LLog("picplace: initial sync finished with \(progress.failures.count) failure(s) — Try again, or the check, retries them")
             }
+            autoSyncSettingChanged()
             refreshUsage()
         } catch {
             LLog("picplace: initial sync failed: \(error)")
@@ -389,9 +412,15 @@ extension PicPlaceController {
         guard let string = item.url, let url = URL(string: string) else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted an unusable download URL.") }
         var request = URLRequest(url: url)
         request.httpMethod = item.method ?? "GET"
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200 ..< 300).contains(status) else { throw PicPlaceSyncRun.Failed(caption: "Storage refused the download (\(status)).") }
-        return data
+        do {
+            return try await PicPlaceTransfer.withRetries("GET \(assetID.prefix(8))") {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                guard (200 ..< 300).contains(status) else { throw PicPlaceTransfer.Refused(status: status, detail: "") }
+                return data
+            }
+        } catch let refused as PicPlaceTransfer.Refused {
+            throw PicPlaceSyncRun.Failed(caption: "Storage refused the download (\(refused.status)).")
+        }
     }
 }

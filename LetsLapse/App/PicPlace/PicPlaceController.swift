@@ -414,6 +414,9 @@ final class PicPlaceController: ObservableObject {
         // delivers the callback URL (open -a <app> "letslapse://…").
         let signInHook = ProcessInfo.processInfo.environment["LL_PICPLACE_SIGNIN"]
         #endif
+        #if DEBUG
+        PicPlaceTransfer.armHooks()
+        #endif
         client = PicPlaceClient(tokens: tokens, accountKey: tokensKey) { [weak self] in
             Task { @MainActor in self?.handleSignedOutByServer() }
         }
@@ -1566,6 +1569,8 @@ final class PicPlaceController: ObservableObject {
         let posterKind = model.mediaKind(for: capture)
         let lastPosterToken = records[key]?.posterToken
         syncTasks[capture.id] = Task {
+            let activity = PicPlaceBackgroundActivity("PicPlace sync of \(capture.displayTitle)")
+            defer { activity.end() }
             do {
                 // A preview-only project's "source" IS its poster: nothing to
                 // render, the file it has is the one that goes.
@@ -1701,6 +1706,8 @@ final class PicPlaceController: ObservableObject {
         progress[capture.id] = PicPlaceSyncProgress(phase: .downloading)
         let server = profile?.server ?? serverString
         syncTasks[capture.id] = Task {
+            let activity = PicPlaceBackgroundActivity("PicPlace download of \(capture.displayTitle)")
+            defer { activity.end() }
             do {
                 let got = try await run.run()
                 var record = records[key] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: revision(of: capture), files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: "pull")

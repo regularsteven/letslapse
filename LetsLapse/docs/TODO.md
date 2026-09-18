@@ -11,6 +11,54 @@ live inline.
 
 ## Open
 
+### PicPlace first connection — done with failures, Try again, transfer retries, a background assertion
+
+**Raised:** 2026-09-18 (Steven's first run against picplace.co with S3: 669 of
+670 sent; one poster PUT lost to "The network connection was lost" during an
+app switch; the auto-sync switches never appeared on the phone) · **Built:**
+2026-09-18 · **Size:** small, with owed follow-ups
+
+What the phone's records showed: the first connection was only marked done
+with zero failures, and *done* gates the switches, the check and the check's
+retries — one lost poster hid the whole of auto-sync. The poster's PUT was a
+standard session with no in-place retry, unlike the JSON calls.
+
+Built: (1) the first connection is marked done when the run completes;
+failed pushes keep `lastError` and the check retries them; (2) *Try again*
+on the card's first-connection row — a run that could not start goes again,
+one that finished with failures runs a person's check, which retries every
+failed push at once; the row reads what still stands failed, live; (3)
+presigned PUTs and GETs retry in place — a dropped connection, a timeout,
+`429`/`5xx` — four attempts, 2 s × attempt (`PicPlaceTransfer`); (4) a push,
+a download and the first connection hold a background task assertion on iOS
+(`PicPlaceBackgroundActivity`), App Nap off on the Mac.
+
+**Verified 2026-09-18 on the Mac bench** (`tools/picplace-bench/launch_wait.sh`
+on a scratch root against picplace.test, a personal-access token minted with
+`tinker` for `LL_PICPLACE_TOKENS`, throwaways cloned and tombstoned after): a
+push made to fail (its folder read-only) leaves *initial sync done · finished
+with 1 failure(s)* and the card's **Try again**; pressed by accessibility it
+ran *check (manual) — 1 retried* and the project landed; a 30 s
+`LL_PICPLACE_TRANSFER_OUTAGE` window shows *PUT poster.jpg — -1005; trying
+again* at 2 s, 4 s and 6 s before the fourth attempt gives up as designed.
+Not exercised: the background assertion itself (no crash, no log), and the
+phone — relaunch it once and the pending first connection re-runs and marks
+itself done. The library "retry-bench" stays on picplace.test as a bench
+leftover.
+
+**Owed:**
+
+1. **A background `URLSession` for the originals** — the durable answer:
+   hours of uploads must survive the phone locking. Libraries plan "later".
+2. **Upload all originals now** — a one-shot for every project regardless of
+   the switch; only honest once 1 exists.
+3. **The in-app LUT fold on iOS** — the phone's library still carries 212
+   legacy cube copies (~199 MB); a script cannot reach it. See
+   [lut-library-assets.md](lut-library-assets.md).
+4. The design mirror of the first-connection row states (pending · running
+   · done · done with problems + Try again · failed + Try again) beyond the
+   one row drawn in `components/picplace-account.signed-in.phone.svg`.
+
 ### LUTs as library assets — one cube per library, referenced by hash
 
 **Raised:** 2026-09-18 · **Detail:** [lut-library-assets.md](lut-library-assets.md)

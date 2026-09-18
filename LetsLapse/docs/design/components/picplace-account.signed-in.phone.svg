@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 361 220" width="361" height="220" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 361 272" width="361" height="272" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>Component · PicPlace account · signed-in · phone</title>
   <desc>Mirrors the PICPLACE card of App/SettingsView.swift (picplaceCard, planned) — the optional cloud tier. Two states: signed-out (the sign-in row in accent, its subtitle naming the server, and the Server row with a chevron: tapping it edits the host — Debug builds default to picplace.test, Release to picplace.co) and signed-in (Account · the PicPlace username; This device · the name this install registered under, which is what other devices see in a project's Also on row and in the server's device list; On PicPlace · how many of this library's projects have a copy and the bytes they take there; Server, read-only while signed in; Sign out… in record red — it revokes THIS device's tokens on the server and keeps every local file). Sign in opens ASWebAuthenticationSession on the server's /oauth/authorize (PKCE); the consent screen is the server's own page, so no mirror exists for it here. Sits between STORAGE and ADVANCED: it is about where projects live. Shared by the Mac (Settings shares the iOS spec).</desc>
-<!-- LetsLapse design component · PicPlace account · phone = 361pt (Settings card contents: place at x=16 on the card's top; the SCREEN draws the white rx16 card and shadow at the component's height). Same row grammar as the Storage card: single rows 44pt (title 16pt at x 16, value 15pt secondary trailing at x 345), a title+subtitle row 52pt (subtitle 11.5pt on +15), dividers x 16–361 at 8% black. signed-out: 52 + 44 = 96pt; signed-in: five single rows = 220pt. -->
+<!-- LetsLapse design component · PicPlace account · phone = 361pt (Settings card contents: place at x=16 on the card's top; the SCREEN draws the white rx16 card and shadow at the component's height). Same row grammar as the Storage card: single rows 44pt (title 16pt at x 16, value 15pt secondary trailing at x 345), a title+subtitle row 52pt (subtitle 11.5pt on +15), dividers x 16–361 at 8% black. signed-out: 52 + 44 = 96pt; signed-in: five single rows + the first-connection row (52pt, 2026-09-18) = 272pt. -->
   <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
   <g id="picplace-account" data-state="signed-in" data-width="phone">
     <g id="row-account"><text x="16" y="28" font-size="16" fill="#000">Account</text><text x="345" y="28" font-size="15" fill="#6D6D72" text-anchor="end">@regularsteven</text></g>
@@ -10,8 +10,12 @@
     <line x1="16" y1="88" x2="361" y2="88" stroke="#000" stroke-opacity="0.08"/>
     <g id="row-on-picplace"><text x="16" y="112" font-size="16" fill="#000">On PicPlace</text><text x="345" y="112" font-size="15" fill="#6D6D72" text-anchor="end">3 of 4 projects · 6.1 GB</text><text x="16" y="128" font-size="11.5" fill="#6D6D72">originals for 2 · 1 not on PicPlace yet</text></g>
     <line x1="16" y1="132" x2="361" y2="132" stroke="#000" stroke-opacity="0.08"/>
-    <g id="row-server"><text x="16" y="160" font-size="16" fill="#000">Server</text><text x="345" y="160" font-size="15" fill="#6D6D72" text-anchor="end">picplace.co</text></g>
-    <line x1="16" y1="176" x2="361" y2="176" stroke="#000" stroke-opacity="0.08"/>
-    <g id="row-sign-out"><text x="16" y="204" font-size="16" fill="#FF3B30">Sign out…</text></g>
+    <!-- first connection — done with problems (2026-09-18): what still stands failed, live, and Try again;
+         the other states (pending · comparing · sending · in step · failed) are undrawn -->
+    <g id="row-first-connection" data-state="done-with-problems"><text x="16" y="156" font-size="16" fill="#000">First connection finished with problems</text><text x="345" y="156" font-size="15" fill="#C36A00" text-anchor="end" class="sb">Try again</text><text x="16" y="171" font-size="11.5" fill="#6D6D72">669 sent · 1 couldn't be sent — Photo 9.9 at 16:56: Upload of poster.jpg failed: The network…</text></g>
+    <line x1="16" y1="184" x2="361" y2="184" stroke="#000" stroke-opacity="0.08"/>
+    <g id="row-server"><text x="16" y="212" font-size="16" fill="#000">Server</text><text x="345" y="212" font-size="15" fill="#6D6D72" text-anchor="end">picplace.co</text></g>
+    <line x1="16" y1="228" x2="361" y2="228" stroke="#000" stroke-opacity="0.08"/>
+    <g id="row-sign-out"><text x="16" y="256" font-size="16" fill="#FF3B30">Sign out…</text></g>
   </g>
 </svg>

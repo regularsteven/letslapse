@@ -27,7 +27,7 @@ hooks.
 | 4 | **The merge, continuously**: a check at launch / foreground / every 3 min / on demand over the whole index with tombstones; every §4.4 row; conflicts with a sheet (keep this device's / PicPlace's / both); tombstones both ways; `uuid_taken` re-mint | plan §12, `PicPlaceChangeSync`, `PicPlaceConflictsView` |
 | 5 | **Originals per project**: Upload (policy `originals`) and Download (pages of presigned URLs, resumable); presence tiers | plan §13, `PicPlaceDownloadRun` |
 | §4.7 (part) | **Auto-sync**: settled edits pushed after 20 s, the timer check, the originals queue behind switches; **only on Wi-Fi/Ethernet for everything automatic**, a person's press on any connection; unchanged copies of deleted projects trashed on their own; posters converge | plan §14, `PicPlaceAutoSync` |
-| §7 | **Pacing and recovery**: every request takes its turn under the server's per-device budget; `429`/`5xx`/dropped requests are retried in place; pushes go through one serial queue; a failed push is retried by the check with a backoff; a preview-only copy re-fetches records when the server's asset count moved | §7 below, `PicPlaceClient`, `PicPlaceAutoSync`, `PicPlaceChangeSync` |
+| §7 | **Pacing and recovery**: every request takes its turn under the server's per-device budget; `429`/`5xx`/dropped requests are retried in place; pushes go through one serial queue; a failed push is retried by the check with a backoff; a preview-only copy re-fetches records when the server's asset count moved. **2026-09-18 (picplace.co, 670 projects):** the presigned PUTs and GETs retry in place too (`PicPlaceTransfer`), a push / download / first connection holds a background assertion (`PicPlaceBackgroundActivity`), and the first connection is marked *done* when the run completes — failed pushes are the check's, and the card's row has *Try again* | §7 below, `PicPlaceClient`, `PicPlaceAutoSync`, `PicPlaceChangeSync`, `PicPlaceTransfer` |
 
 Also: the Simulator signs in (`App/LetsLapse-Simulator.entitlements`,
 `tools/sim-fresh.sh`), the two-device bench (`tools/picplace-bench/`), and
@@ -167,6 +167,16 @@ Server side (the developer's, reported): first-negotiate `bytes: null`
   (simulated path); unchanged copies trashed; the poster push.
 - Kit tests: `PicPlaceBindingTests` (4), `ProjectFileRegistryTests` (3),
   `DirectoryArchiveDeterminismTests` (1).
+- **2026-09-18, the first-connection fixes** (TODO "PicPlace first connection
+  — done with failures…"): the bench's `launch_wait.sh` with `LL_APP` on the
+  isolated `dd-mac` build, `LL_PICPLACE_TOKENS` from a personal-access token
+  (`php artisan tinker`: `$user->createToken("bench", [scopes])->accessToken`
+  — the `letslapse-bench` client), `LL_PICPLACE_CONNECT=link:<uuid>`; a push
+  fails on demand when its folder is `chmod 555` (the poster and the
+  `tmp/` bundle cannot be written); `LL_PICPLACE_TRANSFER_OUTAGE=0:30` fails
+  every PUT/GET for the window and shows the in-place retries; the card's
+  **Try again** is pressed with `~/Library/Developer/LetsLapseRun/tools/ax
+  press <pid> '*' AXButton 'Try again'`.
 
 **Not tested — needs the real world:**
 

@@ -350,7 +350,21 @@ struct PicPlaceSyncRun {
         }
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await Self.uploadSession.upload(for: request, fromFile: pending.item.url)
+            // A dropped connection or a 5xx from storage goes again
+            // (`PicPlaceTransfer`); the body is a file, so the same bytes
+            // are sent each time.
+            (data, response) = try await PicPlaceTransfer.withRetries("PUT \(pending.item.name)") {
+                let (data, response) = try await Self.uploadSession.upload(for: request, fromFile: pending.item.url)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if status == 429 || (500 ..< 600).contains(status) {
+                    throw PicPlaceTransfer.Refused(status: status, detail: String(data: data, encoding: .utf8).map { String($0.prefix(120)) } ?? "")
+                }
+                return (data, response)
+            }
+        } catch let refused as PicPlaceTransfer.Refused {
+            throw Failed(caption: "Storage refused \(pending.item.name) (\(refused.status)) \(refused.detail)")
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             throw Failed(caption: "Upload of \(pending.item.name) failed: \(error.localizedDescription)")
         }

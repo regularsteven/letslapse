@@ -578,9 +578,24 @@ struct PicPlaceSettingsCard: View {
     @ViewBuilder
     private var initialSyncRow: some View {
         if let progress = picplace.initialSyncProgress {
-            LLRow(title: initialSyncTitle(progress), subtitle: initialSyncSubtitle(progress)) {
+            // What still stands failed once the run is done — the run's own
+            // list goes stale the moment a retry lands.
+            let standing = progress.phase == .done ? picplace.failedPushes : []
+            let canRetry = !standing.isEmpty || isRunFailed(progress)
+            LLRow(title: initialSyncTitle(progress, standing: standing.count),
+                  subtitle: initialSyncSubtitle(progress, standing: standing)) {
                 if progress.phase == .pulling || progress.phase == .pushing || progress.phase == .deciding {
                     ProgressView().controlSize(.small)
+                } else if canRetry {
+                    Button {
+                        picplace.retryFirstConnection()
+                    } label: {
+                        Text(picplace.isChecking ? "Trying…" : "Try again")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(LL.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(picplace.isChecking)
                 }
             }
         } else if let binding = picplace.binding, binding.initialSync.state == .pending, picplace.isSignedIn {
@@ -654,18 +669,24 @@ struct PicPlaceSettingsCard: View {
 
     private var lastCheckText: String? { picplace.checkSummary }
 
-    private func initialSyncTitle(_ progress: PicPlaceController.InitialSyncProgress) -> String {
+    private func isRunFailed(_ progress: PicPlaceController.InitialSyncProgress) -> Bool {
+        if case .failed = progress.phase { return true }
+        return false
+    }
+
+    private func initialSyncTitle(_ progress: PicPlaceController.InitialSyncProgress, standing: Int) -> String {
         switch progress.phase {
         case .waiting(let why): return "First connection — \(why.lowercased())"
         case .deciding: return "Comparing with PicPlace…"
         case .pulling: return "Bringing projects here…"
         case .pushing: return "Sending projects…"
-        case .done: return progress.failures.isEmpty ? "Library in step with PicPlace" : "First connection finished with problems"
+        case .done: return standing == 0 ? "Library in step with PicPlace" : "First connection finished with problems"
         case .failed: return "First connection failed"
         }
     }
 
-    private func initialSyncSubtitle(_ progress: PicPlaceController.InitialSyncProgress) -> String {
+    private func initialSyncSubtitle(_ progress: PicPlaceController.InitialSyncProgress,
+                                     standing: [(originID: UUID, localID: UUID, record: PicPlaceSyncRecord)]) -> String {
         if case .failed(let why) = progress.phase { return why }
         if case .waiting = progress.phase { return "Runs on its own once the network allows" }
         var parts: [String] = []
@@ -674,7 +695,18 @@ struct PicPlaceSettingsCard: View {
         if progress.inStep > 0 { parts.append("\(progress.inStep) in step") }
         if progress.evicted > 0 { parts.append("\(progress.evicted) \(progress.evicted == 1 ? "preview" : "previews") of other libraries removed") }
         if progress.deferred > 0 { parts.append("\(progress.deferred) need a merge (a later stage)") }
-        if !progress.failures.isEmpty { parts.append(progress.failures.joined(separator: "; ")) }
+        if progress.phase == .done {
+            // Live: the projects whose push still stands failed, by name,
+            // with the newest reason. Gone once a retry lands.
+            if !standing.isEmpty {
+                let names = standing.prefix(3).compactMap { picplace.model.capture(id: $0.localID)?.displayTitle }
+                let more = standing.count > names.count ? " and \(standing.count - names.count) more" : ""
+                let reason = standing.max { ($0.record.failedAt ?? .distantPast) < ($1.record.failedAt ?? .distantPast) }?.record.lastError
+                parts.append("\(standing.count) couldn't be sent — \(names.joined(separator: ", "))\(more)\(reason.map { ": \($0)" } ?? "")")
+            }
+        } else if !progress.failures.isEmpty {
+            parts.append(progress.failures.joined(separator: "; "))
+        }
         return parts.isEmpty ? "Nothing to exchange" : parts.joined(separator: " · ")
     }
 

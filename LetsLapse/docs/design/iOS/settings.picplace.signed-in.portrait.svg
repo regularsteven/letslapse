@@ -62,11 +62,12 @@
         <!-- picplace — components/picplace-account.signed-in.phone.svg; the screen draws the card -->
         <text x="20" y="432" class="hdr">PICPLACE</text>
         <g id="picplace-card">
-          <rect x="16" y="440" width="361" height="220" rx="16" fill="#FFF" filter="url(#soft)"/>
-          <image href="../components/picplace-account.signed-in.phone.svg" x="16" y="440" width="361" height="220"/>
+          <rect x="16" y="440" width="361" height="272" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <image href="../components/picplace-account.signed-in.phone.svg" x="16" y="440" width="361" height="272"/>
         </g>
 
-        <!-- advanced -->
+        <!-- advanced — 52pt lower since 2026-09-18 (the PicPlace card's first-connection row) -->
+        <g transform="translate(0 52)">
         <text x="20" y="688" class="hdr">ADVANCED</text>
         <g id="advanced-card">
           <rect x="16" y="696" width="361" height="676" rx="16" fill="#FFF" filter="url(#soft)"/>
@@ -182,6 +183,7 @@
             <text x="355" y="1336" font-size="15" class="sec" text-anchor="end">2</text>
             <path d="M363 1340 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
           </g>
+        </g>
         </g>
         </g>
       </g>

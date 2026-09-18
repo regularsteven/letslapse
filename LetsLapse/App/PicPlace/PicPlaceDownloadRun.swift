@@ -102,11 +102,19 @@ struct PicPlaceDownloadRun {
         guard let string = minted.url, let url = URL(string: string) else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted an unusable URL for \(item.name).") }
         var request = URLRequest(url: url)
         request.httpMethod = minted.method ?? "GET"
-        let (temporary, response) = try await Self.session.download(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200 ..< 300).contains(status) else {
-            try? FileManager.default.removeItem(at: temporary)
-            throw PicPlaceSyncRun.Failed(caption: "Storage refused \(item.name) (\(status)).")
+        let temporary: URL
+        do {
+            temporary = try await PicPlaceTransfer.withRetries("GET \(item.name)") {
+                let (temporary, response) = try await Self.session.download(for: request)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                guard (200 ..< 300).contains(status) else {
+                    try? FileManager.default.removeItem(at: temporary)
+                    throw PicPlaceTransfer.Refused(status: status, detail: "")
+                }
+                return temporary
+            }
+        } catch let refused as PicPlaceTransfer.Refused {
+            throw PicPlaceSyncRun.Failed(caption: "Storage refused \(item.name) (\(refused.status)).")
         }
         let destination = folder.appendingPathComponent(item.name)
         try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
