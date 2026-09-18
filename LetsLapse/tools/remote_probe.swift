@@ -36,6 +36,10 @@
 //
 // Compiles the REAL Shared/ sources, so a wire-format change that breaks the
 // app breaks this too.
+//
+// For a readable run — one line per command and reply, frames saved and
+// labelled with their lens stop — wrap it in `remote_run.sh`, which feeds the
+// verbose transcript through `remote_replies.py`.
 import Foundation
 import Network
 
