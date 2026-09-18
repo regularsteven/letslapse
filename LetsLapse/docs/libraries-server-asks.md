@@ -269,3 +269,52 @@ Stage C on the client side starts on your answer doc
 (`docs/letslapse-libraries.md`); end-to-end on picplace.test + Garage
 with two scratch libraries under one account, then the unchanged
 play-pen beside them.
+
+## 7. The site's numbers — projects, and the originals behind them (2026-09-18)
+
+**What the client changed, and why.** On 2026-09-18 Steven read the Mac's
+PicPlace card — *On PicPlace · 518 projects* under a Libraries row saying
+*879 projects* — as "361 originals not uploaded". The records said
+something else: 518 were the library's projects on PicPlace, of which the
+server held the **originals for 98**; 360 were another library's
+*previews* left in the folder by the 16th's mixed connect; 1 was not on
+PicPlace yet. One bare number hid three truths. The card now reads
+*518 of 879 projects · 854,2 MB* with *originals for 98 · 1 not on
+PicPlace yet* under it, and the client removes previews that PicPlace
+files under another library at its next check (they cannot sync from
+there and their own library has them). The client's rule for "originals
+on PicPlace" is `PicPlaceController.LibraryTally`: a project counts when
+its sync record says the server's confirmed heavy assets — source media
+and blends — cover the files the project declares (`serverHeavyFiles ≥
+local`), or the originals were moved there (`originalsMovedAt`).
+
+**What the site says today.** `/letslapse`: per library, *N projects ·
+bytes*, plus *1 deleted, within retention*. `/admin/letslapse`: one total
+(1,395 = 877 + 518). Both are true as counts of live rows; neither says
+whether the originals are there — which is the number a person looking at
+a backup wants.
+
+**The ask — minor, and the same rule as the client's:**
+
+1. **Per library, an originals count.** Beside *N projects*, *originals
+   for M* — the projects whose confirmed heavy assets cover every heavy
+   file their manifest declares (source media + blends; posters, records
+   and sidecars are not heavy). A project with no heavy files declared
+   (an empty one) counts as covered. This is the server's own asset table
+   against the manifest it already stores, no new client data.
+2. **The same on `/admin/letslapse`.** The total stays (*1,395 projects*),
+   with the per-library lines under it — *Holidays · 877 projects ·
+   originals for 12 · 3,1 GB* — and the deleted-within-retention count as
+   now. Unfiled projects (the default library) as their own line when any
+   exist.
+3. **`status.libraries[]` gains `originals`** (the same count), so the
+   phone's connect sheet can say *"All 518 arrive here as previews;
+   originals available for 98 of them"* and the site and the sheet agree.
+4. Nothing about "here" numbers: the client's *879* is what is in a
+   folder on one device; the server cannot know it and should not try.
+   The account's presence rows (*held on N devices*, tier) are a separate
+   page if ever wanted.
+
+Wording, for parity with the client: *projects* · *originals for N* ·
+bytes; a library's own numbers only — never another library's on a
+library's line.
