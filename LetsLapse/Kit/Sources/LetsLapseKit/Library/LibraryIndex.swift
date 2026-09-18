@@ -29,7 +29,7 @@ public final class LibraryIndex: @unchecked Sendable {
     /// 2 (M2): `category`, `scanner_sidecar`, `edited_at`, the shape counts
     /// and `shapes_indexed_at` on the project row; tag labels in the search
     /// table. A v1 database is dropped and rebuilt from the files.
-    public static let schemaVersion = 2
+    public static let schemaVersion = 3
     public static let folderName = "Index"
     public static let fileName = "library.sqlite"
 
@@ -58,7 +58,7 @@ public final class LibraryIndex: @unchecked Sendable {
             // A database from an older schema: drop it and start over. It is
             // a cache; the files rebuild it.
             try db.execute("""
-                DROP TABLE IF EXISTS search; DROP TABLE IF EXISTS assets;
+                DROP TABLE IF EXISTS search; DROP TABLE IF EXISTS assets; DROP TABLE IF EXISTS project_luts;
                 DROP TABLE IF EXISTS blends; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS meta;
                 """)
         }
@@ -115,6 +115,11 @@ public final class LibraryIndex: @unchecked Sendable {
             );
             CREATE INDEX IF NOT EXISTS assets_hash ON assets(hash);
             CREATE INDEX IF NOT EXISTS assets_rating ON assets(rating);
+            CREATE TABLE IF NOT EXISTS project_luts (
+                project_id TEXT NOT NULL, lut_id TEXT NOT NULL,
+                PRIMARY KEY (project_id, lut_id)
+            );
+            CREATE INDEX IF NOT EXISTS project_luts_lut ON project_luts(lut_id);
             CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(
                 kind UNINDEXED, id UNINDEXED, project_id UNINDEXED,
                 title, name, caption, keywords,
@@ -163,7 +168,7 @@ public final class LibraryIndex: @unchecked Sendable {
         var outcome = RebuildOutcome()
         outcome.unreadableDocuments = report.unreadableDocuments
         try db.transaction {
-            try db.execute("DELETE FROM search; DELETE FROM assets; DELETE FROM blends; DELETE FROM projects;")
+            try db.execute("DELETE FROM search; DELETE FROM assets; DELETE FROM project_luts; DELETE FROM blends; DELETE FROM projects;")
             for document in documents {
                 let folderPath = document.inTrash ? ".trash/\(document.folder)" : document.folder
                 let folderURL = projects.appendingPathComponent(folderPath, isDirectory: true)
@@ -235,6 +240,7 @@ public final class LibraryIndex: @unchecked Sendable {
         try db.transaction {
             try db.run("DELETE FROM search WHERE project_id = ?", [.text(key)])
             try db.run("DELETE FROM assets WHERE project_id = ?", [.text(key)])
+            try db.run("DELETE FROM project_luts WHERE project_id = ?", [.text(key)])
             try db.run("DELETE FROM blends WHERE project_id = ?", [.text(key)])
             try db.run("DELETE FROM projects WHERE id = ?", [.text(key)])
         }
@@ -327,6 +333,13 @@ public final class LibraryIndex: @unchecked Sendable {
                 .text(category.rawValue), .init(sidecar), .init(editedAt),
                 .text(id), .text(id), .text(id), .text(id),
             ])
+        // The cubes the document names — the live grade, every keyframe and
+        // the preset snapshot (docs/lut-library-assets.md §2.6): the rows a
+        // LUT's delete is guarded by, and what a fetch reconciles against.
+        try db.run("DELETE FROM project_luts WHERE project_id = ?", [.text(id)])
+        for lutID in Self.referencedLUTIDs(inCapture: capture) {
+            try db.run("INSERT OR IGNORE INTO project_luts (project_id, lut_id) VALUES (?, ?)", [.text(id), .text(lutID)])
+        }
         try db.run("DELETE FROM blends WHERE project_id = ?", [.text(id)])
         for blend in blends {
             guard let blendID = (blend["id"] as? String)?.uppercased() else { continue }
@@ -879,6 +892,59 @@ public final class LibraryIndex: @unchecked Sendable {
             if let id { counts[id] = count }
         }
         return counts
+    }
+
+    /// The cubes the live projects name, with how many name each — the
+    /// count a LUT's delete is guarded by (docs/lut-library-assets.md §2.6).
+    public func lutReferenceCounts() throws -> [String: Int] {
+        lock.lock(); defer { lock.unlock() }
+        var counts: [String: Int] = [:]
+        for (id, count) in try db.query("""
+            SELECT l.lut_id, COUNT(DISTINCT l.project_id) FROM project_luts l
+            JOIN projects p ON p.id = l.project_id
+            WHERE p.deleted_at IS NULL GROUP BY l.lut_id
+            """, [], { ($0.text(0) ?? "", Int($0.int(1) ?? 0)) }) {
+            if !id.isEmpty { counts[id] = count }
+        }
+        return counts
+    }
+
+    /// The live projects naming one cube, newest edit first.
+    public func projectsReferencingLUT(_ lutID: String) throws -> [UUID] {
+        lock.lock(); defer { lock.unlock() }
+        return try db.query("""
+            SELECT p.id FROM project_luts l JOIN projects p ON p.id = l.project_id
+            WHERE l.lut_id = ? AND p.deleted_at IS NULL ORDER BY p.edited_at DESC
+            """, [.text(lutID)]) { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 }
+    }
+
+    /// Every distinct cube the documents name, live or trashed — what a fold
+    /// or a fetch reconciles against the library's store.
+    public func referencedLUTIDs() throws -> Set<String> {
+        lock.lock(); defer { lock.unlock() }
+        return Set(try db.query("SELECT DISTINCT lut_id FROM project_luts", []) { $0.text(0) }.compactMap { $0 })
+    }
+
+    /// The cube ids a capture record names: `adjustments.lut.id`, every
+    /// keyframe's, and the preset snapshot's. In first-seen order, without
+    /// repeats. Reads the document's dictionary form so the index and the
+    /// fold agree without the app's types.
+    public static func referencedLUTIDs(inCapture capture: [String: Any]) -> [String] {
+        var ids: [String] = []
+        func take(_ adjustments: Any?) {
+            guard let adjustments = adjustments as? [String: Any],
+                  let lut = adjustments["lut"] as? [String: Any],
+                  let id = lut["id"] as? String, !id.isEmpty, !ids.contains(id) else { return }
+            ids.append(id)
+        }
+        take(capture["adjustments"])
+        if let timeline = capture["gradeTimeline"] as? [String: Any] {
+            for keyframe in timeline["k"] as? [[String: Any]] ?? [] { take(keyframe["adjustments"]) }
+        }
+        if let preset = capture["presetState"] as? [String: Any], let snapshot = preset["snapshot"] as? [String: Any] {
+            take(snapshot["adjustments"])
+        }
+        return ids
     }
 
     /// The live projects whose stored size is missing or older than their

@@ -149,7 +149,14 @@ public enum ProjectFileRegistry {
         ProjectFile("notes/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("masks/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("fonts/", at: .root, class: .edit, isDirectory: true, travels: true),
-        ProjectFile("luts/", at: .root, class: .edit, isDirectory: true, travels: true),
+        // `luts/` — the library's cubes, materialised into the folder only
+        // for an export or a transfer (docs/lut-library-assets.md §2.3), and
+        // the legacy per-project copies from before 2026-09-18. Derived,
+        // since the library store holds the bytes, and NOT travelling: a
+        // sync classifies a copy as skipped, the installer never moves the
+        // folder into a project (it folds the cubes into the store), and
+        // the archive and the transfer carry it explicitly for the trip.
+        ProjectFile("luts/", at: .root, class: .derived, isDirectory: true, travels: false),
         // The DNG-archive ledger: the only cross-project provenance link a
         // clone keeps. Not carried by an archive or a transfer today (the
         // manifest's `derivedFromOriginID` is what will travel instead).

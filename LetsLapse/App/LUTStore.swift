@@ -47,13 +47,20 @@ struct LUTFile: Identifiable, Codable, Equatable {
 /// adjustments carry a `LUTLayer` naming one of these; the store keeps the
 /// bytes, the preset keeps the name and the strength.
 ///
+/// A LUT is a library asset identified by its content hash
+/// (docs/lut-library-assets.md): the project names it, this store holds it,
+/// and the cube is written into a project folder only for an export or a
+/// transfer (`AppModel.materialiseLUTs`) and folded back into the receiving
+/// library's store on arrival (`AppModel.adoptLUTs`).
+///
 /// Also the Kit's way back from an id to pixels: `installResolver` gives
-/// `LUTRegistry` a lookup that reads the store's file, and failing that any
-/// project folder's own `luts/` copy — which is how a transferred project
-/// renders on a device that never imported the cube.
+/// `LUTRegistry` a lookup that reads the store's file, and failing that a
+/// legacy per-project copy from before 2026-09-18, until the fold has
+/// moved them all in.
 @MainActor
 final class LUTStore: ObservableObject {
-    /// Replaced between models by a library switch (libraries plan L22).
+    /// Replaced between models by a library switch (libraries plan L22);
+    /// the new store's init re-points the resolver at the new root.
     static private(set) var shared = LUTStore()
     static func reroot() { shared = LUTStore() }
 
@@ -69,12 +76,16 @@ final class LUTStore: ObservableObject {
         folderURL = Self.folderURL(under: root)
         indexURL = root.appendingPathComponent(Self.indexName)
         load()
-        Self.installResolver()
+        adoptOrphanFiles()
+        LUTResolver.install(root: root)
         LLog("luts: \(files.count) imported LUT(s) at \(folderURL.path)")
     }
 
     nonisolated static let folderName = "luts"
     nonisolated static let indexName = "luts.json"
+    /// The records of the cubes an archive or a transfer carries, beside
+    /// them in its `luts/` (docs/lut-library-assets.md §4).
+    nonisolated static let archiveIndexName = "index.json"
 
     nonisolated static func folderURL(under root: URL) -> URL {
         root.appendingPathComponent(folderName, isDirectory: true)
@@ -122,33 +133,14 @@ final class LUTStore: ObservableObject {
     }
 
     /// Removes the store's file and record. The registry keeps what it has
-    /// read until the app quits; projects keep their own copies for good.
+    /// read until the app quits. The caller guards this with the index's
+    /// reference count (`ManagePresetsView.delete`): the store is the one
+    /// place the cube a project names lives.
     func delete(id: String) {
         files.removeAll { $0.id == id }
         try? FileManager.default.removeItem(at: fileURL(for: id))
         LUTRegistry.shared.forget(id)
         persist()
-    }
-
-    // MARK: - Projects
-
-    /// Puts the cube into `folder/luts/` unless it is already there — the
-    /// copy a `.lapse` archive and a device transfer carry (`ProjectArchive
-    /// .transferableSubfolders`). Silent when the store has no file for the
-    /// id: the project may have brought its own, or the id may be a cube
-    /// this device never held.
-    func ensureCopy(of id: String, inProjectFolder folder: URL) {
-        let destinationFolder = Self.folderURL(under: folder)
-        let destination = destinationFolder.appendingPathComponent(id + ".cube")
-        guard !FileManager.default.fileExists(atPath: destination.path) else { return }
-        let source = fileURL(for: id)
-        guard FileManager.default.fileExists(atPath: source.path) else { return }
-        do {
-            try FileManager.default.createDirectory(at: destinationFolder, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: source, to: destination)
-        } catch {
-            MediaWorkQueue.note("could not copy LUT \(id.prefix(12)) into \(folder.lastPathComponent): \(error.localizedDescription)", isError: true)
-        }
     }
 
     // MARK: - The registry's lookup
@@ -174,6 +166,40 @@ final class LUTStore: ObservableObject {
         }
     }
 
+    /// Cube files in the folder with no record — a fold that moved the
+    /// project copies in, a hand-copied library, a record lost to a corrupt
+    /// index — get one, parsed from the file, so the sheet lists them and a
+    /// delete can find them. A file not named by its content hash is left
+    /// alone and logged: a grade names the hash, and a misnamed file cannot
+    /// answer for it.
+    private func adoptOrphanFiles() {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: folderURL.path) else { return }
+        var adopted = 0
+        for name in names.sorted() where name.hasSuffix(".cube") {
+            let stem = String(name.dropLast(".cube".count))
+            guard file(id: stem) == nil else { continue }
+            let url = folderURL.appendingPathComponent(name)
+            guard let data = try? Data(contentsOf: url), let cube = try? CubeLUT.parse(data) else {
+                LLog("luts: \(name) does not parse — left alone")
+                continue
+            }
+            guard cube.contentHash == stem else {
+                LLog("luts: \(name) is not named by its content hash (\(cube.contentHash.prefix(12))) — left alone")
+                continue
+            }
+            let made = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date()
+            files.append(LUTFile(
+                id: stem, fileName: name, title: cube.title, size: cube.size, byteCount: data.count,
+                importedAt: made, isLikelyLogInput: cube.isLikelyLogInput))
+            LUTRegistry.shared.register(cube)
+            adopted += 1
+        }
+        if adopted > 0 {
+            persist()
+            LLog("luts: adopted \(adopted) cube file(s) that had no record")
+        }
+    }
+
     private func persist() {
         do {
             let encoder = JSONEncoder()
@@ -188,34 +214,57 @@ final class LUTStore: ObservableObject {
 }
 
 /// The registry's lookup, kept outside the main-actor store so a render
-/// thread can install and run it. Idempotent. Reads the store's own file
-/// first, then every project folder's `luts/` — a transferred project's copy.
+/// thread can install and run it. Installed once; the root it reads is the
+/// one the last `LUTStore.init` gave it, so a library switch on the phone
+/// re-points it (until 2026-09-18 it latched the first root for good).
+/// Reads the store's own file first, then a legacy per-project copy from
+/// before the fold — never a folder walk per frame: the registry remembers
+/// a miss until the store changes.
 enum LUTResolver {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var installed = false
+    private nonisolated(unsafe) static var root: URL?
 
-    static func install() {
+    /// With a root: point the lookup there (a change forgets the cached
+    /// misses). Without one — the graders' static initialisers, which may
+    /// run before any store exists — the process's storage root.
+    static func install(root newRoot: URL? = nil) {
         lock.lock()
         defer { lock.unlock() }
-        guard !installed else { return }
-        installed = true
-        let root = StorageRoot.current
-        let store = LUTStore.folderURL(under: root)
-        let projects = root.appendingPathComponent("Projects", isDirectory: true)
-        LUTRegistry.shared.setResolver { id in
-            guard !id.isEmpty, !id.contains("/"), !id.contains("..") else { return nil }
-            let own = store.appendingPathComponent(id + ".cube")
-            if let cube = try? CubeLUT.parse(contentsOf: own) { return cube }
-            guard let folders = try? FileManager.default.contentsOfDirectory(
-                at: projects, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return nil }
-            for folder in folders {
-                let candidate = LUTStore.folderURL(under: folder).appendingPathComponent(id + ".cube")
-                if FileManager.default.fileExists(atPath: candidate.path),
-                   let cube = try? CubeLUT.parse(contentsOf: candidate) {
-                    return cube
-                }
-            }
-            return nil
+        let resolved = newRoot ?? root ?? StorageRoot.current
+        let changed = root != nil && root != resolved
+        root = resolved
+        if installed {
+            if changed { LUTRegistry.shared.forgetMisses() }
+            return
         }
+        installed = true
+        LUTRegistry.shared.setResolver { id in resolve(id) }
+    }
+
+    private static func currentRoot() -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        return root
+    }
+
+    private static func resolve(_ id: String) -> CubeLUT? {
+        guard !id.isEmpty, !id.contains("/"), !id.contains(".."), let root = currentRoot() else { return nil }
+        let own = LUTStore.folderURL(under: root).appendingPathComponent(id + ".cube")
+        if let cube = try? CubeLUT.parse(contentsOf: own) { return cube }
+        // A legacy copy inside a project folder (before 2026-09-18), read
+        // where it is; the fold moves these into the store.
+        let projects = root.appendingPathComponent("Projects", isDirectory: true)
+        guard let folders = try? FileManager.default.contentsOfDirectory(
+            at: projects, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return nil }
+        for folder in folders {
+            let candidate = LUTStore.folderURL(under: folder).appendingPathComponent(id + ".cube")
+            if FileManager.default.fileExists(atPath: candidate.path),
+               let cube = try? CubeLUT.parse(contentsOf: candidate) {
+                LLog("luts: \(id.prefix(12)) read from a legacy copy in \(folder.lastPathComponent) — run tools/fold_luts.py")
+                return cube
+            }
+        }
+        return nil
     }
 }

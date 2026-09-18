@@ -361,20 +361,27 @@ public final class LUTRegistry: @unchecked Sendable {
 
     private let lock = NSLock()
     private var cubes: [String: CubeLUT] = [:]
+    /// The ids the resolver answered nil for, kept until the resolver or
+    /// the store changes: a cube nobody holds costs one lookup, not a walk
+    /// of every project folder on every frame that names it
+    /// (docs/lut-library-assets.md §2.5).
+    private var misses: Set<String> = []
     private var resolver: (@Sendable (String) -> CubeLUT?)?
 
     public init() {}
 
     /// Installs the lookup used for an id nobody has registered. Replaces
-    /// any earlier one.
+    /// any earlier one, and forgets the misses the old one produced.
     public func setResolver(_ resolver: (@Sendable (String) -> CubeLUT?)?) {
         lock.lock(); defer { lock.unlock() }
         self.resolver = resolver
+        misses.removeAll()
     }
 
     public func register(_ cube: CubeLUT) {
         lock.lock(); defer { lock.unlock() }
         cubes[cube.contentHash] = cube
+        misses.remove(cube.contentHash)
     }
 
     public func forget(_ id: String) {
@@ -382,14 +389,26 @@ public final class LUTRegistry: @unchecked Sendable {
         cubes.removeValue(forKey: id)
     }
 
-    /// The cube for an id: registered, else resolved and kept.
+    /// Forgets every cached miss — after an import into the store, a fold,
+    /// or a library switch, when an id that was missing may now resolve.
+    public func forgetMisses() {
+        lock.lock(); defer { lock.unlock() }
+        misses.removeAll()
+    }
+
+    /// The cube for an id: registered, else resolved and kept; a resolve
+    /// that finds nothing is remembered as a miss.
     public func cube(for id: String) -> CubeLUT? {
         lock.lock()
         if let cube = cubes[id] { lock.unlock(); return cube }
+        if misses.contains(id) { lock.unlock(); return nil }
         let resolve = resolver
         lock.unlock()
-        guard let cube = resolve?(id) else { return nil }
-        lock.lock(); cubes[id] = cube; lock.unlock()
+        guard let cube = resolve?(id) else {
+            lock.lock(); misses.insert(id); lock.unlock()
+            return nil
+        }
+        lock.lock(); cubes[id] = cube; misses.remove(id); lock.unlock()
         return cube
     }
 }

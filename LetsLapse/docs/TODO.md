@@ -11,6 +11,33 @@ live inline.
 
 ## Open
 
+### LUTs as library assets — one cube per library, referenced by hash
+
+**Raised:** 2026-09-18 · **Detail:** [lut-library-assets.md](lut-library-assets.md)
+· **Server ask:** [lut-library-server-asks.md](lut-library-server-asks.md)
+· **Size:** stage A built 2026-09-18; B and C owed
+
+The review of the per-project `luts/` copies (172 files for 8 cubes, 160 MB
+here; 265 objects for the same 8 on the server, never downloaded) reversed
+the spike's §4.4 rule: a LUT is a library asset identified by its content
+hash, a project names it and carries nothing, the cube is materialised into a
+`.lapse` or a transfer for the trip and folded into the receiving library.
+Stage A (the client: no more copies, export/transfer materialisation, import
+into the store with the preset from the snapshot, resolver order + miss cache
++ re-rooting, `project_luts` in the index with the delete guard, the sync no
+longer sends `lut` objects, the fold script) is built.
+
+**Owed:**
+
+1. **Stage B — UI, design first.** The editor's missing-LUT state ("Terra 4.1
+   isn't in this library" + Import) and the Manage Presets LUT row's count by
+   cube with the delete copy. Ask the design-sync question before starting.
+2. **Stage C — server.** The account-level, content-addressed LUT surface,
+   `features.library_luts`, the cleanup of the 265 per-project objects; then
+   the client's push-on-import and fetch-by-hash. The ask is written.
+3. **Run the fold on the volume library** (`tools/fold_luts.py --apply`, app
+   quit) once Steven has read its dry run.
+
 ### Auto rename & tag in the Gallery — shipped 2026-09-16 (macOS), owed follow-ups
 
 **Raised:** 2026-09-16 (Steven's brief, with his own

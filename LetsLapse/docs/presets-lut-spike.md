@@ -242,6 +242,12 @@ decision):
    project carries the bytes. Never delete a store file while any project
    references it; the project copy makes that a nicety rather than a
    correctness rule.
+   > **Reversed 2026-09-18** — the copies became 172 files for 8 cubes here
+   > and 265 write-only objects on the server. A LUT is a library asset
+   > identified by its content hash; the project carries nothing, the cube
+   > is materialised into an archive or a transfer for the trip and folded
+   > into the receiving library, and the index counts the references that
+   > guard a delete. See [lut-library-assets.md](lut-library-assets.md).
 5. **Manage Presets screen** — the Create-tab row + sheet; lists; import via
    `fileImporter` (a `.cube` `UTType` has to be declared as an imported type
    in Info.plist for the Files picker to offer it on iOS); rename (store

@@ -377,8 +377,8 @@ struct PicPlaceSyncRun {
 
     /// The objects the policy sends (v2 plan §3.4): every regular file under
     /// the project folder, classified by `ProjectFileRegistry` — the records
-    /// and sidecars into one `records.aar`, the poster and the LUTs as their
-    /// own objects, the source frames and the blends as the heavy set —
+    /// and sidecars into one `records.aar`, the poster as its own object,
+    /// the source frames and the blends as the heavy set —
     /// hashed from `assets.ndjson` where it has the file at that size and
     /// computed otherwise. Strays (files the table does not know) are logged
     /// and left.
@@ -386,7 +386,7 @@ struct PicPlaceSyncRun {
         let records = AssetRecords.load(inProjectFolder: folder)
         let items = PicPlaceSyncInventory.classify(try listFiles(in: folder))
         let summary = PicPlaceSyncInventory.summary(of: items, policy: policy)
-        for stray in summary.strays { LLog("picplace: \(folder.lastPathComponent)/\(stray) is not a registered project file — left out") }
+        for stray in summary.strays { LLog("picplace: \(folder.lastPathComponent)/\(stray) is not a project file that travels — left out") }
 
         func hashed(_ item: PicPlaceSyncItem, kind: String) async throws -> FileItem {
             let sha: String

@@ -70,6 +70,9 @@ final class ProjectTransferServer: ObservableObject {
     /// device produces several per client attempt — see `accept`.
     private var pendingConnections: [NWConnection] = []
     private var job: TransferJob?
+    /// The cubes packed into the served project's folder for this job
+    /// (docs/lut-library-assets.md §2.3), removed with the job.
+    private var servedLUTs: AppModel.LUTMaterialisation?
     /// Watches for a shoot starting under an in-flight transfer. A poll rather
     /// than an observation because the pump runs off the main actor and the
     /// answer lives on it; one check a second is far finer than the case needs.
@@ -497,6 +500,15 @@ final class ProjectTransferServer: ObservableObject {
             send(PTError.notFound(), on: incoming)
             return
         }
+        // The cubes the grade names travel with the project — from the
+        // library store, for the trip. A cube this library lacks refuses
+        // with the export's own sentence rather than sending a silent gap.
+        do {
+            servedLUTs = try model.materialiseLUTs(for: captureID)
+        } catch {
+            send(PTError.busy(error.localizedDescription), on: incoming)
+            return
+        }
 
         let name = model.capture(id: captureID)
             .map { $0.name ?? $0.originalName } ?? "Project"
@@ -579,6 +591,8 @@ final class ProjectTransferServer: ObservableObject {
     private func clearJob() {
         guard job != nil else { return }
         job = nil
+        servedLUTs?.remove()
+        servedLUTs = nil
         restartIdleTimer()
         captureWatch?.cancel()
         captureWatch = nil
@@ -631,7 +645,10 @@ final class ProjectTransferServer: ObservableObject {
             PTFileEntry(relativePath: "project.json", byteCount: manifestBytes)
         ]
         let fileManager = FileManager.default
-        for subfolder in ProjectArchive.transferableSubfolders {
+        // Plus `luts/`: not a project subfolder that travels, but the cubes
+        // materialised for this job (`AppModel.materialiseLUTs`), which the
+        // installer folds into its own library's store.
+        for subfolder in ProjectArchive.transferableSubfolders + [LUTStore.folderName] {
             let root = folder.appendingPathComponent(subfolder, isDirectory: true)
             guard let walker = fileManager.enumerator(
                 at: root,

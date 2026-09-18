@@ -34,7 +34,10 @@ final class ProjectFileRegistryTests: XCTestCase {
         XCTAssertEqual(masks.name, "masks/")
         XCTAssertEqual(masks.class, .edit)
         XCTAssertEqual(ProjectFileRegistry.entry(forRelativePath: "blends/clip.mov")?.class, .derived)
-        XCTAssertEqual(ProjectFileRegistry.entry(forRelativePath: "luts/terra.cube")?.name, "luts/")
+        let lut = try XCTUnwrap(ProjectFileRegistry.entry(forRelativePath: "luts/terra.cube"))
+        XCTAssertEqual(lut.name, "luts/")
+        XCTAssertEqual(lut.class, .derived, "the library store holds the bytes; a copy in a project is derived")
+        XCTAssertFalse(lut.travels, "a cube is a library asset — materialised for the trip, never sent by a sync")
         XCTAssertNil(ProjectFileRegistry.entry(forRelativePath: "exports/x.mov"), "an unregistered folder")
     }
 
@@ -43,6 +46,9 @@ final class ProjectFileRegistryTests: XCTestCase {
         XCTAssertTrue(ProjectFileRegistry.travellingRootFiles.contains(ProjectFileRegistry.posterName))
         XCTAssertFalse(ProjectFileRegistry.travellingRootFiles.contains(ProjectFileRegistry.projectDocumentName))
         XCTAssertFalse(ProjectFileRegistry.travellingRootFiles.contains { $0.contains("*") })
+        XCTAssertFalse(ProjectFileRegistry.travellingSubfolders.contains("luts"), "the installer folds an arriving luts/ into the store; it never moves it")
+        XCTAssertTrue(ProjectFileRegistry.travellingSubfolders.contains("source"))
+        XCTAssertTrue(ProjectFileRegistry.travellingSubfolders.contains("blends"))
     }
 }
 

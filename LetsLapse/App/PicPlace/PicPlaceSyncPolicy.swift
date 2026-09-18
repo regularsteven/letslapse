@@ -4,9 +4,11 @@ import LetsLapseKit
 
 /// What a sync sends (v2 plan §3.4, decisions D5–D6).
 enum PicPlaceSyncPolicy: String {
-    /// The records bundle, the poster and the hash-deduped authored inputs
-    /// — everything a device needs to show and describe the project. The
-    /// sources and the blends stay where they are.
+    /// The records bundle and the poster — everything a device needs to
+    /// show and describe the project. The sources and the blends stay where
+    /// they are. A LUT is a library asset, never a project object
+    /// (docs/lut-library-assets.md; until 2026-09-18 `luts/` went up as
+    /// per-project `lut` objects nothing ever downloaded).
     case minimal
     /// The originals: the `source/` media and `blends/`, by hash.
     case originals
@@ -69,10 +71,11 @@ enum PicPlaceSyncInventory {
         guard entry.travels else { return .skipped("does not travel") }
         if entry.name == ProjectFileRegistry.posterName { return .object(kind: posterKind) }
         if !entry.isDirectory { return .bundle }            // a root record, or a sidecar under source/
+        // `luts/` never reaches here: the registry has it non-travelling,
+        // so a legacy copy is skipped above.
         switch entry.name {
         case "source/": return .heavy(kind: "source")
         case "blends/": return .heavy(kind: "blend")
-        case "luts/": return .object(kind: "lut")
         default: return .bundle                             // masks/, fonts/, notes/
         }
     }

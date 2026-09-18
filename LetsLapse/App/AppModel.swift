@@ -9861,6 +9861,12 @@ final class AppModel: ObservableObject {
         guard FileManager.default.fileExists(atPath: documentURL.path) else {
             throw ExportError.noProjectDocument
         }
+        // The cubes the grade names travel with the archive — from the
+        // library store, into `luts/` for the trip only, gone again when the
+        // archive is written (docs/lut-library-assets.md §2.3). A cube this
+        // library lacks refuses the export with a sentence.
+        let materialised = try materialiseLUTs(for: capture.id)
+        defer { materialised.remove() }
 
         let rawName = capture.name ?? capture.originalName
         let safeName = rawName
@@ -10135,6 +10141,11 @@ final class AppModel: ObservableObject {
         capture.addedAt = Date()
         let destination = captureFolderURL(for: newID)
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        // The cubes the sender packed for the trip go into THIS library's
+        // store, and the sender's LUT preset is made here from the snapshot
+        // when nothing names the cube yet (docs/lut-library-assets.md §2.4).
+        // The folder itself never becomes part of the project.
+        adoptLUTs(fromStaging: staging, manifest: manifest)
         // Anything not named here is silently dropped at import — a new
         // project subfolder must join this list or it doesn't travel. The
         // transfer's file enumerator reads the SAME constant, so a subfolder
@@ -10681,17 +10692,11 @@ final class AppModel: ObservableObject {
                 || current.adjustments != adjustments
                 || current.presetState != state
                 || current.gradeTimeline != stored else { return }
-        // A LUT renders from a cube the project must be able to find on any
-        // device it travels to: copy it into the project's own `luts/` (a
-        // transferable subfolder) the first time a grade carries it. Cheap
-        // once copied — one `fileExists` per write. docs/presets-lut-spike.md §4.4.
-        var lutIDs = Set<String>()
-        if let id = adjustments.lut?.id { lutIDs.insert(id) }
-        for keyframe in timeline.keyframes { if let id = keyframe.adjustments.lut?.id { lutIDs.insert(id) } }
-        if !lutIDs.isEmpty {
-            let folder = captureFolderURL(for: captureID)
-            for id in lutIDs { LUTStore.shared.ensureCopy(of: id, inProjectFolder: folder) }
-        }
+        // A LUT is named by its content hash and the library store holds
+        // the cube; nothing is copied into the project — the spike's §4.4
+        // rule, reversed 2026-09-18 (docs/lut-library-assets.md §2). An
+        // export or a transfer materialises the cube for the trip, and the
+        // index counts the reference from the document.
         // An edit — see CaptureProject.modifiedAt. A grade moves no bytes,
         // so this DOES cost the project's stored size a needless re-measure
         // on the next size sort; carrying a second "files changed" timestamp

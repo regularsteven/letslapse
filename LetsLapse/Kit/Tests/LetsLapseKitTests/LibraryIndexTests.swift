@@ -235,6 +235,56 @@ final class LibraryIndexTests: XCTestCase {
         XCTAssertNil(try index.project(id: UUID(uuidString: id(6))!))
     }
 
+    func testProjectLUTRowsFollowTheDocument() throws {
+        try writeLibrary()
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        XCTAssertEqual(try index.lutReferenceCounts(), [:])
+
+        // A document naming three cubes: the live grade, a keyframe, the snapshot.
+        let folder = try writeProject(7, name: "Graded", created: 1000)
+        let url = ProjectDocumentFormat.url(inProjectFolder: folder)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        var capture = try XCTUnwrap(object["capture"] as? [String: Any])
+        capture["adjustments"] = ["v": 2, "lut": ["id": "aaa", "strength": 1]]
+        capture["gradeTimeline"] = ["k": [["id": id(70), "position": 0.5, "adjustments": ["v": 2, "lut": ["id": "ccc", "strength": 0.5]]]]]
+        capture["presetState"] = ["kind": "named", "id": id(71),
+                                  "snapshot": ["name": "Terra", "basePreset": "Original", "isBuiltIn": false,
+                                               "adjustments": ["v": 2, "lut": ["id": "bbb", "strength": 1]]]]
+        object["capture"] = capture
+        let data = try JSONSerialization.data(withJSONObject: object)
+        XCTAssertEqual(LibraryIndex.referencedLUTIDs(inCapture: capture), ["aaa", "ccc", "bbb"])
+        try index.upsertProject(documentData: data, folder: id(7))
+        XCTAssertEqual(try index.lutReferenceCounts(), ["aaa": 1, "bbb": 1, "ccc": 1])
+        XCTAssertEqual(try index.projectsReferencingLUT("ccc").map(\.uuidString), [id(7)])
+
+        // A second project on the same cube counts once per project; a
+        // trashed one is referenced but not counted.
+        try data.write(to: url)
+        let second = try writeProject(8, name: "Also graded", created: 1001)
+        var again = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: ProjectDocumentFormat.url(inProjectFolder: second))) as? [String: Any])
+        var secondCapture = try XCTUnwrap(again["capture"] as? [String: Any])
+        secondCapture["adjustments"] = ["v": 2, "lut": ["id": "aaa", "strength": 1]]
+        again["capture"] = secondCapture
+        try index.upsertProject(documentData: JSONSerialization.data(withJSONObject: again), folder: id(8))
+        let trashed = try writeProject(9, created: 1002, deleted: 1003, inTrash: true)
+        var gone = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: ProjectDocumentFormat.url(inProjectFolder: trashed))) as? [String: Any])
+        var goneCapture = try XCTUnwrap(gone["capture"] as? [String: Any])
+        goneCapture["adjustments"] = ["v": 2, "lut": ["id": "ddd", "strength": 1]]
+        gone["capture"] = goneCapture
+        try index.upsertProject(documentData: JSONSerialization.data(withJSONObject: gone), folder: ".trash/\(id(9))")
+        XCTAssertEqual(try index.lutReferenceCounts(), ["aaa": 2, "bbb": 1, "ccc": 1])
+        XCTAssertEqual(try index.referencedLUTIDs(), ["aaa", "bbb", "ccc", "ddd"])
+
+        // A rebuild from the files says the same; a removal drops the rows.
+        try JSONSerialization.data(withJSONObject: again).write(to: ProjectDocumentFormat.url(inProjectFolder: second))
+        try JSONSerialization.data(withJSONObject: gone).write(to: ProjectDocumentFormat.url(inProjectFolder: trashed))
+        try index.rebuild(fromProjectsFolder: projects)
+        XCTAssertEqual(try index.lutReferenceCounts(), ["aaa": 2, "bbb": 1, "ccc": 1])
+        try index.removeProject(id: UUID(uuidString: id(7))!)
+        XCTAssertEqual(try index.lutReferenceCounts(), ["aaa": 1])
+    }
+
     func testDeletingTheDatabaseLosesNothing() throws {
         try writeLibrary()
         let index = try openIndex()

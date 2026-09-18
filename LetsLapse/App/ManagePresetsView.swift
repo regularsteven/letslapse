@@ -369,18 +369,24 @@ struct ManagePresetsView: View {
 
     private func delete(_ offsets: IndexSet, from presets: [CustomPreset]) {
         for index in offsets.sorted(by: >) where index < presets.count {
-            ManagePresetsView.delete(presets[index])
+            ManagePresetsView.delete(presets[index], index: model.libraryIndex)
         }
     }
 
-    /// Deletes a preset; a LUT's file goes with it when no other preset
-    /// still names the cube. Projects keep their snapshots (and, for a LUT,
-    /// their own copy of the cube) either way.
+    /// Deletes a preset. A LUT's file goes with it only when no other
+    /// preset names the cube AND no live project does: the projects keep
+    /// their snapshots, and the library store is the one place the cube
+    /// they name lives (docs/lut-library-assets.md §2.6).
     @MainActor
-    static func delete(_ preset: CustomPreset) {
+    static func delete(_ preset: CustomPreset, index: LibraryIndex?) {
         let store = CustomPresetStore.shared
         store.delete(preset)
-        if let id = preset.lut?.id, !store.presets.contains(where: { $0.lut?.id == id }) {
+        guard let id = preset.lut?.id, !store.presets.contains(where: { $0.lut?.id == id }) else { return }
+        var used = 0
+        if let index, let counts = try? index.lutReferenceCounts() { used = counts[id] ?? 0 }
+        if used > 0 {
+            LLog("luts: preset “\(preset.name)” deleted; the cube \(id.prefix(12)) stays — \(used) project(s) still name it")
+        } else {
             LUTStore.shared.delete(id: id)
         }
     }
@@ -946,7 +952,8 @@ struct PresetDetailView: View {
 
     private func delete() {
         guard let custom else { return }
-        ManagePresetsView.delete(custom)
+        // A parametric preset names no cube, so no index is needed here.
+        ManagePresetsView.delete(custom, index: nil)
         if !path.isEmpty { path.removeLast() }
     }
 }
@@ -954,6 +961,7 @@ struct PresetDetailView: View {
 // MARK: - A LUT's screen
 
 struct LUTDetailView: View {
+    @EnvironmentObject var model: AppModel
     @ObservedObject private var presetStore = CustomPresetStore.shared
     @ObservedObject private var lutStore = LUTStore.shared
     let presetID: UUID
@@ -1092,7 +1100,7 @@ struct LUTDetailView: View {
 
     private func delete() {
         guard let preset else { return }
-        ManagePresetsView.delete(preset)
+        ManagePresetsView.delete(preset, index: model.libraryIndex)
         if !path.isEmpty { path.removeLast() }
     }
 }

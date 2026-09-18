@@ -162,6 +162,29 @@ final class CubeLUTTests: XCTestCase {
         XCTAssertEqual(asked, ["missing", cube.contentHash])
     }
 
+    func testRegistryRemembersMissesUntilTold() {
+        let registry = LUTRegistry()
+        let cube = CubeLUT.identity(size: 3)
+        var asked = 0
+        registry.setResolver { _ in asked += 1; return nil }
+        XCTAssertNil(registry.cube(for: cube.contentHash))
+        XCTAssertNil(registry.cube(for: cube.contentHash))
+        XCTAssertEqual(asked, 1, "a miss is asked once, not on every frame")
+        // A registration answers a remembered miss without the resolver.
+        registry.register(cube)
+        XCTAssertEqual(registry.cube(for: cube.contentHash)?.size, 3)
+        XCTAssertEqual(asked, 1)
+        // Forgetting the misses asks again — a store import, a fold, a switch.
+        XCTAssertNil(registry.cube(for: "other"))
+        registry.forgetMisses()
+        XCTAssertNil(registry.cube(for: "other"))
+        XCTAssertEqual(asked, 3)
+        // A new resolver starts clean too.
+        registry.setResolver { _ in asked += 1; return nil }
+        XCTAssertNil(registry.cube(for: "other"))
+        XCTAssertEqual(asked, 4)
+    }
+
     func testDisplayGradeAppliesTheLUTToo() {
         let swap = CubeLUT.make(size: 9, title: "swap") { SIMD3($0.z, $0.y, $0.x) }
         LUTRegistry.shared.register(swap)
