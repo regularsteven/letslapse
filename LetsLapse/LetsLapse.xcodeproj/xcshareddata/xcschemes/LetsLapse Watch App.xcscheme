@@ -45,7 +45,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000000000000000000034"
             BuildableName = "LetsLapse Watch App.app"
-            BlueprintName = "LetsLapse Watch App"
             ReferencedContainer = "container:LetsLapse.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -62,7 +61,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA0000000000000000000034"
             BuildableName = "LetsLapse Watch App.app"
-            BlueprintName = "LetsLapse Watch App"
             ReferencedContainer = "container:LetsLapse.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

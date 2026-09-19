@@ -3110,9 +3110,13 @@ final class AppModel: ObservableObject {
     }
     #endif
 
-    func setSource(_ source: Source, mode: String = "Import", captureMode: CaptureProjectMode? = nil, projectID: UUID? = nil) {
+    func setSource(
+        _ source: Source, mode: String = "Import", captureMode: CaptureProjectMode? = nil, projectID: UUID? = nil,
+        autoApply: AutoApplyContext? = nil
+    ) {
         do {
-            let capture = try registerCapture(from: source, mode: mode, captureMode: captureMode, id: projectID)
+            let capture = try registerCapture(
+                from: source, mode: mode, captureMode: captureMode, id: projectID, autoApply: autoApply)
             openCapture(capture)
         } catch {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
@@ -3201,9 +3205,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func setSequenceSource(_ result: LiveCaptureResult, projectID: UUID? = nil) {
+    func setSequenceSource(_ result: LiveCaptureResult, projectID: UUID? = nil, autoApply: AutoApplyContext? = nil) {
         do {
-            let capture = try registerSequenceCapture(result, id: projectID)
+            let capture = try registerSequenceCapture(result, id: projectID, autoApply: autoApply)
             openCapture(capture)
         } catch {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
@@ -5976,12 +5980,14 @@ final class AppModel: ObservableObject {
     /// — the camera stays on screen and the finished photo lands quietly in
     /// Projects, so the user can shoot the next frame straight away.
     func processPhotoBurst(urls: [URL], blendDepth: Int, linear: Bool, presentResult: Bool = true,
-                           viewfinderShapes: ViewfinderShapes? = nil, projectID: UUID? = nil) async {
+                           viewfinderShapes: ViewfinderShapes? = nil, projectID: UUID? = nil,
+                           autoApply: AutoApplyContext? = nil) async {
         // Preserve the burst as a photo capture so its frames stay on disk and
         // the blend has a project to belong to.
         let capture: CaptureProject
         do {
-            capture = try registerCapture(from: .photos(urls), mode: Self.photoCaptureMode, id: projectID)
+            capture = try registerCapture(
+                from: .photos(urls), mode: Self.photoCaptureMode, id: projectID, autoApply: autoApply)
         } catch {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
             stage = .home
@@ -7436,14 +7442,15 @@ final class AppModel: ObservableObject {
     /// both `id` and `originID`. Nil (an import, an older caller) mints one
     /// here, as every registration did before.
     private func registerCapture(
-        from source: Source, mode: String, captureMode: CaptureProjectMode? = nil, id runID: UUID? = nil
+        from source: Source, mode: String, captureMode: CaptureProjectMode? = nil, id runID: UUID? = nil,
+        autoApply: AutoApplyContext? = nil
     ) throws -> CaptureProject {
         let id = usableProjectID(runID)
         let root = captureFolderURL(for: id)
         let sourceFolder = root.appendingPathComponent("source")
         try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
 
-        let capture: CaptureProject
+        var capture: CaptureProject
         switch source {
         case .video(let url):
             let ext = url.pathExtension.isEmpty ? "mov" : url.pathExtension
@@ -7467,7 +7474,7 @@ final class AppModel: ObservableObject {
                 sequence: liveSource.sequence,
                 segmentURLs: liveSource.segmentURLs,
                 metadataURL: liveSource.metadataURL
-            ), id: runID)
+            ), id: runID, autoApply: autoApply)
         case .photos(let urls):
             var relativeNames: [String] = []
             for (index, url) in urls.enumerated() {
@@ -7542,6 +7549,7 @@ final class AppModel: ObservableObject {
             )
         }
 
+        stampAutoApply(&capture, autoApply)
         try store.insert(ProjectDocument(capture: capture, blends: []))
         // The project owns the material now — and only now, with the manifest
         // written. Everything downstream re-resolves through `source(for:)`, so
@@ -7617,7 +7625,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func registerSequenceCapture(_ result: LiveCaptureResult, id runID: UUID? = nil) throws -> CaptureProject {
+    private func registerSequenceCapture(
+        _ result: LiveCaptureResult, id runID: UUID? = nil, autoApply: AutoApplyContext? = nil
+    ) throws -> CaptureProject {
         let id = usableProjectID(runID)
         let root = captureFolderURL(for: id)
         let sourceFolder = root.appendingPathComponent("source")
@@ -7639,7 +7649,7 @@ final class AppModel: ObservableObject {
         let metadataName = "source/sequence.json"
         try copyReplacingItem(at: result.metadataURL, to: root.appendingPathComponent(metadataName))
 
-        let capture = CaptureProject(
+        var capture = CaptureProject(
             id: id,
             kind: .video,
             createdAt: result.sequence.createdAt,
@@ -7651,6 +7661,7 @@ final class AppModel: ObservableObject {
             originDeviceID: DeviceIdentity.id
         )
 
+        stampAutoApply(&capture, autoApply)
         try store.insert(ProjectDocument(capture: capture, blends: []))
         // Same as `registerCapture`: the segments and their `sequence.json` are
         // in the project folder and the manifest is on disk, so the staging run
@@ -7666,6 +7677,24 @@ final class AppModel: ObservableObject {
         recordAssets(for: capture)
         autoTagIfEnabled(capture)
         return capture
+    }
+
+    /// The look a new shoot starts on when an auto-apply rule holds its
+    /// context (docs/presets-auto-apply.md): the same three fields
+    /// `applyPreset` / `applyCustomPreset` write, set on the record BEFORE
+    /// its first write — one document, no `modifiedAt` (nobody edited
+    /// anything), and the index counts the preset from the start. A nil
+    /// context — every non-camera path — leaves the record Original, as
+    /// `beforeWrite` stamps it.
+    private func stampAutoApply(_ capture: inout CaptureProject, _ context: AutoApplyContext?) {
+        guard let context else { return }
+        let store = AutoApplyStore.shared
+        store.pruneStale()
+        guard let look = store.resolve(context) else { return }
+        capture.selectedPreset = look.preset.rawValue
+        capture.adjustments = look.adjustments
+        capture.presetState = look.state
+        LLog("auto-apply: \(look.name) → \(context.slot.rawValue) on \(capture.id.uuidString.prefix(8))")
     }
 
 

@@ -275,7 +275,7 @@ struct CreateView: View {
                 }
                 showLadders = true
             }
-            // `LL_PRESETS=list|preset|lut|import` — the Presets sheet on the
+            // `LL_PRESETS=list|preset|lut|import|autoapply` — the Presets sheet on the
             // requested screen. Every value seeds the four saved presets and
             // two LUTs the design draws when the stores are empty (simulator
             // data, written to the same files a real save or import writes);
@@ -290,10 +290,22 @@ struct CreateView: View {
                     presetsInitialPath = ManagePresetsView.debugRoute(named: "Teal and Orange").map { [$0] } ?? []
                 case "import":
                     presetsInitialImport = true
+                case "autoapply":
+                    // Natural's screen: short enough that AUTO APPLY sits
+                    // above the fold with a rule or two on it.
+                    presetsInitialPath = [.builtIn(.natural)]
                 default:
                     break
                 }
                 showPresets = true
+            }
+            // `LL_AUTOAPPLY="photo:dng:Sunny Nature;video:flatOn:Teal and Orange"`
+            // — auto-apply rules staged in memory, never written: the preset
+            // screens' rows, the conflict dialog's other side, and the
+            // capture screen's chip. Entries are `<mode|all>[:<filter>]:<name>`,
+            // the seeded presets by name and the built-ins by theirs.
+            if let spec = environment["LL_AUTOAPPLY"] {
+                ManagePresetsView.debugSeedAutoApply(spec)
             }
             // `LL_SHAPEMATION=home|find|build|list` — the Shape-mation sheet on
             // the requested screen, over whatever the library holds.

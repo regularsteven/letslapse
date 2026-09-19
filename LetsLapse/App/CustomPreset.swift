@@ -118,6 +118,10 @@ final class CustomPresetStore: ObservableObject {
     func delete(_ preset: CustomPreset) {
         presets.removeAll { $0.id == preset.id }
         persist()
+        // Its auto-apply rules go with it, whichever door deleted it — the
+        // Presets sheet, a viewer's chip strip and the Gallery panels all
+        // land here.
+        AutoApplyStore.shared.release(preset.id)
     }
 
     func rename(_ preset: CustomPreset, to name: String) {

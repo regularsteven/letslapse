@@ -11,6 +11,22 @@ live inline.
 
 ## Open
 
+### Auto apply — the SVG mirrors, after sign-off
+
+**Raised:** 2026-09-19. The feature — a preset or LUT assigned to new shoots
+per capture context, from its screen under Manage presets, with a preset
+chip on the capture screen — is built app-code-first per Steven; the model,
+the file, the screens and the hooks are in `docs/presets-auto-apply.md`.
+**Owed once the simulator screenshots are signed off**, in the same unit of
+work: `iOS/manage-presets.preset.portrait.svg` and `.lut.` gain the AUTO
+APPLY section; new `manage-presets.preset.autoapply.portrait.svg` (rows set),
+`manage-presets.preset.autoapply-conflict.portrait.svg` (the dialog),
+`capture-photo.autopreset.portrait.svg` and `.landscape.svg` (the chip beside
+/ under the headroom chip); INDEX rows in `iOS/INDEX.md` (:412–413 updated,
+four new) and a note in `macOS/INDEX.md`. Not done while a mirror is stale.
+Not included unless asked: an "Auto" caption on the list rows, a tap on the
+chip, syncing the rules through PicPlace, a remote `setAutoApply` command.
+
 ### Un-vendor mlx-swift-lm — return the AI engine's LM library to a normal package pin
 
 **Raised:** 2026-09-18 (the first checkout on a second Mac: Xcode reported every
@@ -3368,10 +3384,11 @@ outputs; keyframeable like every other control (rotation lives in
 levelled frame (existing layers turn with the picture, new ones start level,
 and a travelling level carries them per moment). Owed:
 
-- **Project cards and thumbnails are not levelled.** `ProjectThumbnailCache`
-  decodes without the grade, so a levelled project's card still shows the
-  raw tilt; the hero (`ProjectMedia`), grid and fullscreen sheet ARE levelled.
-  Decide whether the card should pay for a grade render.
+- ~~**Project cards and thumbnails are not levelled.**~~ — done 2026-09-19
+  with auto apply (`docs/presets-auto-apply.md`): the Projects card passes
+  the project's grade to `ProjectThumbnailView` exactly as the Gallery tile
+  does (a memory-only 480 px graded render per visible card), so a levelled
+  or auto-graded project's card shows the look.
 - ~~**iOS viewer SVGs** (`project-photo.viewer.*`) are marked ⚠️ Stale~~ —
   redrawn 2026-09-13 with the editor redesign, where the ±10° control is the
   **Angle** slider inside the Crop group (`iOS/project-photo.viewer.crop

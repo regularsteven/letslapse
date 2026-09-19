@@ -893,6 +893,10 @@ struct PresetDetailView: View {
                 Text("What it changes")
             }
 
+            AutoApplySection(
+                presetID: custom?.id ?? (builtIn ?? .original).presetID,
+                presetName: title, isLUT: false)
+
             Section {
                 HStack {
                     Text("Used on")
@@ -1018,6 +1022,12 @@ struct LUTDetailView: View {
                 Text("Strength")
             } footer: {
                 footer("What a project starts at. Each project can set its own strength in the Edit screen.")
+            }
+
+            // Only with the cube in this library's store: a rule for a LUT
+            // nothing here can draw would stamp a look nothing can render.
+            if let preset, file != nil {
+                AutoApplySection(presetID: preset.id, presetName: preset.name, isLUT: true)
             }
 
             Section {
@@ -1230,6 +1240,45 @@ extension ManagePresetsView {
     @MainActor
     static func debugRoute(named name: String) -> PresetRoute? {
         CustomPresetStore.shared.presets.first { $0.name == name }.map { .custom($0.id) }
+    }
+
+    /// `LL_AUTOAPPLY="photo:dng:Sunny Nature;interval:Sunny Nature;video:flatOn:Teal and Orange"`
+    /// — auto-apply rules staged in memory for a screenshot, never written.
+    /// One entry per `;`: `<photo|interval|video|all>[:<filter>]:<preset name>`,
+    /// the filter an `AutoApplyFilter` raw value (`all`, `jpegs`,
+    /// `jpegStandard`, `jpegFlat`, `dng`, `flatOff`, `flatOn`), the name a
+    /// seeded preset's or a built-in's. Seeds the sheet's presets first, so
+    /// the names resolve on an empty simulator.
+    @MainActor
+    static func debugSeedAutoApply(_ spec: String) {
+        debugSeed()
+        var rules = AutoApplyRules()
+        for entry in spec.split(separator: ";") {
+            let parts = entry.split(separator: ":", omittingEmptySubsequences: false)
+                .map { String($0).trimmingCharacters(in: .whitespaces) }
+            guard parts.count >= 2, let name = parts.last, let id = debugPresetID(named: name) else {
+                LLog("LL_AUTOAPPLY: can't read “\(entry)”")
+                continue
+            }
+            let slots: Set<AutoApplySlot>
+            if parts[0].lowercased() == "all" {
+                slots = AutoApplySlot.all
+            } else if let mode = AutoApplyMode(rawValue: parts[0].lowercased()),
+                      let filter = AutoApplyFilter(rawValue: parts.count >= 3 ? parts[1] : "all") {
+                slots = filter.slots(in: mode)
+            } else {
+                LLog("LL_AUTOAPPLY: no such mode or filter in “\(entry)”")
+                continue
+            }
+            rules.assign(slots, to: id)
+        }
+        AutoApplyStore.shared.debugSeed(rules)
+    }
+
+    @MainActor
+    static func debugPresetID(named name: String) -> UUID? {
+        if let builtIn = PhotoPreset(rawValue: name) { return builtIn.presetID }
+        return CustomPresetStore.shared.presets.first { $0.name == name }?.id
     }
 }
 #endif

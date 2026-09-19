@@ -36,6 +36,10 @@ struct CaptureView: View {
     private var captureFlat: Bool {
         FlatCapture.scope(for: mode) == .video ? videoFlat : stillsFlat
     }
+    /// Which preset new shoots start on, per capture context — set on the
+    /// preset's own screen (Create ▸ Manage presets); read here for the top
+    /// bar's chip and handed to registration by the finish closures.
+    @ObservedObject private var autoApply = AutoApplyStore.shared
     @Environment(\.dismiss) private var dismiss
     #if os(iOS)
     @ObservedObject private var watchRemote = WatchRemoteControlReceiver.shared
@@ -1057,11 +1061,15 @@ struct CaptureView: View {
         updateIdleTimer()
         #endif
         camera.onFinishLiveCapture = { result in
+            // The auto-apply context is read here, synchronously, before the
+            // screen goes: what the chip predicted is what registers.
+            let context = AutoApplyContext.video(flat: captureFlat)
             camera.stop()
             dismiss()
-            model.setSequenceSource(result, projectID: camera.runIdentity.current)
+            model.setSequenceSource(result, projectID: camera.runIdentity.current, autoApply: context)
         }
         camera.onFinishVideo = { url in
+            let context = AutoApplyContext.video(flat: captureFlat)
             camera.stop()
             #if os(iOS)
             // Flush the GPX track collected during the take into a sidecar
@@ -1075,10 +1083,15 @@ struct CaptureView: View {
             }
             #endif
             dismiss()
-            model.setSource(.video(url), mode: camera.activeFormatDescription, projectID: camera.runIdentity.current)
+            model.setSource(
+                .video(url), mode: camera.activeFormatDescription, projectID: camera.runIdentity.current,
+                autoApply: context)
         }
         camera.onFinishPhotos = { urls in
             steadiness.stop()
+            // From the frames that landed, not the dial (a DNG dial on a
+            // source without RAW shoots JPEG); a scan never asks.
+            let context = AutoApplyContext.stills(mode: mode, urls: urls, flat: captureFlat)
             // Photo mode never visits Adjust: its burst auto-blends into one
             // image immediately, with the depth already chosen on the capture
             // screen. It also never leaves the camera — the session stays live
@@ -1096,7 +1109,7 @@ struct CaptureView: View {
                     await model.processPhotoBurst(
                         urls: framesToBlend, blendDepth: depth, linear: model.linearLight,
                         presentResult: false, viewfinderShapes: shapes,
-                        projectID: camera.runIdentity.current)
+                        projectID: camera.runIdentity.current, autoApply: context)
                 }
                 return
             }
@@ -1121,7 +1134,9 @@ struct CaptureView: View {
                     projectID: camera.runIdentity.current)
                 return
             }
-            model.setSource(.photos(urls), mode: intervalSourceModeName, projectID: camera.runIdentity.current)
+            model.setSource(
+                .photos(urls), mode: intervalSourceModeName, projectID: camera.runIdentity.current,
+                autoApply: context)
             // A minimum run of 2 filters a lone bad frame (a passing cloud, a
             // single bump); the half-session ceiling keeps a shaky handheld
             // shoot from reading as a tail event.
@@ -1130,6 +1145,7 @@ struct CaptureView: View {
             }
         }
         camera.onFinishLiveBlend = { result in
+            let context = AutoApplyContext.stills(mode: mode, urls: result.frameURLs, flat: captureFlat)
             // Photo mode: the live-blend RAW pipeline already produced one
             // blended DNG (the last window if a stop raced an extra one). It IS
             // the photo — register it as a one-asset Photo capture, no further
@@ -1145,7 +1161,7 @@ struct CaptureView: View {
                     await model.processPhotoBurst(
                         urls: dngURLs, blendDepth: 1, linear: model.linearLight,
                         presentResult: false, viewfinderShapes: shapes,
-                        projectID: camera.runIdentity.current)
+                        projectID: camera.runIdentity.current, autoApply: context)
                 }
                 return
             }
@@ -1176,7 +1192,8 @@ struct CaptureView: View {
             model.setSource(
                 .photos(result.frameURLs),
                 mode: "Interval · \(format)\(blend)",
-                projectID: camera.runIdentity.current)
+                projectID: camera.runIdentity.current,
+                autoApply: context)
         }
         revalidateSafeDepth()
         orientation = currentCaptureOrientation()
@@ -1414,6 +1431,30 @@ struct CaptureView: View {
         model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
     }
 
+    /// The auto-apply context the NEXT shoot would register with — the
+    /// chip's prediction, from the same inputs the finish closures read:
+    /// the mode, whether a still shoot will land as DNG (`wantsPhotoDNG`,
+    /// the format pill's own test) and the mode's Flat. Nil for a Scanner
+    /// run: a scan is a document, never a look.
+    private var predictedAutoApplyContext: AutoApplyContext? {
+        if mode == .video { return .video(flat: captureFlat) }
+        if scannerArmed { return nil }
+        return AutoApplyContext(mode: mode, dng: wantsPhotoDNG, flat: captureFlat)
+    }
+
+    /// The preset new shoots start on right now, when a rule holds the context.
+    private var autoAppliedLookName: String? {
+        predictedAutoApplyContext.flatMap { autoApply.resolve($0) }?.name
+    }
+
+    /// The top bar's "a preset is on" mark — nothing at all when none is.
+    @ViewBuilder
+    private var autoPresetChip: some View {
+        if let name = autoAppliedLookName {
+            AutoPresetChip(name: name).equatable()
+        }
+    }
+
     /// The blend pipeline the current dials would run — the profile pool
     /// Safe mode draws from.
     private var activeBlendPipeline: String {
@@ -1624,9 +1665,20 @@ struct CaptureView: View {
             // shot count is the part you act on, and the whole chip only if
             // even that doesn't fit. The pill never gives ground: it is a
             // control, and the thing beside it is a readout.
+            // The auto-preset chip, when a rule holds the next shoot, sits
+            // ahead of the pair and gives way after the free-space half but
+            // before the shot count: it confirms a setting, the count is
+            // what you act on. A 31 pt circle, so that tier is rarely
+            // reached.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
+                    autoPresetChip
                     headroomChip(compact: false)
+                    formatPill
+                }
+                HStack(spacing: 8) {
+                    autoPresetChip
+                    headroomChip(compact: true)
                     formatPill
                 }
                 HStack(spacing: 8) {
@@ -1820,6 +1872,7 @@ struct CaptureView: View {
             VStack(alignment: anchor, spacing: 8) {
                 formatPill
                 headroomChip(compact: true)
+                autoPresetChip
             }
             .railAnchored(anchor)
             Spacer()

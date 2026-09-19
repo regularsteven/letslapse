@@ -572,6 +572,15 @@ private struct ProjectCard: View {
     @State private var burstSummary: AppModel.BurstClipSummary?
     @State private var sourceFormat: AppModel.SourceFormatSummary?
 
+    /// The project's grade, so the card shows the look a preset put on it —
+    /// the Gallery tile's rule (`GalleryTile.grade`), and what makes a shoot
+    /// an auto-apply rule graded look graded in the first list after it.
+    /// Nil while there is none, which keeps the plain thumbnail cache's path.
+    private var grade: PhotoGrade? {
+        let grade = model.photoGrade(for: capture)
+        return grade.isIdentity ? nil : grade
+    }
+
     var body: some View {
         let versions = model.blends(for: capture)
 
@@ -583,7 +592,7 @@ private struct ProjectCard: View {
             Button(action: onOpen) {
                 HStack(spacing: 12) {
                     ZStack(alignment: .bottomTrailing) {
-                        ProjectThumbnailView(url: thumbnailURL, kind: model.mediaKind(for: capture))
+                        ProjectThumbnailView(url: thumbnailURL, kind: model.mediaKind(for: capture), grade: grade)
                             .frame(width: 86, height: 64)
                         MediaBadge(text: durationBadge)
                             .scaleEffect(0.82, anchor: .bottomTrailing)

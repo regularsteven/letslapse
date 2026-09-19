@@ -108,6 +108,7 @@ final class ModelHost: ObservableObject {
 enum LibrarySwitch {
     @MainActor static func rerootStores() {
         CustomPresetStore.reroot()
+        AutoApplyStore.reroot()
         LightLadderStore.reroot()
         LUTStore.reroot()
         BlendProfileStore.reroot()
@@ -785,7 +786,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -1078,6 +1079,55 @@ struct ContentView: View {
                     LLog("LL_DELETE moved \(capture.id.uuidString) to the trash")
                 } catch {
                     LLog("LL_DELETE failed: \(error)")
+                }
+            }
+        }
+        // LL_REGISTER=<photo|interval|video>:<path>[,<path>…][:flat] —
+        // registers the files as if the camera had just made them: the same
+        // `processPhotoBurst` / `setSource` the capture screen's finish
+        // closures call, with the auto-apply context a shoot of that kind
+        // carries (DNG read off the extensions, Flat by the trailing token),
+        // two seconds after launch like LL_APPLY_PRESET. The registration
+        // path's one door on a machine without a camera — the Simulator has
+        // none, and a driver-launched Mac copy is refused it. The files are
+        // copied to a staging folder first: a registration discards the
+        // folder its frames came from, and a fixture is not staging.
+        if let raw = environment["LL_REGISTER"] {
+            let parts = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            if parts.count >= 2, let mode = CaptureMode(token: parts[0].capitalized) {
+                let sources = parts[1].split(separator: ",").map { URL(fileURLWithPath: String($0)) }
+                let flat = parts.count >= 3 && parts[2] == "flat"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    let staging = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("LL_REGISTER-\(UUID().uuidString)", isDirectory: true)
+                    do {
+                        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+                        var staged: [URL] = []
+                        for source in sources {
+                            let copy = staging.appendingPathComponent(source.lastPathComponent)
+                            try FileManager.default.copyItem(at: source, to: copy)
+                            staged.append(copy)
+                        }
+                        guard let first = staged.first else { return }
+                        LLog("LL_REGISTER: \(mode.rawValue), \(staged.count) file(s), flat \(flat)")
+                        switch mode {
+                        case .video:
+                            model.setSource(.video(first), mode: "Video", autoApply: .video(flat: flat))
+                        case .interval:
+                            model.setSource(
+                                .photos(staged), mode: "Interval · JPEG",
+                                autoApply: .stills(mode: .interval, urls: staged, flat: flat))
+                        case .photo:
+                            Task {
+                                await model.processPhotoBurst(
+                                    urls: staged, blendDepth: 1, linear: model.linearLight,
+                                    presentResult: false,
+                                    autoApply: .stills(mode: .photo, urls: staged, flat: flat))
+                            }
+                        }
+                    } catch {
+                        LLog("LL_REGISTER: couldn't stage the files — \(error.localizedDescription)")
+                    }
                 }
             }
         }
