@@ -96,6 +96,11 @@ final class ShapeFinder: ObservableObject {
         var isCurrent: Bool
         var shapeCount: Int
         var detectedCount: Int
+        /// Set when the register can be seen but not written by this build
+        /// (`ShapeRegisterLock`): a run lists the project and passes it over.
+        var lock: ShapeRegisterLock?
+        var isLocked: Bool { lock != nil }
+        var lockReason: String? { lock?.message }
     }
 
     /// Which projects a run visits — the sheet's scope picker.
@@ -144,6 +149,9 @@ final class ShapeFinder: ObservableObject {
         var withShapes: Int
         var families: [DetectedShape.Family: Int]
         var unreadable: Int
+        /// Registers this build may not write — a newer build's, or one that
+        /// would not decode — left exactly as they were (`ShapeRegisterLock`).
+        var locked: Int
         var alreadyDone: Int
         var skippedVideo: Int
         var results: [ProjectResult]
@@ -231,20 +239,27 @@ final class ShapeFinder: ObservableObject {
         for capture in model.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.categories = [.photo, .interval]; return q }()) {
             let folder = model.projectFolderURL(for: capture)
             guard let rep = representative(for: capture, in: model) else { continue }
-            let existing = ShapeRegister.load(inProjectFolder: folder)
+            // A register this build cannot write is listed with its lock, so
+            // the sheet can say so; its counts are unknown and read as none.
+            let outcome = ShapeRegister.read(inProjectFolder: folder)
+            let existing = outcome.register
             out.append(Candidate(id: capture.id, title: capture.displayTitle, folder: folder, representative: rep,
                                  isAnalysed: existing?.isAnalysed ?? false, isCurrent: existing?.isCurrent ?? false,
                                  shapeCount: existing?.shapes.count ?? 0,
-                                 detectedCount: existing?.shapes.filter { $0.source == .detected }.count ?? 0))
+                                 detectedCount: existing?.shapes.filter { $0.source == .detected }.count ?? 0,
+                                 lock: ShapeRegisterLock(outcome)))
         }
         return (out, video)
     }
 
+    /// A locked register is never "pending" — nothing this build could do
+    /// to it — and never "empty", since its shapes are unknown; the other
+    /// scopes keep it listed, and `run` passes it over with a word.
     static func select(_ projects: [Candidate], scope: Scope, chosen: Set<UUID>) -> [Candidate] {
         switch scope {
-        case .pending: return projects.filter { !$0.isCurrent }
+        case .pending: return projects.filter { !$0.isCurrent && !$0.isLocked }
         case .all: return projects
-        case .empty: return projects.filter { $0.isAnalysed && $0.shapeCount == 0 }
+        case .empty: return projects.filter { $0.isAnalysed && $0.shapeCount == 0 && !$0.isLocked }
         case .chosen: return projects.filter { chosen.contains($0.id) }
         }
     }
@@ -298,7 +313,14 @@ final class ShapeFinder: ObservableObject {
         var changed = 0
         for capture in model.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.categories = [.photo, .interval]; return q }()) {
             let folder = model.projectFolderURL(for: capture)
-            guard var register = ShapeRegister.load(inProjectFolder: folder),
+            let outcome = ShapeRegister.read(inProjectFolder: folder)
+            // A register this build cannot fully read is never rewritten —
+            // its found shapes, whatever they are, stay with it.
+            if let lock = ShapeRegisterLock(outcome) {
+                LLog(lock.logLine(for: capture.displayTitle))
+                continue
+            }
+            guard var register = outcome.register,
                   register.isAnalysed || register.shapes.contains(where: { $0.source == .detected }) else { continue }
             register.shapes.removeAll { $0.source == .detected }
             register.analysedAt = nil
@@ -307,6 +329,10 @@ final class ShapeFinder: ObservableObject {
                 try register.save(inProjectFolder: folder)
                 changed += 1
                 model.shapeRegisterDidChange(for: capture)
+                // A person cleared this project's shapes: stamp it edited so the
+                // change reaches PicPlace (`markEdited` → `store.update` →
+                // `persister.onProjectWritten` → `picplace.noteProjectChanged`).
+                model.markEdited(capture.id)
             } catch {
                 LLog("shapes: could not clear the found shapes of \(capture.displayTitle): \(error)")
             }
@@ -391,15 +417,17 @@ final class ShapeFinder: ObservableObject {
         }
     }
 
-    func run(mode: ShapeDetectionMode, candidates todo: [Candidate], alreadyDone: Int, skippedVideo: Int) {
+    /// `model` is told of every register written (`markEdited`), which is
+    /// what makes the run's writes an auto-sync cue.
+    func run(mode: ShapeDetectionMode, candidates todo: [Candidate], alreadyDone: Int, skippedVideo: Int, in model: AppModel) {
         guard !isRunning else { return }
         isRunning = true
         summary = nil
         let runStarted = Date()
         progress = Progress(done: 0, total: todo.count, current: todo.first?.title ?? "", startedAt: runStarted)
         mode.save()
-        task = Task.detached(priority: .userInitiated) { [weak self] in
-            var analysed = 0, withShapes = 0, unreadable = 0
+        task = Task.detached(priority: .userInitiated) { [weak self, weak model] in
+            var analysed = 0, withShapes = 0, unreadable = 0, locked = 0
             var families: [DetectedShape.Family: Int] = [:]
             var results: [ProjectResult] = []
             var cancelled = false
@@ -407,12 +435,30 @@ final class ShapeFinder: ObservableObject {
                 if Task.isCancelled { cancelled = true; break }
                 await MainActor.run { self?.progress = Progress(done: i, total: todo.count, current: candidate.title, startedAt: runStarted) }
                 let rep = candidate.representative
+                // The register as it stands, read again now: a file this
+                // build cannot write — a newer build's, or one that will not
+                // decode — is passed over whole, whatever the scope said.
+                let outcome = ShapeRegister.read(inProjectFolder: candidate.folder)
+                if let lock = ShapeRegisterLock(outcome) {
+                    locked += 1
+                    results.append(ProjectResult(id: candidate.id, title: candidate.title, families: [:], shapes: 0,
+                                                 milliseconds: 0, note: lock.message, failed: true))
+                    LLog(lock.logLine(for: candidate.title))
+                    continue
+                }
                 // Shapes drawn by hand or confirmed on the viewfinder before
                 // this run stay; the detector's join them — minus any that
                 // are the same thing as a kept one, which is already listed.
-                let existing = ShapeRegister.load(inProjectFolder: candidate.folder)
+                let existing = outcome.register
                 let drawn = existing?.keptShapes ?? []
+                // Start from the register that is there, so whatever it holds
+                // that this build does not read (`foreignShapes`,
+                // `foreignFields`) travels through the rewrite; a project
+                // with no register gets a fresh one.
                 var register: ShapeRegister
+                // The tallies before this project, to fall back on should
+                // the save below be refused.
+                let tally = (analysed, withShapes, unreadable, families)
                 if let size = RepresentativeLoader.orientedPixelSize(rep), let pass = Self.pass(rep, size: size, mode: mode) {
                     var found = pass.shapes
                     // A shape confirmed on the viewfinder keeps its identity
@@ -445,9 +491,16 @@ final class ShapeFinder: ObservableObject {
                     // register keeps its shutter reading), else the file's EXIF.
                     let fov = existing?.representative.horizontalFieldOfView
                         ?? RepresentativeLoader.horizontalFieldOfView(rep)
-                    register = ShapeRegister(representative: .init(relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction,
-                                                                   width: Int(size.width), height: Int(size.height), horizontalFieldOfView: fov),
-                                             shapes: kept + shapes).rectifyingQuads()
+                    let representative = ShapeRegister.Representative(
+                        relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction,
+                        width: Int(size.width), height: Int(size.height), horizontalFieldOfView: fov)
+                    register = existing ?? ShapeRegister(representative: representative, shapes: [])
+                    register.representative = representative
+                    register.shapes = kept + shapes
+                    register.analysedAt = Date()
+                    register.detectorVersion = ShapeRegister.currentDetectorVersion
+                    register.failure = nil
+                    register = register.rectifyingQuads()
                     analysed += 1
                     if !shapes.isEmpty { withShapes += 1 }
                     var own: [DetectedShape.Family: Int] = [:]
@@ -460,8 +513,14 @@ final class ShapeFinder: ObservableObject {
                                                  milliseconds: pass.milliseconds, note: note.isEmpty ? nil : note, failed: pass.failed))
                     LLog(String(format: "shapes: %@ — %d shape(s) in %d ms (%@)", candidate.title, shapes.count, pass.milliseconds, mode.token))
                 } else {
-                    register = ShapeRegister(representative: .init(relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction, width: 0, height: 0),
-                                             shapes: drawn, failure: "picture could not be read")
+                    let representative = ShapeRegister.Representative(
+                        relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction, width: 0, height: 0)
+                    register = existing ?? ShapeRegister(representative: representative, shapes: [])
+                    register.representative = representative
+                    register.shapes = drawn
+                    register.analysedAt = Date()
+                    register.detectorVersion = ShapeRegister.currentDetectorVersion
+                    register.failure = "picture could not be read"
                     unreadable += 1
                     results.append(ProjectResult(id: candidate.id, title: candidate.title, families: [:], shapes: 0,
                                                  milliseconds: 0, note: "picture could not be read", failed: true))
@@ -470,11 +529,30 @@ final class ShapeFinder: ObservableObject {
                 // The viewfinder's account of the capture belongs to the
                 // capture, not to the detector run that is being redone.
                 register.viewfinder = existing?.viewfinder
-                do { try register.save(inProjectFolder: candidate.folder) } catch {
-                    LLog("shapes: could not write shapes.json for \(candidate.title): \(error)")
+                do {
+                    try register.save(inProjectFolder: candidate.folder)
+                    // A person ran this: stamp the project edited so the new
+                    // register reaches PicPlace (`markEdited` → `store.update`
+                    // → `persister.onProjectWritten` → `picplace.noteProjectChanged`).
+                    let id = candidate.id
+                    await MainActor.run { model?.markEdited(id) }
+                } catch let error {
+                    if let lock = ShapeRegisterLock(error) {
+                        // The file changed under the run — `save` probes the
+                        // disk at the write and left it alone. The project's
+                        // row says so instead of what the pass found.
+                        locked += 1
+                        (analysed, withShapes, unreadable, families) = tally
+                        results.removeLast()
+                        results.append(ProjectResult(id: candidate.id, title: candidate.title, families: [:], shapes: 0,
+                                                     milliseconds: 0, note: lock.message, failed: true))
+                        LLog(lock.logLine(for: candidate.title))
+                    } else {
+                        LLog("shapes: could not write shapes.json for \(candidate.title): \(error)")
+                    }
                 }
             }
-            let result = Summary(analysed: analysed, withShapes: withShapes, families: families, unreadable: unreadable,
+            let result = Summary(analysed: analysed, withShapes: withShapes, families: families, unreadable: unreadable, locked: locked,
                                  alreadyDone: alreadyDone, skippedVideo: skippedVideo, results: results,
                                  totalMs: Int(Date().timeIntervalSince(runStarted) * 1000), mode: mode, cancelled: cancelled)
             await MainActor.run {
@@ -515,6 +593,15 @@ extension AppModel {
                 relativePath: rep.relativePath, source: rep.source, frameFraction: rep.frameFraction,
                 width: Int(size.width), height: Int(size.height),
                 horizontalFieldOfView: viewfinder.horizontalFieldOfView ?? RepresentativeLoader.horizontalFieldOfView(rep))
+            // The folder is new, so there is nothing to read — but the rule
+            // is every writer's: a register this build cannot fully read is
+            // never written over, and the same check stands before the
+            // refined write below. Not `markEdited` here: the project is
+            // being registered, and registration stamps it.
+            if let lock = ShapeRegisterLock(ShapeRegister.read(inProjectFolder: folder)) {
+                LLog(lock.logLine(for: title))
+                return
+            }
             var register = ShapeRegister(analysedAt: nil, representative: representative,
                                          shapes: ShapeReconciler.provisional(viewfinder, photoSize: size)).rectifyingQuads()
             register.viewfinder = ViewfinderTrail(viewfinder)
@@ -538,6 +625,10 @@ extension AppModel {
             register = register.rectifyingQuads()
             register.viewfinder?.file = pass?.diagnostics
             register.analysedAt = Date()
+            if let lock = ShapeRegisterLock(ShapeRegister.read(inProjectFolder: folder)) {
+                LLog(lock.logLine(for: title))
+                return
+            }
             do { try register.save(inProjectFolder: folder) } catch {
                 LLog("shapes: could not write the refined register for \(title): \(error)")
                 return

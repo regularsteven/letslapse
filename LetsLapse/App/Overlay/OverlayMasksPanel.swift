@@ -61,6 +61,11 @@ struct OverlayMasksPanel: View {
     @Binding var shapeTool: DetectedShape.Kind?
     /// Square lock for rectangle drawing and corner drags.
     @Binding var squareLock: Bool
+    /// Set when the project's register can be seen but not written by this
+    /// build (`ShapeRegisterLock`): ＋ Shape is disabled and the card shows
+    /// no shapes. The chip that says why goes in `shapesCard` — a later
+    /// design-first pass, which binds to this.
+    let shapeLock: ShapeRegisterLock?
     /// The register's frame, for size captions.
     let shapeFrame: CGSize
     let onShapesEdited: (_ commit: Bool) -> Void
@@ -162,7 +167,8 @@ struct OverlayMasksPanel: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
-        .help(armed == nil ? "Add an ellipse or rectangle shape by drawing on the picture" : "Drag on the picture to draw it")
+        .disabled(shapeLock != nil)
+        .help(shapeLock?.message ?? (armed == nil ? "Add an ellipse or rectangle shape by drawing on the picture" : "Drag on the picture to draw it"))
     }
 
     // MARK: - Shapes (the register)
@@ -179,6 +185,9 @@ struct OverlayMasksPanel: View {
                     .monospaced()
                     .foregroundStyle(.secondary)
             }
+            // The explanatory chip for `shapeLock` — "Shapes written by a
+            // newer LetsLapse" / "Shapes couldn't be read" — goes here, above
+            // the find row, once its design is signed off.
             findRow
             if let find = lastFind {
                 findResults(find)
@@ -266,7 +275,11 @@ struct OverlayMasksPanel: View {
                             .font(.system(size: 11.5, weight: .semibold))
                     }
                 }
-                .disabled(finding)
+                // A locked register cannot take what a find would offer
+                // (`addFound` stands down too), so the find stands down
+                // with it rather than list shapes that cannot be added.
+                .disabled(finding || shapeLock != nil)
+                .help(shapeLock?.message ?? "Find shapes in this picture with the chosen detector")
             }
             Text("Find shapes in this picture · " + findMode.engine.detail)
                 .font(.system(size: 10))

@@ -459,10 +459,18 @@ public final class LibraryIndex: @unchecked Sendable {
     /// split square / rectangle by family. A project with no register at
     /// all counts zero and keeps `shapes_indexed_at` null — "no file, never
     /// counted" is its steady state, not something to re-check each launch.
+    /// A file that is there but not ours to read — `.tooNew` from a newer
+    /// build, `.unreadable` — counts zero and is NOT stamped: the stamp is
+    /// what the re-count triggers compare with the file's date, and a locked
+    /// file's date never moves, so a stamp would keep its zeros for good —
+    /// past the update that can read it. Unstamped, it is re-read on each
+    /// launch (one `version` probe per locked project) and counted the day
+    /// the build catches up.
     private func upsertShapes(projectID: String, inProjectFolder folder: URL) throws {
         var ellipses = 0, rectangles = 0, squares = 0
-        let exists = FileManager.default.fileExists(atPath: ShapeRegister.url(inProjectFolder: folder).path)
-        if exists, let register = ShapeRegister.load(inProjectFolder: folder) {
+        let outcome = ShapeRegister.read(inProjectFolder: folder)
+        let counted = outcome.register != nil
+        if let register = outcome.register {
             for shape in register.shapes {
                 switch shape.kind {
                 case .ellipse: ellipses += 1
@@ -473,7 +481,7 @@ public final class LibraryIndex: @unchecked Sendable {
         try db.run("""
             UPDATE projects SET shape_ellipses = ?, shape_rectangles = ?, shape_squares = ?, shapes_indexed_at = ? WHERE id = ?
             """, [.int(Int64(ellipses)), .int(Int64(rectangles)), .int(Int64(squares)),
-                   .init(exists ? Date().timeIntervalSinceReferenceDate : nil), .text(projectID)])
+                   .init(counted ? Date().timeIntervalSinceReferenceDate : nil), .text(projectID)])
     }
 
     // MARK: - Queries

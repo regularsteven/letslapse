@@ -45,6 +45,15 @@ final class ShapemationStore: ObservableObject {
     }
 
     @Published private(set) var records: [Record] = []
+    /// Index entries this build could not read as a `Record` — a newer
+    /// build's shape of record — kept as they were read and written back by
+    /// `persist`, so the video and poster they name are never orphaned by
+    /// an older build's save. The same rule as `ShapeRegister.foreignShapes`.
+    private var foreignRecords: [JSONValue] = []
+    /// Set when an index file is there but is not a JSON list at all: the
+    /// store then reads as empty and `persist` refuses, so a save can never
+    /// write that emptiness over whatever the file holds.
+    private var indexUnreadable = false
 
     var folderURL: URL {
         StorageRoot.current.appendingPathComponent(Self.folderName, isDirectory: true)
@@ -60,11 +69,45 @@ final class ShapemationStore: ObservableObject {
     func outputURL(for id: UUID) -> URL { folderURL.appendingPathComponent("\(id.uuidString).mp4") }
     func posterURL(for id: UUID) -> URL { folderURL.appendingPathComponent("\(id.uuidString).jpg") }
 
+    /// Reads the index one entry at a time: an entry that is not a `Record`
+    /// to this build is kept aside as JSON rather than failing the whole
+    /// index (which would have emptied the list — and the next `persist`
+    /// would have written that emptiness over every record).
     func load() {
-        guard let data = try? Data(contentsOf: indexURL) else { records = []; return }
+        indexUnreadable = false
+        guard FileManager.default.fileExists(atPath: indexURL.path) else { records = []; foreignRecords = []; return }
+        let data: Data
+        do { data = try Data(contentsOf: indexURL) } catch {
+            // There, but its bytes will not load (permissions, a volume
+            // hiccup): not absent — the same lock as bytes that are no list.
+            records = []; foreignRecords = []; indexUnreadable = true
+            LLog("shapemation: the index could not be read (\(error)); nothing will be written over it")
+            return
+        }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        records = ((try? decoder.decode([Record].self, from: data)) ?? []).sorted { $0.createdAt > $1.createdAt }
+        var known: [Record] = []
+        var foreign: [JSONValue] = []
+        if let entries = try? decoder.decode([JSONValue].self, from: data) {
+            let encoder = JSONEncoder()
+            for entry in entries {
+                // Back to bytes and through the record's own decoder, so the
+                // dates read the way they were written.
+                if let bytes = try? encoder.encode(entry), let record = try? decoder.decode(Record.self, from: bytes) {
+                    known.append(record)
+                } else {
+                    foreign.append(entry)
+                }
+            }
+        } else {
+            indexUnreadable = true
+            LLog("shapemation: the index could not be read; nothing will be written over it")
+        }
+        records = known.sorted { $0.createdAt > $1.createdAt }
+        foreignRecords = foreign
+        if !foreign.isEmpty {
+            LLog("shapemation: \(foreign.count) record\(foreign.count == 1 ? "" : "s") in the index this build cannot read — kept as \(foreign.count == 1 ? "it is" : "they are")")
+        }
     }
 
     func add(_ record: Record) {
@@ -80,12 +123,23 @@ final class ShapemationStore: ObservableObject {
     }
 
     private func persist() {
+        guard !indexUnreadable else {
+            LLog("shapemation: not writing the index — the one on disk could not be read")
+            return
+        }
         do {
             try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
-            try encoder.encode(records).write(to: indexURL, options: .atomic)
+            // The known records, then the foreign ones, as `ShapeRegister`
+            // does. Each record goes through its own encoder first (the
+            // dates as ISO 8601 strings) and comes back as a plain value, so
+            // one list can hold both kinds.
+            let decoder = JSONDecoder()
+            var entries = try records.map { try decoder.decode(JSONValue.self, from: encoder.encode($0)) }
+            entries += foreignRecords
+            try encoder.encode(entries).write(to: indexURL, options: .atomic)
         } catch {
             LLog("shapemation: could not write the index: \(error)")
         }

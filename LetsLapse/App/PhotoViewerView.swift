@@ -295,6 +295,12 @@ struct PhotoViewerView: View {
     /// `shapes.json` for this project, or nil until a shape is drawn.
     @State private var shapeRegister: ShapeRegister?
     @State private var persistedShapeRegister: ShapeRegister?
+    /// Set when the project's `shapes.json` can be seen but not written by
+    /// this build — a newer build's, or one that would not decode
+    /// (`ShapeRegisterLock`). While set, `shapeRegister` stays nil, nothing
+    /// mints a register over the file, the ＋ Shape tool cannot arm and no
+    /// register write happens; the file travels on exactly as it came.
+    @State private var shapeRegisterLock: ShapeRegisterLock?
     /// The register shape whose handles are on the picture (exclusive with a mask).
     @State private var selectedShapeID: UUID?
     /// The + Shape tool, armed until it draws one. `LL_SHAPETOOL=ellipse|rect|square`
@@ -1074,8 +1080,16 @@ struct PhotoViewerView: View {
             // in, so a sidecar written mid-edit still opens consistent.
             overlayDocument.resolveFollows()
             persistedDocument = overlayDocument
-            shapeRegister = ShapeRegister.load(inProjectFolder: model.projectFolderURL(for: capture))
+            let shapesOutcome = ShapeRegister.read(inProjectFolder: model.projectFolderURL(for: capture))
+            shapeRegisterLock = ShapeRegisterLock(shapesOutcome)
+            shapeRegister = shapesOutcome.register
             persistedShapeRegister = shapeRegister
+            if let lock = shapeRegisterLock {
+                // `LL_SHAPETOOL` arms before the register is read; a locked
+                // project disarms it, as the menu would have refused to.
+                shapeTool = nil
+                LLog(lock.logLine(for: capture.displayTitle))
+            }
             selectedOverlayID = overlayDocument.overlays.first?.id
             importedFonts = model.importedOverlayFonts(for: capture)
             segModelIdentity = CoreMLSceneSegmenter.locate()?.identity
@@ -2149,7 +2163,7 @@ struct PhotoViewerView: View {
     /// Whether that gesture should claim the drag at all — with nothing armed
     /// the picture belongs to pan and zoom, as it always has.
     private var maskGestureWantsDrag: Bool {
-        (railTab == .masks && (maskTool != nil || shapeTool != nil))
+        (railTab == .masks && (maskTool != nil || (shapeTool != nil && shapeRegisterLock == nil)))
             || (railTab == .editor && armedMaskField != nil && supportsDragToAdjust)
     }
 
@@ -2286,8 +2300,10 @@ struct PhotoViewerView: View {
             })
     }
 
+    /// Never over a locked file: a project whose register this build cannot
+    /// fully read keeps it as it is, and every edit path above lands here.
     private func ensureShapeRegister() {
-        guard shapeRegister == nil, let capture else { return }
+        guard shapeRegister == nil, shapeRegisterLock == nil, let capture else { return }
         let folder = model.projectFolderURL(for: capture)
         let media = model.mediaURL(for: capture)
         let relative: String = media.map { url in
@@ -2303,7 +2319,7 @@ struct PhotoViewerView: View {
     /// Draws — and keeps redrawing — a register shape under a create drag,
     /// the way `continueDrawing` does for a mask.
     private func continueDrawingShape(_ kind: DetectedShape.Kind, from start: CGPoint, to end: CGPoint, in drawn: CGSize) {
-        guard drawn.width > 0, drawn.height > 0 else { return }
+        guard drawn.width > 0, drawn.height > 0, shapeRegisterLock == nil else { return }
         let native = registerFrame
         var shape: DetectedShape
         switch kind {
@@ -2341,7 +2357,7 @@ struct PhotoViewerView: View {
     }
 
     private func persistShapeRegister() {
-        guard let capture, let register = shapeRegister, register != persistedShapeRegister else { return }
+        guard shapeRegisterLock == nil, let capture, let register = shapeRegister, register != persistedShapeRegister else { return }
         do {
             // A hand-edited quad's own proportions follow its new corners —
             // the register's lens (when it has one) re-measures every quad.
@@ -2349,8 +2365,26 @@ struct PhotoViewerView: View {
             try register.save(inProjectFolder: model.projectFolderURL(for: capture))
             persistedShapeRegister = register
             model.shapeRegisterDidChange(for: capture)
-        } catch {
-            showOverlayToast("Could not save shapes: \(error.localizedDescription)")
+            // A person changed this project's shapes: stamp it edited so the
+            // write reaches PicPlace (`markEdited` → `store.update` →
+            // `persister.onProjectWritten` → `picplace.noteProjectChanged`).
+            model.markEdited(capture.id)
+        } catch let error {
+            if let lock = ShapeRegisterLock(error) {
+                // The file changed under this editor — a pull landed a newer
+                // build's register, say — and `save` left it alone. The lock
+                // stands for the rest of the session: the tools go down and
+                // what was drawn is dropped rather than written over it.
+                shapeRegisterLock = lock
+                shapeRegister = nil
+                persistedShapeRegister = nil
+                selectedShapeID = nil
+                shapeTool = nil
+                LLog(lock.logLine(for: capture.displayTitle))
+                showOverlayToast(lock.message + " — this project's shapes are read-only now")
+            } else {
+                showOverlayToast("Could not save shapes: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -2358,7 +2392,7 @@ struct PhotoViewerView: View {
     /// centre, radii and turn, the default feather — selected so its handles
     /// come up at once.
     private func useShapeAsMask(_ shape: DetectedShape) {
-        guard shape.kind == .ellipse else { return }
+        guard shape.kind == .ellipse, shapeRegisterLock == nil else { return }
         let frame = registerFrame
         let radiusX = shape.majorAxis / 2
         let radiusY = frame.height > 0 ? shape.minorAxis / 2 * Double(frame.width) / Double(frame.height) : shape.minorAxis / 2
@@ -3051,8 +3085,10 @@ struct PhotoViewerView: View {
             onGradeInEditor: { ref, inverted in openGrade(for: ref, inverted: inverted) },
             shapes: shapesBinding,
             selectedShapeID: $selectedShapeID,
-            shapeTool: $shapeTool,
+            // A locked register refuses to arm, whatever asks.
+            shapeTool: Binding(get: { shapeTool }, set: { shapeTool = shapeRegisterLock == nil ? $0 : nil }),
             squareLock: $shapeSquareLock,
+            shapeLock: shapeRegisterLock,
             shapeFrame: registerFrame,
             onShapesEdited: shapesEdited,
             onUseAsMask: useShapeAsMask,
@@ -3100,7 +3136,7 @@ struct PhotoViewerView: View {
     }
 
     private func addFound(_ found: ShapeFinder.Found) {
-        guard let find = lastFind, !addedFindIDs.contains(found.id) else { return }
+        guard let find = lastFind, !addedFindIDs.contains(found.id), shapeRegisterLock == nil else { return }
         var shape = found.shape
         shape.source = .detected
         ensureShapeRegister()

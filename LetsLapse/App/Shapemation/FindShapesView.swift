@@ -164,7 +164,7 @@ struct FindShapesView: View {
         guard !todo.isEmpty else { return }
         removedNote = nil
         showOptions = false
-        finder.run(mode: mode, candidates: todo, alreadyDone: alreadyDone, skippedVideo: skippedVideo)
+        finder.run(mode: mode, candidates: todo, alreadyDone: alreadyDone, skippedVideo: skippedVideo, in: model)
     }
 
     // MARK: - Options
@@ -267,7 +267,9 @@ struct FindShapesView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("\(alreadyDone) analysed by the current detector · \(inventory.filter { $0.isAnalysed && !$0.isCurrent }.count) by an older one · \(inventory.filter { !$0.isAnalysed }.count) never · \(skippedVideo) video shoot\(skippedVideo == 1 ? "" : "s") left out")
+            // A locked register's state is unknown, so it is neither
+            // analysed nor never: its own tally, matching the rows a scope visits.
+            Text(inventoryLine)
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -278,6 +280,15 @@ struct FindShapesView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .llCard(cornerRadius: 18)
+    }
+
+    private var inventoryLine: String {
+        let locked = inventory.filter(\.isLocked).count
+        let older = inventory.filter { $0.isAnalysed && !$0.isCurrent && !$0.isLocked }.count
+        let never = inventory.filter { !$0.isAnalysed && !$0.isLocked }.count
+        var line = "\(alreadyDone) analysed by the current detector · \(older) by an older one · \(never) never"
+        if locked > 0 { line += " · \(locked) locked" }
+        return line + " · \(skippedVideo) video shoot\(skippedVideo == 1 ? "" : "s") left out"
     }
 
     private var chooser: some View {
@@ -337,6 +348,9 @@ struct FindShapesView: View {
     }
 
     private func registerState(_ c: ShapeFinder.Candidate) -> String {
+        // A register this build cannot write says so in the row's state slot;
+        // the fuller word is the chip's, a later design-first pass.
+        if let lock = c.lock { return lock.rowState }
         if !c.isAnalysed { return c.shapeCount > 0 ? "\(c.shapeCount) drawn" : "not analysed" }
         let shapes = c.shapeCount == 0 ? "none" : "\(c.shapeCount) shape\(c.shapeCount == 1 ? "" : "s")"
         return c.isCurrent ? shapes : shapes + " · older detector"
@@ -441,6 +455,11 @@ struct FindShapesView: View {
                 }
                 if summary.unreadable > 0 {
                     Text("\(summary.unreadable) picture\(summary.unreadable == 1 ? "" : "s") could not be read.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                if summary.locked > 0 {
+                    Text("\(summary.locked) register\(summary.locked == 1 ? "" : "s") left as \(summary.locked == 1 ? "it was" : "they were"): written by a newer LetsLapse, or unreadable.")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }

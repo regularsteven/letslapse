@@ -13,7 +13,7 @@ live inline.
 
 ### Shape-mation — the developer brief: inventory, photo collections, tween framing, synthetic corpus
 
-**Raised:** 2026-09-19 · **Size:** XL (fourteen work packages) · **Status:** WP0 / WP1 / WP2 built 2026-09-19 (uncommitted), first sweeps in `docs/shapemation/alignment-report.md`; WP0b next
+**Raised:** 2026-09-19 · **Size:** XL (fourteen work packages) · **Status:** WP0 / WP1 / WP2 committed 66e201c, first sweeps in `docs/shapemation/alignment-report.md`; WP0b built 2026-09-19 (this commit — Kit reader/writer, lock, tests; chip + mirrors + hook owed, see the entry below); WP0c / WP3 next
 
 Steven's brief (`docs/shapemation/brief.md`, verbatim) turns the spike into a
 durable feature: a library-level **shape inventory** of vector outlines with
@@ -81,6 +81,52 @@ Next: WP0b (the tolerant register release), WP3 (sort by alignment against
 `sequence.approach`), WP4 (`.lapse` packaging so the app's builder sees the
 corpus). No design question until WP3's Sort row. Every UI package (WP3-UI, WP8, WP9, WP10) asks "design files
 first, app code first, or something else" and owes its mirrors.
+
+### Shape-mation WP0b — the register lock's chip, mirrors, hook and store check
+
+**Raised:** 2026-09-19 · **Size:** S+S+S+S · **Status:** owed after WP0b (Kit and model shipped 2026-09-19)
+
+WP0b made every build that carries it read past what it does not understand
+in `shapes.json` and refuse to write a register newer than it can fully read
+(`ShapeRegister.read` → `ReadOutcome`, `save` probes the disk at the write
+and throws `WriteRefused`; `App/Shapemation/ShapeRegisterLock.swift`). What
+it left for later, by Steven's decision (Kit and model first):
+
+1. **The explanatory chip — design-first.** `OverlayMasksPanel.shapesCard`
+   has the slot marked above `findRow` and binds `shapeLock`; the copy is
+   `ShapeRegisterLock.message` ("Shapes written by a newer LetsLapse" /
+   "Shapes couldn't be read"). Until it exists, ＋ Shape and the card's Find
+   button are only disabled with that text as their help, and a save refused
+   mid-session shows a toast (verified 2026-09-19 on the scratch library:
+   Find → Add all with the file swapped to version 2 underneath — bytes
+   unchanged, lock line logged, both controls greyed; the find's result rows
+   still read "Added" afterwards, which the chip pass should clear). Ask
+   design-first vs app-first as the README says.
+2. **The four mirrors.** `docs/design/macOS/photo-viewer.masks.svg` and
+   `photo-viewer.masks.shape.svg` (＋ Shape and Find greyed, the chip),
+   `docs/design/iOS/shapemation.find.portrait.svg` and `find.done` (the row
+   states "newer LetsLapse" / "unreadable", the inventory line's "· N
+   locked", the summary's "N register(s) left as it was/they were …" line).
+   Both INDEX.md rows carry the ⚠️ owed note.
+3. **A launch hook that stages a locked register.** Nothing today writes a
+   version-2 `shapes.json` on a scratch library; the verify pass hand-wrote
+   one. An `LL_SEED` variant or `LL_SHAPELOCK=toonew|unreadable` that stamps
+   the seeded project's register would make the chip photographable and the
+   sha256 before/after check repeatable.
+4. **The Gallery's SHAPES rows on a locked project.** `ShapeSummaryIndex`
+   drops a `.tooNew` / `.unreadable` register (`refreshShapeSummaries`
+   `continue`s), so the project lists under "No Shapes", whose caption
+   promises a shape can be drawn on it. Carry the lock into `ShapeSummary`
+   (or a `locked` flag beside the counts) so the rows can leave it out or
+   say why. The index itself no longer stamps a locked register, so its
+   zeros are re-counted the day the build catches up.
+5. **`ShapemationStore`'s foreign-record carry** (`foreignRecords`,
+   `indexUnreadable`) is tested by compile only — no fixture, and no
+   runtime check against an index a newer build wrote. With
+   `indexUnreadable` set, `add` keeps the record in memory and `persist`
+   refuses with a log line, so a rendered Shape-mation's mp4 and poster
+   exist with no row after the next launch; surface it (a Bool from `add`,
+   or a sidecar the next readable load folds in).
 
 ### Auto apply — the SVG mirrors, after sign-off
 

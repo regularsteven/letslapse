@@ -5,6 +5,33 @@ import CoreGraphics
 // written by "Find shapes" and by hand in the Masks tab, read by the
 // Shape-mation builder. One list for both: a shape drawn by hand shows up in
 // the builder at once, and a found shape can be corrected or removed.
+//
+// The file travels byte-for-byte between devices (PicPlace, .lapse, device
+// transfer), and the devices do not all run the same build. So every build
+// that carries this reader keeps what it does not understand, and refuses
+// to write what it cannot fully read. The rule for `ShapeRegister.
+// formatVersion`: bump it ONLY for a change an older build would LOSE by
+// re-encoding the file — a changed meaning of an existing key, a new key a
+// reader must have. A new element kind in `shapes[]` or a new top-level key
+// needs no bump: an older build decodes them as `JSONValue` into
+// `foreignShapes` / `foreignFields` and writes them back out untouched. A
+// build that meets a `version` above its own `formatVersion` answers
+// `.tooNew` from `read` and must not write the file — the shape tools and
+// Find shapes stand down for that project and say so; never edit-and-lose.
+// (A new key INSIDE a known shape is not carried — `DetectedShape` keeps
+// only what it names — so if losing one would matter, that is a bump.)
+// Three more things the carry-through does NOT promise, for whoever adds the
+// first new kind: a new VALUE of an existing enum is a bump too — a new
+// `source` on a known kind makes the whole element foreign (kept, hidden,
+// no longer seen by Find shapes' dedupe), and a new `representative.source`
+// fails the full decode, so the file locks as `.unreadable`, not `.tooNew`;
+// the order of `shapes[]` is not kept across known and foreign elements
+// (the known ones come first on encode — refer to a shape by `id`, never
+// by position); and every number passes through a Double, so an integer
+// above 2^53 does not survive an older build's re-encode — no 64-bit
+// integer fields. A file this build writes is stamped with its own
+// `formatVersion`, whatever version it was read at: a newer build that
+// re-saves an older file marks it as its own even when it added nothing.
 
 /// One shape in a project's representative frame. Geometry is normalised to
 /// that frame (origin top-left; axes as fractions of its width) so it maps to
@@ -94,6 +121,8 @@ public struct DetectedShape: Codable, Identifiable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        // Strict on purpose: a kind this build does not know throws here, and
+        // that throw is what routes the element into `ShapeRegister.foreignShapes`.
         kind = try c.decode(Kind.self, forKey: .kind)
         centre = try c.decode(CGPoint.self, forKey: .centre)
         majorAxis = try c.decode(Double.self, forKey: .majorAxis)
@@ -297,7 +326,16 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
         }
     }
 
-    public var version: Int = 1
+    /// What this build writes into `version`, and the highest it will read
+    /// and write back. The rule for bumping it is in the header. 1: the
+    /// format as it stands (unchanged this release — carrying foreign
+    /// shapes and keys is what this reader does, not a format change).
+    public static let formatVersion = 1
+
+    /// The `version` the file was read at (`formatVersion` for a register
+    /// minted here). `save` writes `formatVersion`, not this: a file this
+    /// build wrote is this build's format.
+    public var version: Int = ShapeRegister.formatVersion
     public var detectorVersion: Int
     /// When Find shapes last ran on this project — nil for a register that only
     /// holds hand-drawn shapes, which Find shapes will still visit.
@@ -311,6 +349,14 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
     /// Why analysis produced nothing usable, when it did (kept so "Find shapes"
     /// does not retry a project whose picture cannot be read).
     public var failure: String?
+    /// Elements of `shapes[]` this build could not read as a `DetectedShape`
+    /// — a kind a newer build writes — kept as they were read and written
+    /// back after the known shapes. Never shown, never counted, never
+    /// re-measured; just not lost. Nothing here means the file is all ours.
+    public var foreignShapes: [JSONValue] = []
+    /// Top-level keys this build does not name, kept the same way and written
+    /// back under their own names.
+    public var foreignFields: [String: JSONValue] = [:]
 
     public init(detectorVersion: Int = ShapeRegister.currentDetectorVersion, analysedAt: Date? = Date(),
                 representative: Representative, shapes: [DetectedShape], failure: String? = nil) {
@@ -318,19 +364,74 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
         self.representative = representative; self.shapes = shapes; self.failure = failure
     }
 
-    private enum CodingKeys: String, CodingKey {
+    /// The keys this build owns. Anything else in the file is a foreign field.
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case version, detectorVersion, analysedAt, representative, shapes, failure, viewfinder
     }
 
+    /// The register as this build understands it, plus everything it does not
+    /// (`foreignShapes`, `foreignFields`) so that `save` writes the whole file
+    /// back. A `shapes[]` element that fails as a `DetectedShape` for ANY
+    /// reason — an unknown kind, a missing centre — is kept as JSON rather than
+    /// failing the register: the known shapes keep their order among
+    /// themselves, the foreign ones follow them on encode.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
         detectorVersion = try c.decodeIfPresent(Int.self, forKey: .detectorVersion) ?? 0
         analysedAt = try c.decodeIfPresent(Date.self, forKey: .analysedAt)
         representative = try c.decode(Representative.self, forKey: .representative)
-        shapes = try c.decodeIfPresent([DetectedShape].self, forKey: .shapes) ?? []
         failure = try c.decodeIfPresent(String.self, forKey: .failure)
         viewfinder = try c.decodeIfPresent(ViewfinderTrail.self, forKey: .viewfinder)
+
+        var known: [DetectedShape] = []
+        var foreign: [JSONValue] = []
+        if c.contains(.shapes), !(try c.decodeNil(forKey: .shapes)) {
+            var elements = try c.nestedUnkeyedContainer(forKey: .shapes)
+            while !elements.isAtEnd {
+                // An unkeyed container only moves on when a decode succeeds, so a
+                // failed `DetectedShape` leaves the cursor on the element and the
+                // `JSONValue` decode takes it — which always succeeds on JSON.
+                if let shape = try? elements.decode(DetectedShape.self) {
+                    known.append(shape)
+                } else {
+                    foreign.append(try elements.decode(JSONValue.self))
+                }
+            }
+        }
+        shapes = known
+        foreignShapes = foreign
+
+        let owned = Set(CodingKeys.allCases.map(\.stringValue))
+        let any = try decoder.container(keyedBy: AnyCodingKey.self)
+        var fields: [String: JSONValue] = [:]
+        for key in any.allKeys where !owned.contains(key.stringValue) {
+            fields[key.stringValue] = try any.decode(JSONValue.self, forKey: key)
+        }
+        foreignFields = fields
+    }
+
+    /// The known keys as they have always been written — `version` as this
+    /// build's `formatVersion`, whatever the file was read at; `shapes` as
+    /// the known shapes followed by the foreign ones; then each foreign
+    /// field under its own key. A register with nothing foreign writes
+    /// exactly the keys it always has — `foreignShapes` and `foreignFields`
+    /// never appear by name.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(Self.formatVersion, forKey: .version)
+        try c.encode(detectorVersion, forKey: .detectorVersion)
+        try c.encodeIfPresent(analysedAt, forKey: .analysedAt)
+        try c.encode(representative, forKey: .representative)
+        try c.encodeIfPresent(failure, forKey: .failure)
+        try c.encodeIfPresent(viewfinder, forKey: .viewfinder)
+        var elements = c.nestedUnkeyedContainer(forKey: .shapes)
+        for shape in shapes { try elements.encode(shape) }
+        for shape in foreignShapes { try elements.encode(shape) }
+        if !foreignFields.isEmpty {
+            var any = encoder.container(keyedBy: AnyCodingKey.self)
+            for (key, value) in foreignFields { try any.encode(value, forKey: AnyCodingKey(key)) }
+        }
     }
 
     /// A register that has never been through Find shapes — a home for shapes drawn by hand.
@@ -358,15 +459,65 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
         folder.appendingPathComponent(fileName, isDirectory: false)
     }
 
+    /// What a project folder's `shapes.json` turned out to be. A writer
+    /// switches on this: only `.register` (and `.none`, minting a fresh one)
+    /// may be followed by a `save`; `.tooNew` and `.unreadable` must leave
+    /// the file alone and say so.
+    public enum ReadOutcome: Sendable {
+        /// No file — the project has never had shapes.
+        case none
+        /// Read in full: every shape this build knows, and everything it does not kept aside.
+        case register(ShapeRegister)
+        /// Written by a build with a `formatVersion` above ours; the full decode
+        /// was never attempted. Refuse to write — see the header.
+        case tooNew(version: Int)
+        /// A file at our version (or none) that would not decode — the error's description.
+        case unreadable(String)
+
+        /// The register for readers, nil for anything that is not one.
+        public var register: ShapeRegister? {
+            if case .register(let r) = self { return r }
+            return nil
+        }
+    }
+
+    /// The register as `read` finds it. Readers may use this; a writer must
+    /// use `read` and switch on the outcome — nil here is "nothing readable",
+    /// which a writer must not mistake for "nothing there" (`.tooNew` and
+    /// `.unreadable` both land here, and minting a fresh register over either
+    /// loses the file).
     public static func load(inProjectFolder folder: URL) -> ShapeRegister? {
+        read(inProjectFolder: folder).register
+    }
+
+    /// The `version` of a file's bytes, looked at alone: nil for a register
+    /// written before `version` existed (version 1), a throw for bytes that
+    /// are not a JSON object at all. What `read` and `save` both ask first.
+    private static func probeVersion(_ data: Data) throws -> Int? {
+        struct Probe: Decodable { var version: Int? }
+        return try JSONDecoder().decode(Probe.self, from: data).version
+    }
+
+    /// The only door into a project's `shapes.json`. Looks at `version` alone
+    /// first, so a file from a newer build is answered `.tooNew` without the
+    /// full decode (whose failure would be expected and uninformative).
+    public static func read(inProjectFolder folder: URL) -> ReadOutcome {
         let url = url(inProjectFolder: folder)
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard FileManager.default.fileExists(atPath: url.path) else { return .none }
+        let data: Data
+        do { data = try Data(contentsOf: url) } catch { return .unreadable(String(describing: error)) }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard var register = try? decoder.decode(ShapeRegister.self, from: data) else { return nil }
+        // A register written before `version` existed is version 1.
+        if let version = try? probeVersion(data), version > formatVersion {
+            return .tooNew(version: version)
+        }
+        var register: ShapeRegister
+        do { register = try decoder.decode(ShapeRegister.self, from: data) } catch { return .unreadable(String(describing: error)) }
         // Registers written before `wide` existed: re-measure quads from their
         // corners; and where the lens is known, quads written before
-        // `rectifiedAspect` existed get theirs worked out now.
+        // `rectifiedAspect` existed get theirs worked out now. Known shapes
+        // only — a foreign element is never touched.
         if register.frameSize.width > 0 {
             register.shapes = register.shapes.map { shape in
                 guard shape.kind == .quad else { return shape }
@@ -375,21 +526,55 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
                 return s
             }
         }
-        return register
+        return .register(register)
     }
 
     /// Every quad's `rectifiedAspect` worked out (or re-worked) against this
-    /// register's lens and frame — for a register about to be written.
+    /// register's lens and frame — for a register about to be written. Known
+    /// shapes only; `foreignShapes` ride along as they are.
     public func rectifyingQuads() -> ShapeRegister {
         var r = self
         r.shapes = shapes.map { $0.kind == .quad ? $0.rectified(horizontalFieldOfView: representative.horizontalFieldOfView, frame: frameSize) : $0 }
         return r
     }
 
+    /// Why `save` left the file alone: what was on disk AT THE WRITE was not
+    /// this build's to overwrite. A writer that read `.register` may still
+    /// meet this — the viewer reads once at open, Find shapes once per
+    /// project, and a PicPlace pull can land a newer build's file in
+    /// between — so it is the lock again, raised where the bytes go.
+    public enum WriteRefused: Error, LocalizedError, Equatable, Sendable {
+        /// The file on disk (or the register itself) is above `formatVersion`.
+        case tooNew(version: Int)
+        /// The file on disk is not a JSON object this build can look at.
+        case unreadable(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .tooNew(let version): return "shapes.json is version \(version); this build writes up to \(ShapeRegister.formatVersion)"
+            case .unreadable(let why): return "shapes.json on disk could not be read: \(why)"
+            }
+        }
+    }
+
+    /// Writes the whole file — known and foreign alike — as this build's
+    /// `formatVersion`. The rule in the header made unskippable, at the one
+    /// place the bytes are written: the file on disk is probed NOW, not as
+    /// it was read, and a version above ours (`WriteRefused.tooNew`) or bytes
+    /// that are no JSON object (`.unreadable`) leave it exactly as it is. A
+    /// register whose own `version` is above ours is refused the same way,
+    /// so a struct built by hand cannot slip past either.
     public func save(inProjectFolder folder: URL) throws {
+        guard version <= Self.formatVersion else { throw WriteRefused.tooNew(version: version) }
+        let url = Self.url(inProjectFolder: folder)
+        if FileManager.default.fileExists(atPath: url.path) {
+            let onDisk: Int?
+            do { onDisk = try Self.probeVersion(try Data(contentsOf: url)) } catch { throw WriteRefused.unreadable(String(describing: error)) }
+            if let onDisk, onDisk > Self.formatVersion { throw WriteRefused.tooNew(version: onDisk) }
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(self).write(to: Self.url(inProjectFolder: folder), options: .atomic)
+        try encoder.encode(self).write(to: url, options: .atomic)
     }
 }

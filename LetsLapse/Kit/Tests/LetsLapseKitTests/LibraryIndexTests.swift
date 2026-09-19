@@ -474,6 +474,41 @@ final class LibraryIndexTests: XCTestCase {
         XCTAssertEqual(try rows([.ellipse]), [id(3)])
     }
 
+    /// A register this build may not read — a newer build's, or corrupt —
+    /// counts zero and is NOT stamped, so it is counted again the day a
+    /// build that can read it arrives (the file's date never moves on its
+    /// own; a stamp would have kept the zeros for good).
+    func testLockedRegisterCountsZeroAndIsNotStamped() throws {
+        let one = try writeProject(1, created: 100)
+        let two = try writeProject(2, created: 200)
+        let representative = """
+            "representative": {"relativePath": "source/frame-1.dng", "source": "sourceFrame", "width": 1000, "height": 1000}
+            """
+        let ellipse = """
+            {"kind": "ellipse", "centre": [0.5, 0.5], "majorAxis": 0.4, "minorAxis": 0.4, "source": "manual"}
+            """
+        try Data("""
+            {"version": \(ShapeRegister.formatVersion + 1), "detectorVersion": 2, \(representative), "shapes": [\(ellipse)]}
+            """.utf8).write(to: ShapeRegister.url(inProjectFolder: one))
+        try Data("{\"version\": 1, \"shapes\": [".utf8).write(to: ShapeRegister.url(inProjectFolder: two))
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        var query = LibraryIndex.ProjectQuery(); query.shapes = [.none]; query.ascending = true
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(1), id(2)], "no shapes this build can count")
+        query.shapes = [.ellipse]
+        XCTAssertEqual(try index.projectIDs(query), [])
+        XCTAssertNil(index.shapesIndexedAt(projectID: uuid(1)), "too new: not stamped")
+        XCTAssertNil(index.shapesIndexedAt(projectID: uuid(2)), "unreadable: not stamped")
+        // The build catches up (here: the file becomes readable) — the next
+        // re-count, which the missing stamp invites, finds the shape.
+        try Data("""
+            {"version": \(ShapeRegister.formatVersion), "detectorVersion": 2, \(representative), "shapes": [\(ellipse)]}
+            """.utf8).write(to: ShapeRegister.url(inProjectFolder: one))
+        try index.reindexShapes(projectID: uuid(1), inProjectFolder: one)
+        XCTAssertEqual(try index.projectIDs(query), [uuid(1)])
+        XCTAssertNotNil(index.shapesIndexedAt(projectID: uuid(1)))
+    }
+
     func testWithBlendsAndOriginLookup() throws {
         try writeProject(1, created: 100, blends: 1)
         try writeProject(2, created: 200)
