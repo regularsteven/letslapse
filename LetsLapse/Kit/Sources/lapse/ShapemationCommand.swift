@@ -10,7 +10,10 @@ import LetsLapseKit
 // own shape factories; `plan` lays them out with the same
 // `ShapemationPlan.make` the builder calls; `score` pushes each scene's truth
 // through its placement and reports how far the perturbed register missed.
-// Never decodes a pixel: sizes come from the manifest and the register.
+// `pack` and `render` are the doors out (WP4): a staged project (with
+// `--project`, a real Photo project) as a `.lapse` the app imports, and the
+// plan as the clip the builder would write. Only `render` decodes a pixel:
+// every other size comes from the manifest and the register.
 
 /// `text` padded with spaces to `width` columns (never cut).
 func padded(_ text: String, _ width: Int) -> String {
@@ -266,7 +269,7 @@ func printShapemationDropped(_ dropped: [ShapemationDroppedJSON], say: (String) 
 
 // MARK: - stage
 
-func runShapemationStage(scenes: [String], out: String, link: Bool) throws {
+func runShapemationStage(scenes: [String], out: String, link: Bool, project writeProject: Bool) throws {
     let fm = FileManager.default
     let outURL = URL(fileURLWithPath: out, isDirectory: true)
     var manifests: [URL] = []
@@ -298,44 +301,24 @@ func runShapemationStage(scenes: [String], out: String, link: Bool) throws {
         guard seen == manifest.frameSize else {
             fail("\(manifest.set)/\(manifest.id): frame.jpg reads as \(Int(seen.width))×\(Int(seen.height)) (orientation applied), the manifest says \(manifest.frame.width)×\(manifest.frame.height)")
         }
-        let project = outURL.appendingPathComponent(manifest.set, isDirectory: true).appendingPathComponent(manifest.id, isDirectory: true)
-        let source = project.appendingPathComponent("source", isDirectory: true)
-        try fm.createDirectory(at: source, withIntermediateDirectories: true)
-
-        // The picture: a copy, or a hard link when the corpus is large and
-        // the staging area sits on the same volume.
-        let frame = source.appendingPathComponent("frame.jpg")
-        if fm.fileExists(atPath: frame.path) { try fm.removeItem(at: frame) }
-        if link { try fm.linkItem(at: frameURL, to: frame) } else { try fm.copyItem(at: frameURL, to: frame) }
-
-        // The register: what the pipeline is given is the perturbed outline,
-        // through the Kit's own factories — the one code path.
-        let shape: DetectedShape
-        do { shape = try SceneManifest.makeShape(manifest.perturbed, frame: manifest.frameSize) } catch {
-            fail("\(manifest.set)/\(manifest.id): perturbed geometry — \(error)")
-        }
-        var register = ShapeRegister.manual(representative: ShapeRegister.Representative(
-            relativePath: "source/frame.jpg", source: .sourceFrame, width: manifest.frame.width, height: manifest.frame.height))
-        register.shapes = [shape]
-        try register.save(inProjectFolder: project)
-
-        // The truth travels with the project.
-        let copied = SceneManifest.url(inProjectFolder: project)
-        if fm.fileExists(atPath: copied.path) { try fm.removeItem(at: copied) }
-        try fm.copyItem(at: manifestURL, to: copied)
-
-        // Acceptance (§3): the register loads back through the app's own door
-        // with the FAMILY the scene intended — the kind is what `makeShape`
-        // just set, the family is what `--family` will later admit or drop.
         let label = "\(manifest.set)/\(manifest.id)"
-        guard let back = ShapeRegister.load(inProjectFolder: project) else {
-            fail("\(project.path): the register did not load back")
+        let staged: ShapemationStaging.Staged
+        do {
+            staged = try ShapemationStaging.stage(manifestURL: manifestURL, into: outURL, link: link, project: writeProject)
+        } catch let error as SceneManifest.GeometryError {
+            fail("\(label): perturbed geometry — \(error)")
+        } catch let error as ShapemationStaging.Failure {
+            fail(error.description)
         }
-        guard back.shapes.count == 1, back.shapes[0].kind.rawValue == manifest.perturbed.kind.rawValue else {
-            fail("\(project.path): the register loaded back with \(back.shapes.count) shape(s) of kind \(back.shapes.first?.kind.rawValue ?? "none"), wanted one \(manifest.perturbed.kind.rawValue)")
+        // Acceptance (§3): the register loaded back through the app's own
+        // door with one shape of the kind the manifest set; the FAMILY is
+        // what `--family` will later admit or drop.
+        let family = staged.family
+        if let id = staged.projectID {
+            print("\(label) \(family.rawValue) \(id.uuidString)")
+        } else {
+            print("\(label) \(family.rawValue)")
         }
-        let family = back.shapes[0].family
-        print("\(label) \(family.rawValue)")
         if family != manifest.subject.family {
             printErr("\(label): loaded back as \(family.rawValue), the scene intended \(manifest.subject.family.rawValue)")
             wrongFamily += 1
@@ -431,20 +414,117 @@ func runShapemationScore(projects: [String], mode: ShapemationMode, family: Dete
     say(score.summaryLine(dropped: dropped.count))
 }
 
-func runShapemation(subcommand: String, args: [String], out: String?, link: Bool, mode: ShapemationMode,
-                    family: DetectedShape.Family?, sort: ShapemationSort, jsonPath: String?) throws {
+// MARK: - pack
+
+/// The capture id a project folder's document names — the archive's name.
+func shapemationProjectID(inFolder folder: URL) throws -> UUID {
+    let url = ProjectDocumentFormat.url(inProjectFolder: folder)
+    let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+    guard let capture = object?["capture"] as? [String: Any], let text = capture["id"] as? String, let id = UUID(uuidString: text) else {
+        throw LapseError.writerFailed("\(url.path) names no capture id")
+    }
+    return id
+}
+
+/// One `<id>.lapse` per project: the folder's contents archived in place
+/// — `project.json` at the root as the manifest the installer reads, the
+/// way `AppModel.exportProject` writes one — so the app's `.lapse` door
+/// (a double-click, `LL_IMPORT_ARCHIVE`) installs it, minting a fresh id
+/// and keeping this one as `importedFromID`/`originID`.
+func runShapemationPack(projects: [String], out: String) throws {
+    let outURL = URL(fileURLWithPath: out, isDirectory: true)
+    try FileManager.default.createDirectory(at: outURL, withIntermediateDirectories: true)
+    for path in projects {
+        let folder = URL(fileURLWithPath: path, isDirectory: true)
+        guard FileManager.default.fileExists(atPath: ProjectDocumentFormat.url(inProjectFolder: folder).path) else {
+            fail("\(shapemationLabel(for: folder)) has no \(ProjectFileRegistry.projectDocumentName) — stage it with --project first")
+        }
+        let id = try shapemationProjectID(inFolder: folder)
+        let archive = outURL.appendingPathComponent("\(id.uuidString).lapse")
+        try DirectoryArchive.write(contentsOf: folder, to: archive)
+        print(archive.path)
+    }
+}
+
+// MARK: - render
+
+/// `1s` / `0.5s` / `3f` — a hold as the CLI spells it.
+func shapemationHold(_ text: String) -> ShapemationTiming.Hold? {
+    if text.hasSuffix("s"), let seconds = Double(text.dropLast()), seconds > 0 { return .seconds(seconds) }
+    if text.hasSuffix("f"), let frames = Int(text.dropLast()), frames > 0 { return .frames(frames) }
+    return nil
+}
+
+/// The output size for a plan: the first of the plan's own options whose
+/// long edge fits `longEdge`, else the canvas scaled to it — even sides,
+/// and never past 4096 on a side, which is as much as the H.264 writer takes.
+func shapemationOutputSize(plan: ShapemationPlan, longEdge: Double) -> CGSize {
+    let cap = min(longEdge, 4096)
+    if let fit = plan.outputOptions().first(where: { max($0.size.width, $0.size.height) <= cap }) { return fit.size }
+    let canvas = plan.canvas.size
+    let s = cap / max(canvas.width, canvas.height)
+    let scaled = CGSize(width: canvas.width * s, height: canvas.height * s)
+    return CGSize(width: max(2, floor(scaled.width / 2) * 2), height: max(2, floor(scaled.height / 2) * 2))
+}
+
+/// The clip: `plan`'s layout through `ShapemationRenderer` with the
+/// Timing step's answer, every representative decoded as it reads.
+func runShapemationRender(projects: [String], out: String, mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort,
+                          timing: ShapemationTiming, longEdge: Double, jsonPath: String?) throws {
+    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort)
+    if let jsonPath { try writeShapemationJSON(shapemationPlanJSON(context), to: jsonPath) }
+    printShapemationPlanHeader(context, say: { printErr($0) })
+    printShapemationDropped(context.dropped, say: { printErr($0) })
+    guard let plan = context.plan else { fail("nothing to render — the plan placed no project") }
+    let items = context.placedItems
+    let outputSize = shapemationOutputSize(plan: plan, longEdge: longEdge)
+    printErr("  \(timing.summary) · \(timing.estimate(count: items.count)) · output \(Int(outputSize.width))×\(Int(outputSize.height))")
+
+    let renderer = ShapemationRenderer()
+    renderer.timing = timing
+    let url = URL(fileURLWithPath: out)
+    let load: ShapemationRenderer.ImageLoader = { item in
+        let long = Int(max(item.pixelSize.width, item.pixelSize.height))
+        guard let image = OrientedDecode.cgImage(url: item.imageURL, maxPixelSize: max(1, long)) else {
+            throw LapseError.writerFailed("\(item.title): could not decode \(item.imageURL.path)")
+        }
+        return image
+    }
+    _ = try renderer.render(plan: plan, items: items, outputSize: outputSize, to: url, load: load, progress: { p in
+        FileHandle.standardError.write(Data("\rrendering… \(p.done)/\(p.total)\(p.done >= p.total ? "\n" : " \(p.title)")".utf8))
+    })
+    let frames = timing.totalFrames(count: items.count)
+    print(String(format: "%@ · %d frames · %.2f s · %d×%d", url.path, frames, timing.totalSeconds(count: items.count),
+                 Int(outputSize.width), Int(outputSize.height)))
+}
+
+func runShapemation(subcommand: String, args: [String], out: String?, link: Bool, project: Bool, mode: ShapemationMode,
+                    family: DetectedShape.Family?, sort: ShapemationSort?, timing: ShapemationTiming, longEdge: Double,
+                    jsonPath: String?) throws {
     switch subcommand {
     case "stage":
         guard let out else { fail("shapemation stage needs --out <projects-dir>") }
         guard !args.isEmpty else { fail("shapemation stage needs a scenes directory") }
-        try runShapemationStage(scenes: args, out: out, link: link)
+        try runShapemationStage(scenes: args, out: out, link: link, project: project)
     case "plan":
         guard !args.isEmpty else { fail("shapemation plan needs at least one project folder") }
-        try runShapemationPlan(projects: args, mode: mode, family: family, sort: sort, jsonPath: jsonPath)
+        try runShapemationPlan(projects: args, mode: mode, family: family, sort: sort ?? .largestFirst, jsonPath: jsonPath)
     case "score":
         guard !args.isEmpty else { fail("shapemation score needs at least one project folder") }
-        try runShapemationScore(projects: args, mode: mode, family: family, sort: sort, jsonPath: jsonPath)
+        try runShapemationScore(projects: args, mode: mode, family: family, sort: sort ?? .largestFirst, jsonPath: jsonPath)
+    case "pack":
+        guard let out else { fail("shapemation pack needs --out <dir>") }
+        guard !args.isEmpty else { fail("shapemation pack needs at least one project folder") }
+        try runShapemationPack(projects: args, out: out)
+    case "render":
+        guard let out else { fail("shapemation render needs --out <clip.mp4>") }
+        guard !args.isEmpty else { fail("shapemation render needs at least one project folder") }
+        // `.captureOrder` keeps the order given (the CLI never reads createdAt):
+        // a staged sequence's zero-padded ids glob in approach order, so the
+        // default plays them as shot.
+        try runShapemationRender(projects: args, out: out, mode: mode, family: family, sort: sort ?? .captureOrder,
+                                 timing: timing, longEdge: longEdge, jsonPath: jsonPath)
     default:
-        fail("shapemation needs stage | plan | score, not '\(subcommand)'")
+        fail("shapemation needs stage | plan | score | pack | render, not '\(subcommand)'")
     }
 }

@@ -13,7 +13,7 @@ live inline.
 
 ### Shape-mation — the developer brief: inventory, photo collections, tween framing, synthetic corpus
 
-**Raised:** 2026-09-19 · **Size:** XL (fourteen work packages) · **Status:** WP0 / WP1 / WP2 committed 66e201c, first sweeps in `docs/shapemation/alignment-report.md`; WP0b built 2026-09-19 (this commit — Kit reader/writer, lock, tests; chip + mirrors + hook owed, see the entry below); WP0c / WP3 next
+**Raised:** 2026-09-19 · **Size:** XL (fourteen work packages) · **Status:** WP0 / WP1 / WP2 committed 66e201c, first sweeps in `docs/shapemation/alignment-report.md`; WP0b committed 6e64237 (Kit reader/writer, lock, tests; chip + mirrors + hook owed, see the entry below); 2026-09-19 evening: the corpus is Steven's scene kit `docs/design/kit` (b46fc48 — the first agent missed it and drew its own tram; `tools/shapesynth/parts/` + `compose.py` deleted, `kit.py` reads the kit), WP4 built (`stage --project` · `pack` · `render`, `ShapemationStaging` + `StandaloneProject`), 60 kit scenes + a σ_centre 0.05 twin staged, scored (σ = 0 all zeros, dropped 0) and rendered, 12 packages imported and built in the app — the addendum atop `alignment-report.md`; uncommitted; WP0c / WP3 next
 
 Steven's brief (`docs/shapemation/brief.md`, verbatim) turns the spike into a
 durable feature: a library-level **shape inventory** of vector outlines with
@@ -67,19 +67,21 @@ WP0 — `DetectedShape.bounds(in:)` / `margins(in:)`, `bounds(of:)` retired,
 `ShapemationSort.captureOrder` ("Capture order"; the legacy "newestFirst"
 still decodes — the Shape-mation index is `try?`-decoded as a whole and
 would have emptied) with the builder on the Kit's rule; WP1 —
-`tools/shapesynth/` (SVG parts → `rsvg-convert` → JPEG, truth + three-dial
-perturbation, sweeps with the σ = 0 and orientation-6 acceptances, 123
-self-checks); WP2 — `lapse shapemation stage | plan | score` over
+`tools/shapesynth/` (the kit's compositions → `rsvg-convert` → JPEG, truth + three-dial
+perturbation, sweeps with the σ = 0 and orientation-6 acceptances, 915
+self-checks since the kit); WP2 — `lapse shapemation stage | plan | score` over
 `Kit/Shapes/ShapemationScore.swift` (`SceneManifest`, the one code path
-through the factories and `ShapemationPlan.make`), 6 tests. The contract is
+through the factories and `ShapemationPlan.make`), 6 tests; WP4 —
+`stage --project | pack | render` (`ShapemationStaging`, `StandaloneProject`,
+`ShapemationStageTests`), the corpus in the app's builder. The contract is
 `docs/shapemation/synthetic-corpus.md`; the first run's numbers and their
 reading are `docs/shapemation/alignment-report.md` — σ = 0 places every
 scene at float noise, each dial lands 1 : 1 in its own residual, nothing is
 ever dropped, and the 2 % break-point rule only sees the centre axis, so
 the per-axis drawing tolerances still need a viewing over rendered σ sets.
-Next: WP0b (the tolerant register release), WP3 (sort by alignment against
-`sequence.approach`), WP4 (`.lapse` packaging so the app's builder sees the
-corpus). No design question until WP3's Sort row. Every UI package (WP3-UI, WP8, WP9, WP10) asks "design files
+Mixed scenes (2026-09-19, later): 40 `mixed.random` recipes appended to the kit, two 100-photo pools
+(`--pool`, `select --where`) planned, scored and rendered — `docs/shapemation/mixed-scenes-report.md`: face pinned, but the angle strobes, the crop intersection collapses (128 × 226 px, never nil) and the smallest face stamps the near photos; WP2/3 score counters, WP4b scale rule, WP6/WP7 acceptance corpora and WP10 d's viewpoint field named there.
+Next: WP0c, WP3 (sort by alignment against `sequence.approach`). No design question until WP3's Sort row. Every UI package (WP3-UI, WP8, WP9, WP10) asks "design files
 first, app code first, or something else" and owes its mirrors.
 
 ### Shape-mation WP0b — the register lock's chip, mirrors, hook and store check

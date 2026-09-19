@@ -336,14 +336,8 @@ public struct LightroomMigration {
         }
 
         // The asset record.
-        var record = AssetRecord(name: name)
-        record.bytes = Int64((try? copy.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        record.hash = try AssetHash.sha256(of: copy)
-        record.hashedAt = now
-        record.imported = imported.isEmpty ? nil : imported
-        record.importedSource = MetadataReader.sourceCatalogue
-        record.importedAt = now
-        try AssetRecords.append(record, to: AssetRecords.url(inProjectFolder: folder))
+        try StandaloneProject.recordAsset(name: name, file: copy, imported: imported, importedSource: MetadataReader.sourceCatalogue,
+                                          now: now, inProjectFolder: folder)
         if !imported.isEmpty {
             var metadata = ProjectMetadata()
             metadata.imported = imported
@@ -355,31 +349,22 @@ public struct LightroomMigration {
         // The project document.
         let created = imported.capturedDate ?? image.captureTime.flatMap { AssetMetadata.parseISO8601(isoCaptureTime($0)) }
             ?? (try? source.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? now
-        var capture: [String: Any] = [
-            "id": id.uuidString, "originID": id.uuidString,
-            "kind": isVideo ? "video" : "photos",
-            "createdAt": FrameTimestamps.string(from: created),
-            "addedAt": FrameTimestamps.string(from: now),
-            "originalName": image.fileName,
-            "mode": isVideo ? "Import" : "Photo · Imported",
-            "sourceFileNames": [name],
-        ]
-        if let width = imported.dimensions?.width, let height = imported.dimensions?.height {
-            capture["sourceWidth"] = width
-            capture["sourceHeight"] = height
-        }
-        if let keywords = imported.keywords, !keywords.isEmpty { capture["sceneTags"] = keywords }
+        var adjustments: [String: Any]?
         if !isVideo, let sidecar = try? LightroomSidecar.read(forRawFile: copy) {
             let grade = LightroomImport.map(sidecar)
             if !grade.adjustments.isEmpty {
-                var adjustments: [String: Any] = ["v": 2]
-                for (key, value) in grade.adjustments { adjustments[key] = value }
-                capture["adjustments"] = adjustments
+                var mapped: [String: Any] = ["v": 2]
+                for (key, value) in grade.adjustments { mapped[key] = value }
+                adjustments = mapped
             }
         }
-        let document: [String: Any] = ["formatVersion": ProjectDocumentFormat.current, "capture": capture, "blends": []]
-        try JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-            .write(to: ProjectDocumentFormat.url(inProjectFolder: folder), options: .atomic)
+        let capture = StandaloneProject.Capture(
+            id: id, kind: isVideo ? "video" : "photos",
+            mode: isVideo ? ProjectModes.importedVideo : ProjectModes.importedPhoto,
+            originalName: image.fileName, createdAt: created, addedAt: now, sourceFileNames: [name],
+            sourceWidth: imported.dimensions?.width, sourceHeight: imported.dimensions?.height,
+            sceneTags: imported.keywords, adjustments: adjustments)
+        try StandaloneProject.writeDocument(for: capture, inProjectFolder: folder)
         return id
     }
 

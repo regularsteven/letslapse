@@ -1,7 +1,73 @@
-# Shape-mation alignment — first synthetic run, 2026-09-19
+# Shape-mation alignment — synthetic runs
+
+> Pooled, mixed-scene run (2026-09-19, later — every scene, sky, angle, size and position at once): `mixed-scenes-report.md`.
+
+## Addendum, 2026-09-19 evening — the kit is the corpus
+
+Everything from "first synthetic run" down was measured on a **placeholder
+tram** the first agent drew itself (`tools/shapesynth/parts/subjects.py`: a
+1.0 × 0.65 body rectangle with a pantograph, flat sky and ground, one affine
+placement) because it never read Steven's scene kit at `docs/design/kit`
+(b46fc48). That kit — `build.js` composing `recipes.json` into 60
+compositions with the Prague T3 tram at five views, six skies, five scenes,
+and the face polygon, bbox, margins and 3×3 cells on every root — is the
+generator from now on; the placeholder parts and `compose.py` are deleted,
+`tools/shapesynth/kit.py` reads the kit and `shapesynth.py generate`
+rasterises it at 2× (`README.md` there). The numbers below still hold as a
+statement about the pipeline (an exact plan lands each dial 1 : 1 in its own
+residual whatever is drawn), but they are not the kit's numbers. These are:
+
+```
+cd Kit && swift build -c release --product lapse && cd ..                                   # 38 s
+tools/.venv/bin/python tools/shapesynth/shapesynth.py selftest                               # 916 passed, 0 failed
+tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit docs/design/kit --out tools/shapesynth/work/kit --sequence all --scale 2
+tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit docs/design/kit --out tools/shapesynth/work/kit --sequence city.clear.approach --scale 2 --sigma-centre 0.05 --seed 5 --set-suffix=-c05
+Kit/.build/release/lapse shapemation stage tools/shapesynth/work/kit --out tools/shapesynth/work/kit-projects --project      # 72 scenes, every one `rectangle`
+Kit/.build/release/lapse shapemation score tools/shapesynth/work/kit-projects/<set>/* --family rectangle
+```
+
+Re-scored kit sets, truth = the face bbox from the manifest, register = the
+truth (σ = 0) staged through the Kit factories:
+
+```
+city.clear.approach       (12, left view, 3600×2400)    SHAPEMATION SCORE: placed 12 · dropped 0 · centre median 0.000 p90 0.000 max 0.000 · scale median 0.000 · rotation median 0.0° · corners rms 0.0 px
+oldtown.golden.approach   (12, portrait 2400×3600)      SHAPEMATION SCORE: placed 12 · dropped 0 · centre median 0.000 p90 0.000 max 0.000 · scale median 0.000 · rotation median 0.0° · corners rms 0.0 px
+mountains.clouds.mixed    (8, front / high / low)       SHAPEMATION SCORE: placed 8 · dropped 0 · centre median 0.000 p90 0.000 max 0.000 · scale median 0.000 · rotation median 0.0° · corners rms 0.0 px
+city.clear.approach-c05   (σ_centre 0.05, seed 5)       SHAPEMATION SCORE: placed 12 · dropped 0 · centre median 0.065 p90 0.082 max 0.101 · scale median 0.000 · rotation median 0.0° · corners rms 13.7 px
+```
+
+The c05 twin reads as the dial says it should: a per-axis σ of 0.05 is a
+radial residual with median 1.177 σ = 0.059 (twelve draws gave 0.065), the
+scale and rotation residuals stay at 0 because the offset keeps both, and
+the corner RMS is the same offset in canvas pixels (0.065 × 211 px ≈ 13.7).
+The `high` view's face (aspect 0.792, width ÷ height as the Kit judges
+it) is a `rectangle` by 0.008 — inside the old 0.05 refusal margin, now a
+printed note — and stages and scores as one; nothing was dropped in any
+of the 18 sets (60 scenes + the 12-scene twin, 72 in all).
+
+Rendered from the same staged projects (`lapse shapemation render`, capture
+order, 25 fps, 1 s each, `--size 1920`): `city.clear.approach` → 300 frames,
+12.00 s, 1920×1280 (stack) and 600×400 (`--mode crop`, the 12th photo's own
+footprint, the face at 211 px filling it); `oldtown.golden.approach` → 300
+frames, 12.00 s, 1280×1920; the c05 twin → 300 frames, 12.00 s, 1920×1278.
+Looked at: in the σ = 0 stack the tram face sits on one spot and every
+footprint edge is invisible — lane lines and skyline run straight across the
+nested layers; in the c05 stack the same layers show a jog at every edge
+(each photo is placed by its perturbed register, 7–21 canvas px off the
+anchor). The 12 `city.clear.approach` projects packed to `.lapse`, imported
+one at a time through `LL_IMPORT_ARCHIVE` on a scratch root, and the app's
+own builder (Rectangle → Any → Pick all → stack → 25 fps · 1 s → Fit 1920 →
+Create) rendered them to a 1920×1280, 300-frame clip, largest first — the
+brief's §8 loop closed on the kit's trams.
+
+---
+
+## First synthetic run, 2026-09-19 (placeholder tram — see the addendum above)
 
 WP0 / WP1 / WP2 of `gap-map.md`, built to `synthetic-corpus.md` and run the
-same day. Everything below is reproducible from `LetsLapse/`:
+same day. Everything below was reproducible from `LetsLapse/` at 66e201c;
+the placeholder generator those commands drove (`parts/`, `compose.py`,
+`--scenes`) is gone, so the tables stand as history, not a recipe:
 
 ```
 cd Kit && swift build -c release --product lapse && cd ..

@@ -4,8 +4,12 @@ The contract for the brief's §8 and §9 step 1 (`brief.md`), decided 2026-09-19
 with Steven: a Swift `lapse shapemation` subcommand in the Kit does the
 register writing, the plan and the score (one code path — the same
 `DetectedShape` factories and the same `ShapemationPlan.make` the app uses);
-Python in `tools/.venv` draws the scenes, rasterises them, runs the sweeps and
-writes the report. Work packages WP0 / WP1 / WP2 of `gap-map.md`.
+the scenes are Steven's design kit (`docs/design/kit`: `build.js` composes
+`recipes.json` into `compositions/*.svg` + `manifest.json`, the Prague T3 tram
+on a one-point-perspective road with the face polygon, margins and 3×3 cells
+already on every root — b46fc48); Python in `tools/.venv` rasterises them,
+perturbs the truth, runs the sweeps and writes the report. Work packages
+WP0 / WP1 / WP2 / WP4 of `gap-map.md`.
 
 ## 1. Coordinates, once
 
@@ -35,22 +39,29 @@ either way) and:
 ```json
 {
   "schema": 1,
-  "id": "front-0042",
-  "set": "scale-0.05",
-  "frame": { "width": 4032, "height": 3024 },
-  "subject": { "part": "tram_front", "viewpoint": "front", "scene": "day-hills-road", "family": "rectangle" },
-  "sequence": { "index": 42, "of": 100, "approach": 0.42 },
-  "truth":     { "kind": "quad", "cornersPx": [[x,y],[x,y],[x,y],[x,y]], "tiltDeg": 0, "yawDeg": 0 },
+  "id": "city.clear.approach.07",
+  "set": "city.clear.approach-c05",
+  "frame": { "width": 3600, "height": 2400 },
+  "subject": { "part": "tram-face", "viewpoint": "left", "scene": "city", "sky": "clear", "family": "rectangle" },
+  "sequence": { "index": 6, "of": 12, "approach": 0.5454 },
+  "truth":     { "kind": "quad", "cornersPx": [[1769.2,1103.4],[2208.6,1103.4],[2208.6,1734.0],[1769.2,1734.0]], "tiltDeg": 0, "yawDeg": 0 },
   "perturbed": { "kind": "quad", "cornersPx": [[x,y],[x,y],[x,y],[x,y]] },
-  "perturbation": { "sigmaScale": 0.05, "sigmaCentre": 0, "sigmaRotationDeg": 0, "seed": 4242 }
+  "perturbation": { "sigmaScale": 0, "sigmaCentre": 0.05, "sigmaRotationDeg": 0, "seed": 5 },
+  "truthPolygon": [[x,y], … 7 points],
+  "kit": { "id": "city.clear.approach.07", "margins": { "left": 0.491, "top": 0.46, "right": 0.386, "bottom": 0.278 },
+           "cells": [0,0,0, 0,0.788,0, 0,0.212,0], "cell": "mixed", "distance": 18.4, "size": 0.358, "cx": 0.518,
+           "camera": -4.5, "camH": 1.5, "track": 1.75, "vp": 0.213, "width": 1800, "height": 1200, "scale": 2,
+           "aspect": "3:2", "file": "compositions/city.clear.approach.07.svg" }
 }
 ```
 
 - `kind` is `quad` or `ellipse`. An ellipse carries `centrePx: [x, y]`,
   `semiAxesPx: [a, b]` (a ≥ b), `rotation` (radians) instead of `cornersPx`.
   Quad corners are **clockwise from top-left** (the register's order).
-- `truth` is exact — the subject part's outline quad through the placement
-  transform. `perturbed` is what the pipeline is given: the truth with the
+- `truth` is exact — the kit composition's face bbox (the manifest's
+  `face.bbox`, from the root `data-face-bbox`) × `--scale`, rotation 0, the
+  register knowing `quad` | `ellipse` only. `perturbed` is what the pipeline
+  is given: the truth with the
   three dials applied, quads perturbed **through their corners** (scale about
   the centre, then the centre offset, then the rotation about the centre) so
   a perturbed quad is still a parallelogram of the truth and its `wide` flag
@@ -64,16 +75,26 @@ either way) and:
 - `sequence.approach` ∈ [0, 1] is where the scene sits in its run — the
   subject's true scale grows monotonically with it — so a size sort or an
   alignment chain can be scored against the true order (WP3).
-- `subject.scene` names the background recipe; `subject.viewpoint` is one of
-  `left`, `right`, `front`, `above`, `below`. `subject.family` is the Kit
-  family (`circle` | `oval` | `square` | `rectangle`) the outline intends
-  under that viewpoint — what the staged register must load back as. The
-  generator refuses a scene whose truth sits within 0.05 of a family boundary
-  (seen aspect against 1.25, obliquity against 0.85: `DetectedShape.family`),
-  so a set never stages green and then drops under `--family`.
-- `placement` (optional, debugging only, never read by the Kit): how the
-  truth was made — `cx`, `cy`, `scalePx`, `tiltDeg`, `yawDeg` and the 2×3
-  placement matrix — so a scene can be checked by eye.
+- The scenes are the design kit's compositions (`docs/design/kit`,
+  `tools/shapesynth/README.md`; since 2026-09-19): `subject.scene` and
+  `subject.sky` name the kit scene and sky, `subject.part` is `tram-face`
+  and `subject.viewpoint` the kit's tram view — one of `front`, `left`,
+  `right`, `high`, `low`; the generator refuses any other. `subject.family`
+  is the Kit family (`circle` | `oval` | `square` | `rectangle`) the outline
+  intends under that viewpoint — what the staged register must load back
+  as. The family-boundary rule is two-tier (seen aspect against 1.25,
+  obliquity against 0.85: `DetectedShape.family`): a truth within 0.05 of a
+  boundary is generated with a printed note (the `high` face is a
+  `rectangle` by 0.008), and only a truth within 0.002 — where float noise
+  after the Kit's normalisation could flip it — is refused, so a set never
+  stages green and then drops under `--family`.
+- Two keys are beyond the contract: `truthPolygon` (the seven-point face in
+  frame px — the root `<polygon data-role="shape">` × scale — for the
+  brief's §2 outline inventory) and `kit` (the composition's margins,
+  cells, cell, distance, size, cx, camera, track, vp — the manifest's own
+  numbers, `scale` added, to check §5/§6 against). The Kit's
+  `SceneManifest` ignores them (no `CodingKeys`); the staged copy keeps
+  them (§3).
 
 ## 3. The staged project (Swift writes it)
 
@@ -90,16 +111,58 @@ folder it finds (recursively, by `scene.json`) into a project folder:
   scene.json            the manifest, copied — the truth travels with the project
 ```
 
-No `project.json` in this step: the CLI's `plan`/`score` read the register and
-the manifest only. Making it a real library project (`project.json`, the
-`.lapse` archive, the import door) is WP4 — see `gap-map.md`. `stage`'s
-acceptance, exit 1 on either: `frame.jpg` must read at the manifest's frame
+Without `--project` no `project.json` is written: the CLI's `plan`/`score`
+read the register and the manifest only. `stage`'s acceptance, exit 1 on
+either: `frame.jpg` must read at the manifest's frame
 size with its EXIF orientation applied (header only, no pixel decoded — an
 orientation-6 file stores the axes swapped), and the register must load back
 through `ShapeRegister.load(inProjectFolder:)` with the family the scene
 intended (`DetectedShape.family` == `subject.family`; every mismatch is
 printed as `<set>/<id>: loaded back as … , the scene intended …`). Each
-staged scene prints `<set>/<scene-id> <family>`.
+staged scene prints `<set>/<scene-id> <family>`. The manifest is copied byte
+for byte, never re-encoded, so the keys the Kit does not read (`truthPolygon`,
+`kit`) travel with the project.
+
+### 3.1 The doors out — `--project`, `pack`, `render` (WP4)
+
+`stage … --project` also writes what makes the folder a Photo project the app
+takes (`ShapemationStaging`, on the Kit's `StandaloneProject` writer — the
+same document `lapse import-lightroom` creates one of per still):
+
+```
+  project.json          {formatVersion 2, capture, blends: []} — kind "photos", mode
+                        "Photo · Imported", sourceFileNames ["source/frame.jpg"],
+                        sourceWidth/Height = the manifest's frame, a fresh id that is
+                        also originID, addedAt = now, createdAt = a date fixed per set
+                        and sequence index (one day per set drawn from its name, then a
+                        minute per index) so the builder's Capture order IS the
+                        approach order
+  assets.ndjson         the frame's record: bytes + sha256
+```
+
+and the printed line gains the id: `<set>/<scene-id> <family> <uuid>`. The folder
+keeps the `<set>/<scene-id>` layout the plan and score label by; a copy of it as
+`Projects/<id>/` is adopted by the launch walk (Phase 4 W6), and `scene.json` is
+registered in `ProjectFileRegistry` as a travelling root file (class derived) so an
+install keeps the truth.
+
+`lapse shapemation pack <project…> --out <dir>` writes one `<id>.lapse` per project
+— the folder's contents archived in place through `DirectoryArchive.write`, the
+document at the archive root as `AppModel.exportProject` does it — for the app's
+`.lapse` door (a double-click, `LL_IMPORT_ARCHIVE`), which mints a fresh id on
+install and keeps this one as `importedFromID`/`originID`. Prints each path;
+refuses a folder without a document.
+
+`lapse shapemation render <project…> --out <clip.mp4> [--mode] [--family] [--sort]
+[--fps 25] [--hold 1s|<n>f] [--ramp start[,middle],end] [--size 1920] [--json <plan>]`
+is the plan (default sort **capture** — a staged sequence is already in approach
+order) through `ShapemationRenderer` with `ShapemationTiming` from the options; the
+output is the plan's own `outputOptions()` entry that fits `--size`, else the canvas
+scaled to it, never past 4096 on a side; each representative decodes through
+`OrientedDecode`. Progress on stderr, then one line: the path, frame count, seconds
+and size. `ShapemationStageTests` covers the three: the document as the app reads
+it, the archive's file list back through `DirectoryArchive.extract`, a three-frame
+320 px render.
 
 ## 4. The plan — `lapse shapemation plan`
 
@@ -186,14 +249,16 @@ test asserts exactly that on three hand-built items
 set is the CLI's acceptance. The family matters: without one quads are
 placed by similarity (levelled and scaled), not the builder's
 `rectanglePlacement`, and a posed σ = 0 set then scores a corner residual
-the app never sees (measured 2026-09-19: 5.7 px median on a left/right/
-above/below tram set, 0 with `--family rectangle`).
+the app never sees (measured 2026-09-19 on the placeholder generator's
+posed tram set: 5.7 px median, 0 with `--family rectangle`).
 
 ## 6. The sweep and the break point (Python)
 
-`tools/shapesynth/shapesynth.py sweep --axis scale|centre|rotation|joint --values 0,0.02,0.05,0.1,0.2 --scenes 60 --seed 1 --lapse Kit/.build/release/lapse`
+`tools/shapesynth/shapesynth.py sweep --axis scale|centre|rotation|joint --values 0,0.02,0.05,0.1,0.2 [--kit docs/design/kit] [--sequence city.clear.approach|<prefix>|all] --seed 1 --lapse Kit/.build/release/lapse`
 
-generates one set per value (the other two dials at 0; `joint` moves all
+generates one set per value from the kit sequence named (`--sequence`, the
+default `city.clear.approach`; a prefix such as `single` or `all` for
+every composition) (the other two dials at 0; `joint` moves all
 three together), stages, scores — with `--family <the subject's family>`
 unless `--score-flags` names one — and collects `results.json` +
 `report.md` under `tools/shapesynth/work/<sweep-name>/`. The σ = 0 set is
@@ -243,9 +308,12 @@ becomes informative once a real detector replaces the perturbed register.
 ## 8. Where things live
 
 ```
-Kit/Sources/lapse/ShapemationCommand.swift     stage · plan · score (hand-rolled argv like framing)
-Kit/Tests/LetsLapseKitTests/ShapemationPlanScoreTests.swift
-tools/shapesynth/                               Python: parts/ (SVG fragments), compose.py, rasterise.py,
+Kit/Sources/lapse/ShapemationCommand.swift     stage · plan · score · pack · render (hand-rolled argv like framing)
+Kit/Sources/LetsLapseKit/Shapes/ShapemationStaging.swift   one scene → one project folder (+ the document with --project)
+Kit/Sources/LetsLapseKit/Library/StandaloneProject.swift   the project.json / assets.ndjson writer shared with import-lightroom
+Kit/Tests/LetsLapseKitTests/ShapemationPlanScoreTests.swift · ShapemationStageTests.swift
+docs/design/kit/                                the generator: build.js composes recipes.json → compositions/*.svg + manifest.json
+tools/shapesynth/                               Python: kit.py (reads the kit, writes the manifests), rasterise.py,
                                                 perturb.py, shapesynth.py (generate · sweep · selftest), README.md
 tools/shapesynth/work/                          git-ignored outputs
 ```

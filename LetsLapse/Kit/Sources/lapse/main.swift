@@ -68,7 +68,7 @@ USAGE:
       --range A-B           Measure only stills A…B (0-based); printed, not written
       --json PATH           Also write the review here
 
-  lapse shapemation stage <scenes-dir> --out <projects-dir> [--link]
+  lapse shapemation stage <scenes-dir> --out <projects-dir> [--link] [--project]
                             Turn every scene folder (found by scene.json) into
                             a project folder: source/frame.jpg (copied, or hard
                             linked with --link), shapes.json written through the
@@ -79,6 +79,36 @@ USAGE:
                             read at the manifest's frame size (orientation
                             applied) or a register's family is not the one the
                             scene intended (docs/shapemation/synthetic-corpus.md §3).
+      --project             Also write what makes it a Photo project the app
+                            adopts: project.json (kind photos, one source, the
+                            manifest's pixel size, a fresh id that is also the
+                            origin, a capture date fixed per set and sequence
+                            index so Capture order is the approach order) and
+                            assets.ndjson for the frame. The id joins the line
+                            printed. Copy the folder to Projects/<id>/ for the
+                            launch walk to adopt it, or pack it.
+  lapse shapemation pack <project…> --out <dir>   One <id>.lapse per staged
+                            project (needs --project's project.json): the
+                            folder archived in place, as Export does, for the
+                            app's .lapse door (double-click, LL_IMPORT_ARCHIVE).
+                            Prints each archive's path.
+  lapse shapemation render <project…> --out <clip.mp4> [plan options] [timing]
+                            The plan, then the clip the builder would write:
+                            ShapemationRenderer over every placed project,
+                            each representative decoded as it reads. Progress
+                            on stderr; prints the path, frame count, seconds
+                            and the output size. `--sort capture` (the default)
+                            plays the folders as given — the CLI never reads
+                            createdAt — so pass a staged sequence in order
+                            (a zero-padded glob does); largest | smallest
+                            sort by the shape.
+      --fps N               Frame rate (default 25)
+      --hold H              Every photo's hold: <seconds>s or <frames>f (default 1s)
+      --ramp A,B | A,M,B    A hold at the start, (middle,) end — interpolated
+                            across the sequence in whole frames
+      --size N              The output's long edge (default 1920; the plan's own
+                            option that fits, else the canvas scaled; never past 4096)
+      --json PATH           Also write the plan JSON here
   lapse shapemation plan <project…> [options]    Lay the projects out with the
                             builder's own ShapemationPlan.make: one item per
                             folder, the register's largest shape admissible to
@@ -94,7 +124,7 @@ USAGE:
       --mode stack|crop     ShapemationMode (default stack)
       --family F            circle | oval | square | rectangle — also builds the
                             ShapeMatch the app's Match step would pass
-      --sort largest|smallest|capture   ShapemationSort (default largest)
+      --sort largest|smallest|capture   ShapemationSort (default largest; render: capture)
       --json PATH           Write the plan / score JSON here ("-" for stdout; score then talks on stderr)
 
   lapse synth -o <output> [options]             Render a synthetic test clip
@@ -1044,20 +1074,45 @@ do {
     case "shapemation":
         let out = takeOption(["--out", "-o"])
         let link = takeFlag(["--link"])
+        let project = takeFlag(["--project"])
         let modeName = takeOption(["--mode"]) ?? "stack"
         let familyName = takeOption(["--family"])
-        let sortName = takeOption(["--sort"]) ?? "largest"
+        let sortName = takeOption(["--sort"])
         let jsonPath = takeOption(["--json"])
         guard let mode = ShapemationMode(rawValue: modeName) else { fail("--mode needs stack | crop") }
         let family = familyName.map { name -> DetectedShape.Family in
             guard let f = DetectedShape.Family(rawValue: name) else { fail("--family needs circle | oval | square | rectangle") }
             return f
         }
-        guard let sort = shapemationSort(named: sortName) else { fail("--sort needs largest | smallest | capture") }
-        guard let subcommand = args.first else { fail("shapemation needs stage | plan | score") }
+        // Per subcommand: plan and score largest first, render capture order.
+        let sort = sortName.map { name -> ShapemationSort in
+            guard let s = shapemationSort(named: name) else { fail("--sort needs largest | smallest | capture") }
+            return s
+        }
+        // render's timing — the Timing step's selects, spelled on the command line.
+        var timing = ShapemationTiming()
+        if let text = takeOption(["--fps"]) {
+            guard let fps = Int(text), fps > 0 else { fail("--fps needs a whole number") }
+            timing.fps = fps
+        }
+        if let text = takeOption(["--hold"]) {
+            guard let hold = shapemationHold(text) else { fail("--hold needs <seconds>s or <frames>f, like 1s or 3f") }
+            timing.each = hold
+        }
+        if let text = takeOption(["--ramp"]) {
+            let holds = text.split(separator: ",").map { shapemationHold(String($0)) }
+            guard (2...3).contains(holds.count), !holds.contains(where: { $0 == nil }) else {
+                fail("--ramp needs start,end or start,middle,end holds, like 2s,0.5s,1s")
+            }
+            let h = holds.compactMap { $0 }
+            timing.ramp = ShapemationTiming.Ramp(start: h[0], middle: h.count == 3 ? h[1] : nil, end: h[h.count - 1])
+        }
+        let longEdge = Double(takeOption(["--size"]) ?? "1920") ?? 0
+        guard longEdge >= 2 else { fail("--size needs the output's long edge in pixels") }
+        guard let subcommand = args.first else { fail("shapemation needs stage | plan | score | pack | render") }
         try runShapemation(
-            subcommand: subcommand, args: Array(args.dropFirst()), out: out, link: link,
-            mode: mode, family: family, sort: sort, jsonPath: jsonPath)
+            subcommand: subcommand, args: Array(args.dropFirst()), out: out, link: link, project: project,
+            mode: mode, family: family, sort: sort, timing: timing, longEdge: longEdge, jsonPath: jsonPath)
 
     case "whitebalance", "wb":
         let report = takeFlag(["--report"])

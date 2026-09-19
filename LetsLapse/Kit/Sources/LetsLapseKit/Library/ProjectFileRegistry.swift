@@ -114,6 +114,10 @@ public enum ProjectFileRegistry {
     /// a tag today, a name next month — costs no second pass.
     public static let sceneAnalysisName = "scene-analysis.json"
 
+    /// `scene.json` — a synthetic scene's manifest (`SceneManifest`), the
+    /// truth a staged corpus project is scored against.
+    public static let sceneManifestName = SceneManifest.fileName
+
     public static let all: [ProjectFile] = [
         // Capture-time records, beside the media.
         ProjectFile("frames.timestamps", at: .source, class: .captureFact, travels: true, isHotPath: true),
@@ -146,6 +150,11 @@ public enum ProjectFileRegistry {
         // can run the model again — but it is the expensive kind of derived,
         // so it travels: a shoot analysed once is analysed for every copy.
         ProjectFile(sceneAnalysisName, at: .root, class: .derived, travels: true),
+        // The synthetic corpus's ground truth (docs/shapemation/synthetic-corpus.md
+        // §2): the outline the drawing put in the frame, beside the register
+        // `lapse shapemation stage` wrote from it. Absent on every real
+        // project; travels so an imported scene can still be scored.
+        ProjectFile(sceneManifestName, at: .root, class: .captureFact, travels: true),
         ProjectFile("notes/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("masks/", at: .root, class: .edit, isDirectory: true, travels: true),
         ProjectFile("fonts/", at: .root, class: .edit, isDirectory: true, travels: true),
