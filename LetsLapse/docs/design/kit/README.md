@@ -32,6 +32,8 @@ The composer is a small one-point-perspective camera standing on a two-lane road
 
 Sequences are just recipes sharing an id prefix (`<seq>.<nn>`); the contact sheet groups on it.
 
+`mixed.random.01…40` is a seeded batch (`tools/shapesynth/recipes_mixed.py`, seed 19) that pools every aspect, scene, sky, track, camera and tram angle with `size` log-uniform 0.08–0.75 and `cx` 0.15–0.85, numbered by the face's share of the frame — the mixed-scene corpus for shape-mation, where the tram is the one constant. Add to it with a new seed and prefix rather than re-drawing it: the ids are referenced from staged corpora. Known and kept as drawn: the batch sets `tram` explicitly by slot, and an explicit `tram` overrides `angleFor(Z)` (the flank the camera/track geometry would show), so in 17 of its 24 ground-level compositions (02, 04, 09, 15, 16, 19, 20, 25, 26, 29, 31, 32, 35, 36, 37, 39, 40) the drawn flank is on the wrong side for where the rails recede — `tram` (and the corpus's `viewpoint`) is the drawn label, not the photographer's position. A next batch should cycle only `high`/`low` by slot and let the camera/track draw label the ground views.
+
 ## Metadata (brief §5–6)
 
 Each object carries `data-shape` — the tram-face polygon, the registration anchor — plus `data-width-m` and `data-ground-y`, which is all the composer needs to place any future object (a car, a person) the same way. Each composition root carries:
