@@ -220,6 +220,44 @@ public struct DetectedShape: Codable, Identifiable, Equatable, Sendable {
         return s
     }
 
+    /// The shape's axis-aligned bounds in the pixels of a frame of `frame`:
+    /// an ellipse from its rotated semi-axes, a quad from its corners. The
+    /// axes are fractions of the frame's WIDTH and the centre is normalised
+    /// per axis, so everything goes to pixels first — which is why this
+    /// exists beside `ShapeDetector.bbox`: that one stays in the normalised
+    /// frame, where a width-fraction axis lands on y as if it were a height
+    /// fraction (a circle on a 4:3 frame comes back 4/3 too tall), and it
+    /// stays as it is under the fifteen tuned IoU thresholds that lean on it.
+    public func bounds(in frame: CGSize) -> CGRect {
+        let W = Double(frame.width), H = Double(frame.height)
+        let c = cos(rotation), s = sin(rotation)
+        switch kind {
+        case .quad:
+            if let corners, corners.count == 4 {
+                let xs = corners.map { Double($0.x) * W }, ys = corners.map { Double($0.y) * H }
+                let minX = xs.min()!, maxX = xs.max()!, minY = ys.min()!, maxY = ys.max()!
+                return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            }
+            // A quad known only by its sides: the rectangle they span, turned
+            // by the top edge's angle. `wide` says which side lies along it.
+            let w = (wide ? majorAxis : minorAxis) * W, h = (wide ? minorAxis : majorAxis) * W
+            let hw = (w * abs(c) + h * abs(s)) / 2, hh = (w * abs(s) + h * abs(c)) / 2
+            return CGRect(x: Double(centre.x) * W - hw, y: Double(centre.y) * H - hh, width: 2 * hw, height: 2 * hh)
+        case .ellipse:
+            let a = majorAxis * W / 2, b = minorAxis * W / 2
+            let hw = sqrt(a * a * c * c + b * b * s * s)
+            let hh = sqrt(a * a * s * s + b * b * c * c)
+            return CGRect(x: Double(centre.x) * W - hw, y: Double(centre.y) * H - hh, width: 2 * hw, height: 2 * hh)
+        }
+    }
+
+    /// How far the shape's bounds sit inside a frame of `frame` pixels, per
+    /// side — signed, so a negative margin is the shape spilling past that edge.
+    public func margins(in frame: CGSize) -> (left: Double, top: Double, right: Double, bottom: Double) {
+        let b = bounds(in: frame)
+        return (Double(b.minX), Double(b.minY), Double(frame.width) - Double(b.maxX), Double(frame.height) - Double(b.maxY))
+    }
+
     static func wrapped(_ r: Double) -> Double {
         var rot = r
         while rot > .pi / 2 { rot -= .pi }

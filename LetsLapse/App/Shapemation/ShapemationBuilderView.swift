@@ -84,14 +84,11 @@ final class ShapemationBuilder: ObservableObject {
     }
 
     /// The projects holding at least one admissible shape, in the Sort's order
-    /// (by the share of the frame of the shape that would be picked).
+    /// (by the share of the frame of the shape that would be picked) — the
+    /// Kit's rule, so the builder and the `lapse` CLI order the same way.
     func projects(for family: DetectedShape.Family) -> [ProjectShapes] {
         let admitted = projects.filter { !shapes(of: $0, for: family).isEmpty }
-        switch sort {
-        case .newestFirst: return admitted
-        case .largestFirst: return admitted.sorted { share(of: $0, for: family) > share(of: $1, for: family) }
-        case .smallestFirst: return admitted.sorted { share(of: $0, for: family) < share(of: $1, for: family) }
-        }
+        return sort.sorted(admitted) { share(of: $0, for: family) }
     }
 
     /// The Sort's key for a project: its picked (else largest) admissible

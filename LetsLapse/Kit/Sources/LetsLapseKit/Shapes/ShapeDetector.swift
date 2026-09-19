@@ -613,11 +613,6 @@ public struct ShapeDetector: Sendable {
         return kept
     }
 
-    /// The shape's axis-aligned bounds in its normalised frame — public so the
-    /// viewfinder tracker and the register's reconcile pass match shapes the
-    /// way the detector dedupes them.
-    public static func bounds(of a: DetectedShape) -> CGRect { bbox(a) }
-
     /// Intersection over union of two shapes' bounds.
     public static func overlap(_ a: DetectedShape, _ b: DetectedShape) -> Double { iou(bbox(a), bbox(b)) }
 

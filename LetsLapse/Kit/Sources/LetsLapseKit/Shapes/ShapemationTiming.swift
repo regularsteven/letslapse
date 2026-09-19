@@ -122,14 +122,28 @@ public struct ShapemationTiming: Equatable, Codable, Sendable {
 /// default: each photo a little further away than the last reads as a zoom
 /// rather than a shuffle.
 public enum ShapemationSort: String, Codable, CaseIterable, Sendable {
-    case largestFirst, smallestFirst, newestFirst
+    /// `captureOrder` is the order given — oldest → newest as the builder
+    /// loads them; until 2026-09-19 it was called `newestFirst`, a misnomer.
+    case largestFirst, smallestFirst, captureOrder
 
     public var title: String {
         switch self {
         case .largestFirst: return "Largest first"
         case .smallestFirst: return "Smallest first"
-        case .newestFirst: return "Newest first"
+        case .captureOrder: return "Capture order"
         }
+    }
+
+    /// Shape-mation records written before the rename say `newestFirst`; they
+    /// mean this order, and the store decodes its whole index in one go, so a
+    /// strict miss here would lose every record with it.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        if raw == "newestFirst" { self = .captureOrder; return }
+        guard let sort = ShapemationSort(rawValue: raw) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "unknown ShapemationSort \(raw)"))
+        }
+        self = sort
     }
 
     /// The key: the shape's diameter as a share of its photo's short edge —
@@ -140,12 +154,18 @@ public enum ShapemationSort: String, Codable, CaseIterable, Sendable {
         return short > 0 ? item.shape.nativeDiameterPx / short : 0
     }
 
-    /// `items` in this order; `newestFirst` keeps the order given.
-    public func sorted(_ items: [ShapemationItem]) -> [ShapemationItem] {
+    /// `items` in this order, keyed by `share` — the one rule the builder and
+    /// the `lapse` CLI both order by; `captureOrder` keeps the order given.
+    public func sorted<T>(_ items: [T], share: (T) -> Double) -> [T] {
         switch self {
-        case .newestFirst: return items
-        case .largestFirst: return items.sorted { Self.share(of: $0) > Self.share(of: $1) }
-        case .smallestFirst: return items.sorted { Self.share(of: $0) < Self.share(of: $1) }
+        case .captureOrder: return items
+        case .largestFirst: return items.sorted { share($0) > share($1) }
+        case .smallestFirst: return items.sorted { share($0) < share($1) }
         }
+    }
+
+    /// The builder's items by their own share.
+    public func sorted(_ items: [ShapemationItem]) -> [ShapemationItem] {
+        sorted(items, share: Self.share(of:))
     }
 }

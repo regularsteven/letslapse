@@ -11,6 +11,77 @@ live inline.
 
 ## Open
 
+### Shape-mation — the developer brief: inventory, photo collections, tween framing, synthetic corpus
+
+**Raised:** 2026-09-19 · **Size:** XL (fourteen work packages) · **Status:** WP0 / WP1 / WP2 built 2026-09-19 (uncommitted), first sweeps in `docs/shapemation/alignment-report.md`; WP0b next
+
+Steven's brief (`docs/shapemation/brief.md`, verbatim) turns the spike into a
+durable feature: a library-level **shape inventory** of vector outlines with
+pose (scale, tilt, yaw), **stills in Collections** as the re-renderable asset,
+an **output rectangle keyframed** on the first and last frame with every frame
+tweened and **scrubbable**, **crop feasibility** from the shape's per-side
+margins, a **3×3 composition** class, per-image duration and a **sort by
+alignment**, all proven first on a **synthetic scene corpus** with ground-truth
+and dialably perturbed shapes (the break point is a deliverable), rasterised
+into `.lapse` projects that come through the normal import door. Build order
+by the brief's §9: alignment + scoring first, tween + feasibility second.
+
+The map of the brief against the code is `docs/shapemation/gap-map.md`: 55
+requirement rows (EXISTS / PARTIAL / MISSING with the seam to build on), the
+contradictions with the shipped code and with decisions already recorded here,
+a fourteen-package build sequence and the open questions with defaults. The
+findings that reorder the work, all verified by hand:
+
+- **An outline cannot be a new `Kind` in `shapes[]`.** `DetectedShape` decodes
+  `kind` strictly, `ShapeRegister.load` collapses any error to nil, and both
+  writers (Find shapes, the Masks tab) then mint a register over
+  `existing?.keptShapes ?? []` — an installed build meeting a newer register
+  strips the hand shapes, and `shapes.json` travels byte-for-byte on PicPlace,
+  `.lapse` and device transfer, so the loss syncs back. A forward-tolerant
+  register (per-element decode, foreign entries retained, a `version` gate the
+  writers honour) ships as its own release before any outline is written, and
+  the outline goes under a separate top-level key.
+- **The perspective placement is unbounded.** `Homography.apply` has no `w ≤ 0`
+  guard and `ShapemationPlan.make` maps the whole frame's corners through it;
+  measured stack canvases on real registers reach 500 000 px a side, and the
+  renderer has no size guard before `AVAssetWriter` — Create on such a set is
+  an error, not a clip. Bound the footprint and cap Native before §4 lands.
+- **`ShapeDetector.bbox` mixes units** (width-fraction axes applied as a y
+  offset) and is the sole IoU primitive behind fifteen tuned thresholds —
+  fixing it is a measured detector-version bump with a benchmark re-run, not
+  hygiene. The new margins/feasibility work gets its own correct `bounds(in:)`
+  and leaves `bbox` alone until that run is wanted.
+- **Frames accumulate.** The renderer feeds each written frame back as the
+  next photo's table, so "each frame gets its own crop" and a scrub cannot
+  share that path; photo collections render one photo per frame through a
+  single-photo evaluator (the Ken Burns / Reframe shape) and a Shape-mation
+  enters a collection as its baked clip.
+- Already shipped and only needing a nod: size sorts, the global ramp, the
+  output-rectangle-first builder order and per-item duration (recorded under
+  the 2026-09-11 sign-off above), quads placed by full homography (the brief's
+  "no perspective" is already crossed for rectangles).
+
+**Built 2026-09-19 (Steven's call: WP0 → WP1 → WP2 first; Swift
+`lapse shapemation` + Python scenes; Collections gain still members):**
+WP0 — `DetectedShape.bounds(in:)` / `margins(in:)`, `bounds(of:)` retired,
+`ShapemationSort.captureOrder` ("Capture order"; the legacy "newestFirst"
+still decodes — the Shape-mation index is `try?`-decoded as a whole and
+would have emptied) with the builder on the Kit's rule; WP1 —
+`tools/shapesynth/` (SVG parts → `rsvg-convert` → JPEG, truth + three-dial
+perturbation, sweeps with the σ = 0 and orientation-6 acceptances, 123
+self-checks); WP2 — `lapse shapemation stage | plan | score` over
+`Kit/Shapes/ShapemationScore.swift` (`SceneManifest`, the one code path
+through the factories and `ShapemationPlan.make`), 6 tests. The contract is
+`docs/shapemation/synthetic-corpus.md`; the first run's numbers and their
+reading are `docs/shapemation/alignment-report.md` — σ = 0 places every
+scene at float noise, each dial lands 1 : 1 in its own residual, nothing is
+ever dropped, and the 2 % break-point rule only sees the centre axis, so
+the per-axis drawing tolerances still need a viewing over rendered σ sets.
+Next: WP0b (the tolerant register release), WP3 (sort by alignment against
+`sequence.approach`), WP4 (`.lapse` packaging so the app's builder sees the
+corpus). No design question until WP3's Sort row. Every UI package (WP3-UI, WP8, WP9, WP10) asks "design files
+first, app code first, or something else" and owes its mirrors.
+
 ### Auto apply — the SVG mirrors, after sign-off
 
 **Raised:** 2026-09-19. The feature — a preset or LUT assigned to new shoots
@@ -1091,8 +1162,10 @@ Owed:
   captures are matched as seen; imports still get EXIF.
 - The oval Custom chip seeds 0.65 and steps 0.30…0.85; the rectangle Custom
   steppers run 1…32 — both unstyled Steppers for now.
-- The Sort's "Newest first" keeps the builder's capture order (oldest → newest
-  as loaded); rename or reverse if that reads wrong in use.
+- ~~The Sort's "Newest first" keeps the builder's capture order (oldest → newest
+  as loaded); rename or reverse if that reads wrong in use.~~ **2026-09-19:**
+  renamed `ShapemationSort.captureOrder`, "Capture order" (shapemation WP0);
+  saved records still decode the old `newestFirst` value.
 
 ### Auto shape mode — shapes found live on the Photo viewfinder, recorded at capture
 

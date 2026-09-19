@@ -68,6 +68,35 @@ USAGE:
       --range A-B           Measure only stills A…B (0-based); printed, not written
       --json PATH           Also write the review here
 
+  lapse shapemation stage <scenes-dir> --out <projects-dir> [--link]
+                            Turn every scene folder (found by scene.json) into
+                            a project folder: source/frame.jpg (copied, or hard
+                            linked with --link), shapes.json written through the
+                            Kit's shape factories from the manifest's
+                            `perturbed` outline, scene.json copied beside it.
+                            Prints "<set>/<id> <family>" per scene once the
+                            register loads back; exits 1 when frame.jpg does not
+                            read at the manifest's frame size (orientation
+                            applied) or a register's family is not the one the
+                            scene intended (docs/shapemation/synthetic-corpus.md §3).
+  lapse shapemation plan <project…> [options]    Lay the projects out with the
+                            builder's own ShapemationPlan.make: one item per
+                            folder, the register's largest shape admissible to
+                            --family. A table, or the plan as JSON with --json.
+                            Every project the plan lost is listed with why.
+  lapse shapemation score <project…> [options]   The plan, then each scene's
+                            truth through its placement: centre (÷ shape size),
+                            scale, rotation, corner RMS, pairwise overlap.
+                            Ends with one greppable SHAPEMATION SCORE line.
+                            Give --family: without one quads are placed by
+                            similarity (not the builder's path) and an oval's
+                            rotation is its placed angle, not a residual.
+      --mode stack|crop     ShapemationMode (default stack)
+      --family F            circle | oval | square | rectangle — also builds the
+                            ShapeMatch the app's Match step would pass
+      --sort largest|smallest|capture   ShapemationSort (default largest)
+      --json PATH           Write the plan / score JSON here ("-" for stdout; score then talks on stderr)
+
   lapse synth -o <output> [options]             Render a synthetic test clip
       --frames N            Frame count (default 120)
       --size WxH            Dimensions (default 320x240)
@@ -1011,6 +1040,24 @@ do {
         try runFraming(
             path: args[0], apply: apply, withdraw: withdraw, force: force, jsonPath: jsonPath,
             scale: scale, workers: workers, range: range)
+
+    case "shapemation":
+        let out = takeOption(["--out", "-o"])
+        let link = takeFlag(["--link"])
+        let modeName = takeOption(["--mode"]) ?? "stack"
+        let familyName = takeOption(["--family"])
+        let sortName = takeOption(["--sort"]) ?? "largest"
+        let jsonPath = takeOption(["--json"])
+        guard let mode = ShapemationMode(rawValue: modeName) else { fail("--mode needs stack | crop") }
+        let family = familyName.map { name -> DetectedShape.Family in
+            guard let f = DetectedShape.Family(rawValue: name) else { fail("--family needs circle | oval | square | rectangle") }
+            return f
+        }
+        guard let sort = shapemationSort(named: sortName) else { fail("--sort needs largest | smallest | capture") }
+        guard let subcommand = args.first else { fail("shapemation needs stage | plan | score") }
+        try runShapemation(
+            subcommand: subcommand, args: Array(args.dropFirst()), out: out, link: link,
+            mode: mode, family: family, sort: sort, jsonPath: jsonPath)
 
     case "whitebalance", "wb":
         let report = takeFlag(["--report"])

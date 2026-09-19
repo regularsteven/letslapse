@@ -142,8 +142,16 @@ final class ShapemationMatchTests: XCTestCase {
         let given = [small, big, mid]
         XCTAssertEqual(ShapemationSort.largestFirst.sorted(given).map(\.title), ["500", "1350", "1400"])
         XCTAssertEqual(ShapemationSort.smallestFirst.sorted(given).map(\.title), ["1400", "1350", "500"])
-        XCTAssertEqual(ShapemationSort.newestFirst.sorted(given).map(\.title), ["1400", "1350", "500"])
+        XCTAssertEqual(ShapemationSort.captureOrder.sorted(given).map(\.title), ["1400", "1350", "500"], "the order given")
         XCTAssertEqual(ShapemationSort.share(of: big), 1350.0 / 3024, accuracy: 1e-9)
+        // The generic overload is the same rule under any key — what the builder and the CLI sort by.
+        XCTAssertEqual(ShapemationSort.smallestFirst.sorted([3, 1, 2]) { Double($0) }, [1, 2, 3])
+        XCTAssertEqual(ShapemationSort.captureOrder.sorted([3, 1, 2]) { Double($0) }, [3, 1, 2])
+        // Records from before the rename say "newestFirst" and must still load.
+        XCTAssertEqual(try JSONDecoder().decode([ShapemationSort].self, from: Data("[\"newestFirst\",\"captureOrder\",\"largestFirst\"]".utf8)),
+                       [.captureOrder, .captureOrder, .largestFirst])
+        XCTAssertEqual(String(data: try JSONEncoder().encode(ShapemationSort.captureOrder), encoding: .utf8), "\"captureOrder\"")
+        XCTAssertThrowsError(try JSONDecoder().decode(ShapemationSort.self, from: Data("\"sideways\"".utf8)))
     }
 
     /// The plan's transforms: a tilted circle lands round, an oval lands
