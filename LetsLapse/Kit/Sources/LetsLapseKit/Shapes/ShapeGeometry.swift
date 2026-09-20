@@ -105,6 +105,40 @@ public enum ShapePolygon {
         }
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
+
+    /// How far `q` lies outside the convex polygon `p` (either winding):
+    /// 0 on or inside it, else the largest of its outward distances to the
+    /// edge lines — the distance to the nearest edge for a point off one
+    /// side, a lower bound off a corner. Exact for a photo's corners through
+    /// any affine or projective placement, since straight edges stay
+    /// straight: the axis-aligned box around a rotated quad strictly
+    /// contains it, this does not.
+    public static func distanceOutside(_ p: [CGPoint], _ q: CGPoint) -> Double {
+        guard p.count >= 3 else { return .infinity }
+        var signed = 0.0
+        for i in 0..<p.count {
+            let a = p[i], b = p[(i + 1) % p.count]
+            signed += Double(a.x * b.y - b.x * a.y)
+        }
+        // Sign of the winding: an inside point's cross products share it.
+        let orientation: Double = signed >= 0 ? 1 : -1
+        var worst = 0.0
+        for i in 0..<p.count {
+            let a = p[i], b = p[(i + 1) % p.count]
+            let ex = Double(b.x - a.x), ey = Double(b.y - a.y)
+            let length = (ex * ex + ey * ey).squareRoot()
+            guard length > 0 else { continue }
+            let cross = ex * Double(q.y - a.y) - ey * Double(q.x - a.x)
+            // Positive = outside this edge, in the polygon's own winding.
+            worst = max(worst, -orientation * cross / length)
+        }
+        return worst
+    }
+
+    /// Whether `q` is on or inside the convex polygon `p`.
+    public static func convexContains(_ p: [CGPoint], _ q: CGPoint) -> Bool {
+        distanceOutside(p, q) <= 0
+    }
 }
 
 /// Fitted ellipse in the same coordinate frame as the input points.

@@ -30,6 +30,37 @@ func shapemationSort(named name: String) -> ShapemationSort? {
     }
 }
 
+/// `--frame` as the CLI spells it: `WxH` in pixels, or one of the builder's
+/// aspect labels (`16:9`) at `--long`'s long edge (a `sizePresets` entry,
+/// default 1920). Sides are made even the way the builder makes them.
+func shapemationFrameSize(_ text: String, long: String?) -> CGSize? {
+    if let aspect = ShapemationFraming.aspectPresets.first(where: { $0.label == text }) {
+        guard let edge = Int(long ?? "1920"), ShapemationFraming.sizePresets.contains(edge) else { return nil }
+        return ShapemationFraming.outputSize(aspect: aspect, longEdge: edge)
+    }
+    let parts = text.lowercased().split(separator: "x")
+    guard parts.count == 2, let w = Int(parts[0]), let h = Int(parts[1]), w >= 2, h >= 2, w % 2 == 0, h % 2 == 0 else { return nil }
+    return CGSize(width: w, height: h)
+}
+
+/// `--face x,y@s`: the face's centre in unit coordinates of the output rect
+/// (y-down) and its long side as a fraction of the rect's height.
+func shapemationFace(_ text: String) -> (face: CGPoint, size: Double)? {
+    let halves = text.split(separator: "@")
+    guard halves.count == 2, let size = Double(halves[1]), size > 0 else { return nil }
+    let xy = halves[0].split(separator: ",")
+    guard xy.count == 2, let x = Double(xy[0]), let y = Double(xy[1]) else { return nil }
+    return (CGPoint(x: x, y: y), size)
+}
+
+/// A framing in one line, for the plan header: `frame 1920×1080 · face
+/// (0.50, 0.55) @ 0.18 → (0.50, 0.55) @ 0.50 · ease inOut · cap 2×`.
+func shapemationFramingLine(_ f: ShapemationFraming) -> String {
+    func key(_ k: ShapemationFraming.Key) -> String { String(format: "(%.2f, %.2f) @ %.2f", k.face.x, k.face.y, k.size) }
+    let keys = f.keys.map(key).joined(separator: " → ")
+    return String(format: "frame %.0f×%.0f · face %@ · ease %@ · cap %.1f×", f.outputSize.width, f.outputSize.height, keys, f.ease.rawValue, f.upscaleCap)
+}
+
 /// A project's label in every report: `<set>/<scene-id>`, the last two
 /// components of its folder.
 func shapemationLabel(for folder: URL) -> String {
@@ -103,6 +134,47 @@ struct ShapemationPlacedJSON: Codable {
     }
 }
 
+/// The framing a `.frame` plan was made from (output-frame.md §1), in the
+/// plan JSON's own array style: `outputSize` [w, h], each key's `face` [x, y].
+struct ShapemationFramingJSON: Codable {
+    struct Key: Codable {
+        var at: Double
+        var face: [Double]
+        var size: Double
+    }
+    var outputSize: [Double]
+    var keys: [Key]
+    var ease: String
+    var upscaleCap: Double
+
+    init(_ f: ShapemationFraming) {
+        outputSize = [Double(f.outputSize.width), Double(f.outputSize.height)]
+        keys = f.keys.map { .init(at: $0.at, face: [Double($0.face.x), Double($0.face.y)], size: $0.size) }
+        ease = f.ease.rawValue
+        upscaleCap = f.upscaleCap
+    }
+}
+
+/// A placement's feasibility (§2): the output pixels the photo fails to
+/// cover on each side, the scale applied, and the verdict.
+struct ShapemationFeasibilityJSON: Codable {
+    struct Shortfall: Codable {
+        var left: Double
+        var top: Double
+        var right: Double
+        var bottom: Double
+    }
+    var shortfall: Shortfall
+    var upscale: Double
+    var verdict: String
+
+    init(_ f: ShapemationPlan.Placement.Feasibility) {
+        shortfall = .init(left: f.shortfall.left, top: f.shortfall.top, right: f.shortfall.right, bottom: f.shortfall.bottom)
+        upscale = f.upscale
+        verdict = f.verdict.rawValue
+    }
+}
+
 struct ShapemationPlanJSON: Codable {
     struct Item: Codable {
         var id: UUID
@@ -112,6 +184,10 @@ struct ShapemationPlanJSON: Codable {
         var transform: [Double]
         var footprint: [Double]
         var placed: ShapemationPlacedJSON
+        /// Where the shape's centre was put, canvas px (the anchor under stack | crop).
+        var target: [Double]
+        var targetSizePx: Double
+        var feasibility: ShapemationFeasibilityJSON
     }
     var mode: String
     var family: String?
@@ -120,6 +196,10 @@ struct ShapemationPlanJSON: Codable {
     var anchor: [Double]
     var canvas: [Double]
     var unionCanvas: [Double]
+    /// `.frame` only.
+    var framing: ShapemationFramingJSON?
+    var flaggedShort: Int
+    var flaggedUpscaled: Int
     var items: [Item]
     var dropped: [ShapemationDroppedJSON]
 }
@@ -133,6 +213,9 @@ struct ShapemationScoreJSON: Codable {
         var scale: Double
         var rotationDeg: Double
         var cornerRmsPx: Double?
+        var target: [Double]
+        var targetSizePx: Double
+        var verdict: String
     }
     var placed: Int
     var droppedCount: Int
@@ -143,6 +226,9 @@ struct ShapemationScoreJSON: Codable {
     var shapeSizePx: Double
     var anchor: [Double]
     var canvas: [Double]
+    var framing: ShapemationFramingJSON?
+    var flaggedShort: Int
+    var flaggedUpscaled: Int
     var items: [Item]
     var centre: ShapemationScore.Stat?
     var scale: ShapemationScore.Stat?
@@ -163,6 +249,8 @@ struct ShapemationPlanContext {
     var folders: [UUID: URL]
     var plan: ShapemationPlan?
     var dropped: [ShapemationDroppedJSON]
+    /// `.frame` only: the framing the plan was asked for.
+    var framing: ShapemationFraming?
 
     var placedItems: [ShapemationItem] {
         guard let plan else { return [] }
@@ -171,7 +259,8 @@ struct ShapemationPlanContext {
     }
 }
 
-func shapemationBuildPlan(projects: [String], mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort) -> ShapemationPlanContext {
+func shapemationBuildPlan(projects: [String], mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort,
+                          framing: ShapemationFraming? = nil) -> ShapemationPlanContext {
     var items: [ShapemationItem] = []
     var folders: [UUID: URL] = [:]
     var dropped: [ShapemationDroppedJSON] = []
@@ -201,7 +290,7 @@ func shapemationBuildPlan(projects: [String], mode: ShapemationMode, family: Det
                                      pixelSize: register.frameSize, shape: shape, frameFraction: register.representative.frameFraction))
     }
     let sorted = sort.sorted(items)
-    let plan = sorted.isEmpty ? nil : ShapemationPlan.make(items: sorted, mode: mode, match: match)
+    let plan = sorted.isEmpty ? nil : ShapemationPlan.make(items: sorted, mode: mode, match: match, framing: framing)
     if let plan {
         // Unreachable while `make`'s only silent skip is the majorPx check
         // above; kept so a new skip in `make` can never lose a project quietly.
@@ -212,7 +301,7 @@ func shapemationBuildPlan(projects: [String], mode: ShapemationMode, family: Det
     } else {
         for item in sorted { dropped.append(.init(project: item.title, reason: "plan returned nil")) }
     }
-    return ShapemationPlanContext(mode: mode, family: family, sort: sort, items: sorted, folders: folders, plan: plan, dropped: dropped)
+    return ShapemationPlanContext(mode: mode, family: family, sort: sort, items: sorted, folders: folders, plan: plan, dropped: dropped, framing: framing)
 }
 
 func shapemationPlanJSON(_ context: ShapemationPlanContext) -> ShapemationPlanJSON {
@@ -222,14 +311,19 @@ func shapemationPlanJSON(_ context: ShapemationPlanContext) -> ShapemationPlanJS
         guard let item = byID[p.itemID] else { return nil }
         return .init(id: item.id, project: item.title, scale: p.scale, transform: p.transform.m,
                      footprint: [Double(p.footprint.minX), Double(p.footprint.minY), Double(p.footprint.width), Double(p.footprint.height)],
-                     placed: ShapemationPlacedJSON(shape: item.shape, frame: item.pixelSize, through: p.transform))
+                     placed: ShapemationPlacedJSON(shape: item.shape, frame: item.pixelSize, through: p.transform),
+                     target: [Double(p.target.x), Double(p.target.y)], targetSizePx: p.targetSizePx,
+                     feasibility: ShapemationFeasibilityJSON(p.feasibility))
     }
+    let tally = plan?.feasibilitySummary ?? (short: 0, upscaled: 0)
     return ShapemationPlanJSON(
         mode: context.mode.rawValue, family: context.family?.rawValue, sort: context.sort.rawValue,
         shapeSizePx: plan?.shapeSizePx ?? 0,
         anchor: plan.map { [Double($0.anchor.x), Double($0.anchor.y)] } ?? [0, 0],
         canvas: plan.map { [Double($0.canvas.width), Double($0.canvas.height)] } ?? [0, 0],
         unionCanvas: plan.map { [Double($0.unionCanvas.width), Double($0.unionCanvas.height)] } ?? [0, 0],
+        framing: (plan?.framing ?? context.framing).map(ShapemationFramingJSON.init),
+        flaggedShort: tally.short, flaggedUpscaled: tally.upscaled,
         items: items, dropped: context.dropped)
 }
 
@@ -257,10 +351,29 @@ func printShapemationPlanHeader(_ context: ShapemationPlanContext, placed: Int? 
     let placed = placed ?? context.plan?.placements.count ?? 0
     let dropped = dropped ?? context.dropped.count
     say("shapemation plan · \(context.mode.rawValue) · \(family) · sort \(context.sort.rawValue) · \(placed) placed · \(dropped) dropped")
+    if let framing = context.plan?.framing ?? context.framing { say("  " + shapemationFramingLine(framing)) }
     if let plan = context.plan {
         say(String(format: "  shape %.1f px at (%.1f, %.1f) · canvas %.0f×%.0f · union %.0f×%.0f", plan.shapeSizePx, plan.anchor.x, plan.anchor.y,
                    plan.canvas.width, plan.canvas.height, plan.unionCanvas.width, plan.unionCanvas.height))
     }
+}
+
+/// The tally the plan and score tables end with (§5) — one photo that is both
+/// short and upscaled counts in each.
+func shapemationTallyLine(short: Int, upscaled: Int) -> String {
+    "  flagged: short \(short) · upscaled \(upscaled)"
+}
+
+/// A verdict as the tables print it, with the numbers that earned it: the
+/// upscale for an upscaled photo, the largest shortfall side for a short one.
+func shapemationVerdictColumn(_ f: ShapemationPlan.Placement.Feasibility) -> String {
+    var parts: [String] = [f.verdict.rawValue]
+    if f.verdict.isShort {
+        let sides = [("l", f.shortfall.left), ("t", f.shortfall.top), ("r", f.shortfall.right), ("b", f.shortfall.bottom)].filter { $0.1 > 0.5 }
+        parts.append(sides.map { String(format: "%@ %.0f", $0.0, $0.1) }.joined(separator: " "))
+    }
+    if f.verdict.isUpscaled { parts.append(String(format: "%.2f×", f.upscale)) }
+    return parts.joined(separator: " ")
 }
 
 func printShapemationDropped(_ dropped: [ShapemationDroppedJSON], say: (String) -> Void = { print($0) }) {
@@ -332,8 +445,9 @@ func runShapemationStage(scenes: [String], out: String, link: Bool, project writ
 
 // MARK: - plan
 
-func runShapemationPlan(projects: [String], mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort, jsonPath: String?) throws {
-    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort)
+func runShapemationPlan(projects: [String], mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort,
+                        framing: ShapemationFraming?, jsonPath: String?) throws {
+    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort, framing: framing)
     if let jsonPath {
         try writeShapemationJSON(shapemationPlanJSON(context), to: jsonPath)
         return
@@ -341,7 +455,7 @@ func runShapemationPlan(projects: [String], mode: ShapemationMode, family: Detec
     printShapemationPlanHeader(context)
     if let plan = context.plan {
         let byID = Dictionary(context.items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        print("  #   project                              scale   footprint (x, y, w×h)              placed centre")
+        print("  #   project                              scale   footprint (x, y, w×h)              placed centre        target (x, y @ px)     verdict")
         for (n, p) in plan.placements.enumerated() {
             guard let item = byID[p.itemID] else { continue }
             let placed = ShapemationPlacedJSON(shape: item.shape, frame: item.pixelSize, through: p.transform)
@@ -350,18 +464,24 @@ func runShapemationPlan(projects: [String], mode: ShapemationMode, family: Detec
             else if let corners = placed.cornersPx, corners.count == 4 {
                 centre = [corners.map { $0[0] }.reduce(0, +) / 4, corners.map { $0[1] }.reduce(0, +) / 4]
             } else { centre = [0, 0] }
+            let placedText = String(format: "(%.1f, %.1f)", centre[0], centre[1])
+            let targetText = String(format: "(%.1f, %.1f @ %.0f)", p.target.x, p.target.y, p.targetSizePx)
             print("  \(padded("\(n + 1)", 3)) \(padded(item.title, 36)) "
-                  + String(format: "%6.3f   %7.1f, %7.1f, %6.0f×%-6.0f   (%.1f, %.1f)", p.scale,
-                           p.footprint.minX, p.footprint.minY, p.footprint.width, p.footprint.height, centre[0], centre[1]))
+                  + String(format: "%6.3f   %7.1f, %7.1f, %6.0f×%-6.0f   ", p.scale,
+                           p.footprint.minX, p.footprint.minY, p.footprint.width, p.footprint.height)
+                  + padded(placedText, 20) + " " + padded(targetText, 22) + " " + shapemationVerdictColumn(p.feasibility))
         }
+        let tally = plan.feasibilitySummary
+        print(shapemationTallyLine(short: tally.short, upscaled: tally.upscaled))
     }
     printShapemationDropped(context.dropped)
 }
 
 // MARK: - score
 
-func runShapemationScore(projects: [String], mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort, jsonPath: String?) throws {
-    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort)
+func runShapemationScore(projects: [String], mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort,
+                         framing: ShapemationFraming?, jsonPath: String?) throws {
+    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort, framing: framing)
     var dropped = context.dropped
     var truths: [UUID: SceneManifest.Geometry] = [:]
     for item in context.placedItems {
@@ -383,15 +503,18 @@ func runShapemationScore(projects: [String], mode: ShapemationMode, family: Dete
         printErr("note: no --family — quads were placed by similarity (levelled and scaled), not the builder's rectanglePlacement; a posed set scores a corner residual here that the app never sees")
     }
     printShapemationPlanHeader(context, placed: score.placed, dropped: dropped.count, say: say)
-    say("  project                              centre   centrePx    scale   rotation   corners rms")
+    let placementByID = Dictionary((context.plan?.placements ?? []).map { ($0.itemID, $0) }, uniquingKeysWith: { a, _ in a })
+    say("  project                              centre   centrePx    scale   rotation   corners rms   verdict")
     for s in score.items {
         let label = byID[s.itemID]?.title ?? s.itemID.uuidString
-        let rms = s.cornerRmsPx.map { String(format: "%7.2f px", $0) } ?? "      —"
-        say("  \(padded(label, 36)) " + String(format: "%6.3f  %8.2f  %+7.4f  %+7.2f°  ", s.centre, s.centrePx, s.scale, s.rotationDeg) + rms)
+        let rms = s.cornerRmsPx.map { String(format: "%7.2f px", $0) } ?? "      —   "
+        let verdict = placementByID[s.itemID].map { shapemationVerdictColumn($0.feasibility) } ?? s.verdict.rawValue
+        say("  \(padded(label, 36)) " + String(format: "%6.3f  %8.2f  %+7.4f  %+7.2f°  ", s.centre, s.centrePx, s.scale, s.rotationDeg) + rms + "   " + verdict)
     }
     if let o = score.pairwiseOverlap {
         say(String(format: "  pairwise overlap: median %.3f · p90 %.3f · max %.3f", o.median, o.p90, o.max))
     }
+    say(shapemationTallyLine(short: score.flaggedShort, upscaled: score.flaggedUpscaled))
     printShapemationDropped(dropped, say: say)
 
     if let jsonPath {
@@ -402,9 +525,14 @@ func runShapemationScore(projects: [String], mode: ShapemationMode, family: Dete
             shapeSizePx: plan?.shapeSizePx ?? 0,
             anchor: plan.map { [Double($0.anchor.x), Double($0.anchor.y)] } ?? [0, 0],
             canvas: plan.map { [Double($0.canvas.width), Double($0.canvas.height)] } ?? [0, 0],
+            framing: (plan?.framing ?? context.framing).map(ShapemationFramingJSON.init),
+            flaggedShort: score.flaggedShort, flaggedUpscaled: score.flaggedUpscaled,
             items: score.items.map { s in
-                .init(itemID: s.itemID, project: byID[s.itemID]?.title ?? "", centrePx: s.centrePx, centre: s.centre,
-                      scale: s.scale, rotationDeg: s.rotationDeg, cornerRmsPx: s.cornerRmsPx)
+                let p = placementByID[s.itemID]
+                return .init(itemID: s.itemID, project: byID[s.itemID]?.title ?? "", centrePx: s.centrePx, centre: s.centre,
+                             scale: s.scale, rotationDeg: s.rotationDeg, cornerRmsPx: s.cornerRmsPx,
+                             target: p.map { [Double($0.target.x), Double($0.target.y)] } ?? [0, 0],
+                             targetSizePx: p?.targetSizePx ?? 0, verdict: s.verdict.rawValue)
             },
             centre: score.centre, scale: score.scale, rotationDeg: score.rotationDeg,
             cornerRmsPx: score.cornerRmsPx, pairwiseOverlap: score.pairwiseOverlap)
@@ -470,15 +598,21 @@ func shapemationOutputSize(plan: ShapemationPlan, longEdge: Double) -> CGSize {
 /// The clip: `plan`'s layout through `ShapemationRenderer` with the
 /// Timing step's answer, every representative decoded as it reads.
 func runShapemationRender(projects: [String], out: String, mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort,
-                          timing: ShapemationTiming, longEdge: Double, jsonPath: String?) throws {
-    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort)
+                          timing: ShapemationTiming, longEdge: Double, framing: ShapemationFraming?, jsonPath: String?) throws {
+    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort, framing: framing)
     if let jsonPath { try writeShapemationJSON(shapemationPlanJSON(context), to: jsonPath) }
     printShapemationPlanHeader(context, say: { printErr($0) })
     printShapemationDropped(context.dropped, say: { printErr($0) })
     guard let plan = context.plan else { fail("nothing to render — the plan placed no project") }
     let items = context.placedItems
-    let outputSize = shapemationOutputSize(plan: plan, longEdge: longEdge)
+    // Under `.frame` the canvas IS the output rect: the clip is written at
+    // the framing's size and --size has no say.
+    let outputSize = plan.framing?.outputSize ?? shapemationOutputSize(plan: plan, longEdge: longEdge)
     printErr("  \(timing.summary) · \(timing.estimate(count: items.count)) · output \(Int(outputSize.width))×\(Int(outputSize.height))")
+    if plan.mode == .frame {
+        let tally = plan.feasibilitySummary
+        printErr(shapemationTallyLine(short: tally.short, upscaled: tally.upscaled))
+    }
 
     let renderer = ShapemationRenderer()
     renderer.timing = timing
@@ -500,7 +634,7 @@ func runShapemationRender(projects: [String], out: String, mode: ShapemationMode
 
 func runShapemation(subcommand: String, args: [String], out: String?, link: Bool, project: Bool, mode: ShapemationMode,
                     family: DetectedShape.Family?, sort: ShapemationSort?, timing: ShapemationTiming, longEdge: Double,
-                    jsonPath: String?) throws {
+                    framing: ShapemationFraming?, jsonPath: String?) throws {
     switch subcommand {
     case "stage":
         guard let out else { fail("shapemation stage needs --out <projects-dir>") }
@@ -508,10 +642,10 @@ func runShapemation(subcommand: String, args: [String], out: String?, link: Bool
         try runShapemationStage(scenes: args, out: out, link: link, project: project)
     case "plan":
         guard !args.isEmpty else { fail("shapemation plan needs at least one project folder") }
-        try runShapemationPlan(projects: args, mode: mode, family: family, sort: sort ?? .largestFirst, jsonPath: jsonPath)
+        try runShapemationPlan(projects: args, mode: mode, family: family, sort: sort ?? .largestFirst, framing: framing, jsonPath: jsonPath)
     case "score":
         guard !args.isEmpty else { fail("shapemation score needs at least one project folder") }
-        try runShapemationScore(projects: args, mode: mode, family: family, sort: sort ?? .largestFirst, jsonPath: jsonPath)
+        try runShapemationScore(projects: args, mode: mode, family: family, sort: sort ?? .largestFirst, framing: framing, jsonPath: jsonPath)
     case "pack":
         guard let out else { fail("shapemation pack needs --out <dir>") }
         guard !args.isEmpty else { fail("shapemation pack needs at least one project folder") }
@@ -523,7 +657,7 @@ func runShapemation(subcommand: String, args: [String], out: String?, link: Bool
         // a staged sequence's zero-padded ids glob in approach order, so the
         // default plays them as shot.
         try runShapemationRender(projects: args, out: out, mode: mode, family: family, sort: sort ?? .captureOrder,
-                                 timing: timing, longEdge: longEdge, jsonPath: jsonPath)
+                                 timing: timing, longEdge: longEdge, framing: framing, jsonPath: jsonPath)
     default:
         fail("shapemation needs stage | plan | score | pack | render, not '\(subcommand)'")
     }

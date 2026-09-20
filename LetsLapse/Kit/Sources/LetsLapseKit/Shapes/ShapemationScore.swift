@@ -146,27 +146,31 @@ public struct SceneManifest: Codable, Equatable, Sendable {
 }
 
 /// What a plan did to the truth. The plan promises that the register shape
-/// lands centred on `anchor` at `shapeSizePx` (long side) and levelled; the
-/// truth pushed through the same transform says how far the perturbed
-/// register missed. Everything is in canvas pixels, the headline residual
-/// `centre` in units of `shapeSizePx` so a small subject and a large one
-/// read on one scale.
+/// lands centred on the placement's `target` at `targetSizePx` (long side)
+/// and levelled — the one anchor under the stack modes, each photo's own
+/// framing under `.frame`; the truth pushed through the same transform says
+/// how far the perturbed register missed. Everything is in canvas pixels,
+/// the headline residual `centre` in units of `targetSizePx` so a small
+/// subject and a large one read on one scale.
 public struct ShapemationScore: Codable, Equatable, Sendable {
     public struct ItemScore: Codable, Equatable, Sendable {
         public var itemID: UUID
-        /// Transformed truth centre to `anchor`, canvas pixels.
+        /// Transformed truth centre to the placement's `target`, canvas pixels.
         public var centrePx: Double
-        /// `centrePx / shapeSizePx`.
+        /// `centrePx / targetSizePx`.
         public var centre: Double
-        /// Transformed truth long side ÷ `shapeSizePx` − 1.
+        /// Transformed truth long side ÷ `targetSizePx` − 1.
         public var scale: Double
         /// The transformed truth's top edge (quads) or major axis (ovals) from
         /// horizontal, in degrees; 0 for a circle by definition.
         public var rotationDeg: Double
         /// Quads: RMS corner distance to the rectangle the plan targets —
-        /// centred on `anchor`, long side `shapeSizePx`, the truth's own
+        /// centred on `target`, long side `targetSizePx`, the truth's own
         /// aspect, lying the way the truth does.
         public var cornerRmsPx: Double?
+        /// The plan's own feasibility call on this placement (`fits` under
+        /// the stack modes by construction).
+        public var verdict: ShapemationPlan.Placement.Feasibility.Verdict
     }
 
     /// Median · p90 (nearest rank) · max of one residual over the placed items.
@@ -196,11 +200,16 @@ public struct ShapemationScore: Codable, Equatable, Sendable {
     /// IoU of consecutive placed footprints in the plan's order — the "does
     /// it read as one motion" number. Nil under two placements.
     public var pairwiseOverlap: Stat?
+    /// Of the scored items, how many the plan flagged as short of the frame
+    /// and how many as upscaled past the cap (one that is both counts twice).
+    public var flaggedShort: Int
+    public var flaggedUpscaled: Int
 
     public var placed: Int { items.count }
 
     /// No plan, nothing placed.
-    public static let empty = ShapemationScore(items: [], centre: nil, scale: nil, rotationDeg: nil, cornerRmsPx: nil, pairwiseOverlap: nil)
+    public static let empty = ShapemationScore(items: [], centre: nil, scale: nil, rotationDeg: nil, cornerRmsPx: nil, pairwiseOverlap: nil,
+                                               flaggedShort: 0, flaggedUpscaled: 0)
 
     /// Scores every placement of `plan` whose item has a truth. `truths` is
     /// keyed by item id and holds the manifest's `truth`, in the item's own
@@ -225,14 +234,17 @@ public struct ShapemationScore: Codable, Equatable, Sendable {
             scale: Stat(scores.map { abs($0.scale) }),
             rotationDeg: Stat(scores.map { abs($0.rotationDeg) }),
             cornerRmsPx: Stat(scores.compactMap(\.cornerRmsPx)),
-            pairwiseOverlap: Stat(overlaps))
+            pairwiseOverlap: Stat(overlaps),
+            flaggedShort: scores.filter { $0.verdict.isShort }.count,
+            flaggedUpscaled: scores.filter { $0.verdict.isUpscaled }.count)
     }
 
     static func score(_ placement: ShapemationPlan.Placement, item: ShapemationItem, truth: SceneManifest.Geometry,
                       plan: ShapemationPlan) -> ItemScore? {
         let h = placement.transform
-        let anchor = plan.anchor
-        let size = plan.shapeSizePx
+        let anchor = placement.target
+        let size = placement.targetSizePx
+        let verdict = placement.feasibility.verdict
         guard size > 0 else { return nil }
         switch truth.kind {
         case .quad:
@@ -252,7 +264,7 @@ public struct ShapemationScore: Codable, Equatable, Sendable {
             for (p, q) in zip(dst, target) { sum += Double((p.x - q.x) * (p.x - q.x) + (p.y - q.y) * (p.y - q.y)) }
             let centrePx = Double(hypot(centre.x - anchor.x, centre.y - anchor.y))
             return ItemScore(itemID: item.id, centrePx: centrePx, centre: centrePx / size, scale: placed.major / size - 1,
-                             rotationDeg: placed.rotation * 180 / .pi, cornerRmsPx: (sum / 4).squareRoot())
+                             rotationDeg: placed.rotation * 180 / .pi, cornerRmsPx: (sum / 4).squareRoot(), verdict: verdict)
         case .ellipse:
             guard let c = truth.centrePx, let axes = truth.semiAxesPx, axes.count == 2 else { return nil }
             let a = axes[0], rot = truth.rotation ?? 0
@@ -266,7 +278,7 @@ public struct ShapemationScore: Codable, Equatable, Sendable {
             let angle = isCircle ? 0 : DetectedShape.wrapped(atan2(Double(e1.y - e2.y), Double(e1.x - e2.x)))
             let centrePx = Double(hypot(centre.x - anchor.x, centre.y - anchor.y))
             return ItemScore(itemID: item.id, centrePx: centrePx, centre: centrePx / size, scale: long / size - 1,
-                             rotationDeg: angle * 180 / .pi, cornerRmsPx: nil)
+                             rotationDeg: angle * 180 / .pi, cornerRmsPx: nil, verdict: verdict)
         }
     }
 
@@ -301,5 +313,6 @@ public struct ShapemationScore: Codable, Equatable, Sendable {
             + " · scale median \(f(scale?.median, "%.3f"))"
             + " · rotation median \(f(rotationDeg?.median, "%.1f"))°"
             + " · corners rms \(cornerRmsPx.map { String(format: "%.1f px", $0.median) } ?? "n/a")"
+            + " · flagged: short \(flaggedShort) · upscaled \(flaggedUpscaled)"
     }
 }

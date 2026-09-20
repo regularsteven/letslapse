@@ -107,7 +107,8 @@ USAGE:
       --ramp A,B | A,M,B    A hold at the start, (middle,) end — interpolated
                             across the sequence in whole frames
       --size N              The output's long edge (default 1920; the plan's own
-                            option that fits, else the canvas scaled; never past 4096)
+                            option that fits, else the canvas scaled; never past 4096;
+                            --mode frame renders at the framing's size instead)
       --json PATH           Also write the plan JSON here
   lapse shapemation plan <project…> [options]    Lay the projects out with the
                             builder's own ShapemationPlan.make: one item per
@@ -121,11 +122,28 @@ USAGE:
                             Give --family: without one quads are placed by
                             similarity (not the builder's path) and an oval's
                             rotation is its placed angle, not a residual.
-      --mode stack|crop     ShapemationMode (default stack)
+      --mode stack|crop|frame   ShapemationMode (default stack)
       --family F            circle | oval | square | rectangle — also builds the
                             ShapeMatch the app's Match step would pass
       --sort largest|smallest|capture   ShapemationSort (default largest; render: capture)
       --json PATH           Write the plan / score JSON here ("-" for stdout; score then talks on stderr)
+    Output frame (--mode frame; docs/shapemation/output-frame.md §5). The user's
+    rectangle and where the face sits in it; every photo is scaled and placed to
+    put its face there, what won't fill the frame is flagged and kept — the plan
+    and score tables gain a verdict column (fits | short | upscaled |
+    shortAndUpscaled) and end with `flagged: short N · upscaled M`; the plan JSON
+    gains `framing` and per-item target / targetSizePx / feasibility; render
+    writes at the framing's size (--size is ignored).
+      --frame WxH | ASPECT  The output rect in even pixels (1920x1080), or one of
+                            the builder's aspects 1:1 | 4:5 | 3:2 | 16:9 | 2:3 | 9:16
+                            at --long's long edge. Required under --mode frame.
+      --long N              The long edge for an aspect: 1080 | 1920 | 2160 (default 1920)
+      --face x,y@s          The face at the FIRST photo: its centre in unit
+                            coordinates of the rect (y-down) and its long side as
+                            a fraction of the rect's height (default 0.5,0.55@0.25)
+      --face-end x,y@s      The face at the LAST photo (default: the same — a still)
+      --ease linear|inout   Between the two (default linear)
+      --upscale-cap N       Flag a photo scaled up past N× (default 2)
 
   lapse synth -o <output> [options]             Render a synthetic test clip
       --frames N            Frame count (default 120)
@@ -1079,7 +1097,7 @@ do {
         let familyName = takeOption(["--family"])
         let sortName = takeOption(["--sort"])
         let jsonPath = takeOption(["--json"])
-        guard let mode = ShapemationMode(rawValue: modeName) else { fail("--mode needs stack | crop") }
+        guard let mode = ShapemationMode(rawValue: modeName) else { fail("--mode needs stack | crop | frame") }
         let family = familyName.map { name -> DetectedShape.Family in
             guard let f = DetectedShape.Family(rawValue: name) else { fail("--family needs circle | oval | square | rectangle") }
             return f
@@ -1107,12 +1125,48 @@ do {
             let h = holds.compactMap { $0 }
             timing.ramp = ShapemationTiming.Ramp(start: h[0], middle: h.count == 3 ? h[1] : nil, end: h[h.count - 1])
         }
-        let longEdge = Double(takeOption(["--size"]) ?? "1920") ?? 0
+        let sizeText = takeOption(["--size"])
+        let longEdge = Double(sizeText ?? "1920") ?? 0
         guard longEdge >= 2 else { fail("--size needs the output's long edge in pixels") }
+        // The output frame (--mode frame): the rect, the face at the first and
+        // the last photo, the ease and the cap, spelled as the usage says.
+        let frameText = takeOption(["--frame"])
+        let longText = takeOption(["--long"])
+        let faceText = takeOption(["--face"])
+        let faceEndText = takeOption(["--face-end"])
+        let easeText = takeOption(["--ease"])
+        let capText = takeOption(["--upscale-cap"])
+        var framing: ShapemationFraming?
+        if mode == .frame {
+            guard let frameText else { fail("--mode frame needs --frame WxH (or an aspect like 16:9 with --long)") }
+            guard let outputSize = shapemationFrameSize(frameText, long: longText) else {
+                fail("--frame needs WxH in even pixels (1920x1080) or an aspect 1:1 | 4:5 | 3:2 | 16:9 | 2:3 | 9:16 (with --long 1080 | 1920 | 2160)")
+            }
+            let start = faceText.map { text -> (face: CGPoint, size: Double) in
+                guard let f = shapemationFace(text) else { fail("--face needs x,y@s, like 0.5,0.55@0.25") }
+                return f
+            } ?? (ShapemationFraming.defaultFace, ShapemationFraming.defaultSize)
+            let end = faceEndText.map { text -> (face: CGPoint, size: Double) in
+                guard let f = shapemationFace(text) else { fail("--face-end needs x,y@s, like 0.5,0.55@0.5") }
+                return f
+            } ?? start
+            let ease: ShapemationFraming.Ease
+            switch easeText ?? "linear" {
+            case "linear": ease = .linear
+            case "inout", "inOut", "in-out": ease = .inOut
+            default: fail("--ease needs linear | inout")
+            }
+            let cap = Double(capText ?? "\(ShapemationFraming.defaultUpscaleCap)") ?? 0
+            guard cap > 0 else { fail("--upscale-cap needs a positive number") }
+            framing = .approach(outputSize: outputSize, from: start, to: end, ease: ease, upscaleCap: cap)
+            if sizeText != nil { printErr("note: --size is ignored under --mode frame — the clip is the framing's \(Int(outputSize.width))×\(Int(outputSize.height))") }
+        } else if frameText != nil || faceText != nil || faceEndText != nil || easeText != nil || capText != nil || longText != nil {
+            fail("--frame, --long, --face, --face-end, --ease and --upscale-cap belong to --mode frame")
+        }
         guard let subcommand = args.first else { fail("shapemation needs stage | plan | score | pack | render") }
         try runShapemation(
             subcommand: subcommand, args: Array(args.dropFirst()), out: out, link: link, project: project,
-            mode: mode, family: family, sort: sort, timing: timing, longEdge: longEdge, jsonPath: jsonPath)
+            mode: mode, family: family, sort: sort, timing: timing, longEdge: longEdge, framing: framing, jsonPath: jsonPath)
 
     case "whitebalance", "wb":
         let report = takeFlag(["--report"])

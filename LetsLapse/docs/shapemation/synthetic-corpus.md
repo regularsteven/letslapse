@@ -162,11 +162,19 @@ scaled to it, never past 4096 on a side; each representative decodes through
 `OrientedDecode`. Progress on stderr, then one line: the path, frame count, seconds
 and size. `ShapemationStageTests` covers the three: the document as the app reads
 it, the archive's file list back through `DirectoryArchive.extract`, a three-frame
-320 px render.
+320 px render. Under `--mode frame` (§4) the clip is written at the framing's
+output size — `--size` is ignored with a note — one photo per hold over black
+through `ShapemationFrameEvaluator`, no accumulation; the tally line
+(`flagged: short N · upscaled M`) joins the timing line on stderr.
+`tools/shapesynth/frame_sheet.py <clip> <plan.json> <sheet.png>` draws a contact
+sheet of it: the middle frame of every hold with the plan's target (crosshair +
+`targetSizePx` square), the register shape through the placement, and the
+verdict (`output-frame-report.md`).
 
 ## 4. The plan — `lapse shapemation plan`
 
-`lapse shapemation plan <project…> [--mode stack|crop] [--family circle|oval|square|rectangle] [--sort largest|smallest|capture] [--json <file>]`
+`lapse shapemation plan <project…> [--mode stack|crop|frame] [--family circle|oval|square|rectangle] [--sort largest|smallest|capture] [--json <file>]`
+`… --mode frame --frame WxH|1:1|4:5|3:2|16:9|2:3|9:16 [--long 1080|1920|2160] [--face x,y@s] [--face-end x,y@s] [--ease linear|inout] [--upscale-cap 2]`
 
 One `ShapemationItem` per project folder: `id` = the RFC 4122 version-5
 UUID of `<set>/<scene-id>` in the URL namespace (stable across runs;
@@ -178,7 +186,23 @@ family is given, largest `nativeDiameterPx` wins). `--family` builds the
 that one match decides admissibility (`ShapeMatch.matches`) and is handed to
 the plan, so quads go through `rectanglePlacement` exactly as in the builder.
 `--sort` is `ShapemationSort`; default `largest`. Then
-`ShapemationPlan.make(items:mode:match:)`.
+`ShapemationPlan.make(items:mode:match:framing:)`.
+
+`--mode frame` is the output frame (`output-frame.md`): the canvas IS the
+rect `--frame` names — even pixels, or one of the builder's aspects at
+`--long`'s long edge (`ShapemationFraming.outputSize(aspect:longEdge:)`) —
+and photo *i* of *n* is scaled and placed so its face's centre sits at
+`--face`'s unit point with its long side `s` × the rect's height, read at
+`t = i / (n − 1)` between `--face` (default `0.5,0.55@0.25`) and `--face-end`
+(default: the same, a still) with `--ease` (`ShapemationFraming.approach`).
+`--frame` is required there; every frame option outside `--mode frame` is
+refused. Nothing is dropped by the framing: a photo that fails to cover the
+rect on a side by more than 0.5 px is `short`, one scaled up past
+`--upscale-cap` is `upscaled` (both: `shortAndUpscaled`), and the table
+prints one verdict per row with its numbers (`short r 453`, `upscaled
+4.60×`) and ends with `flagged: short N · upscaled M` — under stack | crop
+always `0 · 0`. The header gains `frame 1920×1080 · face (0.50, 0.55) @ 0.18
+→ (0.50, 0.55) @ 0.50 · ease inOut · cap 2.0×`.
 
 JSON out (`--json`, else a table on stdout):
 
@@ -186,11 +210,19 @@ JSON out (`--json`, else a table on stdout):
 {
   "mode": "stack", "family": "rectangle", "sort": "largestFirst",
   "shapeSizePx": 812.0, "anchor": [x, y], "canvas": [w, h], "unionCanvas": [w, h],
+  "framing": { "outputSize": [1920, 1080],                  // --mode frame only, else absent
+               "keys": [ { "at": 0, "face": [0.5, 0.55], "size": 0.18 }, { "at": 1, "face": [0.5, 0.55], "size": 0.5 } ],
+               "ease": "inOut", "upscaleCap": 2 },
+  "flaggedShort": 5, "flaggedUpscaled": 0,                  // one photo that is both counts in each
   "items": [
     { "id": "…", "project": "scale-0.05/front-0042", "scale": 0.61,
       "transform": [9 numbers, row-major, source px → canvas px],
       "footprint": [x, y, w, h],
-      "placed": { "kind": "quad", "cornersPx": [[…]] }      // the REGISTER shape through the transform
+      "placed": { "kind": "quad", "cornersPx": [[…]] },     // the REGISTER shape through the transform
+      "target": [x, y], "targetSizePx": 270.0,              // where the face was put and its long side there
+                                                            // (= anchor / shapeSizePx under stack | crop)
+      "feasibility": { "shortfall": { "left": 0, "top": 0, "right": 453.2, "bottom": 24.5 },
+                       "upscale": 0.43, "verdict": "fits" | "short" | "upscaled" | "shortAndUpscaled" }
     }
   ],
   "dropped": [ { "project": "…", "reason": "majorPx <= 0" | "no admissible shape" | "register unreadable" | "plan returned nil" | "plan skipped it" | "scene.json unreadable" } ]
@@ -212,17 +244,21 @@ error itself goes to stderr).
 
 Runs the plan, then for every placed item reads `scene.json` and pushes the
 **truth** shape (pixels) through the item's transform. The plan promises that
-the register shape lands centred on `anchor` at `shapeSizePx` (long side)
-and levelled (quads by their top edge, circles round, ovals level). So:
+the register shape lands centred on the item's `target` at `targetSizePx`
+(long side) — `anchor` and `shapeSizePx` under stack | crop, the photo's own
+framing under `--mode frame` — and levelled (quads by their top edge, circles
+round, ovals level). So:
 
 - `centrePx` — distance in canvas pixels from the transformed truth centre to
-  `anchor`; **`centre` = `centrePx / shapeSizePx`** (the headline residual).
-- `scale` — transformed truth long side ÷ `shapeSizePx` − 1.
+  `target`; **`centre` = `centrePx / targetSizePx`** (the headline residual).
+- `scale` — transformed truth long side ÷ `targetSizePx` − 1.
 - `rotationDeg` — the transformed truth's top-edge angle (quads) or major-axis
   angle (ovals; 0 for circles by definition) in degrees.
 - Quads also get `cornerRmsPx` against the rectangle the plan targets
-  (centred on `anchor`, long side `shapeSizePx`, aspect = the truth's own
+  (centred on `target`, long side `targetSizePx`, aspect = the truth's own
   effective aspect, orientation by `wide`) — the honest projective residual.
+- `verdict` — the placement's feasibility (§4), printed as the table's last
+  column; the JSON item also carries `target` and `targetSizePx`.
 
 `rotationDeg` is a residual only under a family that levels the shape —
 quads through `rectanglePlacement` under `--family square|rectangle`, ovals
@@ -236,8 +272,12 @@ placed footprints in the sorted order — the "does it read as one motion"
 number). Stdout ends with one greppable line:
 
 ```
-SHAPEMATION SCORE: placed 98 · dropped 2 · centre median 0.004 p90 0.019 max 0.071 · scale median 0.006 · rotation median 0.3° · corners rms 2.1 px
+SHAPEMATION SCORE: placed 98 · dropped 2 · centre median 0.004 p90 0.019 max 0.071 · scale median 0.006 · rotation median 0.3° · corners rms 2.1 px · flagged: short 5 · upscaled 0
 ```
+
+The tail is the feasibility tally (`flaggedShort` / `flaggedUpscaled` in the
+JSON, beside `framing`), meaningful under `--mode frame` and `0 · 0` under
+the stack modes; the readable table ends with the same `flagged:` line.
 
 Under `--json -` the readable lines, SCORE line included, go to stderr so a
 pipe gets the JSON alone; the sweep greps both streams.
