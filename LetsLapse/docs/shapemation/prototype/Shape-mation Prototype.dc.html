@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#D6D6DB;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;color:#1C1C1E;-webkit-font-smoothing:antialiased}
+a{color:#C36A00;text-decoration:none}a:hover{color:#8A4A00}
+button{font:inherit;color:inherit;cursor:pointer}
+input[type=range]{accent-color:#C36A00}
+*{box-sizing:border-box}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:rgba(0,0,0,.28);border-radius:5px}::-webkit-scrollbar-track{background:rgba(0,0,0,.04)}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+
+<!-- prototype bar -->
+<div style="display:flex;align-items:center;gap:14px;padding:0 16px;height:44px;background:#1C1C1E;color:#fff;font-size:12px;position:sticky;top:0;z-index:50;white-space:nowrap;overflow-x:auto">
+  <div style="font-weight:700;font-size:13px;letter-spacing:.2px;flex:none">Shape-mation · prototype</div>
+  <div style="display:flex;gap:2px;background:#2C2C2E;border-radius:7px;padding:2px">
+    <sc-for list="{{ pageOpts }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for>
+  </div>
+  <div style="width:1px;height:20px;background:#3A3A3E"></div>
+  <span style="color:rgba(255,255,255,.55)">Set</span>
+  <div style="display:flex;gap:2px;background:#2C2C2E;border-radius:7px;padding:2px">
+    <sc-for list="{{ setOpts }}" as="o" hint-placeholder-count="5"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for>
+  </div>
+  <div style="width:1px;height:20px;background:#3A3A3E"></div>
+  <div style="display:flex;gap:2px;background:#2C2C2E;border-radius:7px;padding:2px">
+    <sc-for list="{{ platformOpts }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for>
+  </div>
+  <div style="flex:1"></div>
+  <div style="color:rgba(255,255,255,.55)">{{ statusLine }}</div>
+  <button onClick="{{ resetAll }}" style="background:none;border:1px solid #3A3A3E;border-radius:6px;padding:4px 10px;color:#FFB340;font-size:12px">Reset</button>
+</div>
+
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1C1C1E;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:60;box-shadow:0 6px 24px rgba(0,0,0,.3)">{{ toast }}</div>
+</sc-if>
+
+<!-- NOTES page -->
+<sc-if value="{{ isNotes }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:960px;margin:28px auto;padding:0 20px">
+  <div style="display:flex;gap:2px;background:#E9E9EB;border-radius:8px;padding:2px;width:max-content;margin-bottom:18px">
+    <sc-for list="{{ notesTabs }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for>
+  </div>
+
+  <sc-if value="{{ notesIsAssumptions }}" hint-placeholder-val="{{ true }}">
+  <div style="background:#fff;border-radius:18px;padding:20px 24px;font-size:14px;line-height:1.55">
+    <div style="font-size:17px;font-weight:600;margin-bottom:8px">Assumptions and context</div>
+    <p style="margin:0 0 10px">Built from the prototype brief (2026-09-20), the macOS mirrors <code>docs/design/macOS/shapemation.builder.*.svg</code> and the scene kit's <code>manifest.json</code>. The seven shipped steps are recreated at the mirrors' geometry (560 pt sheet, 47.5 pt nav bar, 16 pt padding, llCard radius 18, the pinned 78.5 pt bottom bar). The <b>Sequence board</b> is a new step between Mode and Timing; it is the one place the sheet grows — to <b>900 × 720 pt</b> — because the board wants ~560 pt of thumbnails beside a 280 pt column for the charts and the selected photo. At 560 the charts had to go under the board and the reject-and-watch loop lost its glance.</p>
+    <p style="margin:0 0 10px">Every badge, number and rendered thumbnail on the list, the board, the scrub and the player comes from one file, <code>model.js</code> — §4 written once: cover fit, the natural position, the running-median path, the per-side zoom <i>z</i>, crop risk <i>f</i> = 1 − 1/<i>z</i>², Σ J and mean crop. Fixed face runs the shipped output-frame math with the ×2 rasterisation rule. Nothing is detected: the manifest's <code>bbox</code> is the truth.</p>
+    <p style="margin:0 0 10px">The kit's compositions stand in for a library. Their tags are the manifest's own fields (sequence prefix, scene, sky, tram angle), plus one synthetic tag, <b>Bad apple</b>, on the ten photos §3 names — the way Steven's "Shape testing" tag works. The Portrait 30 set is the aspect filter, not a tag. Capture order is the manifest's order. Titles are the composition ids; the app would show "Photo 13. 9. at 12:57".</p>
+    <p style="margin:0">Timing with a per-photo hold, Collections with re-render, the three board forms (grid · strip · list), exposed thresholds, the phone pass and the shape-inventory stretch are all in. The <b>Decisions</b> tab computes the board's two numbers live for the four sets, with and without auto-reject, so the log is never stale against the prototype.</p>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ notesIsStates }}" hint-placeholder-val="{{ false }}">
+  <div style="display:grid;gap:12px">
+    <sc-for list="{{ statesList }}" as="g" hint-placeholder-count="4">
+    <div style="background:#fff;border-radius:18px;padding:16px 20px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:8px">{{ g.title }}</div>
+      <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+      <div style="display:grid;grid-template-columns:200px 1fr;gap:12px;padding:6px 0;border-top:1px solid rgba(0,0,0,.06);font-size:13px"><div style="font-weight:500">{{ r.s }}</div><div style="color:#6D6D72">{{ r.how }}</div></div>
+      </sc-for>
+    </div>
+    </sc-for>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ notesIsDecisions }}" hint-placeholder-val="{{ false }}">
+  <div style="display:grid;gap:12px">
+    <div style="background:#fff;border-radius:18px;padding:16px 20px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:4px">The board's two numbers, live</div>
+      <div style="font-size:12px;color:#6D6D72;margin-bottom:10px">Σ J · mean crop · rejected of members — computed by the model on the current thresholds ({{ thresholdsLine }}), window {{ window }}, ends {{ ends }}, into {{ A }}. Smallest first unless noted.</div>
+      <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:0;font-size:13px">
+        <div style="padding:6px 0;color:#6D6D72;font-size:11px;font-weight:600;letter-spacing:.3px">SET</div><div style="padding:6px 0;color:#6D6D72;font-size:11px;font-weight:600">NO AUTO-REJECT</div><div style="padding:6px 0;color:#6D6D72;font-size:11px;font-weight:600">AUTO-REJECT</div><div style="padding:6px 0;color:#6D6D72;font-size:11px;font-weight:600">ALIGNMENT SORT · K = 3</div>
+        <sc-for list="{{ evidence }}" as="e" hint-placeholder-count="5">
+          <div style="padding:8px 0;border-top:1px solid rgba(0,0,0,.06);font-weight:500">{{ e.name }}</div>
+          <div style="padding:8px 0;border-top:1px solid rgba(0,0,0,.06);font-variant-numeric:tabular-nums">{{ e.off }}</div>
+          <div style="padding:8px 0;border-top:1px solid rgba(0,0,0,.06);font-variant-numeric:tabular-nums">{{ e.on }}</div>
+          <div style="padding:8px 0;border-top:1px solid rgba(0,0,0,.06);font-variant-numeric:tabular-nums">{{ e.align }}</div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-for list="{{ decisions }}" as="d" hint-placeholder-count="10">
+    <div style="background:#fff;border-radius:18px;padding:16px 20px;font-size:13px;line-height:1.5">
+      <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:#fff;background:#C36A00;border-radius:5px;padding:2px 7px;flex:none;margin-top:2px">Q{{ d.q }}</span><span style="font-size:15px;font-weight:600;flex:1">{{ d.title }}</span></div>
+      <div style="color:#1C1C1E"><b>Proposed:</b> {{ d.answer }}</div>
+      <div style="color:#6D6D72;margin-top:4px"><b style="color:#1C1C1E">Evidence:</b> {{ d.evidence }}</div>
+    </div>
+    </sc-for>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ notesIsHandoff }}" hint-placeholder-val="{{ false }}">
+  <div style="display:grid;gap:12px">
+    <div style="background:#fff;border-radius:18px;padding:16px 20px;font-size:13px;line-height:1.5">
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Hand-off — what to build, in what order</div>
+      <div style="color:#6D6D72">Four buckets. <b style="color:#1C1C1E">Shipped</b> is already in the Swift app and is recreated here unchanged; touch only what the row says. <b style="color:#1C1C1E">Required</b> is the new work the brief's §1 goal cannot be met without. <b style="color:#1C1C1E">Open</b> is what the prototype could not settle on synthetic photos and hands to the developer to investigate on real libraries and recommend. <b style="color:#1C1C1E">Enhancement</b> improves the flow but the goal survives without it; build after Required, or cut. The prototype's code is not carried over — the developer works from this table, the States and Decisions tabs, <code>model.js</code> as the reference for the maths, and the SVG mirrors it redraws.</div>
+      <div style="color:#6D6D72;margin-top:8px">Sign-off: Steven, on the prototype and this log together (2026-09-20). Sets referenced throughout: Mixed 40 · Clean 12 · Bad apple 10 · Portrait 30, all from <code>kit/compositions/manifest.json</code>.</div>
+    </div>
+    <sc-for list="{{ handoff }}" as="g" hint-placeholder-count="3">
+    <div style="background:#fff;border-radius:18px;padding:16px 20px">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px"><span style="{{ g.badge }}">{{ g.tag }}</span><span style="font-size:15px;font-weight:600">{{ g.title }}</span></div>
+      <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+      <div style="display:grid;grid-template-columns:200px 1fr;gap:12px;padding:7px 0;border-top:1px solid rgba(0,0,0,.06);font-size:13px;line-height:1.45"><div style="font-weight:500">{{ r.s }}</div><div style="color:#6D6D72">{{ r.how }}</div></div>
+      </sc-for>
+    </div>
+    </sc-for>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ notesIsDepartures }}" hint-placeholder-val="{{ false }}">
+  <div style="background:#fff;border-radius:18px;padding:16px 20px;font-size:13px;line-height:1.5">
+    <div style="font-size:15px;font-weight:600;margin-bottom:8px">Where the prototype departs from §2's shipped semantics</div>
+    <sc-for list="{{ departures }}" as="d" hint-placeholder-count="8"><div style="padding:6px 0;border-top:1px solid rgba(0,0,0,.06)">{{ d }}</div></sc-for>
+  </div>
+  </sc-if>
+</div>
+</sc-if>
+
+<!-- BUILDER / LIST on the Mac or the phone -->
+<sc-if value="{{ isBuilderOrList }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;justify-content:center;padding:28px 20px 60px">
+
+<sc-if value="{{ isMac }}" hint-placeholder-val="{{ true }}">
+<div style="{{ winStyle }}">
+  <!-- title bar -->
+  <div style="height:32px;background:#F6F6F8;display:flex;align-items:center;padding-left:10.5px;gap:10.5px;border-bottom:1px solid rgba(0,0,0,.08)">
+    <span style="width:12px;height:12px;border-radius:6px;background:#FF736A;display:inline-block"></span><span style="width:12px;height:12px;border-radius:6px;background:#FEBC2E;display:inline-block"></span><span style="width:12px;height:12px;border-radius:6px;background:#19C332;display:inline-block"></span>
+    <span style="font-size:13px;font-weight:600;color:rgba(0,0,0,.85);margin-left:10px">Create</span>
+  </div>
+  <!-- the Create page behind, dimmed -->
+  <div style="position:absolute;left:0;top:32px;right:0;bottom:0;padding:16.5px 16.5px 0;pointer-events:none">
+    <div style="font-size:28px;font-weight:700;margin-top:20px">Create</div>
+    <div style="font-size:13px;color:#6D6D72;margin-top:6px">What do you want to make?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px">
+      <div style="background:#fff;border-radius:14px;padding:14px 12.5px;height:170px"><div style="height:84.5px;border-radius:8px;background:#8794A5"></div><div style="font-size:15px;font-weight:600;margin-top:22px">Smooth timelapse</div><div style="font-size:12px;color:#6D6D72;margin-top:4px">Hours become seconds, motion melts into streaks</div></div>
+      <div style="background:#fff;border-radius:14px;padding:14px 12.5px;height:170px"><div style="height:84.5px;border-radius:8px;background:#7E8899"></div><div style="font-size:15px;font-weight:600;margin-top:22px">Long exposure</div><div style="font-size:12px;color:#6D6D72;margin-top:4px">Interval photos into a timelapse, or one long exposure</div></div>
+      <div style="background:#fff;border-radius:14px;padding:14px 12.5px;height:167.5px"><div style="height:84.5px;border-radius:8px;background:#9A8D82"></div><div style="font-size:15px;font-weight:600;margin-top:22px">Speed ramp</div><div style="font-size:12px;color:#6D6D72;margin-top:4px">Speed rises or falls across the clip</div></div>
+      <div style="background:#fff;border-radius:14px;padding:14px 12.5px;height:167.5px"><div style="height:84.5px;border-radius:8px;background:#C7C2B3"></div><div style="font-size:15px;font-weight:600;margin-top:22px">Custom blend</div><div style="font-size:12px;color:#6D6D72;margin-top:4px">Every dial, no presets</div></div>
+    </div>
+    <div style="background:#fff;border-radius:14px;margin-top:17px;padding:0 15px;font-size:15px">
+      <div style="display:flex;align-items:center;gap:11px;height:57px;border-bottom:1px solid rgba(0,0,0,.08)"><span style="width:31px;height:31px;border-radius:8px;background:#D7A46A;display:inline-block"></span>Record now</div>
+      <div style="display:flex;align-items:center;gap:11px;height:57px;border-bottom:1px solid rgba(0,0,0,.08)"><span style="width:31px;height:31px;border-radius:8px;background:#9FB0C8;display:inline-block"></span>Import a video…</div>
+      <div style="display:flex;align-items:center;gap:11px;height:57px;border-bottom:1px solid rgba(0,0,0,.08)"><span style="width:31px;height:31px;border-radius:8px;background:#ABA3C8;display:inline-block"></span>Import photos…</div>
+      <div style="display:flex;align-items:center;gap:11px;height:57px"><span style="width:31px;height:31px;border-radius:8px;background:#B5AB94;display:inline-block"></span>Import a LetsLapse project…</div>
+    </div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,.17)"></div>
+  <!-- the sheet -->
+  <div style="{{ sheetStyle }}">
+    <div style="height:47.5px;background:#fff;border-bottom:.5px solid rgba(0,0,0,.14);display:flex;align-items:center;padding:0 9.5px;gap:10px;flex:none">
+      <button onClick="{{ back }}" style="width:29px;height:29px;border-radius:50%;background:#C36A00;border:none;display:flex;align-items:center;justify-content:center;padding:0"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M8 1.5 L3.5 6 8 10.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      <span style="font-size:13px;font-weight:700">{{ navTitle }}</span>
+      <span style="flex:1"></span>
+      <sc-if value="{{ lockedLine }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:500;background:rgba(195,106,0,.1);color:#8A4A00;border-radius:10px;padding:3px 9px">{{ lockedLine }}</span></sc-if>
+    </div>
+    <div style="flex:1;min-height:0;overflow:auto;position:relative">
+      <sc-if value="{{ loading }}" hint-placeholder-val="{{ true }}"><div style="padding:24px 16px;font-size:13px;color:#6D6D72;display:flex;align-items:center;gap:10px"><span style="width:14px;height:14px;border:2px solid #C36A00;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;display:inline-block"></span>{{ statusLine }}</div></sc-if>
+      <dc-import name="ShapemationSteps" hint-size="100%,560px" ctx="{{ ctx }}"></dc-import>
+    </div>
+    <sc-if value="{{ bottomBar }}" hint-placeholder-val="{{ true }}">
+    <div style="height:78.5px;background:rgba(195,106,0,.06);display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex:none">
+      <sc-if value="{{ leadingLabel }}" hint-placeholder-val="{{ false }}"><button onClick="{{ leadingAction }}" style="background:#FBF2E8;border:none;border-radius:6px;padding:4px 8px;font-size:15px;color:#C36A00">{{ leadingLabel }}</button></sc-if>
+      <span></span>
+      <button onClick="{{ next }}" style="background:#C36A00;color:#fff;border:none;border-radius:8px;height:44px;padding:0 22px;font-size:15px;font-weight:600;white-space:nowrap">{{ nextLabel }}</button>
+    </div>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
+<div style="width:393px;height:852px;background:#F2F2F7;border-radius:48px;box-shadow:0 0 0 10px #1C1C1E,0 0 0 12px #3A3A3E,0 30px 60px rgba(0,0,0,.35);position:relative;overflow:hidden;display:flex;flex-direction:column">
+  <div style="height:59px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 8px;font-size:15px;font-weight:600;position:relative"><span>9:41</span><span style="position:absolute;left:50%;top:11px;transform:translateX(-50%);width:126px;height:37px;border-radius:20px;background:#000"></span><span style="font-size:12px">●●● ▲ ▮</span></div>
+  <div style="height:44px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px;background:#fff;border-bottom:.5px solid rgba(0,0,0,.14)">
+    <button onClick="{{ back }}" style="background:none;border:none;color:#C36A00;font-size:17px;display:flex;align-items:center;gap:2px;padding:6px"><svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2 L2 10 10 18" fill="none" stroke="#C36A00" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>Back</button>
+    <span style="flex:1;text-align:center;font-size:17px;font-weight:600;margin-right:64px">{{ navTitle }}</span>
+  </div>
+  <div style="flex:1;min-height:0;overflow:auto;position:relative">
+    <dc-import name="ShapemationSteps" hint-size="100%,600px" ctx="{{ ctx }}"></dc-import>
+  </div>
+  <sc-if value="{{ bottomBar }}" hint-placeholder-val="{{ true }}">
+  <div style="flex:none;background:rgba(195,106,0,.06);display:flex;align-items:center;justify-content:space-between;padding:12px 16px 34px">
+    <sc-if value="{{ leadingLabel }}" hint-placeholder-val="{{ false }}"><button onClick="{{ leadingAction }}" style="background:#FBF2E8;border:none;border-radius:6px;padding:6px 10px;font-size:15px;color:#C36A00">{{ leadingLabel }}</button></sc-if>
+    <span></span>
+    <button onClick="{{ next }}" style="background:#C36A00;color:#fff;border:none;border-radius:12px;height:50px;padding:0 24px;font-size:17px;font-weight:600;white-space:nowrap">{{ nextLabel }}</button>
+  </div>
+  </sc-if>
+  <div style="position:absolute;left:50%;bottom:8px;transform:translateX(-50%);width:139px;height:5px;border-radius:3px;background:#1C1C1E"></div>
+</div>
+</sc-if>
+
+</div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    loading: true, photos: [], platform: 'mac', page: 'builder', step: 'filters', history: [], set: 'mixed',
+    search: '', tags: ['mixed.random'], aspectFilter: 'all', cellFilter: null, showSheet: true,
+    family: 'rectangle', matchAspect: 'Any', orientation: 'Any',
+    picked: null, excluded: [], sort: 'smallest', sortMenu: false, sameAngle: false, K: 3,
+    mode: 'least', form: 'grid', A: '3:2', sizeLong: 1920, option: 'least', autoReject: true, thFlag: 0.15, thReject: 0.30, onZ: false, zFlag: 1.1, zReject: 1.2, fixpoint: false, window: 5, ends: 'median', keys: {}, easeK: 'linear', showRejected: false, rejectedManual: [], keptAnyway: [], thumbW: 132, hover: null, selected: null, showEnds: true, drag: null, keyPicker: 'drag',
+    fx: { startSize: 0.25, endSize: 0.25, endSizeFollows: true, startPlace: 4, endPlace: 4, endPlaceFollows: true, ease: 'linear' },
+    fps: 25, ramp: false, rampStart: '2 s', rampMid: '1 s', rampEnd: '0.5 s', hold: '1 s', holds: {},
+    outputSize: 0, scrub: 0, rendering: null, rendered: null, collections: [], player: null, lockedMembers: null, notesTab: 'handoff', toast: null,
+    inventory: null,
+  };
+  M = null;
+  async componentDidMount() {
+    let M, res;
+    try {
+      [M, res] = await Promise.all([import(new URL('model.js', document.baseURI).href), fetch(new URL('kit/compositions/manifest.json', document.baseURI).href)]);
+    } catch (err) { console.error('kit load failed', err); this.setState({ toast: 'Kit failed to load: ' + err.message }); return; }
+    this.M = M;
+    const BAD = ['mixed.random.01', 'mixed.random.02', 'mixed.random.05', 'mixed.random.07', 'mixed.random.10', 'mixed.random.11', 'mixed.random.13', 'mixed.random.21', 'mixed.random.26', 'mixed.random.27'];
+    const raw = await res.json();
+    const photos = raw.map((m, i) => { const d = M.derive(m); d.order = i; d.src = 'kit/' + m.file.replace(/^kit\//, ''); d.tags = [d.seq.startsWith('single') ? 'single' : d.seq, d.scene, d.sky, d.tram]; if (BAD.includes(d.id)) d.tags.push('Bad apple'); return d; });
+    this.setState({ photos, loading: false });
+  }
+  toast(t) { this.setState({ toast: t }); clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast: null }), 2200); }
+  set(patch) { this.setState(patch); }
+  seg(opts, cur, pick, dark) {
+    return opts.map(o => { const on = o.v === cur; return { l: o.l, v: o.v, pick: () => pick(o.v), st: dark
+      ? { background: on ? '#FFB340' : 'transparent', color: on ? '#1C1C1E' : 'rgba(255,255,255,.75)', border: 'none', borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: on ? 600 : 400 }
+      : { background: on ? '#C36A00' : 'transparent', color: on ? '#fff' : '#1C1C1E', border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: 13, fontWeight: on ? 500 : 400, flex: 1, height: 23.5, whiteSpace: 'nowrap' } }; });
+  }
+  goto(step) { this.setState(s => ({ history: [...s.history, s.step], step, sortMenu: false })); }
+  back = () => { this.setState(s => { if (s.page === 'list') return { page: 'builder' }; const h = [...s.history]; const step = h.pop(); if (!step) return {}; return { history: h, step, rendering: null }; }); };
+  applySet = (set) => {
+    const base = { set, picked: null, excluded: [], rejectedManual: [], keptAnyway: [], keys: {}, holds: {}, selected: null, lockedMembers: null, search: '', cellFilter: null, aspectFilter: 'all', A: '3:2', family: 'rectangle', matchAspect: 'Any', orientation: 'Any' };
+    const map = { mixed: { tags: ['mixed.random'] }, clean: { tags: ['city.clear.approach'] }, bad: { tags: ['Bad apple'] }, portrait: { tags: [], aspectFilter: 'portrait', A: '2:3' }, all: { tags: [] } };
+    this.setState({ ...base, ...map[set] });
+  };
+  resetAll = () => { this.setState({ step: 'filters', history: [], page: 'builder', mode: 'least', option: 'least', form: 'grid', autoReject: true, thFlag: 0.15, thReject: 0.3, onZ: false, fixpoint: false, window: 5, ends: 'median', sort: 'smallest', rendering: null, rendered: null, player: null, fps: 25, ramp: false, hold: '1 s' }); this.applySet('mixed'); };
+
+  // ---- derived data
+  filtered() {
+    const { photos, search, tags, aspectFilter, cellFilter } = this.state;
+    return photos.filter(p => (!search || p.id.includes(search.toLowerCase())) && tags.every(t => p.tags.includes(t))
+      && (aspectFilter === 'all' || p.orient === aspectFilter)
+      && (!cellFilter || (cellFilter.col != null ? p.centreCell % 3 === cellFilter.col : p.centreCell === cellFilter.cell)));
+  }
+  familySet(f) { const fl = this.filtered(); return this.state.family === 'circle' || f === 'circle' ? fl.filter(p => p.seq.startsWith('single')) : fl; }
+  faceClass(p) { const r = Math.max(p.bbox.w, p.bbox.h) / Math.min(p.bbox.w, p.bbox.h); const cls = [['5:4', 1.25], ['4:3', 1.333], ['Page', 1.414], ['3:2', 1.5], ['16:9', 1.778], ['2:1', 2]]; return cls.reduce((b, c) => Math.abs(c[1] - r) < Math.abs(b[1] - r) ? c : b)[0]; }
+  matched() { const { matchAspect, orientation } = this.state; return this.familySet().filter(p => (matchAspect === 'Any' || matchAspect === 'Custom' || this.faceClass(p) === matchAspect) && (orientation === 'Any' || (orientation === 'Landscape' ? p.bbox.w >= p.bbox.h : p.bbox.w < p.bbox.h))); }
+  members() {
+    const { picked, excluded, lockedMembers } = this.state;
+    if (lockedMembers) return this.state.photos.filter(p => lockedMembers.includes(p.id));
+    return this.matched().filter(p => (!picked || picked.includes(p.id)) && !excluded.includes(p.id));
+  }
+  boardOpts(over = {}) { const s = this.state; return { thFlag: s.thFlag, thReject: s.thReject, onZ: s.onZ, zFlag: s.zFlag, zReject: s.zReject, autoReject: s.autoReject, fixpoint: s.fixpoint, window: s.window, ends: s.ends, keys: s.keys, ease: s.easeK, rejectedManual: new Set(s.rejectedManual), keptAnyway: new Set(s.keptAnyway), ...over }; }
+  sorted(list, sort) { const s = this.state; const so = sort || s.sort; if (so === 'manual' && s.manualOrder) { const idx = id => { const i = s.manualOrder.indexOf(id); return i < 0 ? 1e6 : i; }; return [...list].sort((a, b) => idx(a.id) - idx(b.id)); } return this.M.sortPhotos(list, so, { A: this.M.ASPECTS[s.A], K: s.K, sameAngle: s.sameAngle }); }
+  outSize() { const A = this.M.ASPECTS[this.state.A], L = this.state.sizeLong; return A >= 1 ? { w: L, h: Math.round(L / A / 2) * 2 } : { w: Math.round(L * A / 2) * 2, h: L }; }
+  holdOf(id) { const s = this.state, M = this.M; const h = s.holds[id] || s.hold; return M.HOLDS.find(x => x.l === h) || M.HOLDS[1]; }
+  framesFor(rows) {
+    const s = this.state, M = this.M, n = rows.length;
+    return rows.map((r, i) => {
+      if (s.holds[r.ph.id]) return M.holdFrames(this.holdOf(r.ph.id), s.fps);
+      if (!s.ramp) return M.holdFrames(this.holdOf(r.ph.id), s.fps);
+      const t = n > 1 ? i / (n - 1) : 0, a = M.holdFrames(M.HOLDS.find(h => h.l === s.rampStart), s.fps), b = M.holdFrames(M.HOLDS.find(h => h.l === s.rampMid), s.fps), c = M.holdFrames(M.HOLDS.find(h => h.l === s.rampEnd), s.fps);
+      return Math.max(1, Math.round(t < 0.5 ? a + (b - a) * t * 2 : b + (c - b) * (t - 0.5) * 2));
+    });
+  }
+  fixedAt(t) { const f = this.state.fx, pl = i => ({ x: [0.15, 0.5, 0.85][i % 3], y: [0.2, 0.55, 0.85][Math.floor(i / 3)] }); const E = this.M.ease[f.ease === 'inOut' ? 'inOut' : 'linear'](t); const a = pl(f.startPlace), b = pl(f.endPlaceFollows ? f.startPlace : f.endPlace); const sz = f.startSize + ((f.endSizeFollows ? f.startSize : f.endSize) - f.startSize) * E; return { x: a.x + (b.x - a.x) * E, y: a.y + (b.y - a.y) * E, size: sz }; }
+  evalFixed(rows) { const o = this.outSize(); return rows.map((r, i) => { const t = rows.length > 1 ? i / (rows.length - 1) : 0, k = this.fixedAt(t); const fx = this.M.fixedFace(r.ph, o.w, o.h, k, k.size); return { ...r, fx, fv: fx.verdict }; }); }
+
+  renderVals() { try { return this.renderVals2(); } catch (e) { console.error(e); return { statusLine: 'error: ' + e.message, loading: true }; } }
+  renderVals2() {
+    const s = this.state, M = this.M;
+    const pages = [{ l: 'Builder', v: 'builder' }, { l: 'Shape-mations', v: 'list' }, { l: 'Notes', v: 'notes' }];
+    const base = {
+      pageOpts: this.seg(pages, s.page, v => this.setState({ page: v, rendering: null }), true),
+      setOpts: this.seg([{ l: 'Mixed 40', v: 'mixed' }, { l: 'Clean 12', v: 'clean' }, { l: 'Bad apple 10', v: 'bad' }, { l: 'Portrait 30', v: 'portrait' }, { l: 'All 100', v: 'all' }], s.set, this.applySet, true),
+      platformOpts: this.seg([{ l: 'Mac', v: 'mac' }, { l: 'Phone 393', v: 'phone' }], s.platform, v => this.setState({ platform: v }), true),
+      isMac: s.platform === 'mac', isPhone: s.platform === 'phone', isNotes: s.page === 'notes', isBuilderOrList: s.page !== 'notes',
+      toast: s.toast, resetAll: this.resetAll, back: this.back, A: s.A, window: s.window, ends: s.ends,
+      notesTabs: this.seg([{ l: 'Hand-off', v: 'handoff' }, { l: 'Assumptions', v: 'assumptions' }, { l: 'States', v: 'states' }, { l: 'Decisions', v: 'decisions' }, { l: 'Departures', v: 'departures' }], s.notesTab, v => this.setState({ notesTab: v })),
+      notesIsHandoff: s.notesTab === 'handoff', notesIsAssumptions: s.notesTab === 'assumptions', notesIsStates: s.notesTab === 'states', notesIsDecisions: s.notesTab === 'decisions', notesIsDepartures: s.notesTab === 'departures',
+      statesList: this.statesList(), departures: this.departures(), handoff: this.handoff(), decisions: [], evidence: [], thresholdsLine: '',
+      statusLine: s.loading ? (s.toast || 'Loading the kit…') : `${s.photos.length} compositions · step ${s.step}`, loading: s.loading,
+    };
+    if (s.loading || !M) return { ...base, winStyle: this.winStyle(560), sheetStyle: this.sheetStyle(560), navTitle: 'Apply filters', bottomBar: true, nextLabel: 'Next · shape', next: () => {}, ctx: null };
+
+    const isBoard = s.step === 'board' && s.page === 'builder';
+    const sheetW = s.platform === 'phone' ? 393 : isBoard ? 900 : 560;
+    const titles = { filters: 'Apply filters', shape: 'Shape slideshow', match: 'Match', projects: s.family === 'circle' ? 'Circles' : 'Rectangles', mode: 'Mode', board: 'Sequence board', timing: 'Timing', output: 'Output', inventory: 'Shape inventory' };
+    const nextMap = { filters: ['Next · shape', 'shape'], match: ['Next · projects', 'projects'], projects: ['Next · mode', 'mode'], mode: [s.mode === 'least' || s.mode === 'frame' ? 'Next · board' : 'Next · timing', s.mode === 'least' || s.mode === 'frame' ? 'board' : 'timing'], board: ['Next · timing', 'timing'], timing: ['Next · output', 'output'] };
+    const nm = nextMap[s.step];
+    const matched = this.matched(), allPicked = !s.picked || matched.every(p => s.picked.includes(p.id));
+    const members = this.members();
+    const board = this.computeBoard(members);
+    const ctx = { board, members, matched, sheetW, out: this.outSize() };
+    if (s.page === 'notes') Object.assign(base, this.decisionsVals());
+    return {
+      ...base,
+      winStyle: this.winStyle(sheetW), sheetStyle: this.sheetStyle(sheetW),
+      navTitle: s.page === 'list' ? 'Shape-mations' : titles[s.step],
+      lockedLine: s.lockedMembers && s.page === 'builder' ? `Members locked · ${s.lockedMembers.length} photos` : null,
+      bottomBar: s.page === 'builder' && !!nm && !(s.step === 'mode' && false),
+      nextLabel: nm ? nm[0] : '', next: () => { if (!nm) return; if (s.step === 'projects' && !members.length) { this.toast('Pick at least one photo'); return; } this.goto(nm[1]); },
+      leadingLabel: s.step === 'projects' && s.page === 'builder' ? (allPicked ? 'Clear' : 'Pick all') : null,
+      leadingAction: () => this.setState({ picked: allPicked ? [] : null }),
+      ctx: { state: s, M, ...ctx, api: this.api() },
+    };
+  }
+  api() {
+    return {
+      set: p => this.setState(p), goto: st => this.goto(st), toast: t => this.toast(t),
+      toggleTag: t => this.setState(s => ({ tags: s.tags.includes(t) ? s.tags.filter(x => x !== t) : [...s.tags, t], picked: null })),
+      togglePick: id => this.setState(s => { const all = this.matched().map(p => p.id); const cur = s.picked || all; return { picked: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] }; }),
+      toggleExclude: id => this.setState(s => ({ excluded: s.excluded.includes(id) ? s.excluded.filter(x => x !== id) : [...s.excluded, id] })),
+      reject: id => this.setState(s => ({ rejectedManual: [...new Set([...s.rejectedManual, id])], keptAnyway: s.keptAnyway.filter(x => x !== id) })),
+      unreject: id => this.setState(s => ({ rejectedManual: s.rejectedManual.filter(x => x !== id) })),
+      keepAnyway: id => this.setState(s => ({ keptAnyway: [...new Set([...s.keptAnyway, id])], rejectedManual: s.rejectedManual.filter(x => x !== id) })),
+      unkeep: id => this.setState(s => ({ keptAnyway: s.keptAnyway.filter(x => x !== id) })),
+      setKey: (id, k) => this.setState(s => ({ keys: { ...s.keys, [id]: { ...(s.keys[id] || { x: 0.5, y: 0.55, zoom: 1 }), ...k } } })),
+      removeKey: id => this.setState(s => { const k = { ...s.keys }; delete k[id]; return { keys: k }; }),
+      setHold: (id, h) => this.setState(s => { const holds = { ...s.holds }; if (h) holds[id] = h; else delete holds[id]; return { holds }; }),
+      setFx: p => this.setState(s => ({ fx: { ...s.fx, ...p } })),
+      framesFor: rows => this.framesFor(rows), holdOf: id => this.holdOf(id), faceClass: p => this.faceClass(p),
+      render: rows => this.startRender(rows), saveCollection: rec => this.saveCollection(rec), openCollection: c => this.openCollection(c), deleteCollection: i => this.setState(s => ({ collections: s.collections.filter((_, j) => j !== i) })),
+      evalFixed: rows => this.evalFixed(rows), fixedAt: t => this.fixedAt(t), sorted: (l, so) => this.sorted(l, so), computeBoard: (m, over) => this.computeBoard(m, over),
+    };
+  }
+  computeBoard(members, over = {}) {
+    const s = this.state, M = this.M;
+    const A = M.ASPECTS[over.A || s.A];
+    const sortedM = this.sorted(members, over.sort);
+    return M.evaluateBoard(sortedM, A, this.boardOpts(over));
+  }
+  startRender(rows) {
+    const s = this.state; let i = 0; const n = rows.length;
+    this.setState({ rendering: { i: 0, n, title: rows[0]?.ph.id } });
+    clearInterval(this._rt);
+    this._rt = setInterval(() => { i++; if (i >= n) { clearInterval(this._rt); const frames = this.framesFor(rows).reduce((a, b) => a + b, 0); const rec = this.record(rows, frames); this.setState({ rendering: null, rendered: rec }); } else this.setState({ rendering: { i, n, title: rows[i].ph.id } }); }, Math.max(60, 900 / n));
+  }
+  record(rows, frames) {
+    const s = this.state, o = this.outSize(), M = this.M;
+    const d = new Date(); const date = `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()} at ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const sortL = { largest: 'Largest first', smallest: 'Smallest first', capture: 'Capture order', alignment: 'Alignment' }[s.sort];
+    const modeL = { stack: 'stack', crop: 'crop', frame: 'fixed face', least: 'least crop' }[s.mode === 'least' || s.mode === 'frame' ? (s.option === 'fixed' ? 'frame' : 'least') : s.mode];
+    return { title: `${s.family === 'circle' ? 'Circle' : 'Rectangle'} · ${date}`, subtitle: `${s.tags[0] || 'All'} · ${s.family === 'circle' ? 'Circle' : 'Rectangle'} ${s.matchAspect} · ${sortL} · ${modeL} · ${rows.length} photos · ${o.w}×${o.h} · ${s.fps} fps · ${s.hold} each`, rows, frames, seconds: frames / s.fps, out: o, fixed: s.option === 'fixed' && (s.mode === 'least' || s.mode === 'frame'),
+      snapshot: { members: rows.map(r => r.ph.id), rejected: [...s.rejectedManual], keys: { ...s.keys }, easeK: s.easeK, option: s.option, A: s.A, sizeLong: s.sizeLong, holds: { ...s.holds }, fps: s.fps, hold: s.hold, tags: [...s.tags], sort: s.sort, fx: { ...s.fx } } };
+  }
+  saveCollection(rec) { this.setState(s => ({ collections: [rec, ...s.collections] })); this.toast('Saved as a collection · members, order, rejects, keys and timing'); }
+  openCollection(c) { const sn = c.snapshot; this.setState({ page: 'builder', step: 'board', history: ['filters', 'shape', 'match', 'projects', 'mode'], lockedMembers: sn.members, keys: sn.keys, easeK: sn.easeK, option: sn.option, A: sn.A, sizeLong: sn.sizeLong, holds: sn.holds, fps: sn.fps, hold: sn.hold, sort: sn.sort, fx: sn.fx, rejectedManual: [], mode: 'least', rendered: null }); this.toast('Re-render: the members are locked; change fps, ramp, aspect or framing'); }
+  winStyle(sheetW) { const w = sheetW > 560 ? sheetW + 60 : 760, h = sheetW > 560 ? 760 : 680; return { width: w, height: h, background: '#F2F2F7', borderRadius: 11, boxShadow: '0 0 0 1px rgba(0,0,0,.16), 0 20px 60px rgba(0,0,0,.25)', position: 'relative', overflow: 'hidden', flex: 'none', transition: 'width .25s, height .25s' }; }
+  sheetStyle(sheetW) { const h = sheetW > 560 ? 720 : 679.5; return { position: 'absolute', left: '50%', top: 32, transform: 'translateX(-50%)', width: sheetW, height: h, background: '#F2F2F7', borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,.28)', display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'width .25s' }; }
+
+  // ---- notes content
+  decisionsVals() {
+    const s = this.state, M = this.M, P = s.photos; if (!P.length) return {};
+    const sets = [
+      ['Mixed 40', P.filter(p => p.seq === 'mixed.random'), '3:2'],
+      ['Mixed 40 · left column', P.filter(p => p.seq === 'mixed.random' && p.cx < 1 / 3), '3:2'],
+      ['Bad-apple 10', P.filter(p => p.tags.includes('Bad apple')), '3:2'],
+      ['Clean approach 12', P.filter(p => p.seq === 'city.clear.approach'), '3:2'],
+      ['Portrait 30 (the trams\' stand-in)', P.filter(p => p.orient === 'portrait'), '2:3'],
+    ];
+    const fmt = b => `${b.sumJ.toFixed(2)} · ${M.fmtPct(b.meanF)} · ${b.rejectedRows.length} of ${b.rows.length + b.rejectedRows.length}`;
+    const evidence = sets.map(([name, list, A]) => {
+      const off = this.computeBoard(list, { A, sort: 'smallest', autoReject: false, rejectedManual: new Set(), keptAnyway: new Set(), keys: {} });
+      const on = this.computeBoard(list, { A, sort: 'smallest', autoReject: true, rejectedManual: new Set(), keptAnyway: new Set(), keys: {} });
+      const al = this.computeBoard(list, { A, sort: 'alignment', autoReject: true, rejectedManual: new Set(), keptAnyway: new Set(), keys: {} });
+      return { name: `${name} → ${A}`, off: fmt(off), on: fmt(on), align: `${fmt(al)} · ${al.angleChanges} angle cuts (vs ${on.angleChanges})` };
+    });
+    const bad = this.computeBoard(sets[2][1], { A: '3:2', sort: 'smallest', autoReject: true, rejectedManual: new Set(), keptAnyway: new Set(), keys: {} });
+    const badTrend = this.computeBoard(sets[3][1], { A: '3:2', sort: 'smallest', autoReject: false, ends: 'trend', rejectedManual: new Set(), keptAnyway: new Set(), keys: {} });
+    const cleanMed = this.computeBoard(sets[3][1], { A: '3:2', sort: 'smallest', autoReject: false, ends: 'median', rejectedManual: new Set(), keptAnyway: new Set(), keys: {} });
+    const p169 = this.computeBoard(sets[4][1], { A: '16:9', sort: 'smallest', autoReject: true, rejectedManual: new Set(), keptAnyway: new Set(), keys: {} });
+    const p45 = this.computeBoard(sets[4][1], { A: '4:5', sort: 'smallest', autoReject: true, rejectedManual: new Set(), keptAnyway: new Set(), keys: {} });
+    const p23 = this.computeBoard(sets[4][1], { A: '2:3', sort: 'smallest', autoReject: true, rejectedManual: new Set(), keptAnyway: new Set(), keys: {} });
+    const endsF = b => b.rows.length ? `${M.fmtPct(b.rows[0].ev.f)} / ${M.fmtPct(b.rows[b.rows.length - 1].ev.f)}` : '—';
+    const decisions = [
+      { q: 1, title: 'Smoothing window and the two thresholds — OPEN, for the developer', answer: 'Starting point only: window 5; flag 15 % and reject 30 % on f; one pass. Not settled here — the kit is synthetic. The developer investigates against the real libraries (the 164 tram projects first) and recommends the window, the two thresholds, f-or-z and one-pass-or-fixpoint, with the count each rule rejects and a contact sheet of the survivors, for Steven\'s review before the values are fixed in code. Until then the four switches stay exposed behind the cog.', evidence: `Bad-apple 10, one pass: ${bad.rejectedRows.map(r => r.ph.id.replace('mixed.random.', '#')).join(', ')} rejected, ${bad.rows.length} kept at Σ J ${bad.sumJ.toFixed(2)} · mean ${M.fmtPct(bad.meanF)}. On z the line is harder to read: z 1.2 is f 31 %, so the sets behave the same but the number means nothing to a person. The fixpoint second pass takes the three left-edge faces (10, 26, 27) too and the sequence shrinks below the point where it still reads as an approach.` },
+      { q: 2, title: 'Median path vs keys; the ends', answer: 'Median path with the ends continuing the trend; start and end handles always drawn on the position chart; a middle key is the exception.', evidence: `Clean approach, ends: plain median pays ${endsF(cleanMed)} at the first / last photo; trend-continued ends pay ${endsF(badTrend)}. No set in the demo asked for a middle key — the drift a middle key fixes is what the median already removes.` },
+      { q: 3, title: 'Setting a key: place and size', answer: 'Drag on the rendered thumbnail (large preview) sets place; the chart handle is the precise alternative; the nine-point picker is the phone fallback. Zoom-at-key is a stepper, off by default.', evidence: 'On the Mac the preview drag is one gesture and the chart shows the consequence at once. On the phone the preview is 361 pt wide and the drag is still fine; the chart handle is too small. Zoom-at-key breaks the least-crop promise visibly: the badge turns amber on the key itself, which is the right feedback.' },
+      { q: 4, title: 'The aspect for a mixed library', answer: 'Propose the dominant aspect; flag the minority orientation in the shortlist; offer per-orientation sequences as the fix, not a forced rect.', evidence: `Portrait 30 into 2:3: ${p23.rejectedRows.length} rejected, mean ${M.fmtPct(p23.meanF)}; into 4:5: ${p45.rejectedRows.length} · ${M.fmtPct(p45.meanF)}; into 16:9: ${p169.rejectedRows.length} · ${M.fmtPct(p169.meanF)} — the 16:9 cover fit already loses top and bottom of every portrait photo before the path asks for anything.` },
+      { q: 5, title: 'Does the 3×3 filter earn its place', answer: 'Keep it as a shortlist filter for the eye, as a column picker (a cell is too fine).', evidence: 'On the Mixed 40 the left column takes 12, the centre 21, the right 7; the left-column shortlist is two clicks from the filter and a scroll-and-compare on the board. People reach for the grid before the board because it is on the first step.' },
+      { q: 6, title: 'Alignment sort', answer: 'A separate sort option beside Smallest first, K = 3; the same-angle tie-break as a toggle under it.', evidence: evidence[0].align + ' on the Mixed 40 against Smallest first ' + evidence[0].on + '. The size wobble shows in the size chart as a non-monotonic dip; it is the honest trade and the chart makes it visible.' },
+      { q: 7, title: 'Naming', answer: '"Crop" for the badge (the percentage is the picture lost), "column" for the grid.', evidence: 'Fit reads as the shipped verdict (fits/short); cut sounds like an edit. The board says "crop 24 %" and people repeat it.' },
+      { q: 8, title: 'The board at 100 photos', answer: 'The strip: one locked preview, the strip under it, the charts and controls in a column that scrolls on its own.', evidence: 'All 100 on a grid needed a scroll of four screens and the charts left view; a list beside a preview repeated the badge and the title twice. The strip keeps every badge in one row at any count, the selected photo is the big preview, and the held photos read as wider. Grid and list were built and dropped on review (2026-09-20).' },
+      { q: 9, title: 'Fixed face\'s place', answer: 'An option on the board (Least crop · Fixed face), the mode card kept as the entry that preselects it.', evidence: 'Switching on the board is a one-seat toggle and the same thumbnails re-render with the shipped verdicts; nobody goes back two steps to change a mode card. Fixed face is picked for the square post with the tram dead centre — the logo case — and for nothing else once least crop exists.' },
+      { q: 10, title: 'The default for a real library', answer: `For a portrait library propose 4:5 with least crop; never 16:9 by default.`, evidence: `Portrait 30: 4:5 ${p45.rejectedRows.length} rejected · ${M.fmtPct(p45.meanF)}; 2:3 ${p23.rejectedRows.length} · ${M.fmtPct(p23.meanF)}; 16:9 ${p169.rejectedRows.length} · ${M.fmtPct(p169.meanF)}. 4:5 keeps the scene above and below the tram that 16:9 throws away, and posts where the trams will be shown.` },
+    ];
+    return { evidence, decisions, thresholdsLine: s.onZ ? `z ${s.zFlag} / ${s.zReject}` : `f ${Math.round(s.thFlag * 100)} / ${Math.round(s.thReject * 100)} %` };
+  }
+  statesList() {
+    return [
+      { title: 'Apply filters', rows: [{ s: 'Default', how: 'Open; the set\'s tag lit; the count line and contact sheet show the survivors' }, { s: 'Filtered to zero', how: 'Light two tags that never meet (e.g. city + oldtown): the count reads 0, the contact sheet shows the empty line and Next is refused' }, { s: 'Column filter', how: 'Tap a column of the 3×3 grid; tap again to clear; cells via the dots' }, { s: 'Aspect filter', how: 'Landscape · Portrait · Square segmented' }] },
+      { title: 'Shape · Match · Projects', rows: [{ s: 'Family rows', how: 'Rectangle always; Circle only when single.* photos survive the filter' }, { s: 'Match narrows', how: 'Aspect chips classify the face (Page for the T3); Orientation Any/Landscape/Portrait' }, { s: 'All picked / some / none', how: 'Pick all ↔ Clear in the bottom bar; tap a row to toggle; Next refused at none' }, { s: 'Sort menu', how: 'Sort ▾: Largest · Smallest · Capture order · Alignment (+ same-angle)' }, { s: 'Unticked row', how: 'The tick off: an empty circle, the face traced in white; the photo is out of the sequence' }] },
+      { title: 'Mode', rows: [{ s: 'Four tabs', how: 'Stack · fit / Stack · crop / Output frame / Least crop; the preview loops the picked photos through the chosen mode (stack modes: the first 10)' }, { s: 'Crop has nothing to show', how: 'Stack · crop over photos that share no common area: the red-line warning replaces the preview' }] },
+    { title: 'Sequence board', rows: [{ s: 'All green', how: 'Clean 12 set, 3:2' }, { s: 'Some flagged', how: 'Bad apple 10: amber on 07, red on 05 (auto-reject off)' }, { s: 'Rejected (auto)', how: 'Auto-reject on: the outlier greys out, the count line says "1 rejected", Σ J falls' }, { s: 'Rejected (by hand) / Keep anyway', how: 'Select a thumbnail → Reject; a rejected one → Keep anyway (it pays its crop, pins nothing)' }, { s: 'Show rejected', how: 'Toggle in the header: rejected thumbnails return greyed with a strike' }, { s: 'Key being dragged', how: 'Select a thumbnail → Add key here → drag inside the big preview or the chart handle' }, { s: 'Zoom at key', how: 'Stepper on a key; the key\'s own badge rises' }, { s: 'Fixed face', how: 'Option seat: the side column swaps to Face size/place/Ease; badges become fits · short · upscaled' }, { s: 'Strip', how: 'The preview and the strip are locked; the side column scrolls on its own; held photos are wider in the strip' }, { s: 'Cog', how: 'Path and thresholds fold behind the cog in the side column; the summary line shows the current values' }, { s: 'Hold override', how: 'Selected → Hold select ("hold this one 2 s"); the strip widens it' }, { s: 'Members locked (re-render)', how: 'Open a saved Shape-mation → Re-render: pill in the nav bar, no reject/exclude' }] },
+      { title: 'Timing · Output · Done', rows: [{ s: 'Ramp on', how: 'Ramp On reveals Start / Middle / End selects' }, { s: 'Scrub', how: 'Output step: slider over photo i with its badge and the tally line' }, { s: 'Rendering', how: 'Create → progress card "Rendering n of N"' }, { s: 'Done card', how: 'Poster, title, subtitle, Play · Share · Save as collection' }, { s: 'Player', how: 'Play: the sequence at fps through the same model; scrub; close' }, { s: 'Shape-mations list', how: 'Top bar → Shape-mations: rows with Play · Re-render · Delete; empty state when none' }] },
+      { title: 'Phone 393', rows: [{ s: 'Every step', how: 'Top bar → Phone 393; the board becomes the list form with the preview above' }] },
+    ];
+  }
+  handoff() {
+    const badge = bg => ({ fontSize: 11, fontWeight: 700, color: '#fff', background: bg, borderRadius: 5, padding: '2px 8px', letterSpacing: 0.3 });
+    return [
+      { tag: 'SHIPPED', badge: badge('#6D6D72'), title: 'Already in the app — recreated, keep', rows: [
+        { s: 'The 560 pt sheet and nav', how: 'Unchanged. The sheet grows to 900 × 720 on the board step only (Required, below).' },
+        { s: 'Apply filters', how: 'Search and tag intersection as shipped. Change only the presentation: chips from components/tag-suggestions, sorted by volume, applied chips above (Enhancement).' },
+        { s: 'Shape · Match', how: 'Unchanged.' },
+        { s: 'Projects', how: 'Rows as shipped; the tick alone includes/leaves out (already in code). Adds a crop badge per row once the board exists (Required).' },
+        { s: 'Timing', how: 'Card unchanged. Ramp On exposes Start / Middle / End hold selects.' },
+        { s: 'Output frame (Fixed face)', how: 'The shipped evaluator, verdicts and ×2 rule, unchanged; it becomes an option on the board (Q9) and the mode card preselects it.' },
+        { s: 'Done card · Play · Share', how: 'Unchanged. Gains Save as collection (Required, Collections below).' },
+      ] },
+      { tag: 'REQUIRED', badge: badge('#C36A00'), title: 'New — the goal of §1 needs these', rows: [
+        { s: 'model.js as Swift', how: 'One computation for list, board, scrub and render: cover fit, natural position p, running-median path (window 5, trend-continued ends), per-side zoom z, crop f = 1 − 1/z², Σ J and mean f. §4 of the brief; the prototype file is the reference implementation to port, formula for formula.' },
+        { s: 'Least crop mode', how: 'Fourth mode; the render puts each photo through the same evaluator the board shows.' },
+        { s: 'Sequence board step', how: 'Between Mode and Timing when Least crop / Output frame is chosen. Locked preview + strip on the left (strip widths follow the hold), a self-scrolling 280 pt column on the right: source-with-window card, the two charts, the cog. Option seat Least crop · Fixed face, aspect chips, size, Auto-reject and Show rejected toggles, the two numbers.' },
+        { s: 'Crop-risk badges and auto-reject', how: 'Green / amber / red at 15 / 30 % on f, one pass by default; per-photo Reject, Keep anyway, undo; rejected stay reachable. Re-smooth and recompute every f on each change.' },
+        { s: 'Keys', how: 'Stored by photo id. Start and end handles always drawn on the position chart; Add key here on any photo; drag on the preview (Mac) or the chart handle; nine-point picker on the phone; linear / in-out ease; remove key.' },
+        { s: 'Sort · Smallest first default, Alignment', how: 'Smallest first is the default (the approach); Alignment (greedy chain, K = 3) with a same-angle tie-break as a separate option; Capture order.' },
+        { s: 'Collections with stills as members', how: 'Save from the done card: members (shape snapshots), order, rejects, keys + ease, option, rect, holds, fps, filters. Open → Re-render with members locked; change fps, ramp, aspect, framing.' },
+        { s: 'Mode step preview', how: 'Four tabs over one card with a looping low-fi preview of the picked photos through the chosen mode (stack modes: first 10). The copy alone did not explain the modes.' },
+      ] },
+      { tag: 'OPEN', badge: badge('#FF9500'), title: 'For the developer to investigate and recommend', rows: [
+        { s: 'Q1 · window and thresholds', how: 'Run the ported model over the real libraries — Steven\'s 164 tram projects first, then any other set with shapes — and recommend: window 3 · 5 · 7; flag / reject on f (15 / 30 % is the starting point) or on z (1.1 / 1.2); one pass or to a fixpoint. Deliver the count each rule rejects and a contact sheet of the survivors per set, for review, before fixing anything in code.' },
+        { s: 'Q10 · the portrait default', how: 'Confirm 4:5 with least crop as the proposed default for a portrait library against the same real sets; report the rejected count and mean crop into 4:5 · 2:3 · 16:9.' },
+        { s: 'Not in this hand-off', how: 'The screen recording (brief §7.4) is Steven\'s; the SVG mirrors are redrawn by the developer after sign-off per docs/design/README.md.' },
+      ] },
+      { tag: 'ENHANCEMENT', badge: badge('#34C759'), title: 'Improves the flow — after Required, or cut', rows: [
+        { s: 'Aspect filter + 3×3 position filter', how: 'On Apply filters, with the live contact sheet. Q5 says keep the column picker; the cells are optional.' },
+        { s: 'Per-photo hold override', how: 'Hold popup on the selected photo; the strip widens it; the override wins over the ramp for that photo.' },
+        { s: 'Zoom beyond cover fit at a key', how: 'Stepper on a key; raises that photo\'s own f. Q3: keep it, off by default.' },
+        { s: 'Exposed thresholds and path controls', how: 'Behind the cog. Keep them exposed (a debug setting is fine) until Q1 is answered on real libraries — see the open question below; then fix the values in code and drop the switches.' },
+        { s: 'Phone pass (393)', how: 'Same steps; the board stacks (preview, strip, side cards). Visible for Q3 / Q8, not tuned.' },
+        { s: 'Shape inventory with pose', how: 'STRETCH. A library-level outline adjusted per photo (scale · tilt · yaw). Only if a–h are settled; the same-angle grouping already solves the angle-strobe.' },
+      ] },
+    ];
+  }
+  departures() {
+    return [
+      'A new step, Sequence board, sits between Mode and Timing when Least crop or Output frame is chosen; Stack and Crop skip it as shipped. Its form is the strip (Q8); the grid and list forms were built, reviewed and dropped.',
+      'The sheet grows to 900 × 720 pt on the board step only; every other step keeps the shipped 560 × 680.',
+      'Mode becomes four tabs over one card with a looping low-fi preview of the picked photos through the chosen mode; Least crop is the fourth; Output frame preselects the board\'s Fixed face option. The board\'s option seat can switch between the two without returning to Mode (Q9).',
+      'Apply filters draws the tags as the tag editor\'s chips (components/tag-suggestions), sorted by volume, applied ones in accent above; it gains an Aspect segmented control and the 3×3 position filter, plus a live contact sheet of survivors under the count line.',
+      'Sort defaults to Smallest first (the approach of §1) instead of the shipped Largest first; it gains Capture order (in place of Newest/Oldest, which the kit cannot express) and Alignment with a same-angle tie-break; rows carry the board\'s crop badge; the tick alone includes or leaves out a photo.',
+      'The Output step under Least crop shows the frame summary and the shipped scrub card (the badge is the least-crop badge, not the fixed-face verdict); under Fixed face it shows the shipped verdicts.',
+      'Timing keeps the shipped card; Ramp On exposes Start / Middle / End hold selects (the shipped ramp\'s rows); per-photo holds live on the board thumbnail, not on Timing.',
+      'The done card gains Save as collection; a Shape-mation record holds the stills as members with a snapshot of each shape, and Re-render opens the board with members locked.',
+      'Keys are stored by photo, not by index, so a reject does not move a key to a different photo.',
+      'The Circle family is faked from the single.* set so the family step has two rows; the kit draws only rectangles.',
+    ];
+  }
+}
+</script>
+</body>
+</html>

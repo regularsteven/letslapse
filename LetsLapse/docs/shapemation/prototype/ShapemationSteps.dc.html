@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="{{ padStyle }}">
+
+<!-- ============ SHAPE-MATIONS LIST ============ -->
+<sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+  <div style="font-size:17px;font-weight:600">Shape-mations</div>
+  <div style="font-size:13px;color:#6D6D72;margin-top:6px">Each record keeps its stills as members — the shapes, the order, the rejects, the keys and the timing — so it can be rendered again differently.</div>
+  <sc-if value="{{ noCollections }}" hint-placeholder-val="{{ true }}">
+    <div style="background:#fff;border-radius:18px;padding:28px 16px;margin-top:16px;text-align:center;color:#6D6D72;font-size:13px">No Shape-mations yet. Create one from the Output step and press Save as collection.</div>
+  </sc-if>
+  <div style="display:grid;gap:10px;margin-top:16px">
+  <sc-for list="{{ collections }}" as="c" hint-placeholder-count="0">
+    <div style="background:#fff;border-radius:16px;padding:14px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <div style="{{ c.posterStyle }}"><img src="{{ c.posterSrc }}" style="{{ c.posterImg }}"></img></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:600">{{ c.title }}</div>
+        <div style="font-size:12px;color:#6D6D72;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.subtitle }}</div>
+        <div style="font-size:12px;color:#6D6D72;margin-top:3px">{{ c.duration }}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex:none">
+        <button onClick="{{ c.play }}" style="background:#C36A00;color:#fff;border:none;border-radius:6px;height:23.5px;padding:0 10px;font-size:13px;font-weight:500">Play</button>
+        <button onClick="{{ c.open }}" style="background:rgba(195,106,0,.07);color:#C36A00;border:none;border-radius:6px;height:23.5px;padding:0 10px;font-size:13px;font-weight:500">Re-render</button>
+        <button onClick="{{ c.del }}" style="background:rgba(255,59,48,.08);color:#FF3B30;border:none;border-radius:6px;height:23.5px;padding:0 10px;font-size:13px;font-weight:500">Delete</button>
+      </div>
+    </div>
+  </sc-for>
+  </div>
+</sc-if>
+
+<!-- ============ APPLY FILTERS ============ -->
+<sc-if value="{{ isFilters }}" hint-placeholder-val="{{ true }}">
+  <div style="font-size:13px;color:#6D6D72;line-height:17px">Narrow the photos before choosing the shape — the way the Gallery's Tags rows do.</div>
+  <div style="display:flex;align-items:center;gap:8px;height:33px;background:#E3E3E8;border-radius:10px;padding:0 12px;margin-top:16px">
+    <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="6" cy="6" r="4.5" fill="none" stroke="#6D6D72" stroke-width="1.6"></circle><line x1="9.5" y1="9.5" x2="13" y2="13" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round"></line></svg>
+    <input value="{{ search }}" onChange="{{ setSearch }}" placeholder="Search titles and tags" style="flex:1;background:none;border:none;outline:none;font-size:15px;font-family:inherit;color:#1C1C1E"></input>
+  </div>
+  <div style="background:#fff;border-radius:12px;padding:14px 16px 14px;margin-top:16px">
+    <sc-if value="{{ hasApplied }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:12px;font-weight:600;color:#6D6D72;letter-spacing:.5px">APPLIED</div><button onClick="{{ clearTags }}" style="background:none;border:none;padding:0;font-size:13px;font-weight:600;color:#C36A00">Clear tags</button></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;margin-bottom:14px">
+      <sc-for list="{{ appliedChips }}" as="t" hint-placeholder-count="1">
+        <button onClick="{{ t.toggle }}" style="display:flex;align-items:center;gap:8px;height:33px;border-radius:16.5px;background:#C36A00;border:none;padding:0 10px 0 12px;font-size:14px;font-weight:600;color:#fff;white-space:nowrap">{{ t.l }}<span style="font-weight:400;opacity:.8">{{ t.n }}</span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1 l8 8 M9 1 l-8 8" stroke="#fff" stroke-opacity=".8" stroke-width="1.7" stroke-linecap="round"></path></svg></button>
+      </sc-for>
+    </div>
+    </sc-if>
+    <div style="font-size:12px;font-weight:600;color:#6D6D72;letter-spacing:.5px">TAGS</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:9px">
+      <sc-for list="{{ tagChips }}" as="t" hint-placeholder-count="12">
+        <button onClick="{{ t.toggle }}" style="display:flex;align-items:center;gap:7px;height:33px;border-radius:16.5px;background:rgba(0,0,0,.07);border:none;padding:0 12px;font-size:14px;color:rgba(0,0,0,.75);white-space:nowrap">{{ t.l }}<span style="color:#6D6D72;font-size:13px">{{ t.n }}</span></button>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
+    <div style="background:#fff;border-radius:12px;padding:14px 16px;flex:1;min-width:240px">
+      <div style="font-size:12px;font-weight:600;color:#6D6D72;letter-spacing:.2px">ASPECT</div>
+      <div style="display:flex;background:#E9E9EB;border-radius:7px;padding:1.5px;margin-top:10px"><sc-for list="{{ aspectSeg }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div>
+      <div style="font-size:12px;color:#6D6D72;margin-top:10px;line-height:16px">{{ aspectNote }}</div>
+    </div>
+    <div style="background:#fff;border-radius:12px;padding:14px 16px;flex:1;min-width:240px">
+      <div style="display:flex;justify-content:space-between"><div style="font-size:12px;font-weight:600;color:#6D6D72;letter-spacing:.2px">POSITION</div><div style="font-size:12px;color:#6D6D72">where the face's centre lies</div></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:10px">
+        <sc-for list="{{ colBtns }}" as="c" hint-placeholder-count="3"><button onClick="{{ c.pick }}" style="{{ c.st }}">{{ c.l }}<span style="opacity:.6;margin-left:5px">{{ c.n }}</span></button></sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:4px">
+        <sc-for list="{{ cellBtns }}" as="c" hint-placeholder-count="9"><button onClick="{{ c.pick }}" style="{{ c.st }}">{{ c.n }}</button></sc-for>
+      </div>
+    </div>
+  </div>
+  <div style="font-size:13px;color:#6D6D72;margin-top:18px">{{ countLine }}</div>
+  <sc-if value="{{ emptyFilter }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#fff;border-radius:12px;padding:20px 16px;margin-top:10px;font-size:13px;color:#6D6D72;text-align:center">Nothing matches these filters. Clear a tag or widen the aspect.</div>
+  </sc-if>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;align-items:flex-start">
+    <sc-for list="{{ contactThumbs }}" as="t" hint-placeholder-count="12">
+      <div style="{{ t.box }}" title="{{ t.title }}">
+        <img src="{{ t.src }}" style="position:absolute;inset:0;width:100%;height:100%"></img>
+        <div style="{{ t.win }}"></div>
+        <div style="{{ t.face }}"></div>
+      </div>
+    </sc-for>
+  </div>
+</sc-if>
+
+<!-- ============ SHAPE ============ -->
+<sc-if value="{{ isShape }}" hint-placeholder-val="{{ false }}">
+  <div style="font-size:17px;font-weight:700">Which shape holds still?</div>
+  <div style="font-size:13px;color:#6D6D72;margin-top:6px">{{ trail }}</div>
+  <div style="background:#fff;border-radius:12px;padding:0 16px 0 0;margin-top:14px">
+    <sc-for list="{{ familyRows }}" as="f" hint-placeholder-count="2">
+      <div onClick="{{ f.pick }}" style="display:flex;align-items:center;height:57px;cursor:pointer;border-bottom:1px solid rgba(0,0,0,.1);margin-left:0">
+        <div style="width:58px;display:flex;justify-content:center"><div style="{{ f.glyph }}"></div></div>
+        <span style="font-size:17px">{{ f.l }}</span>
+        <span style="flex:1"></span>
+        <span style="font-size:13px;color:#6D6D72">{{ f.count }}</span>
+        <svg width="8" height="12" viewBox="0 0 8 12" style="margin-left:10px"><path d="M1.5 1 l5 5 -5 5" fill="none" stroke="#A0A0A5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </div>
+    </sc-for>
+    <div onClick="{{ goInventory }}" style="display:flex;align-items:center;min-height:57px;padding:8px 0;cursor:pointer">
+      <div style="width:58px;flex:none;display:flex;justify-content:center"><svg width="18" height="18" viewBox="0 0 18 18"><rect x="2" y="4" width="14" height="10" rx="2" fill="none" stroke="#6D6D72" stroke-width="1.8" transform="rotate(-8 9 9)"></rect><circle cx="9" cy="9" r="1.5" fill="#6D6D72"></circle></svg></div>
+      <div style="flex:1;min-width:0"><div style="font-size:17px;color:#6D6D72;white-space:nowrap">Shape inventory · pose <span style="font-size:13px;color:#A0A0A5">stretch</span></div><div style="font-size:12px;color:#A0A0A5;line-height:15px;margin-top:2px">One outline for the whole library — "tram face" — drawn once, then adjusted per photo (scale · tilt · yaw) so a shape records how the face is turned, not only its box.</div></div>
+      <svg width="8" height="12" viewBox="0 0 8 12" style="margin-left:10px"><path d="M1.5 1 l5 5 -5 5" fill="none" stroke="#A0A0A5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+  </div>
+</sc-if>
+
+<!-- ============ INVENTORY (stretch) ============ -->
+<sc-if value="{{ isInventory }}" hint-placeholder-val="{{ false }}">
+  <div style="font-size:17px;font-weight:700">Tram face — a library-level outline</div>
+  <div style="font-size:13px;color:#6D6D72;margin-top:6px;line-height:17px">Add it once, then adjust: scale, tilt and yaw. A shape records pose, not only bounds. The kit's tram.left / right / high / low objects are the truth for the poses.</div>
+  <div style="background:#fff;border-radius:18px;padding:16px;margin-top:14px">
+    <div style="{{ invBox }}">
+      <img src="{{ invSrc }}" style="position:absolute;inset:0;width:100%;height:100%"></img>
+      <div style="{{ invShape }}"></div>
+      <div style="{{ invHandleT }}"></div><div style="{{ invHandleR }}"></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px"><div style="font-size:14px">Scale <span style="color:#6D6D72">{{ invScaleL }}</span></div><input type="range" min="0.6" max="1.6" step="0.02" value="{{ invScale }}" onChange="{{ setInvScale }}" style="width:100%"></input></div>
+      <div style="flex:1;min-width:150px"><div style="font-size:14px">Tilt <span style="color:#6D6D72">{{ invTiltL }}</span></div><input type="range" min="-25" max="25" step="1" value="{{ invTilt }}" onChange="{{ setInvTilt }}" style="width:100%"></input></div>
+      <div style="flex:1;min-width:150px"><div style="font-size:14px">Yaw <span style="color:#6D6D72">{{ invYawL }}</span></div><input type="range" min="-60" max="60" step="1" value="{{ invYaw }}" onChange="{{ setInvYaw }}" style="width:100%"></input></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+      <sc-for list="{{ invPhotoSeg }}" as="o" hint-placeholder-count="5"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for>
+      <span style="flex:1"></span>
+      <span style="font-size:12px;color:#6D6D72">truth: {{ invTruth }}</span>
+      <button onClick="{{ invAdd }}" style="background:#C36A00;color:#fff;border:none;border-radius:6px;height:23.5px;padding:0 12px;font-size:13px;font-weight:500">Add to library</button>
+    </div>
+  </div>
+  <div style="font-size:12px;color:#6D6D72;margin-top:12px;line-height:16px">Must answer: add-then-adjust as one gesture or two; can a person tell yaw from tilt on a handle; is pose worth its handles when the angle-strobe is solved by grouping (Sort · same-angle), not by pose.</div>
+</sc-if>
+
+<!-- ============ MATCH ============ -->
+<sc-if value="{{ isMatch }}" hint-placeholder-val="{{ false }}">
+  <div style="font-size:17px;font-weight:700">{{ matchHeading }}</div>
+  <div style="background:#fff;border-radius:12px;padding:16px 18px;margin-top:12px">
+    <div style="font-size:15px">Aspect</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"><sc-for list="{{ matchChips }}" as="o" hint-placeholder-count="8"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div>
+    <div style="font-size:15px;margin-top:22px">Orientation</div>
+    <div style="display:flex;background:#E9E9EB;border-radius:7px;padding:1.5px;margin-top:8px;width:270px"><sc-for list="{{ orientSeg }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div>
+    <div style="font-size:13px;color:#6D6D72;margin-top:22px;line-height:15px">{{ strictness }}</div>
+  </div>
+  <div style="font-size:13px;color:#6D6D72;margin-top:18px">{{ matchTally }}</div>
+</sc-if>
+
+<!-- ============ PROJECTS ============ -->
+<sc-if value="{{ isProjects }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;align-items:center;position:relative">
+    <span style="font-size:15px;color:#6D6D72">{{ pickedLine }}</span>
+    <span style="flex:1"></span>
+    <button onClick="{{ toggleSortMenu }}" style="background:none;border:none;display:flex;align-items:center;gap:6px;font-size:15px;color:#6D6D72;padding:0">
+      <svg width="10" height="6" viewBox="0 0 10 6"><path d="M0.5 0.5 l4.5 4.5 4.5 -4.5" fill="none" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>Sort<span style="color:#1C1C1E">· {{ sortLabel }}</span>
+      <svg width="8" height="5" viewBox="0 0 8 5"><path d="M0 0.5 l4 4 4 -4" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </button>
+    <sc-if value="{{ sortMenu }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;right:0;top:26px;background:#fff;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.2);padding:6px;z-index:5;min-width:200px">
+        <sc-for list="{{ sortItems }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for>
+        <div style="border-top:1px solid rgba(0,0,0,.08);margin:4px 0"></div>
+        <button onClick="{{ toggleSameAngle }}" style="display:flex;width:100%;justify-content:space-between;background:none;border:none;padding:6px 10px;font-size:13px;border-radius:6px"><span>Keep same-angle runs together</span><span style="color:#C36A00">{{ sameAngleL }}</span></button>
+      </div>
+    </sc-if>
+  </div>
+  <div style="display:grid;gap:10px;margin-top:14px">
+    <sc-for list="{{ projectRows }}" as="r" hint-placeholder-count="4">
+      <div draggable="true" onDragStart="{{ r.dragStart }}" onDragOver="{{ r.dragOver }}" onDrop="{{ r.drop }}" style="{{ r.card }}">
+        <div onClick="{{ r.toggle }}" style="display:flex;gap:24px;flex:1;cursor:pointer;min-width:0">
+          <div style="width:72px;height:96px;border-radius:6px;background:#1C1C1E;position:relative;overflow:hidden;flex:none">
+            <img src="{{ r.src }}" style="{{ r.img }}"></img>
+            <div style="{{ r.box }}"></div>
+          </div>
+          <div style="min-width:0">
+            <div style="font-size:15px;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.title }}</div>
+            <div style="font-size:13px;color:#6D6D72;margin-top:8px">{{ r.kind }}</div>
+            <div style="font-size:13px;color:#A0A0A5;margin-top:6px">{{ r.share }}</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:8px"><span style="{{ r.badge }}">{{ r.badgeL }}</span><span style="font-size:12px;color:#6D6D72">{{ r.pos }}</span></div>
+          </div>
+        </div>
+        <div style="flex:none">
+          <div style="{{ r.check }}"><sc-if value="{{ r.on }}" hint-placeholder-val="{{ true }}"><svg width="12" height="10" viewBox="0 0 12 10"><path d="M1 5 l3.5 3.5 6.5 -7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if></div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</sc-if>
+
+<!-- ============ MODE ============ -->
+<sc-if value="{{ isMode }}" hint-placeholder-val="{{ false }}">
+  <div style="font-size:17px;font-weight:600">How should the photos be laid out?</div>
+  <div style="display:flex;background:#E8E8E8;border-radius:6px;margin-top:14px"><sc-for list="{{ modeSeg }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div>
+  <div style="background:#fff;border-radius:18px;padding:16px;margin-top:12px">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <div style="{{ modeTile }}"><span style="font-size:15px;font-weight:600">{{ modeGlyph }}</span></div>
+      <div><div style="font-size:16px;font-weight:600">{{ modeTitle }}</div><div style="font-size:13px;color:#6D6D72;margin-top:4px;line-height:16.5px">{{ modeSub }}</div></div>
+    </div>
+    <div style="{{ mpFrame }}">
+      <sc-for list="{{ mpLayers }}" as="l" hint-placeholder-count="1"><img src="{{ l.src }}" style="{{ l.st }}" draggable="false"></img></sc-for>
+      <div style="{{ mpFace }}"></div>
+      <span style="{{ mpBadge }}">{{ mpBadgeL }}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+      <button onClick="{{ mpPlay }}" style="width:28px;height:28px;border-radius:14px;background:#C36A00;border:none;color:#fff;font-size:12px;flex:none">{{ mpGlyph }}</button>
+      <input type="range" min="0" max="{{ mpMax }}" step="1" value="{{ mpIdx }}" onChange="{{ mpSet }}" style="flex:1"></input>
+      <span style="font-size:12px;color:#6D6D72;font-variant-numeric:tabular-nums;white-space:nowrap">{{ mpCounter }}</span>
+    </div>
+    <div style="font-size:12px;color:#6D6D72;margin-top:8px;line-height:15px">{{ mpNote }}</div>
+  </div>
+  <div style="font-size:12px;color:#6D6D72;margin-top:14px">{{ planSummary }}</div>
+</sc-if>
+
+<!-- ============ SEQUENCE BOARD ============ -->
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ false }}">
+<div style="{{ boardRoot }}">
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;flex:none">
+    <div style="display:flex;background:#E9E9EB;border-radius:7px;padding:1.5px"><sc-for list="{{ optionSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ aspectChips }}" as="o" hint-placeholder-count="6"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div>
+    <div style="position:relative"><button onClick="{{ sizePop.toggle }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:80px;height:23.5px;border-radius:5px;border:.75px solid rgba(0,0,0,.1);background:#F7F7F7;font-size:13px;padding:0 6px 0 11px;box-shadow:0 .5px 1px rgba(0,0,0,.08);white-space:nowrap"><span>{{ sizePop.label }}</span><svg width="8" height="10" viewBox="0 0 8 10"><path d="M1 3.5 l3 -3 3 3 M1 6.5 l3 3 3 -3" fill="none" stroke="#6D6D72" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><sc-if value="{{ sizePop.open }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;right:0;top:26px;background:#fff;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.22);padding:4px;z-index:20;min-width:120px"><sc-for list="{{ sizePop.items }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></sc-if></div>
+    <span style="font-size:12px;color:#6D6D72;white-space:nowrap">{{ outSizeL }}</span>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px;flex:none">
+    <button onClick="{{ toggleAutoReject }}" style="display:flex;align-items:center;gap:7px;background:none;border:none;padding:0;font-size:13px;white-space:nowrap"><span style="{{ arTrack }}"><span style="{{ arKnob }}"></span></span>Auto-reject</button>
+    <button onClick="{{ toggleShowRejected }}" style="display:flex;align-items:center;gap:7px;background:none;border:none;padding:0;font-size:13px;white-space:nowrap"><span style="{{ srTrack }}"><span style="{{ srKnob }}"></span></span>Show rejected</button>
+    <span style="font-size:13px;color:#6D6D72;white-space:nowrap">{{ boardCount }}</span>
+    <span style="flex:1"></span>
+    <div style="display:flex;gap:14px;background:#1C1C1E;color:#fff;border-radius:10px;padding:7px 14px;font-variant-numeric:tabular-nums;white-space:nowrap"><span style="font-size:12px;color:rgba(255,255,255,.55)">Σ J <b style="color:#FFB340;font-size:14px;margin-left:4px">{{ sumJ }}</b></span><span style="font-size:12px;color:rgba(255,255,255,.55)">mean crop <b style="color:#FFB340;font-size:14px;margin-left:4px">{{ meanF }}</b></span></div>
+  </div>
+
+  <div style="{{ boardBody }}">
+    <!-- left: the preview and the strip, locked -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+      <div style="{{ bigFrame }}" onPointerDown="{{ previewDown }}">
+        <img src="{{ bigSrc }}" style="{{ bigImg }}" draggable="false"></img>
+        <div style="{{ bigFace }}"></div>
+        <sc-if value="{{ selIsKey }}" hint-placeholder-val="{{ false }}"><div style="{{ bigKeyDot }}"></div></sc-if>
+        <span style="position:absolute;left:10px;top:8px;font-size:12px;color:#fff;background:rgba(0,0,0,.5);border-radius:8px;padding:2px 8px">{{ selTitle }}</span>
+        <span style="{{ selBadge }}">{{ selBadgeL }}</span>
+        <sc-if value="{{ selIsKey }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:10px;bottom:8px;font-size:11px;color:#1C1C1E;background:#FFB340;border-radius:8px;padding:2px 8px;font-weight:600">key · {{ dragHint }}</span></sc-if>
+      </div>
+      <div style="display:flex;gap:3px;overflow-x:auto;background:#1C1C1E;border-radius:10px;padding:8px;flex:none">
+        <sc-for list="{{ stripThumbs }}" as="t" hint-placeholder-count="10">
+          <div onClick="{{ t.select }}" onMouseEnter="{{ t.hover }}" onMouseLeave="{{ unhover }}" style="{{ t.frame }}">
+            <img src="{{ t.src }}" style="{{ t.img }}" draggable="false"></img>
+            <span style="{{ t.dot }}"></span>
+            <span style="position:absolute;left:4px;top:3px;font-size:9px;font-weight:600;color:#fff;background:rgba(0,0,0,.5);border-radius:5px;padding:0 4px">{{ t.n }}</span>
+            <sc-if value="{{ t.isKey }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:4px;bottom:3px;width:8px;height:8px;background:#FFB340;transform:rotate(45deg);border:1.5px solid #1C1C1E"></span></sc-if>
+            <sc-if value="{{ t.holdL }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:3px;bottom:3px;font-size:9px;color:#1C1C1E;background:#FFB340;border-radius:5px;padding:0 4px;font-weight:600">{{ t.holdL }}</span></sc-if>
+            <sc-if value="{{ t.rejected }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(255,255,255,.35) 0 6px,transparent 6px 12px)"></span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11px;color:#6D6D72;flex:none">{{ stripNote }}</div>
+    </div>
+
+    <!-- right: nested scroll -->
+    <div style="{{ sideStyle }}">
+      <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ true }}">
+      <div style="background:#fff;border-radius:18px;padding:12px">
+        <div style="{{ srcFrame }}">
+          <img src="{{ bigSrc }}" style="position:absolute;inset:0;width:100%;height:100%" draggable="false"></img>
+          <div style="position:absolute;inset:0;background:rgba(0,0,0,.45)"></div>
+          <div style="{{ srcWin }}"><img src="{{ bigSrc }}" style="{{ srcWinImg }}" draggable="false"></img></div>
+          <div style="{{ srcFace }}"></div>
+        </div>
+        <div style="font-size:11px;color:#6D6D72;margin-top:4px">the source; the output window over it is what stays</div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px;margin-top:8px;font-variant-numeric:tabular-nums">
+          <span style="color:#6D6D72">face</span><span>{{ selShare }}</span>
+          <span style="color:#6D6D72">natural</span><span>{{ selNatural }}</span>
+          <span style="color:#6D6D72">{{ selMetricL }}</span><span>{{ selMetric }}</span>
+          <span style="color:#6D6D72">margins</span><span>{{ selMargins }}</span>
+        </div>
+        <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+          <button onClick="{{ selReject }}" style="{{ selRejectSt }}">{{ selRejectL }}</button>
+          <sc-if value="{{ isLeast }}" hint-placeholder-val="{{ true }}"><button onClick="{{ selKey }}" style="{{ selKeySt }}">{{ selKeyL }}</button></sc-if>
+          <div style="position:relative"><button onClick="{{ selHoldPop.toggle }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:101px;height:23.5px;border-radius:5px;border:.75px solid rgba(0,0,0,.1);background:#F7F7F7;font-size:12px;padding:0 6px 0 11px;box-shadow:0 .5px 1px rgba(0,0,0,.08);white-space:nowrap"><span>{{ selHoldPop.label }}</span><svg width="8" height="10" viewBox="0 0 8 10"><path d="M1 3.5 l3 -3 3 3 M1 6.5 l3 3 3 -3" fill="none" stroke="#6D6D72" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><sc-if value="{{ selHoldPop.open }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;right:0;top:26px;background:#fff;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.22);padding:4px;z-index:20;min-width:120px"><sc-for list="{{ selHoldPop.items }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></sc-if></div>
+        </div>
+        <sc-if value="{{ selIsKey }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,.08)">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px"><span>Key · place {{ selKeyPlace }}</span><div style="display:flex;background:#E9E9EB;border-radius:6px;padding:1px"><sc-for list="{{ keyPickerSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></div>
+            <sc-if value="{{ keyPickerIsNine }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;grid-template-columns:repeat(3,24px);background:#E9E9EB;border-radius:8px;padding:6px 12px;width:max-content;margin-top:8px"><sc-for list="{{ ninePts }}" as="o" hint-placeholder-count="9"><button onClick="{{ o.pick }}" style="{{ o.st }}"></button></sc-for></div>
+            </sc-if>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-top:8px"><span>Zoom beyond cover fit</span><div style="display:flex;align-items:center;gap:6px"><span style="font-variant-numeric:tabular-nums">{{ selZoomL }}</span><div style="display:flex;border-radius:5px;background:#EBEBEB;overflow:hidden"><button onClick="{{ zoomDown }}" style="width:19.5px;height:24.5px;border:none;background:none">−</button><button onClick="{{ zoomUp }}" style="width:19.5px;height:24.5px;border:none;background:none;border-left:1px solid rgba(0,0,0,.08)">+</button></div></div></div>
+          </div>
+        </sc-if>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isLeast }}" hint-placeholder-val="{{ true }}">
+      <div style="background:#fff;border-radius:18px;padding:12px">
+        <div style="display:flex;justify-content:space-between;font-size:12px"><span style="font-weight:600;white-space:nowrap">Face position</span><span style="color:#6D6D72">path P over p<sub>i</sub> · <span style="color:#C36A00">x</span> · <span style="color:#8A4A00">y</span></span></div>
+        <svg viewBox="0 0 256 96" style="width:100%;height:auto;margin-top:6px;touch-action:none;display:block">
+          <rect x="8" y="8" width="240" height="80" fill="#F2F2F7" rx="4"></rect>
+          <line x1="8" y1="48" x2="248" y2="48" stroke="rgba(0,0,0,.08)"></line>
+          <sc-for list="{{ posDots }}" as="d" hint-placeholder-count="10"><circle cx="{{ d.x }}" cy="{{ d.yx }}" r="2.2" fill="#C36A00" opacity="0.45"></circle><circle cx="{{ d.x }}" cy="{{ d.yy }}" r="2.2" fill="#8A4A00" opacity="0.45"></circle></sc-for>
+          <path d="{{ pathX }}" fill="none" stroke="#C36A00" stroke-width="2"></path>
+          <path d="{{ pathY }}" fill="none" stroke="#8A4A00" stroke-width="1.5" stroke-dasharray="4 3"></path>
+          <sc-if value="{{ playheadX }}" hint-placeholder-val="{{ false }}"><line x1="{{ playheadX }}" y1="8" x2="{{ playheadX }}" y2="88" stroke="#1C1C1E" stroke-width="1" opacity="0.5"></line></sc-if>
+          <sc-for list="{{ handles }}" as="h" hint-placeholder-count="2">
+            <circle cx="{{ h.x }}" cy="{{ h.yx }}" r="6" fill="#fff" stroke="#C36A00" stroke-width="2" style="cursor:ns-resize" onPointerDown="{{ h.downX }}"></circle>
+            <circle cx="{{ h.x }}" cy="{{ h.yy }}" r="5" fill="#fff" stroke="#8A4A00" stroke-width="2" style="cursor:ns-resize" onPointerDown="{{ h.downY }}"></circle>
+          </sc-for>
+        </svg>
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:10px"><span style="font-weight:600;white-space:nowrap">Face share</span><span style="color:#6D6D72;text-align:right">rendered s·z — must be monotonic</span></div>
+        <svg viewBox="0 0 256 80" style="width:100%;height:auto;margin-top:6px;display:block">
+          <rect x="8" y="6" width="240" height="66" fill="#F2F2F7" rx="4"></rect>
+          <path d="{{ sizeNat }}" fill="none" stroke="#C36A00" stroke-width="1" opacity="0.35"></path>
+          <path d="{{ sizePath }}" fill="none" stroke="#1C1C1E" stroke-width="1.5"></path>
+          <sc-for list="{{ sizeDots }}" as="d" hint-placeholder-count="10"><circle cx="{{ d.x }}" cy="{{ d.y }}" r="2.6" fill="{{ d.c }}"></circle></sc-for>
+          <sc-if value="{{ playheadX }}" hint-placeholder-val="{{ false }}"><line x1="{{ playheadX }}" y1="6" x2="{{ playheadX }}" y2="72" stroke="#1C1C1E" stroke-width="1" opacity="0.5"></line></sc-if>
+        </svg>
+        <div style="font-size:11px;color:#6D6D72;margin-top:6px">{{ monoLine }}</div>
+      </div>
+      <div style="background:#fff;border-radius:18px;padding:12px;display:grid;gap:10px;font-size:12px">
+        <button onClick="{{ toggleCog }}" style="display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;font-size:12px;width:100%"><span style="display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="2.2" fill="none" stroke="#6D6D72" stroke-width="1.5"></circle><path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3.1 3.1l1.4 1.4M9.5 9.5l1.4 1.4M3.1 10.9l1.4-1.4M9.5 4.5l1.4-1.4" stroke="#6D6D72" stroke-width="1.5" stroke-linecap="round"></path></svg><span style="font-weight:600">Path and thresholds</span></span><span style="color:#6D6D72">{{ cogSummary }}</span></button>
+        <sc-if value="{{ cogOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span>Window</span><div style="display:flex;background:#E9E9EB;border-radius:6px;padding:1px;width:110px"><sc-for list="{{ windowSeg }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span>The ends</span><div style="display:flex;background:#E9E9EB;border-radius:6px;padding:1px;width:150px"><sc-for list="{{ endsSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span>Ease between keys</span><div style="display:flex;background:#E9E9EB;border-radius:6px;padding:1px;width:150px"><sc-for list="{{ easeSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span>End handles</span><div style="display:flex;background:#E9E9EB;border-radius:6px;padding:1px;width:110px"><sc-for list="{{ endHandlesSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></div>
+        <div style="border-top:1px solid rgba(0,0,0,.08)"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span>Thresholds on</span><div style="display:flex;background:#E9E9EB;border-radius:6px;padding:1px;width:110px"><sc-for list="{{ onZSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></div>
+        <div><div style="display:flex;justify-content:space-between"><span>Flag <span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:#FFB340;vertical-align:middle"></span></span><span style="font-variant-numeric:tabular-nums">{{ thFlagL }}</span></div><input type="range" min="{{ thMin }}" max="{{ thMax }}" step="{{ thStep }}" value="{{ thFlagV }}" onChange="{{ setThFlag }}" style="width:100%;margin:2px 0 0"></input></div>
+        <div><div style="display:flex;justify-content:space-between"><span>Reject <span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:#FF3B30;vertical-align:middle"></span></span><span style="font-variant-numeric:tabular-nums">{{ thRejectL }}</span></div><input type="range" min="{{ thMin }}" max="{{ thMax }}" step="{{ thStep }}" value="{{ thRejectV }}" onChange="{{ setThReject }}" style="width:100%;margin:2px 0 0"></input></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span>Auto-reject passes</span><div style="display:flex;background:#E9E9EB;border-radius:6px;padding:1px;width:150px"><sc-for list="{{ fixpointSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isFixed }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#fff;border-radius:18px;padding:16px;display:grid;gap:14px">
+        <div style="font-size:14px;font-weight:600">Face size</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px"><span>Start {{ fxStartL }} of the height</span><div style="display:flex;border-radius:5px;background:#EBEBEB;overflow:hidden"><button onClick="{{ fxStartDown }}" style="width:19.5px;height:24.5px;border:none;background:none">−</button><button onClick="{{ fxStartUp }}" style="width:19.5px;height:24.5px;border:none;background:none;border-left:1px solid rgba(0,0,0,.08)">+</button></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px"><span>End {{ fxEndL }}</span><div style="display:flex;border-radius:5px;background:#EBEBEB;overflow:hidden"><button onClick="{{ fxEndDown }}" style="width:19.5px;height:24.5px;border:none;background:none">−</button><button onClick="{{ fxEndUp }}" style="width:19.5px;height:24.5px;border:none;background:none;border-left:1px solid rgba(0,0,0,.08)">+</button></div></div>
+        <div style="font-size:14px;font-weight:600">Face place</div>
+        <div style="display:flex;gap:24px">
+          <div><div style="display:grid;grid-template-columns:repeat(3,24px);background:#E9E9EB;border-radius:8px;padding:6px 12px;width:max-content"><sc-for list="{{ fxStartPts }}" as="o" hint-placeholder-count="9"><button onClick="{{ o.pick }}" style="{{ o.st }}"></button></sc-for></div><div style="font-size:12px;color:#6D6D72;text-align:center;margin-top:6px">Start</div></div>
+          <div><div style="display:grid;grid-template-columns:repeat(3,24px);background:#E9E9EB;border-radius:8px;padding:6px 12px;width:max-content"><sc-for list="{{ fxEndPts }}" as="o" hint-placeholder-count="9"><button onClick="{{ o.pick }}" style="{{ o.st }}"></button></sc-for></div><div style="font-size:12px;color:#6D6D72;text-align:center;margin-top:6px">{{ fxEndPlaceL }}</div></div>
+        </div>
+        <div style="font-size:14px;font-weight:600">Ease</div>
+        <div style="display:flex;background:#E8E8E8;border-radius:6px;padding:0;width:233.5px"><sc-for list="{{ fxEaseSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div>
+        <div style="font-size:12px;color:#8A4A00">{{ fxTally }}</div>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ============ TIMING ============ -->
+<sc-if value="{{ isTiming }}" hint-placeholder-val="{{ false }}">
+  <div style="font-size:17px;font-weight:600">How fast should it play?</div>
+  <div style="background:#fff;border-radius:18px;padding:16px;margin-top:14px">
+    <div style="font-size:14px">Frame rate</div>
+    <div style="display:flex;background:#E8E8E8;border-radius:6px;margin-top:8px;width:202px"><sc-for list="{{ fpsSeg }}" as="o" hint-placeholder-count="5"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div>
+    <div style="font-size:14px;margin-top:22px">Ramp</div>
+    <div style="display:flex;background:#E8E8E8;border-radius:6px;margin-top:8px;width:86.5px"><sc-for list="{{ rampSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div>
+    <sc-if value="{{ rampOn }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px 16px;margin-top:14px;align-items:center;font-size:15px">
+        <span>Start</span><div style="position:relative"><button onClick="{{ rampStartPop.toggle }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:101px;height:23.5px;border-radius:5px;border:.75px solid rgba(0,0,0,.1);background:#F7F7F7;font-size:13px;padding:0 6px 0 11px;box-shadow:0 .5px 1px rgba(0,0,0,.08);white-space:nowrap"><span>{{ rampStartPop.label }}</span><svg width="8" height="10" viewBox="0 0 8 10"><path d="M1 3.5 l3 -3 3 3 M1 6.5 l3 3 3 -3" fill="none" stroke="#6D6D72" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><sc-if value="{{ rampStartPop.open }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;right:0;top:26px;background:#fff;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.22);padding:4px;z-index:20;min-width:120px"><sc-for list="{{ rampStartPop.items }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></sc-if></div>
+        <span>Middle</span><div style="position:relative"><button onClick="{{ rampMidPop.toggle }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:101px;height:23.5px;border-radius:5px;border:.75px solid rgba(0,0,0,.1);background:#F7F7F7;font-size:13px;padding:0 6px 0 11px;box-shadow:0 .5px 1px rgba(0,0,0,.08);white-space:nowrap"><span>{{ rampMidPop.label }}</span><svg width="8" height="10" viewBox="0 0 8 10"><path d="M1 3.5 l3 -3 3 3 M1 6.5 l3 3 3 -3" fill="none" stroke="#6D6D72" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><sc-if value="{{ rampMidPop.open }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;right:0;top:26px;background:#fff;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.22);padding:4px;z-index:20;min-width:120px"><sc-for list="{{ rampMidPop.items }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></sc-if></div>
+        <span>End</span><div style="position:relative"><button onClick="{{ rampEndPop.toggle }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:101px;height:23.5px;border-radius:5px;border:.75px solid rgba(0,0,0,.1);background:#F7F7F7;font-size:13px;padding:0 6px 0 11px;box-shadow:0 .5px 1px rgba(0,0,0,.08);white-space:nowrap"><span>{{ rampEndPop.label }}</span><svg width="8" height="10" viewBox="0 0 8 10"><path d="M1 3.5 l3 -3 3 3 M1 6.5 l3 3 3 -3" fill="none" stroke="#6D6D72" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><sc-if value="{{ rampEndPop.open }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;right:0;top:26px;background:#fff;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.22);padding:4px;z-index:20;min-width:120px"><sc-for list="{{ rampEndPop.items }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></sc-if></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ rampOff }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:26px"><span style="font-size:15px">Each photo</span><div style="position:relative"><button onClick="{{ holdPop.toggle }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:101px;height:23.5px;border-radius:5px;border:.75px solid rgba(0,0,0,.1);background:#F7F7F7;font-size:13px;padding:0 6px 0 11px;box-shadow:0 .5px 1px rgba(0,0,0,.08);white-space:nowrap"><span>{{ holdPop.label }}</span><svg width="8" height="10" viewBox="0 0 8 10"><path d="M1 3.5 l3 -3 3 3 M1 6.5 l3 3 3 -3" fill="none" stroke="#6D6D72" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><sc-if value="{{ holdPop.open }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;right:0;top:26px;background:#fff;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.22);padding:4px;z-index:20;min-width:120px"><sc-for list="{{ holdPop.items }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" style="{{ o.st }}">{{ o.l }}</button></sc-for></div></sc-if></div></div>
+    </sc-if>
+    <div style="font-size:12px;color:#6D6D72;margin-top:22px;line-height:15px">{{ timingFooter }}</div>
+    <sc-if value="{{ overridesLine }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#8A4A00;margin-top:8px">{{ overridesLine }}</div></sc-if>
+  </div>
+  <div style="font-size:12px;color:#6D6D72;margin-top:22px">{{ estimate2 }}</div>
+</sc-if>
+
+<!-- ============ OUTPUT ============ -->
+<sc-if value="{{ isOutput }}" hint-placeholder-val="{{ false }}">
+  <sc-if value="{{ outIdle }}" hint-placeholder-val="{{ true }}">
+    <sc-if value="{{ outIsStack }}" hint-placeholder-val="{{ false }}">
+      <div style="font-size:17px;font-weight:600">Output size</div>
+      <div style="font-size:13px;color:#6D6D72;margin-top:10px;line-height:16px">Sizes come from the pictures you picked: the native canvas keeps every pixel; the fits scale it down.</div>
+      <div style="background:#fff;border-radius:16px;margin-top:14px;padding:0 16px">
+        <sc-for list="{{ sizeRows }}" as="o" hint-placeholder-count="5">
+          <div onClick="{{ o.pick }}" style="display:flex;justify-content:space-between;align-items:center;height:48px;border-bottom:.5px solid rgba(0,0,0,.12);cursor:pointer"><span style="font-size:15px">{{ o.l }}</span><div style="{{ o.check }}"><sc-if value="{{ o.on }}" hint-placeholder-val="{{ false }}"><svg width="12" height="10" viewBox="0 0 12 10"><path d="M1 5 l3.5 3.5 6.5 -7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if></div></div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ outIsFrame }}" hint-placeholder-val="{{ true }}">
+      <div style="font-size:17px;font-weight:600">{{ outHeading }}</div>
+      <div style="font-size:13px;color:#6D6D72;margin-top:10px;line-height:16px">{{ outIntro }}</div>
+      <div style="background:#fff;border-radius:18px;padding:16px;margin-top:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:15px">Frame</span><span style="font-size:13px;color:#6D6D72">{{ frameSummary }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span style="font-size:15px">Members</span><span style="font-size:13px;color:#6D6D72">{{ memberSummary }}</span></div>
+        <button onClick="{{ backToBoard }}" style="background:none;border:none;padding:10px 0 0;font-size:13px;font-weight:600;color:#C36A00">Adjust on the board</button>
+      </div>
+      <div style="background:#fff;border-radius:18px;padding:12px 16px 16px;margin-top:12px">
+        <div style="{{ scrubFrame }}"><img src="{{ scrubSrc }}" style="{{ scrubImg }}" draggable="false"></img><div style="{{ scrubFace }}"></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><span style="font-size:14px;font-weight:600">{{ scrubTitle }}</span><span style="{{ scrubBadge }}">{{ scrubBadgeL }}</span></div>
+        <input type="range" min="0" max="{{ scrubMax }}" step="1" value="{{ scrub }}" onChange="{{ setScrub }}" style="width:100%;margin-top:10px"></input>
+        <div style="font-size:12px;color:rgba(0,0,0,.35);margin-top:6px">{{ scrubCounter }}</div>
+        <div style="font-size:12px;color:#8A4A00;margin-top:10px">{{ scrubTally }}</div>
+      </div>
+    </sc-if>
+    <div style="font-size:12px;color:#6D6D72;margin-top:22px">{{ estimate1 }}</div>
+    <div style="font-size:12px;color:#6D6D72;margin-top:3px">{{ estimate2 }}</div>
+    <button onClick="{{ create }}" style="width:100%;height:50.5px;background:#C36A00;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;margin-top:12px">Create Shape-mation</button>
+  </sc-if>
+  <sc-if value="{{ outRendering }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#fff;border-radius:18px;padding:16px;margin-top:4px">
+      <div style="font-size:15px;font-weight:600">{{ renderingLine }}</div>
+      <div style="height:6px;background:#E4E4E4;border-radius:3px;margin-top:12px;overflow:hidden"><div style="{{ renderingBar }}"></div></div>
+      <div style="font-size:12px;color:#6D6D72;margin-top:10px">{{ renderingTitle }}</div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ outDone }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#fff;border-radius:18px;padding:16px;margin-top:4px">
+      <div style="height:239.5px;background:#000;border-radius:12px;position:relative;overflow:hidden;display:flex;justify-content:center"><div style="{{ posterFrame }}"><img src="{{ posterSrc }}" style="{{ posterImg }}" draggable="false"></img></div></div>
+      <div style="font-size:15px;font-weight:600;margin-top:14px">{{ doneTitle }}</div>
+      <div style="font-size:12px;color:#6D6D72;margin-top:8px">{{ doneSubtitle }}</div>
+      <div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap">
+        <button onClick="{{ openPlayer }}" style="display:flex;align-items:center;gap:6px;background:#C36A00;color:#fff;border:none;border-radius:6px;height:23.5px;padding:0 12px;font-size:13px;font-weight:500"><svg width="9" height="11" viewBox="0 0 9 11"><path d="M0 0 l9 5.5 -9 5.5 z" fill="#fff"></path></svg>Play</button>
+        <button onClick="{{ share }}" style="background:rgba(195,106,0,.07);color:#C36A00;border:none;border-radius:6px;height:23.5px;padding:0 12px;font-size:13px;font-weight:500">Share</button>
+        <button onClick="{{ saveCollection }}" style="background:rgba(195,106,0,.07);color:#C36A00;border:none;border-radius:6px;height:23.5px;padding:0 12px;font-size:13px;font-weight:500">Save as collection</button>
+        <span style="flex:1"></span>
+        <button onClick="{{ again }}" style="background:none;color:#6D6D72;border:none;font-size:13px">Render again</button>
+      </div>
+    </div>
+  </sc-if>
+</sc-if>
+
+<!-- ============ PLAYER (a second sheet) ============ -->
+<sc-if value="{{ playerOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:10;padding:16px">
+    <div style="background:#F2F2F7;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.4);padding:14px;width:100%;max-width:640px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:700">{{ doneTitle }}</span><button onClick="{{ closePlayer }}" style="background:none;border:none;font-size:13px;color:#C36A00;font-weight:600">Done</button></div>
+      <div style="{{ playerFrame }}"><img src="{{ playerSrc }}" style="{{ playerImg }}" draggable="false"></img><div style="{{ playerFace }}"></div></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+        <button onClick="{{ playPause }}" style="width:28px;height:28px;border-radius:14px;background:#C36A00;border:none;color:#fff;font-size:12px">{{ playGlyph }}</button>
+        <input type="range" min="0" max="{{ playerMax }}" step="1" value="{{ playerIdx }}" onChange="{{ setPlayerIdx }}" style="flex:1"></input>
+        <span style="font-size:12px;color:#6D6D72;font-variant-numeric:tabular-nums;min-width:110px;text-align:right">{{ playerCounter }}</span>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { inv: { scale: 1, tilt: 0, yaw: 0, idx: 0 }, dragSrcId: null };
+  componentWillUnmount() { clearInterval(this._pt); clearInterval(this._mpt); }
+  seg(opts, cur, pick, small) {
+    return opts.map(o => { const on = o.v === cur; return { l: o.l, v: o.v, pick: () => pick(o.v), st: { background: on ? '#C36A00' : 'transparent', color: on ? '#fff' : '#1C1C1E', border: 'none', borderRadius: 6, padding: small ? '0 8px' : '0 10px', fontSize: small ? 11 : 13, fontWeight: on ? 500 : 400, flex: 1, height: small ? 20 : 23.5, whiteSpace: 'nowrap' } }; });
+  }
+  popup(key, cur, opts, pick) {
+    const open = this.state.menu === key;
+    return { label: (opts.find(o => o.v === cur) || opts[0]).l, open, toggle: e => { e.stopPropagation(); this.setState({ menu: open ? null : key }); },
+      items: opts.map(o => ({ l: o.l, pick: () => { this.setState({ menu: null }); pick(o.v); }, st: { display: 'block', width: '100%', textAlign: 'left', background: o.v === cur ? 'rgba(195,106,0,.1)' : 'none', color: o.v === cur ? '#C36A00' : '#1C1C1E', border: 'none', padding: '5px 10px', fontSize: 13, borderRadius: 5, whiteSpace: 'nowrap' } })) };
+  }
+  chip(l, on, pick) { return { l, pick, st: { background: on ? '#C36A00' : '#E9E9EB', color: on ? '#fff' : '#1C1C1E', border: 'none', borderRadius: 14, height: 25.5, padding: '0 12px', fontSize: 13, fontWeight: on ? 500 : 400 } }; }
+  badgeSt(v, small) { const c = { green: ['#34C759', 'rgba(52,199,89,.16)'], amber: ['#8A4A00', 'rgba(255,179,64,.3)'], red: ['#FF3B30', 'rgba(255,59,48,.14)'], grey: ['#6D6D72', 'rgba(0,0,0,.06)'] }[v] || ['#6D6D72', 'rgba(0,0,0,.06)']; return { color: c[0], background: c[1], borderRadius: 11.5, padding: small ? '1px 7px' : '3px 9px', fontSize: small ? 10.5 : 11, fontWeight: 500, whiteSpace: 'nowrap', flex: 'none' }; }
+  imgBadgeSt(v) { const col = { green: '#4CD964', amber: '#FFB340', red: '#FF6B61', grey: '#C7C7CC' }[v] || '#C7C7CC'; return { color: col, background: 'rgba(0,0,0,.6)', borderRadius: 11.5, padding: '3px 9px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', flex: 'none' }; }
+  dotColor(v) { return { green: '#34C759', amber: '#FFB340', red: '#FF3B30' }[v] || '#8E8E93'; }
+  // rendered thumbnail: least-crop window or fixed placement
+  leastStyles(row, A, w) {
+    const ph = row.ph, win = row.ev.win, h = w / A;
+    return {
+      frame: { width: w, height: h, position: 'relative', overflow: 'hidden', background: '#000', borderRadius: 6, flex: 'none' },
+      img: { position: 'absolute', left: (-win.left / win.w * 100) + '%', top: (-win.top / win.h * 100) + '%', width: (100 / win.w) + '%', height: (100 / win.h) + '%', maxWidth: 'none' },
+      face: { position: 'absolute', left: ((ph.bbox.x / ph.width - win.left) / win.w * 100) + '%', top: ((ph.bbox.y / ph.height - win.top) / win.h * 100) + '%', width: (ph.bbox.w / ph.width / win.w * 100) + '%', height: (ph.bbox.h / ph.height / win.h * 100) + '%', border: '1.5px solid #FFB340', boxSizing: 'border-box', pointerEvents: 'none' },
+    };
+  }
+  fixedStyles(row, A, w) {
+    const ph = row.ph, p = row.fx.placed, h = w / A, out = this.props.ctx.out;
+    const fw = ph.bbox.w * 2 * row.fx.scale / out.w, fh = ph.bbox.h * 2 * row.fx.scale / out.h;
+    return {
+      frame: { width: w, height: h, position: 'relative', overflow: 'hidden', background: '#000', borderRadius: 6, flex: 'none' },
+      img: { position: 'absolute', left: p.left * 100 + '%', top: p.top * 100 + '%', width: p.w * 100 + '%', height: p.h * 100 + '%', maxWidth: 'none' },
+      face: { position: 'absolute', left: (p.left + ph.bbox.x / ph.width * p.w) * 100 + '%', top: (p.top + ph.bbox.y / ph.height * p.h) * 100 + '%', width: fw * 100 + '%', height: fh * 100 + '%', border: '1.5px solid #FFB340', boxSizing: 'border-box', pointerEvents: 'none' },
+    };
+  }
+  // Mode step preview: the picked photos through each mode, low-fi, looping.
+  modePreview(s, M, api, board, members, out, sheetW) {
+    const mp = this.state.mp || { idx: 0, playing: true };
+    const A = M.ASPECTS[s.A];
+    const w = Math.min(sheetW - 65, 495);
+    let frames = [], frameA = A, note = '';
+    const seq = board.rows.map(r => r.ph);
+    if (s.mode === 'stack' || s.mode === 'crop') {
+      const list = seq.slice(0, 10);
+      if (list.length) {
+        const T = Math.min(...list.map(p => p.facePx));
+        const pl = list.map(p => { const sc = T / p.facePx; const W = p.width * sc, H = p.height * sc; return { p, sc, left: -p.cx * W, top: -p.cy * H, right: (1 - p.cx) * W, bottom: (1 - p.cy) * H, W, H }; });
+        const L = s.mode === 'stack' ? Math.min(...pl.map(x => x.left)) : Math.max(...pl.map(x => x.left)), R = s.mode === 'stack' ? Math.max(...pl.map(x => x.right)) : Math.min(...pl.map(x => x.right));
+        const Tp = s.mode === 'stack' ? Math.min(...pl.map(x => x.top)) : Math.max(...pl.map(x => x.top)), B = s.mode === 'stack' ? Math.max(...pl.map(x => x.bottom)) : Math.min(...pl.map(x => x.bottom));
+        const cw = R - L, ch = B - Tp;
+        if (cw <= 0 || ch <= 0) { note = 'These photos share no common area once the shape is locked — crop mode has nothing to show. Pick fewer, or use stack mode.'; frames = []; }
+        else {
+          frameA = cw / ch;
+          frames = list.map((p, i) => ({ layers: pl.slice(0, i + 1).map(x => ({ src: x.p.src, st: { position: 'absolute', left: (x.left - L) / cw * 100 + '%', top: (x.top - Tp) / ch * 100 + '%', width: x.W / cw * 100 + '%', height: x.H / ch * 100 + '%', maxWidth: 'none' } })), face: { position: 'absolute', left: (-L - T * (p.bbox.w / p.facePx) / 2) / cw * 100 + '%', top: (-Tp - T * (p.bbox.h / p.facePx) / 2) / ch * 100 + '%', width: T * (p.bbox.w / p.facePx) / cw * 100 + '%', height: T * (p.bbox.h / p.facePx) / ch * 100 + '%' }, badge: 'green', badgeL: `${i + 1} on the table` }));
+          note = `${s.mode === 'stack' ? `The canvas ${Math.round(cw)}×${Math.round(ch)} holds every photo; black shows until it is covered.` : `Cropped to the ${Math.round(cw)}×${Math.round(ch)} every photo covers.`} The shape is ${Math.round(T)} px across. Preview: the first ${list.length} of ${seq.length} photos, ${seq.length > 10 ? 'the rest render the same way' : 'all of them'}.`;
+        }
+      }
+    } else if (s.mode === 'frame') {
+      const rows = api.evalFixed(board.rows);
+      frames = rows.map(r => { const st = this.fixedStyles(r, A, w); return { layers: [{ src: r.ph.src, st: st.img }], face: st.face, badge: { fits: 'green', short: 'amber', upscaled: 'red', shortAndUpscaled: 'red' }[r.fv], badgeL: { fits: 'fits', short: "won't fill the frame", upscaled: 'upscaled past ×2', shortAndUpscaled: 'short · upscaled' }[r.fv] }; });
+      note = `Every face put at ${Math.round(s.fx.startSize * 100)} % of the height, centred; ${rows.filter(r => r.fv !== 'fits').length} of ${rows.length} flagged. The board sets size, place and ease.`;
+    } else {
+      frames = board.rows.map(r => { const st = this.leastStyles(r, A, w); return { layers: [{ src: r.ph.src, st: st.img }], face: st.face, badge: r.v, badgeL: 'crop ' + M.fmtPct(r.ev.f) }; });
+      note = `Cover-fitted into ${s.A}, shifted along the median path; ${board.rejectedRows.length} rejected, mean crop ${M.fmtPct(board.meanF)}. The board is where the rejects, keys and thresholds live.`;
+    }
+    const n = frames.length, idx = n ? Math.min(mp.idx, n - 1) : 0, f = frames[idx];
+    if (mp.playing && n > 1 && !this._mpt) this._mpt = setInterval(() => { const cur = this.state.mp || { idx: 0, playing: true }; if (!cur.playing) { clearInterval(this._mpt); this._mpt = null; return; } this.setState({ mp: { ...cur, idx: cur.idx + 1 } }); }, 700);
+    if ((!mp.playing || n <= 1) && this._mpt) { clearInterval(this._mpt); this._mpt = null; }
+    if (mp.idx >= n && n) setTimeout(() => this.setState({ mp: { ...mp, idx: 0 } }), 0);
+    return {
+      mpFrame: { width: Math.min(w, 300 * frameA), height: Math.min(w, 300 * frameA) / frameA, position: 'relative', overflow: 'hidden', background: '#000', borderRadius: 10, marginTop: 14, marginLeft: 'auto', marginRight: 'auto' },
+      mpLayers: f ? f.layers : [], mpFace: f ? { ...f.face, border: '1.5px solid #FFB340', boxSizing: 'border-box', pointerEvents: 'none' } : { display: 'none' },
+      mpBadge: f ? { ...this.imgBadgeSt(f.badge), position: 'absolute', right: 10, top: 8 } : { display: 'none' }, mpBadgeL: f ? f.badgeL : '',
+      mpPlay: () => this.setState({ mp: { ...mp, playing: !mp.playing } }), mpGlyph: mp.playing ? '❚❚' : '▶', mpMax: Math.max(0, n - 1), mpIdx: idx, mpSet: e => this.setState({ mp: { idx: +e.target.value, playing: false } }),
+      mpCounter: n ? `${idx + 1} / ${n}` : '—', mpNote: note,
+    };
+  }
+  startDrag(e, rectEl, onMove) {
+    const rect = rectEl.getBoundingClientRect();
+    const move = ev => onMove(Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width)), Math.min(1, Math.max(0, (ev.clientY - rect.top) / rect.height)));
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    e.preventDefault(); move(e);
+  }
+  renderVals() {
+    const ctx = this.props.ctx; if (!ctx) return { padStyle: { padding: 16 } };
+    const { state: s, M, board, members, matched, sheetW, out, api } = ctx;
+    const phone = sheetW < 500;
+    const step = s.page === 'list' ? 'list' : s.step;
+    const A = M.ASPECTS[s.A];
+    const v = { padStyle: { padding: '16px 16.5px 28px', minHeight: '100%' }, isList: step === 'list', isFilters: step === 'filters', isShape: step === 'shape', isInventory: step === 'inventory', isMatch: step === 'match', isProjects: step === 'projects', isMode: step === 'mode', isBoard: step === 'board', isTiming: step === 'timing', isOutput: step === 'output', playerOpen: !!s.player };
+    const filtered = s.photos.filter(p => (!s.search || p.id.includes(s.search.toLowerCase())) && s.tags.every(t => p.tags.includes(t)) && (s.aspectFilter === 'all' || p.orient === s.aspectFilter) && (!s.cellFilter || (s.cellFilter.col != null ? p.centreCell % 3 === s.cellFilter.col : p.centreCell === s.cellFilter.cell)));
+    const fam = s.family === 'circle' ? 'Circle' : 'Rectangle', famL = fam.toLowerCase();
+
+    // ---- list
+    v.collections = s.collections.map((c, i) => { const last = c.rows[c.rows.length - 1]; const st = c.fixed ? this.fixedStyles(last, c.out.w / c.out.h, 64) : this.leastStyles(last, c.out.w / c.out.h, 64); return { title: c.title, subtitle: c.subtitle, duration: `${c.seconds.toFixed(1)} s · ${c.frames} frames · ${c.rows.length} members`, posterStyle: { ...st.frame, height: 64, width: 64 * Math.min(1.5, c.out.w / c.out.h) }, posterSrc: last.ph.src, posterImg: st.img, play: () => api.set({ player: { rec: c, idx: 0, playing: true } }), open: () => api.openCollection(c), del: () => api.deleteCollection(i) }; });
+    v.noCollections = !s.collections.length;
+
+    // ---- filters
+    if (v.isFilters) {
+      const seqNames = ['city.clear.approach', 'oldtown.golden.approach', 'hills.dusk.right', 'mountains.clouds.mixed', 'depot.night.approach', 'mixed.random', 'single', 'city', 'oldtown', 'hills', 'mountains', 'depot', 'clear', 'clouds', 'sun', 'golden', 'dusk', 'night', 'front', 'left', 'right', 'high', 'low', 'Bad apple'];
+      v.search = s.search; v.setSearch = e => api.set({ search: e.target.value, picked: null });
+      const allTags = seqNames.map(t => ({ l: t, n: s.photos.filter(p => p.tags.includes(t)).length, toggle: () => api.toggleTag(t) })).filter(r => r.n > 0).sort((a, b) => b.n - a.n);
+      v.appliedChips = allTags.filter(t => s.tags.includes(t.l)); v.hasApplied = v.appliedChips.length > 0;
+      v.tagChips = allTags.filter(t => !s.tags.includes(t.l)).map(t => ({ ...t, n: filtered.length && s.tags.length ? `${s.photos.filter(p => p.tags.includes(t.l) && s.tags.every(x => p.tags.includes(x))).length} of ${t.n}` : String(t.n) }));
+      v.clearTags = () => api.set({ tags: [], picked: null });
+      v.aspectSeg = this.seg([{ l: 'All', v: 'all' }, { l: 'Landscape', v: 'landscape' }, { l: 'Portrait', v: 'portrait' }, { l: 'Square', v: 'square' }], s.aspectFilter, x => api.set({ aspectFilter: x, picked: null }));
+      const cnt = o => filtered.filter(p => p.orient === o).length;
+      v.aspectNote = `${cnt('landscape')} landscape · ${cnt('portrait')} portrait · ${cnt('square')} square — a mixed-orientation set pays cover-fit crop on every photo of the minority.`;
+      const inCol = c => s.cellFilter && s.cellFilter.col === c, inCell = c => s.cellFilter && s.cellFilter.cell === c;
+      const baseFiltered = s.photos.filter(p => (!s.search || p.id.includes(s.search.toLowerCase())) && s.tags.every(t => p.tags.includes(t)) && (s.aspectFilter === 'all' || p.orient === s.aspectFilter));
+      v.colBtns = ['Left', 'Centre', 'Right'].map((l, c) => ({ l, n: baseFiltered.filter(p => p.centreCell % 3 === c).length, pick: () => api.set({ cellFilter: inCol(c) ? null : { col: c }, picked: null }), st: { background: inCol(c) ? '#C36A00' : '#E9E9EB', color: inCol(c) ? '#fff' : '#1C1C1E', border: 'none', borderRadius: 6, height: 24, fontSize: 12, fontWeight: 500 } }));
+      v.cellBtns = Array.from({ length: 9 }, (_, c) => ({ n: baseFiltered.filter(p => p.centreCell === c).length, pick: () => api.set({ cellFilter: inCell(c) ? null : { cell: c }, picked: null }), st: { background: inCell(c) ? '#C36A00' : inCol(c % 3) ? 'rgba(195,106,0,.18)' : '#F2F2F7', color: inCell(c) ? '#fff' : '#6D6D72', border: 'none', borderRadius: 4, height: 22, fontSize: 11 } }));
+      v.countLine = `${filtered.length} photo projects`; v.emptyFilter = filtered.length === 0;
+      const domA = A;
+      v.contactThumbs = filtered.map(p => { const n = M.natural(p, domA); const ww = 1 / (1 + n.ex), wh = 1 / (1 + n.ey); const w = 84; return { src: p.src, title: p.id, box: { width: w, height: w / p.a, position: 'relative', overflow: 'hidden', borderRadius: 4, background: '#000', flex: 'none' }, win: { position: 'absolute', left: (1 - ww) / 2 * 100 + '%', top: (1 - wh) / 2 * 100 + '%', width: ww * 100 + '%', height: wh * 100 + '%', boxShadow: '0 0 0 400px rgba(0,0,0,.45)', pointerEvents: 'none' }, face: { position: 'absolute', left: p.bbox.x / p.width * 100 + '%', top: p.bbox.y / p.height * 100 + '%', width: p.bbox.w / p.width * 100 + '%', height: p.bbox.h / p.height * 100 + '%', border: '1.5px solid #FFB340', boxSizing: 'border-box' } }; });
+    }
+    // ---- shape
+    if (v.isShape) {
+      v.trail = `${s.tags.join(' · ') || 'All'} · ${filtered.length} photos`;
+      const singles = filtered.filter(p => p.seq.startsWith('single'));
+      v.familyRows = [{ l: 'Rectangle', f: 'rectangle', n: filtered.length, glyph: { width: 18, height: 13, border: '2px solid #C36A00', borderRadius: 2 } }, ...(singles.length ? [{ l: 'Circle', f: 'circle', n: singles.length, glyph: { width: 16, height: 16, border: '2px solid #C36A00', borderRadius: 8 } }] : [])].map(r => ({ ...r, count: `${r.n} projects · ${r.n}`, pick: () => { api.set({ family: r.f, picked: null }); api.goto('match'); } }));
+      v.goInventory = () => api.goto('inventory');
+    }
+    // ---- inventory
+    if (v.isInventory) {
+      const inv = this.state.inv, list = filtered.length ? filtered : s.photos; const ph = list[Math.min(inv.idx, list.length - 1)];
+      if (ph) {
+        const w = Math.min(sheetW - 66, 520);
+        v.invBox = { width: w, height: w / ph.a, position: 'relative', overflow: 'hidden', borderRadius: 10, background: '#000', margin: '0 auto' }; v.invSrc = ph.src;
+        const cx = (ph.bbox.x + ph.bbox.w / 2) / ph.width * 100, cy = (ph.bbox.y + ph.bbox.h / 2) / ph.height * 100;
+        const bw = ph.bbox.w / ph.width * 100 * inv.scale, bh = ph.bbox.h / ph.height * 100 * inv.scale;
+        v.invShape = { position: 'absolute', left: cx - bw / 2 + '%', top: cy - bh / 2 + '%', width: bw + '%', height: bh + '%', border: '2px solid #FFB340', boxSizing: 'border-box', transform: `perspective(600px) rotate(${inv.tilt}deg) rotateY(${inv.yaw}deg)`, boxShadow: '0 0 0 1px rgba(0,0,0,.4)' };
+        v.invHandleT = { position: 'absolute', left: cx + '%', top: cy - bh / 2 + '%', width: 12, height: 12, marginLeft: -6, marginTop: -18, borderRadius: 6, background: '#fff', border: '2px solid #C36A00' };
+        v.invHandleR = { position: 'absolute', left: cx + bw / 2 + '%', top: cy + '%', width: 12, height: 12, marginLeft: 6, marginTop: -6, background: '#fff', border: '2px solid #8A4A00' };
+        v.invScale = inv.scale; v.invTilt = inv.tilt; v.invYaw = inv.yaw; v.invScaleL = '×' + inv.scale.toFixed(2); v.invTiltL = inv.tilt + '°'; v.invYawL = inv.yaw + '°';
+        v.setInvScale = e => this.setState({ inv: { ...inv, scale: +e.target.value } }); v.setInvTilt = e => this.setState({ inv: { ...inv, tilt: +e.target.value } }); v.setInvYaw = e => this.setState({ inv: { ...inv, yaw: +e.target.value } });
+        v.invPhotoSeg = this.seg(list.slice(0, 5).map((p, i) => ({ l: String(i + 1), v: i })), Math.min(inv.idx, list.length - 1), i => this.setState({ inv: { ...inv, idx: i } }), true);
+        v.invTruth = `tram.${ph.tram} · ${ph.id}`;
+        v.invAdd = () => api.toast(`Tram face added to the library · scale ×${inv.scale.toFixed(2)} · tilt ${inv.tilt}° · yaw ${inv.yaw}°`);
+      }
+    }
+    // ---- match
+    if (v.isMatch) {
+      const fs = s.family === 'circle' ? filtered.filter(p => p.seq.startsWith('single')) : filtered;
+      v.matchHeading = `How strict about the ${famL}?`;
+      v.matchChips = ['Any', '4:3', '3:2', '16:9', 'Page', '5:4', '2:1', 'Custom'].map(l => this.chip(l, s.matchAspect === l, () => api.set({ matchAspect: l, picked: null })));
+      v.orientSeg = this.seg([{ l: 'Any', v: 'Any' }, { l: 'Landscape', v: 'Landscape' }, { l: 'Portrait', v: 'Portrait' }], s.orientation, x => api.set({ orientation: x, picked: null }));
+      v.strictness = s.matchAspect === 'Any' ? `Every ${famL}. Measured on the true ${famL} and corrected for the camera angle where the lens is known — ${fs.length} of ${fs.length} here (the kit's compositions all carry a camera).` : `Only ${famL}s whose class is ${s.matchAspect}. Measured on the true ${famL}; the tram face classifies as Page (√2) in the kit.`;
+      v.matchTally = `${matched.length} projects · ${matched.length} ${famL}s match`;
+    }
+    // ---- projects
+    if (v.isProjects) {
+      const picked = s.picked || matched.map(p => p.id);
+      v.pickedLine = `${matched.filter(p => picked.includes(p.id)).length} of ${matched.length} picked`;
+      const sortL = { largest: 'Largest first', smallest: 'Smallest first', capture: 'Capture order', alignment: 'Alignment', manual: 'By hand' };
+      v.sortLabel = sortL[s.sort]; v.sortMenu = s.sortMenu; v.toggleSortMenu = () => api.set({ sortMenu: !s.sortMenu });
+      v.sortItems = ['largest', 'smallest', 'capture', 'alignment'].map(k => ({ l: sortL[k], pick: () => api.set({ sort: k, sortMenu: false }), st: { display: 'block', width: '100%', textAlign: 'left', background: s.sort === k ? 'rgba(195,106,0,.1)' : 'none', color: s.sort === k ? '#C36A00' : '#1C1C1E', border: 'none', padding: '6px 10px', fontSize: 13, borderRadius: 6 } }));
+      v.toggleSameAngle = () => api.set({ sameAngle: !s.sameAngle }); v.sameAngleL = s.sameAngle ? 'On' : 'Off';
+      const list = api.sorted(matched);
+      const byId = {}; board.rows.forEach(r => byId[r.ph.id] = r); board.rejectedRows.forEach(r => byId[r.ph.id] = r);
+      v.projectRows = list.map((p, i) => {
+        const on = picked.includes(p.id), ex = s.excluded.includes(p.id), r = byId[p.id];
+        const sc = Math.min(72 / p.width, 96 / p.height), iw = p.width * sc, ih = p.height * sc, ox = (72 - iw) / 2, oy = (96 - ih) / 2;
+        const n = M.natural(p, A);
+        const badgeV = !on || ex ? 'grey' : r ? (r.rejected ? 'grey' : r.v) : 'grey';
+        const badgeL = !on ? 'not picked' : ex ? 'excluded' : r ? (r.rejected ? 'rejected · ' + M.fmtPct(r.ev.f) : 'crop ' + M.fmtPct(r.ev.f)) : '—';
+        return { src: p.src, title: p.id, kind: `1 ${famL} · Photo · ${p.tram}`, share: `${M.fmtPx(p.facePx)} px · ${M.fmtPct(p.s)} of the frame`, pos: `natural ${n.px.toFixed(2)} · ${n.py.toFixed(2)}`, on, toggle: () => api.togglePick(p.id),
+          card: { background: '#fff', borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', gap: 12, opacity: ex ? 0.5 : 1, cursor: 'grab' },
+          img: { position: 'absolute', left: ox, top: oy, width: iw, height: ih }, box: { position: 'absolute', left: ox + p.bbox.x * sc, top: oy + p.bbox.y * sc, width: p.bbox.w * sc, height: p.bbox.h * sc, border: `2px solid ${on ? '#FFB340' : '#fff'}`, boxSizing: 'border-box' },
+          badge: this.badgeSt(badgeV, true), badgeL, check: { width: 22, height: 22, borderRadius: 11, background: on ? '#C36A00' : 'none', border: on ? 'none' : '1.6px solid rgba(109,109,114,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+          exclude: e => { e.stopPropagation(); api.toggleExclude(p.id); }, exL: ex ? 'Include' : 'Exclude', exBtn: { background: 'none', border: 'none', fontSize: 12, color: ex ? '#C36A00' : '#6D6D72', padding: 0 },
+          dragStart: () => this.setState({ dragSrcId: p.id }), dragOver: e => e.preventDefault(), drop: e => { e.preventDefault(); const from = this.state.dragSrcId; if (!from || from === p.id) return; const order = list.map(x => x.id); order.splice(order.indexOf(from), 1); order.splice(order.indexOf(p.id), 0, from); api.set({ sort: 'manual', manualOrder: order }); },
+        };
+      });
+    }
+    // ---- mode
+    if (v.isMode) {
+      const cards = [
+        { k: 'stack', l: 'Stack, fit in frame', g: '▤', sub: 'The canvas holds every photo. Each lands on top of the last, the shape locked in place; the black table shows until it is covered.' },
+        { k: 'crop', l: 'Stack, crop to fill', g: '⌗', sub: 'The same stack, cropped to what every photo covers. No black — but one off-centre shape crops everyone.' },
+        { k: 'frame', l: 'Output frame', g: '⊡', sub: 'Pick the frame; the face is put at a chosen size and place in every photo; what won\'t fill it is flagged.' },
+        { k: 'least', l: 'Least crop', g: '⤢', sub: 'Pick the frame; every photo is cover-fitted and shifted only as far as its neighbours ask; the face stays its own size and the crop each photo pays is shown before rendering.' },
+      ];
+      v.modeSeg = this.seg(cards.map(c => ({ l: c.l.replace('Stack, fit in frame', 'Stack · fit').replace('Stack, crop to fill', 'Stack · crop'), v: c.k })), s.mode, k => { api.set({ mode: k, option: k === 'frame' ? 'fixed' : k === 'least' ? 'least' : s.option }); this.setState({ mp: { idx: 0, playing: this.state.mp?.playing ?? true } }); });
+      const cur = cards.find(c => c.k === s.mode) || cards[0];
+      v.modeTitle = cur.l; v.modeSub = cur.sub; v.modeGlyph = cur.g; v.modeTile = { width: 34, height: 34, borderRadius: 9, background: '#C36A00', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' };
+      Object.assign(v, this.modePreview(s, M, api, board, members, out, sheetW));
+      const maxW = Math.max(...members.map(p => p.width), 0), maxH = Math.max(...members.map(p => p.height), 0), minFace = Math.min(...members.map(p => p.facePx), 0);
+      v.planSummary = s.mode === 'stack' || s.mode === 'crop' ? `Canvas ${maxW}×${maxH} holds every photo; the shape is ${Math.round(minFace)} px across.` : s.mode === 'frame' ? `Frame ${out.w}×${out.h}; the shape is ${Math.round(s.fx.startSize * out.h)} px across; ${api.evalFixed(board.rows).filter(r => r.fv !== 'fits').length} photos flagged — see the board.` : `Frame ${out.w}×${out.h} · least crop; ${board.red + board.rejectedRows.length} of ${members.length} photos would pay more than ${Math.round(s.thReject * 100)} % — see the board.`;
+    }
+    // ---- board
+    const isLeast = s.option !== 'fixed';
+    const fixedRows = !isLeast ? api.evalFixed(board.rows) : null;
+    const rowsShown = isLeast ? (s.showRejected ? [...board.rows, ...board.rejectedRows] : board.rows) : fixedRows;
+    const rowFor = id => board.rows.find(r => r.ph.id === id) || board.rejectedRows.find(r => r.ph.id === id);
+    let selId = s.hover || s.selected || (board.rows[0] && board.rows[0].ph.id);
+    let sel = selId ? rowFor(selId) : null;
+    if (sel && !isLeast) { const f = fixedRows.find(r => r.ph.id === selId); sel = f || fixedRows[0] || null; if (sel) selId = sel.ph.id; }
+    const badgeOf = r => r.rejected ? 'grey' : isLeast ? r.v : ({ fits: 'green', short: 'amber', upscaled: 'red', shortAndUpscaled: 'red' }[r.fv]);
+    const badgeLOf = r => r.rejected ? `rejected · ${M.fmtPct(r.ev.f)}` : isLeast ? `crop ${M.fmtPct(r.ev.f)}` : ({ fits: 'fits', short: "won't fill the frame", upscaled: 'upscaled past ×2', shortAndUpscaled: 'short · upscaled' }[r.fv]);
+    if (v.isBoard) {
+      v.optionSeg = this.seg([{ l: 'Least crop', v: 'least' }, { l: 'Fixed face', v: 'fixed' }], s.option, x => api.set({ option: x }));
+      v.aspectChips = ['1:1', '4:5', '3:2', '16:9', '2:3', '9:16'].map(l => this.chip(l, s.A === l, () => api.set({ A: l })));
+      v.sizePop = this.popup('size', s.sizeLong, [{ l: '1 080', v: 1080 }, { l: '1 920', v: 1920 }, { l: '2 160', v: 2160 }], x => api.set({ sizeLong: x })); v.outSizeL = `${M.fmtPx(out.w)}×${M.fmtPx(out.h)}`;
+      const contentH = 720 - 47.5 - 78.5 - 44;
+      v.boardRoot = phone ? { display: 'flex', flexDirection: 'column' } : { display: 'flex', flexDirection: 'column', height: contentH, minHeight: 0 };
+      v.boardBody = phone ? { display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 } : { display: 'flex', gap: 14, marginTop: 14, flex: 1, minHeight: 0, alignItems: 'stretch' };
+      v.cogOpen = !!this.state.cog; v.toggleCog = () => this.setState({ cog: !this.state.cog });
+      v.cogSummary = `window ${s.window} · ${s.ends} · ${s.onZ ? 'z ' + s.zFlag + '/' + s.zReject : 'f ' + Math.round(s.thFlag * 100) + '/' + Math.round(s.thReject * 100) + ' %'} · ${s.fixpoint ? 'fixpoint' : 'one pass'}`;
+      v.stripNote = `${board.rows.length} in the strip · widths follow the hold · click to select, hover to peek · ${Object.keys(s.keys).length} keys`;
+      const track = on => ({ width: 30, height: 18, borderRadius: 9, background: on ? '#34C759' : '#E9E9EB', position: 'relative', display: 'inline-block', transition: 'background .15s' }), knob = on => ({ position: 'absolute', top: 2, left: on ? 14 : 2, width: 14, height: 14, borderRadius: 7, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .15s' });
+      v.toggleAutoReject = () => api.set({ autoReject: !s.autoReject }); v.arTrack = track(s.autoReject); v.arKnob = knob(s.autoReject);
+      v.toggleShowRejected = () => api.set({ showRejected: !s.showRejected }); v.srTrack = track(s.showRejected); v.srKnob = knob(s.showRejected);
+      v.boardCount = isLeast ? `${board.rows.length} members · ${board.rejectedRows.length} rejected · ${board.flagged} flagged · ${board.red} red` : `${fixedRows.length} members · ${fixedRows.filter(r => r.fv === 'short' || r.fv === 'shortAndUpscaled').length} won't fill the frame · ${fixedRows.filter(r => r.fv === 'upscaled' || r.fv === 'shortAndUpscaled').length} upscaled past ×2`;
+      v.sumJ = board.sumJ.toFixed(2); v.meanF = M.fmtPct(board.meanF);
+      v.unhover = () => api.set({ hover: null });
+      const tw = phone ? Math.min(s.thumbW, 108) : s.thumbW;
+      const mk = (r, i, w) => { const st = isLeast ? this.leastStyles(r, A, w) : this.fixedStyles(r, A, w); const isSel = r.ph.id === s.selected; return { src: r.ph.src, n: i + 1, isKey: !!s.keys[r.ph.id], rejected: !!r.rejected, holdL: s.holds[r.ph.id] ? 'hold ' + s.holds[r.ph.id] : null, fL: badgeLOf(r), select: () => api.set({ selected: r.ph.id }), hover: () => api.set({ hover: r.ph.id }),
+        frame: { ...st.frame, opacity: r.rejected ? 0.4 : 1, cursor: 'pointer', boxShadow: isSel ? '0 0 0 2.5px #C36A00' : 'none' }, img: st.img, face: st.face, dot: { position: 'absolute', right: 5, top: 5, width: 10, height: 10, borderRadius: 5, background: this.dotColor(badgeOf(r)), border: '1.5px solid rgba(0,0,0,.5)' },
+        fLabel: { position: 'absolute', right: 5, bottom: 4, fontSize: 10, color: '#fff', background: 'rgba(0,0,0,.55)', borderRadius: 6, padding: '1px 5px', whiteSpace: 'nowrap', display: s.holds[r.ph.id] ? 'none' : 'block' } }; };
+      const frames = api.framesFor(board.rows);
+      v.stripThumbs = rowsShown.map((r, i) => { const fr = frames[i] || frames[0] || 25; const w = Math.max(28, Math.min(200, 68 * A * fr / (s.fps))); const t = mk(r, i, w); t.frame = { ...t.frame, height: 68, borderRadius: 3 }; return t; });
+      v.sideStyle = phone ? { width: '100%', display: 'grid', gap: 12, alignContent: 'start' } : { width: 280, flex: 'none', display: 'grid', gap: 12, alignContent: 'start', overflowY: 'auto', minHeight: 0, paddingRight: 2 };
+      v.isLeast = isLeast; v.isFixed = !isLeast; v.canEdit = !s.lockedMembers;
+      v.hasSel = !!sel; v.noSel = !sel;
+      if (sel) {
+        const leftW = phone ? sheetW - 33 : sheetW - 33 - 280 - 14, budgetH = phone ? 320 : contentH - 96 - 92 - 16;
+        const bw = Math.min(leftW, budgetH * A);
+        const st = isLeast ? this.leastStyles(sel, A, bw) : this.fixedStyles(sel, A, bw);
+        const isKey = !!s.keys[sel.ph.id] && isLeast && !sel.rejected;
+        v.bigFrame = { ...st.frame, borderRadius: 10, cursor: isKey ? 'crosshair' : 'default', alignSelf: 'center' }; v.bigSrc = sel.ph.src; v.bigImg = st.img; v.bigFace = st.face;
+        v.selIsKey = isKey; v.bigKeyDot = { position: 'absolute', left: (sel.P?.x || 0.5) * 100 + '%', top: (sel.P?.y || 0.5) * 100 + '%', width: 14, height: 14, marginLeft: -7, marginTop: -7, borderRadius: 7, background: '#fff', border: '2.5px solid #C36A00', pointerEvents: 'none' };
+        v.previewDown = e => { if (!isKey || s.keyPicker !== 'drag') return; this.startDrag(e, e.currentTarget, (x, y) => api.setKey(sel.ph.id, { x, y })); };
+        v.selTitle = sel.ph.id; v.selWhich = s.hover && s.hover !== s.selected ? 'hovering' : 'selected';
+        v.selBadge = { ...this.imgBadgeSt(badgeOf(sel)), position: 'absolute', right: 10, top: 8 }; v.selBadgeSmall = this.badgeSt(badgeOf(sel), true); v.selBadgeL = badgeLOf(sel);
+        v.dragHint = isKey ? 'drag to place the face' : 'add a key to drag the face';
+        const sw = phone ? sheetW - 57 : 254; v.srcFrame = { width: sw, height: sw / sel.ph.a, position: 'relative', overflow: 'hidden', borderRadius: 8, marginTop: 10, background: '#000' };
+        if (isLeast) { const w = sel.ev.win; v.srcWin = { position: 'absolute', left: w.left * 100 + '%', top: w.top * 100 + '%', width: w.w * 100 + '%', height: w.h * 100 + '%', overflow: 'hidden', border: '1.5px solid #fff', boxSizing: 'border-box' }; v.srcWinImg = { position: 'absolute', left: (-w.left / w.w * 100) + '%', top: (-w.top / w.h * 100) + '%', width: (100 / w.w) + '%', height: (100 / w.h) + '%', maxWidth: 'none' }; }
+        else { const p = sel.fx.placed; const wl = Math.max(0, -p.left / p.w), wt = Math.max(0, -p.top / p.h), wr = Math.min(1, (1 - p.left) / p.w), wb = Math.min(1, (1 - p.top) / p.h); v.srcWin = { position: 'absolute', left: wl * 100 + '%', top: wt * 100 + '%', width: (wr - wl) * 100 + '%', height: (wb - wt) * 100 + '%', overflow: 'hidden', border: '1.5px solid #fff', boxSizing: 'border-box' }; v.srcWinImg = { position: 'absolute', left: (-wl / (wr - wl) * 100) + '%', top: (-wt / (wb - wt) * 100) + '%', width: (100 / (wr - wl)) + '%', height: (100 / (wb - wt)) + '%', maxWidth: 'none' }; }
+        v.srcFace = { position: 'absolute', left: sel.ph.bbox.x / sel.ph.width * 100 + '%', top: sel.ph.bbox.y / sel.ph.height * 100 + '%', width: sel.ph.bbox.w / sel.ph.width * 100 + '%', height: sel.ph.bbox.h / sel.ph.height * 100 + '%', border: '1.5px solid #FFB340', boxSizing: 'border-box' };
+        v.selShare = `${M.fmtPx(sel.ph.facePx)} px · ${M.fmtPct(sel.ph.s)} of the frame${isLeast ? ` → ${M.fmtPct(sel.ev.size)}` : ''}`;
+        v.selNatural = `${sel.ev.px.toFixed(2)} · ${sel.ev.py.toFixed(2)}${sel.P ? ` → path ${sel.P.x.toFixed(2)} · ${sel.P.y.toFixed(2)}` : ''}`;
+        v.selMetricL = isLeast ? 'crop' : 'placement'; v.selMetric = isLeast ? `${M.fmtPct(sel.ev.f)} · zoom ×${sel.ev.z.toFixed(2)} (x ${sel.ev.zx.toFixed(2)} · y ${sel.ev.zy.toFixed(2)})` : `scale ×${sel.fx.scale.toFixed(2)} · short L ${Math.round(sel.fx.shortfall.left)} T ${Math.round(sel.fx.shortfall.top)} R ${Math.round(sel.fx.shortfall.right)} B ${Math.round(sel.fx.shortfall.bottom)} px`;
+        const mg = sel.ph.margins; v.selMargins = `L ${M.fmtPct(mg.left)} · T ${M.fmtPct(mg.top)} · R ${M.fmtPct(mg.right)} · B ${M.fmtPct(mg.bottom)}`;
+        const rej = !!sel.rejected, manual = sel.manual, kept = s.keptAnyway.includes(sel.ph.id);
+        v.selRejectL = rej ? (manual ? 'Undo reject' : 'Keep anyway') : kept ? 'Kept anyway · undo' : 'Reject';
+        v.selReject = () => rej ? (manual ? api.unreject(sel.ph.id) : api.keepAnyway(sel.ph.id)) : kept ? api.unkeep(sel.ph.id) : api.reject(sel.ph.id);
+        v.selRejectSt = { background: rej ? 'rgba(195,106,0,.1)' : 'rgba(255,59,48,.1)', color: rej ? '#C36A00' : '#FF3B30', border: 'none', borderRadius: 6, height: 23.5, padding: '0 10px', fontSize: 12, fontWeight: 500 };
+        v.selKeyL = isKey ? 'Remove key' : 'Add key here'; v.selKey = () => isKey ? api.removeKey(sel.ph.id) : api.setKey(sel.ph.id, { x: sel.P.x, y: sel.P.y, zoom: 1 }); v.selKeySt = { background: isKey ? '#FFB340' : 'rgba(195,106,0,.1)', color: '#1C1C1E', border: 'none', borderRadius: 6, height: 23.5, padding: '0 10px', fontSize: 12, fontWeight: 500 };
+        v.selHoldPop = this.popup('selHold', s.holds[sel.ph.id] || '', [{ l: 'Hold · as timed', v: '' }, ...M.HOLDS.map(h => ({ l: 'Hold ' + h.l, v: h.l }))], x => api.setHold(sel.ph.id, x || null));
+        if (isKey) { const k = s.keys[sel.ph.id]; v.selKeyPlace = `${k.x.toFixed(2)} · ${k.y.toFixed(2)}`; v.keyPickerSeg = this.seg([{ l: 'Drag', v: 'drag' }, { l: 'Nine points', v: 'nine' }], s.keyPicker, x => api.set({ keyPicker: x }), true); v.keyPickerIsNine = s.keyPicker === 'nine';
+          v.ninePts = Array.from({ length: 9 }, (_, i) => { const x = [0.15, 0.5, 0.85][i % 3], y = [0.2, 0.55, 0.85][Math.floor(i / 3)]; const on = Math.abs(k.x - x) < 0.03 && Math.abs(k.y - y) < 0.03; return { pick: () => api.setKey(sel.ph.id, { x, y }), st: { width: 24, height: 13.5, background: 'none', border: 'none', padding: 0, position: 'relative', backgroundImage: `radial-gradient(circle, ${on ? '#C36A00' : '#C9C9CA'} ${on ? 6.5 : 4.5}px, transparent ${on ? 7 : 5}px)` } }; });
+          v.selZoomL = '×' + (k.zoom || 1).toFixed(1); v.zoomDown = () => api.setKey(sel.ph.id, { zoom: Math.max(1, (k.zoom || 1) - 0.1) }); v.zoomUp = () => api.setKey(sel.ph.id, { zoom: Math.min(3, (k.zoom || 1) + 0.1) }); }
+      }
+      // charts
+      const n = board.rows.length, X = i => n > 1 ? 8 + i * 240 / (n - 1) : 128;
+      v.posDots = board.rows.map((r, i) => ({ x: X(i), yx: 8 + r.ev.px * 80, yy: 8 + r.ev.py * 80 }));
+      v.pathX = board.path.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + (8 + p.x * 80).toFixed(1)).join(' ');
+      v.pathY = board.path.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + (8 + p.y * 80).toFixed(1)).join(' ');
+      const selIdx = sel && !sel.rejected ? board.rows.findIndex(r => r.ph.id === sel.ph.id) : -1; v.playheadX = selIdx >= 0 ? X(selIdx) : null;
+      const handleIdx = new Set(Object.keys(s.keys).map(id => board.rows.findIndex(r => r.ph.id === id)).filter(i => i >= 0)); if (s.showEnds && n) { handleIdx.add(0); handleIdx.add(n - 1); }
+      v.handles = [...handleIdx].map(i => { const r = board.rows[i], id = r.ph.id; const down = axis => e => { const svg = e.currentTarget.ownerSVGElement; api.set({ selected: id }); this.startDrag(e, svg, (x, y) => { const val = Math.min(1, Math.max(0, (y * 96 - 8) / 80)); api.setKey(id, { [axis]: val, ...(s.keys[id] ? {} : { [axis === 'x' ? 'y' : 'x']: r.P[axis === 'x' ? 'y' : 'x'], zoom: 1 }) }); }); }; return { x: X(i), yx: 8 + r.P.x * 80, yy: 8 + r.P.y * 80, downX: down('x'), downY: down('y') }; });
+      const maxS = Math.max(0.05, ...board.rows.map(r => r.ev.size)); const Y = val => 72 - val / maxS * 62;
+      v.sizeNat = board.rows.map((r, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(r.ph.s).toFixed(1)).join(' ');
+      v.sizePath = board.rows.map((r, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(r.ev.size).toFixed(1)).join(' ');
+      const dir = s.sort === 'largest' ? -1 : 1; let breaks = 0;
+      v.sizeDots = board.rows.map((r, i) => { const bad = i > 0 && (r.ev.size - board.rows[i - 1].ev.size) * dir < -0.002; if (bad) breaks++; return { x: X(i), y: Y(r.ev.size), c: bad ? '#FF3B30' : '#1C1C1E' }; });
+      v.monoLine = breaks ? `${breaks} ${breaks === 1 ? 'break' : 'breaks'} in the size curve — the sort or a hand reorder (or a zoom) did this` : `monotonic · ${board.angleChanges} angle cuts`;
+      v.windowSeg = this.seg([{ l: '3', v: 3 }, { l: '5', v: 5 }, { l: '7', v: 7 }], s.window, x => api.set({ window: x }), true);
+      v.endsSeg = this.seg([{ l: 'Median', v: 'median' }, { l: 'Trend', v: 'trend' }], s.ends, x => api.set({ ends: x }), true);
+      v.easeSeg = this.seg([{ l: 'Linear', v: 'linear' }, { l: 'In-out', v: 'inOut' }], s.easeK, x => api.set({ easeK: x }), true);
+      v.endHandlesSeg = this.seg([{ l: 'Shown', v: true }, { l: 'Hidden', v: false }], s.showEnds, x => api.set({ showEnds: x }), true);
+      v.onZSeg = this.seg([{ l: 'f', v: false }, { l: 'z', v: true }], s.onZ, x => api.set({ onZ: x }), true);
+      v.thMin = s.onZ ? 1 : 0; v.thMax = s.onZ ? 2 : 0.8; v.thStep = s.onZ ? 0.01 : 0.01;
+      v.thFlagV = s.onZ ? s.zFlag : s.thFlag; v.thRejectV = s.onZ ? s.zReject : s.thReject; v.thFlagL = s.onZ ? 'z ≥ ' + s.zFlag.toFixed(2) : 'f ≥ ' + Math.round(s.thFlag * 100) + ' %'; v.thRejectL = s.onZ ? 'z ≥ ' + s.zReject.toFixed(2) : 'f ≥ ' + Math.round(s.thReject * 100) + ' %';
+      v.setThFlag = e => api.set(s.onZ ? { zFlag: +e.target.value } : { thFlag: +e.target.value }); v.setThReject = e => api.set(s.onZ ? { zReject: +e.target.value } : { thReject: +e.target.value });
+      v.fixpointSeg = this.seg([{ l: 'One pass', v: false }, { l: 'To a fixpoint', v: true }], s.fixpoint, x => api.set({ fixpoint: x }), true);
+      // fixed face
+      const f = s.fx, pct = x => Math.round(x * 100) + ' %';
+      v.fxStartL = pct(f.startSize); v.fxEndL = f.endSizeFollows ? pct(f.startSize) + ' · Same' : pct(f.endSize);
+      v.fxStartDown = () => api.setFx({ startSize: Math.max(0.1, f.startSize - 0.05) }); v.fxStartUp = () => api.setFx({ startSize: Math.min(0.8, f.startSize + 0.05) });
+      const endS = f.endSizeFollows ? f.startSize : f.endSize; v.fxEndDown = () => api.setFx({ endSize: Math.max(0.1, endS - 0.05), endSizeFollows: false }); v.fxEndUp = () => api.setFx({ endSize: Math.min(0.8, endS + 0.05), endSizeFollows: false });
+      const pts = (cur, pick) => Array.from({ length: 9 }, (_, i) => ({ pick: () => pick(i), st: { width: 24, height: 13.5, background: 'none', border: 'none', padding: 0, backgroundImage: `radial-gradient(circle, ${cur === i ? '#C36A00' : '#C9C9CA'} ${cur === i ? 6.5 : 4.5}px, transparent ${cur === i ? 7 : 5}px)` } }));
+      v.fxStartPts = pts(f.startPlace, i => api.setFx({ startPlace: i })); v.fxEndPts = pts(f.endPlaceFollows ? f.startPlace : f.endPlace, i => api.setFx({ endPlace: i, endPlaceFollows: false })); v.fxEndPlaceL = f.endPlaceFollows ? 'End · Same' : 'End';
+      v.fxEaseSeg = this.seg([{ l: 'Linear', v: 'linear' }, { l: 'Ease in and out', v: 'inOut' }], f.ease, x => api.setFx({ ease: x }));
+      if (fixedRows) v.fxTally = `${fixedRows.filter(r => r.fv === 'short' || r.fv === 'shortAndUpscaled').length} photos won't fill the frame · ${fixedRows.filter(r => r.fv === 'upscaled' || r.fv === 'shortAndUpscaled').length} would be upscaled past ×2`;
+    }
+    // ---- timing
+    const frames = api.framesFor(board.rows), totalFrames = frames.reduce((a, b) => a + b, 0);
+    const sortL = { largest: 'largest first', smallest: 'smallest first', capture: 'capture order', alignment: 'alignment', manual: 'by hand' }[s.sort];
+    v.estimate1 = `${board.rows.length} photos · ${s.fps} fps · ${s.ramp ? `ramp ${s.rampStart} → ${s.rampMid} → ${s.rampEnd}` : s.hold + ' each'}`;
+    v.estimate2 = `${(totalFrames / s.fps).toFixed(1)} s of playback · ${totalFrames} frames · ${sortL}`;
+    if (v.isTiming) {
+      v.fpsSeg = this.seg([24, 25, 30, 50, 60].map(x => ({ l: String(x), v: x })), s.fps, x => api.set({ fps: x }));
+      v.rampSeg = this.seg([{ l: 'Off', v: false }, { l: 'On', v: true }], s.ramp, x => api.set({ ramp: x })); v.rampOn = s.ramp; v.rampOff = !s.ramp;
+      const HO = M.HOLDS.map(h => ({ l: h.l, v: h.l }));
+      v.holdPop = this.popup('hold', s.hold, HO, x => api.set({ hold: x }));
+      v.rampStartPop = this.popup('rampStart', s.rampStart, HO, x => api.set({ rampStart: x })); v.rampMidPop = this.popup('rampMid', s.rampMid, HO, x => api.set({ rampMid: x })); v.rampEndPop = this.popup('rampEnd', s.rampEnd, HO, x => api.set({ rampEnd: x }));
+      const hf = M.holdFrames(api.holdOf('_'), s.fps);
+      v.timingFooter = s.ramp ? `The hold ramps from ${s.rampStart} at the first photo through ${s.rampMid} in the middle to ${s.rampEnd} at the last; seconds round to whole frames at ${s.fps} fps.` : `Every photo holds ${s.hold} — ${hf} frames at ${s.fps} fps. Choose in seconds or in frames; seconds round to whole frames at the frame rate.`;
+      const ov = Object.keys(s.holds).length; v.overridesLine = ov ? `${ov} ${ov === 1 ? 'photo has' : 'photos have'} their own hold from the board — the override wins over the ramp for that photo.` : null;
+    }
+    // ---- output
+    if (v.isOutput) {
+      const frameMode = s.mode === 'least' || s.mode === 'frame';
+      v.outIdle = !s.rendering && !s.rendered; v.outRendering = !!s.rendering; v.outDone = !!s.rendered && !s.rendering;
+      v.outIsStack = !frameMode; v.outIsFrame = frameMode;
+      if (!frameMode) { const maxW = Math.max(...members.map(p => p.width), 1), maxH = Math.max(...members.map(p => p.height), 1); const fit = L => { const k = L / Math.max(maxW, maxH); return `${Math.round(maxW * k)}×${Math.round(maxH * k)}`; }; v.sizeRows = [`Native ${maxW}×${maxH}`, `Fit 3840 · ${fit(3840)}`, `Fit 2160 · ${fit(2160)}`, `Fit 1920 · ${fit(1920)}`, `Fit 1080 · ${fit(1080)}`].map((l, i) => ({ l, on: s.outputSize === i, pick: () => api.set({ outputSize: i }), check: { width: 22, height: 22, borderRadius: 11, background: s.outputSize === i ? '#C36A00' : 'none', border: s.outputSize === i ? 'none' : '1.6px solid rgba(109,109,114,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' } })); }
+      v.outHeading = isLeast ? 'Least crop' : 'Output frame';
+      v.outIntro = isLeast ? 'Every photo is cover-fitted to the frame and shifted only as far as the path asks. The crop each one pays is the badge; rejected photos are left out.' : 'Every photo is scaled and placed to put its rectangle here. One that cannot reach the frame\'s edges, or would be blown up to, is flagged and kept.';
+      v.frameSummary = `${s.A} · ${M.fmtPx(out.w)}×${M.fmtPx(out.h)} · ${isLeast ? 'least crop' : 'fixed face ' + Math.round(s.fx.startSize * 100) + ' %'}`;
+      v.memberSummary = `${board.rows.length} photos · ${board.rejectedRows.length} rejected · ${Object.keys(s.keys).length} keys · ${sortL}`;
+      v.backToBoard = () => api.goto('board');
+      const rows = isLeast ? board.rows : fixedRows; const idx = Math.min(s.scrub, Math.max(0, rows.length - 1)); const r = rows[idx];
+      if (r) { const w = sheetW - 33 - 32; const st = isLeast ? this.leastStyles(r, A, Math.min(w, 461.5)) : this.fixedStyles(r, A, Math.min(w, 461.5)); v.scrubFrame = { ...st.frame, borderRadius: 10, margin: '0 auto' }; v.scrubSrc = r.ph.src; v.scrubImg = st.img; v.scrubFace = st.face; v.scrubTitle = r.ph.id; v.scrubBadge = this.badgeSt(badgeOf(r)); v.scrubBadgeL = badgeLOf(r); }
+      v.scrubMax = Math.max(0, rows.length - 1); v.scrub = idx; v.setScrub = e => api.set({ scrub: +e.target.value }); v.scrubCounter = `Photo ${idx + 1} of ${rows.length}`;
+      v.scrubTally = isLeast ? `${board.rejectedRows.length} rejected · ${board.flagged} flagged · mean crop ${M.fmtPct(board.meanF)} · Σ J ${board.sumJ.toFixed(2)}` : v.fxTally || `${fixedRows.filter(r => r.fv !== 'fits').length} photos flagged`;
+      v.create = () => api.render(rows);
+      if (s.rendering) { v.renderingLine = `Rendering ${s.rendering.i + 1} of ${s.rendering.n}`; v.renderingBar = { height: '100%', width: ((s.rendering.i + 1) / s.rendering.n * 100) + '%', background: '#C36A00', transition: 'width .1s' }; v.renderingTitle = s.rendering.title; }
+      if (s.rendered) { const rec = s.rendered, last = rec.rows[rec.rows.length - 1]; const ph = 239.5, pw = Math.min(495, ph * rec.out.w / rec.out.h); const st = rec.fixed ? this.fixedStyles(last, rec.out.w / rec.out.h, pw) : this.leastStyles(last, rec.out.w / rec.out.h, pw); v.posterFrame = { ...st.frame, borderRadius: 0, height: ph }; v.posterSrc = last.ph.src; v.posterImg = st.img; v.doneTitle = rec.title; v.doneSubtitle = rec.subtitle;
+        v.openPlayer = () => api.set({ player: { rec, idx: 0, playing: true } }); v.share = () => api.toast('Share sheet · the movie file'); v.saveCollection = () => api.saveCollection(rec); v.again = () => api.set({ rendered: null }); }
+    }
+    // ---- player
+    if (s.player) {
+      const p = s.player, rec = p.rec, idx = Math.min(p.idx, rec.rows.length - 1), r = rec.rows[idx];
+      const fr = api.framesFor(rec.rows);
+      if (p.playing && !this._pt) { this._pt = setInterval(() => { const cur = this.props.ctx.state.player; if (!cur || !cur.playing) { clearInterval(this._pt); this._pt = null; return; } const n = cur.rec.rows.length; const holdMs = 1000 * (api.framesFor(cur.rec.rows)[cur.idx] || 25) / this.props.ctx.state.fps; this._acc = (this._acc || 0) + 80; if (this._acc >= holdMs) { this._acc = 0; api.set({ player: { ...cur, idx: (cur.idx + 1) % n } }); } }, 80); }
+      if (!p.playing && this._pt) { clearInterval(this._pt); this._pt = null; }
+      const pw = Math.min(sheetW - 64, 600), Ar = rec.out.w / rec.out.h; const st = rec.fixed ? this.fixedStyles(r, Ar, pw) : this.leastStyles(r, Ar, pw);
+      v.playerFrame = { ...st.frame, borderRadius: 8, marginTop: 10, margin: '10px auto 0' }; v.playerSrc = r.ph.src; v.playerImg = st.img; v.playerFace = { ...st.face, opacity: 0.6 };
+      v.doneTitle = v.doneTitle || rec.title; v.playPause = () => api.set({ player: { ...p, playing: !p.playing } }); v.playGlyph = p.playing ? '❚❚' : '▶';
+      v.playerMax = rec.rows.length - 1; v.playerIdx = idx; v.setPlayerIdx = e => api.set({ player: { ...p, idx: +e.target.value, playing: false } });
+      const secBefore = fr.slice(0, idx).reduce((a, b) => a + b, 0) / s.fps; v.playerCounter = `${idx + 1} / ${rec.rows.length} · ${secBefore.toFixed(1)} s · ${r.ph.id.replace(/^.*\./, '#')}`;
+      v.closePlayer = () => { api.set({ player: null }); };
+    } else if (this._pt) { clearInterval(this._pt); this._pt = null; }
+    return v;
+  }
+}
+</script>
+</body>
+</html>
