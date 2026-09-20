@@ -3,9 +3,12 @@ import AVKit
 import LetsLapseKit
 
 /// "List Shape-mations": every finished video, newest first, with play,
-/// share and delete.
+/// share and delete — and Re-render for a record that kept its members: the
+/// builder opens on its board with the members locked, to render again at
+/// another rate, ramp, rect or framing.
 struct ShapemationListView: View {
     @ObservedObject var store: ShapemationStore
+    var onRerender: ((ShapemationStore.Record) -> Void)? = nil
     @State private var playing: ShapemationStore.Record?
     @State private var deleting: ShapemationStore.Record?
 
@@ -64,6 +67,9 @@ struct ShapemationListView: View {
                 HStack(spacing: 14) {
                     Button { playing = record } label: { Label("Play", systemImage: "play.fill") }
                     ShareLink(item: store.url(for: record)) { Label("Share", systemImage: "square.and.arrow.up") }
+                    if record.members != nil, let onRerender {
+                        Button { onRerender(record) } label: { Label("Re-render", systemImage: "arrow.triangle.2.circlepath") }
+                    }
                     Button(role: .destructive) { deleting = record } label: { Label("Delete", systemImage: "trash") }
                 }
                 .font(.system(size: 13, weight: .medium))

@@ -144,9 +144,35 @@ public struct ShapemationFraming: Codable, Equatable, Sendable {
     /// The even pixel size of `aspect` at `longEdge` on its longer side — a
     /// square's long edge is both sides.
     public static func outputSize(aspect: Aspect, longEdge: Int) -> CGSize {
+        outputSize(ratio: aspect.ratio, longEdge: longEdge)
+    }
+
+    /// The same for any width ÷ height — the Source rect, a shortlist's own
+    /// dominant aspect, need not be a preset.
+    public static func outputSize(ratio: Double, longEdge: Int) -> CGSize {
+        let r = ratio.isFinite && ratio > 0 ? ratio : 1
         let long = Double(longEdge)
-        let short = long / max(aspect.ratio, 1 / aspect.ratio)
-        let size = aspect.ratio >= 1 ? CGSize(width: long, height: short) : CGSize(width: short, height: long)
+        let short = long / max(r, 1 / r)
+        let size = r >= 1 ? CGSize(width: long, height: short) : CGSize(width: short, height: long)
         return CGSize(width: max(2, floor(size.width / 2) * 2), height: max(2, floor(size.height / 2) * 2))
+    }
+
+    /// A ratio as small integers — 0.75 → "3:4", 1.5 → "3:2" — the nearest
+    /// fraction with sides up to 32; "1.42:1" when none is close.
+    public static func aspectLabel(ratio: Double) -> String {
+        guard ratio.isFinite, ratio > 0 else { return "1:1" }
+        var best: (w: Int, h: Int, err: Double) = (1, 1, abs(ratio - 1))
+        for h in 1...32 {
+            let w = Int((ratio * Double(h)).rounded())
+            guard w >= 1, w <= 32 else { continue }
+            let err = abs(Double(w) / Double(h) - ratio)
+            if err < best.err { best = (w, h, err) }
+        }
+        if best.err <= 0.004 {
+            func gcd(_ a: Int, _ b: Int) -> Int { b == 0 ? a : gcd(b, a % b) }
+            let g = gcd(best.w, best.h)
+            return "\(best.w / g):\(best.h / g)"
+        }
+        return String(format: "%.2f:1", ratio)
     }
 }

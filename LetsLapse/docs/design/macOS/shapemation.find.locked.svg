@@ -1,0 +1,107 @@
+<svg viewBox="0 0 800 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · Find shapes · summary after a pass over a locked register (sheet) · 760×680</title>
+  <desc>Mirrors App/Shapemation/FindShapesView.swift — summaryCard and its By project card (resultRow) after a pass over a LOCKED register (WP0b, register forward-compat: LetsLapseKit/Shapes/ShapeRegisterLock.swift / App/Shapemation/ShapeRegisterLock.swift — a shapes.json written by a newer LetsLapse, or unreadable, is read past and never written) — in the Mac's 560-wide Shape-mation sheet over the Create tab. Drawn 2026-09-20, mirrored from the Debug build on the wp0b-root scratch library (12 city projects; the register of 'Photo 19. 9. at 20:00' is the version-2 fixture wp0b/toonew.json, detectorVersion 4 / version 2) with LL_SHAPEMATION=find LL_SHAPES_SCOPE=all LL_SHAPES_RUN=1; capture find.locked.png + AX dump. The capture's window was not key (grey traffic lights, the prominent buttons grey) — drawn here in the key-window look (accent), which is what the app shows when it is in front. The step is pushed from the home sheet: nav title 'Find shapes' 13/700 with the Back circle; the plan card (Detector · Sensitivity · Size · Family, Projects scope, 'Find shapes in N projects' — shapemation.find.svg on iOS, no Mac mirror yet) has been replaced by the SUMMARY CARD (llCard radius 18, 527.5×198.5 at y 115.5, 16 pt padding, 10 pt spacing): 'Nothing analysed' 17/600 (with N analysed: 'N projects analysed in 1.2 s'); the mode line 12 secondary 'Use all · all/high/all' (engine title · search token: family/sensitivity/size — the Mac's stored Use all / High; a fresh simulator reads 'Standard · all/medium/all'); '0 with at least one shape' 14 pt; four family pills (Label count + circle · oval · square · rectangle, 13/500, 10 × 5 padding, capsule) — tertiary text on secondary-12 % when the count is 0, primary on accent-12 % otherwise; the LOCK LINE (new, WP0b) 12 secondary: '1 register left as it was: written by a newer LetsLapse, or unreadable.' (plural: 'N registers left as they were: …'; an 'N pictures could not be read.' line would precede it); Run again (borderedProminent accent, 83.5×24, disabled when nothing is selected) · Change options (bordered, 119×24), 13/500. BY PROJECT (llCard radius 18, 527.5×91.5, 12 under): 'By project' 13/600 secondary with '0 ms median' 11 mono secondary at the trailing edge; one resultRow per project — the title 12.5/500 (middle-truncated), the family counts 11 pt or, with no shapes, 'failed' in system orange (#FF9500, Color.orange — a plain 'none' in secondary when the pass simply found nothing), the milliseconds 11 mono secondary in a 64 pt trailing column, and the pass's own note 10.5 pt under it, orange when failed: 'Shapes written by a newer LetsLapse' (the unreadable case reads 'Shapes couldn't be read'). Console for the same run: 'shapes: Photo 19. 9. at 20:00 written by a newer LetsLapse (version 2) — left as it is'. The plan card's inventory line gains '· N locked' and the chosen-projects list shows the row states 'newer LetsLapse' / 'unreadable' for such a register (desc-only, not captured). Same screen on iOS: ../iOS/shapemation.find.done.portrait.svg (stale: drawn before the test-bench cards and WP0b; the 2026-09-20 iPhone 16 Pro capture find.locked.png shows the identical summary and row).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <clipPath id="sheet"><rect x="120" y="52" width="560" height="679.5" rx="10"/></clipPath>
+    <clipPath id="content"><rect x="120" y="100" width="560" height="631.5"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <filter id="knob" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.25"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums;font-family:'SF Mono', Menlo, monospace}</style>
+
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- The sheet: 560 pt wide, its top under the title bar, 679.5 tall — taller than the
+       680 pt window, so its foot overhangs the window's bottom edge by 31.5 pt as captured. -->
+  <g id="sheet">
+    <rect x="120" y="52" width="560" height="679.5" rx="10" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+    <g clip-path="url(#sheet)">
+      <g id="navbar">
+        <rect x="120" y="52" width="560" height="47.5" fill="#FFFFFF"/>
+        <line x1="120" y1="99.75" x2="680" y2="99.75" stroke="#000" stroke-opacity="0.14" stroke-width="0.5"/>
+        <circle cx="144" cy="76" r="14.5" fill="#C36A00"/>
+        <path d="M146.5 70.5 l-5.5 5.5 5.5 5.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+        <text x="168.5" y="80.5" font-size="13" class="b" fill="#000">Find shapes</text>
+      </g>
+      <g id="content" clip-path="url(#content)">
+        <!-- summaryCard (llCard radius 18, 16 pt padding, 10 pt spacing) -->
+        <rect x="136" y="115.5" width="527.5" height="198.5" rx="18" fill="#FFFFFF"/>
+        <text x="152" y="147.5" font-size="17" class="sb" fill="#000">Nothing analysed</text>
+        <text x="152" y="173.5" font-size="12" fill="#6D6D72">Use all · all/high/all</text>
+        <text x="152" y="200" font-size="14" fill="#000">0 with at least one shape</text>
+        <rect x="152" y="214" width="51.5" height="25" rx="12.5" fill="#6D6D72" fill-opacity="0.12"/><circle cx="165" cy="226.5" r="5.5" fill="none" stroke="#B0B0B0" stroke-width="1.3" data-symbol="circle"/><text x="193.5" y="231" font-size="13" class="m" text-anchor="end" fill="#B0B0B0">0</text>
+        <rect x="212" y="214" width="55" height="25" rx="12.5" fill="#6D6D72" fill-opacity="0.12"/><ellipse cx="225" cy="226.5" rx="7.5" ry="5" fill="none" stroke="#B0B0B0" stroke-width="1.3" data-symbol="oval"/><text x="257" y="231" font-size="13" class="m" text-anchor="end" fill="#B0B0B0">0</text>
+        <rect x="275.5" y="214" width="51" height="25" rx="12.5" fill="#6D6D72" fill-opacity="0.12"/><rect x="283.0" y="221" width="11" height="11" rx="1.5" fill="none" stroke="#B0B0B0" stroke-width="1.3" data-symbol="square"/><text x="316.5" y="231" font-size="13" class="m" text-anchor="end" fill="#B0B0B0">0</text>
+        <rect x="335" y="214" width="54.5" height="25" rx="12.5" fill="#6D6D72" fill-opacity="0.12"/><rect x="340.5" y="222" width="15" height="9" rx="1.5" fill="none" stroke="#B0B0B0" stroke-width="1.3" data-symbol="rectangle"/><text x="379.5" y="231" font-size="13" class="m" text-anchor="end" fill="#B0B0B0">0</text>
+        <text x="152" y="261.5" font-size="12" fill="#6D6D72">1 register left as it was: written by a newer LetsLapse, or unreadable.</text>
+        <rect x="152" y="274.5" width="83.5" height="24" rx="6" fill="#C36A00"/>
+        <text x="193.75" y="290.5" font-size="13" class="m" text-anchor="middle" fill="#FFFFFF">Run again</text>
+        <rect x="248" y="275" width="119" height="24" rx="6" fill="#000" fill-opacity="0.06"/>
+        <rect x="248" y="274.5" width="119" height="24" rx="6" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12" stroke-width="0.75"/>
+        <text x="307.5" y="290.5" font-size="13" class="m" text-anchor="middle" fill="#000">Change options</text>
+        <!-- By project card: one resultRow per project of the pass -->
+        <rect x="136" y="326.5" width="527.5" height="91.5" rx="18" fill="#FFFFFF"/>
+        <text x="152" y="356" font-size="13" class="sb" fill="#6D6D72">By project</text>
+        <text x="647.5" y="356" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">0 ms median</text>
+        <text x="152" y="382" font-size="12.5" class="m" fill="#000">Photo 19. 9. at 20:00</text>
+        <text x="575.5" y="382" font-size="11" text-anchor="end" fill="#FF9500">failed</text>
+        <text x="647.5" y="382" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">0 ms</text>
+        <text x="152" y="397" font-size="10.5" fill="#FF9500">Shapes written by a newer LetsLapse</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="758" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation sheet · Find shapes · summary — Nothing analysed, 1 register left as it was, By project: failed · Shapes written by a newer LetsLapse · 760×680 pt window, 560 pt sheet</text>
+  <text x="400" y="776" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/FindShapesView.swift (summaryCard · resultRow) + ShapeRegisterLock — LL_SHAPEMATION=find LL_SHAPES_SCOPE=all LL_SHAPES_RUN=1 on the wp0b-root lock fixture, 2026-09-20</text>
+</svg>

@@ -1097,14 +1097,14 @@ do {
         let familyName = takeOption(["--family"])
         let sortName = takeOption(["--sort"])
         let jsonPath = takeOption(["--json"])
-        guard let mode = ShapemationMode(rawValue: modeName) else { fail("--mode needs stack | crop | frame") }
+        guard let mode = ShapemationMode(rawValue: modeName == "least" ? "leastCrop" : modeName) else { fail("--mode needs stack | crop | frame | least") }
         let family = familyName.map { name -> DetectedShape.Family in
             guard let f = DetectedShape.Family(rawValue: name) else { fail("--family needs circle | oval | square | rectangle") }
             return f
         }
         // Per subcommand: plan and score largest first, render capture order.
         let sort = sortName.map { name -> ShapemationSort in
-            guard let s = shapemationSort(named: name) else { fail("--sort needs largest | smallest | capture") }
+            guard let s = shapemationSort(named: name) else { fail("--sort needs largest | smallest | capture | alignment") }
             return s
         }
         // render's timing — the Timing step's selects, spelled on the command line.
@@ -1160,13 +1160,60 @@ do {
             guard cap > 0 else { fail("--upscale-cap needs a positive number") }
             framing = .approach(outputSize: outputSize, from: start, to: end, ease: ease, upscaleCap: cap)
             if sizeText != nil { printErr("note: --size is ignored under --mode frame — the clip is the framing's \(Int(outputSize.width))×\(Int(outputSize.height))") }
-        } else if frameText != nil || faceText != nil || faceEndText != nil || easeText != nil || capText != nil || longText != nil {
+        } else if mode != .leastCrop, frameText != nil || faceText != nil || faceEndText != nil || easeText != nil || capText != nil || longText != nil {
             fail("--frame, --long, --face, --face-end, --ease and --upscale-cap belong to --mode frame")
+        }
+        // Least crop (--mode least; docs/shapemation/prototype-review.md): the
+        // rect as --frame spells it, and the board's cog.
+        let toleranceText = takeOption(["--tolerance"])
+        let windowText = takeOption(["--window"])
+        let endsText = takeOption(["--ends"])
+        let passesText = takeOption(["--passes"])
+        let letGoText = takeOption(["--let-go"])
+        var leastCrop: ShapemationLeastCrop.Settings?
+        if mode == .leastCrop {
+            guard let frameText else { fail("--mode least needs --frame WxH (or an aspect like 4:5 with --long)") }
+            guard let outputSize = shapemationFrameSize(frameText, long: longText) else {
+                fail("--frame needs WxH in even pixels (1080x1350) or an aspect 1:1 | 4:5 | 3:2 | 16:9 | 2:3 | 9:16 (with --long 1080 | 1920 | 2160)")
+            }
+            if faceText != nil || faceEndText != nil || capText != nil { fail("--face, --face-end and --upscale-cap belong to --mode frame") }
+            var s = ShapemationLeastCrop.Settings(outputSize: outputSize)
+            if let text = toleranceText {
+                guard let tolerance = ShapemationLeastCrop.Tolerance(rawValue: text) else { fail("--tolerance needs strict | normal | loose | none") }
+                s.tolerance = tolerance
+            }
+            if let text = windowText {
+                guard let n = Int(text), ShapemationLeastCrop.Settings.windows.contains(n) else { fail("--window needs 3 | 5 | 7") }
+                s.window = n
+            }
+            if let text = endsText {
+                guard let ends = ShapemationLeastCrop.Settings.Ends(rawValue: text) else { fail("--ends needs median | trend") }
+                s.ends = ends
+            }
+            switch passesText ?? "fixpoint" {
+            case "fixpoint": s.fixpoint = true
+            case "one": s.fixpoint = false
+            case "off": s.autoReject = false
+            default: fail("--passes needs one | fixpoint | off")
+            }
+            if let text = letGoText {
+                guard let g = Double(text), g >= 0 else { fail("--let-go needs a number, 0 or more (nil takes the tolerance's own)") }
+                s.letGo = g
+            }
+            switch easeText ?? "linear" {
+            case "linear": s.ease = .linear
+            case "inout", "inOut", "in-out": s.ease = .inOut
+            default: fail("--ease needs linear | inout")
+            }
+            leastCrop = s
+            if sizeText != nil { printErr("note: --size is ignored under --mode least — the clip is the rect's \(Int(outputSize.width))×\(Int(outputSize.height))") }
+        } else if toleranceText != nil || windowText != nil || endsText != nil || passesText != nil || letGoText != nil {
+            fail("--tolerance, --window, --ends, --passes and --let-go belong to --mode least")
         }
         guard let subcommand = args.first else { fail("shapemation needs stage | plan | score | pack | render") }
         try runShapemation(
             subcommand: subcommand, args: Array(args.dropFirst()), out: out, link: link, project: project,
-            mode: mode, family: family, sort: sort, timing: timing, longEdge: longEdge, framing: framing, jsonPath: jsonPath)
+            mode: mode, family: family, sort: sort, timing: timing, longEdge: longEdge, framing: framing, leastCrop: leastCrop, jsonPath: jsonPath)
 
     case "whitebalance", "wb":
         let report = takeFlag(["--report"])

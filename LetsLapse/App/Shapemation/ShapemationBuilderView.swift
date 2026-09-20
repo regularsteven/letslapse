@@ -87,12 +87,15 @@ final class ShapemationBuilder: ObservableObject {
     private var reloadTask: Task<Void, Never>?
     /// captureID → the chosen shape instance.
     @Published var selection: [UUID: UUID] = [:]
-    @Published var mode: ShapemationMode = .stack
+    /// Least crop by default (2026-09-20): the stack modes are not the
+    /// output model for a real set (docs/shapemation/output-frame.md).
+    @Published var mode: ShapemationMode = .leastCrop
     /// The Match step's answer, per family visited. Nil until the step is
     /// seen, when the family's plain membership applies.
     @Published var matches: [DetectedShape.Family: ShapeMatch] = [:]
-    /// The order the photos play in. Largest share first by default.
-    @Published var sort: ShapemationSort = .largestFirst
+    /// The order the photos play in. Smallest first by default — the
+    /// approach of the brief's §1.
+    @Published var sort: ShapemationSort = .smallestFirst
     @Published var timing = ShapemationTiming()
     @Published var thumbnails: [UUID: CGImage] = [:]
     @Published private(set) var loaded = false
@@ -105,8 +108,9 @@ final class ShapemationBuilder: ObservableObject {
     /// otherwise. Ignored by the stack modes.
     @Published private(set) var framing = ShapemationFraming.still(
         outputSize: ShapemationFraming.outputSize(aspect: ShapemationBuilder.defaultAspect, longEdge: ShapemationBuilder.defaultLongEdge))
-    @Published var frameAspect: ShapemationFraming.Aspect = ShapemationBuilder.defaultAspect { didSet { refitFrame() } }
-    @Published var frameLongEdge: Int = ShapemationBuilder.defaultLongEdge { didSet { refitFrame() } }
+    /// The rect's long edge, shared by both frame modes; its aspect is
+    /// `rectRatio` (nil: the Source rect), and `rectSize(for:)` is the size.
+    @Published var frameLongEdge: Int = ShapemationBuilder.defaultLongEdge
     /// The end rows read "Same" and follow the start until touched.
     @Published private(set) var endSizeFollowsStart = true
     @Published private(set) var endPlaceFollowsStart = true
@@ -154,10 +158,254 @@ final class ShapemationBuilder: ObservableObject {
         framing = ShapemationFraming(outputSize: framing.outputSize, keys: [start, end], ease: framing.ease, upscaleCap: framing.upscaleCap)
     }
 
-    private func refitFrame() {
-        let size = ShapemationFraming.outputSize(aspect: frameAspect, longEdge: frameLongEdge)
-        guard size != framing.outputSize else { return }
-        framing = ShapemationFraming(outputSize: size, keys: framing.keys, ease: framing.ease, upscaleCap: framing.upscaleCap)
+    /// The framing at the rect in force: the keys and the ease are the
+    /// state, the size follows the board's rect.
+    func framing(for family: DetectedShape.Family) -> ShapemationFraming {
+        ShapemationFraming(outputSize: rectSize(for: family), keys: framing.keys, ease: framing.ease, upscaleCap: framing.upscaleCap)
+    }
+
+    // MARK: - The Sequence board (docs/shapemation/prototype-review.md)
+
+    /// The least-crop settings — the cog, the keys, the rejects. The output
+    /// size and the sort are filled in from the rect and `sort` on every use
+    /// (`settings(for:)`).
+    @Published var leastCrop = ShapemationLeastCrop.Settings(
+        outputSize: ShapemationFraming.outputSize(aspect: ShapemationBuilder.defaultAspect, longEdge: ShapemationBuilder.defaultLongEdge))
+    /// The rect's aspect; nil is Source — the picked photos' own dominant aspect.
+    @Published var rectRatio: Double?
+    @Published var boardSelection: UUID?
+    @Published var boardHover: UUID?
+    @Published var showRejected = false
+    @Published var showEndHandles = true
+    /// Re-render: the record whose members are locked on the board, or nil.
+    @Published private(set) var lockedRecord: ShapemationStore.Record?
+    /// A locked member's shape as it was rendered, over the register's.
+    private var snapshotShapes: [UUID: DetectedShape] = [:]
+    var membersLocked: Bool { lockedRecord != nil }
+
+    /// The photos the board works from: the picked items with their capture order.
+    func photos(for family: DetectedShape.Family) -> [ShapemationLeastCrop.Photo] {
+        items(for: family).enumerated().map { i, item in ShapemationLeastCrop.Photo(item: item, captureOrder: item.captureIndex ?? i) }
+    }
+
+    /// The Source rect: the picked photos' dominant aspect, 4:5 for none.
+    func sourceRatio(for family: DetectedShape.Family) -> Double {
+        ShapemationLeastCrop.dominantAspect(of: photos(for: family)) ?? 0.8
+    }
+    func rectRatio(for family: DetectedShape.Family) -> Double { rectRatio ?? sourceRatio(for: family) }
+    func rectSize(for family: DetectedShape.Family) -> CGSize {
+        ShapemationFraming.outputSize(ratio: rectRatio(for: family), longEdge: frameLongEdge)
+    }
+
+    /// The settings the board, the plan and the record share.
+    func settings(for family: DetectedShape.Family) -> ShapemationLeastCrop.Settings {
+        var s = leastCrop
+        s.outputSize = rectSize(for: family)
+        s.sort = sort
+        return s
+    }
+
+    func board(for family: DetectedShape.Family) -> ShapemationLeastCrop.Board {
+        ShapemationLeastCrop.board(photos(for: family), settings: settings(for: family))
+    }
+
+    /// The mean loss the picked set would pay into a rect of `ratio` — the
+    /// chips' captions, so a wider rect cannot look cheaper by throwing
+    /// pixels to the aspect crop.
+    func meanLoss(for family: DetectedShape.Family, ratio: Double) -> Double {
+        var s = settings(for: family)
+        s.outputSize = ShapemationFraming.outputSize(ratio: ratio, longEdge: frameLongEdge)
+        return ShapemationLeastCrop.board(photos(for: family), settings: s).meanLoss
+    }
+
+    func setKeyPlace(_ id: UUID, _ place: CGPoint) {
+        let zoom = leastCrop.key(for: id)?.zoom ?? 1
+        leastCrop.setKey(ShapemationLeastCrop.Key(id: id, place: place, zoom: zoom))
+    }
+    func setKeyZoom(_ id: UUID, _ zoom: Double) {
+        guard let key = leastCrop.key(for: id) else { return }
+        leastCrop.setKey(ShapemationLeastCrop.Key(id: id, place: key.place, zoom: zoom))
+    }
+
+    /// The ids that play, in order: the plan's placements — the board's kept
+    /// rows under least crop — else the picked items in the sort's order.
+    func playOrder(for family: DetectedShape.Family) -> [UUID] {
+        plan(for: family)?.placements.map(\.itemID) ?? items(for: family).map(\.id)
+    }
+
+    /// Each playing photo's hold in frames, by id.
+    func holds(for family: DetectedShape.Family) -> [UUID: Int] {
+        let ids = playOrder(for: family)
+        return Dictionary(zip(ids, timing.holds(for: ids)), uniquingKeysWith: { a, _ in a })
+    }
+
+    /// The Projects rows' crop badge under least crop.
+    func rowBadges(for family: DetectedShape.Family) -> [UUID: (label: String, colour: Color)] {
+        guard mode == .leastCrop else { return [:] }
+        let board = board(for: family)
+        var out: [UUID: (label: String, colour: Color)] = [:]
+        for r in board.rows { out[r.id] = ("crop \(Self.pct(r.evaluation.crop))", Self.colour(r.verdict)) }
+        for r in board.rejected { out[r.id] = ("rejected · \(Self.pct(r.evaluation.crop))", Color.secondary) }
+        return out
+    }
+
+    nonisolated static func pct(_ v: Double) -> String { "\(Int((v * 100).rounded())) %" }
+    nonisolated static func colour(_ v: ShapemationLeastCrop.Verdict) -> Color {
+        switch v {
+        case .green: return LL.levelGood
+        case .amber: return LL.amber
+        case .red: return LL.levelFar
+        }
+    }
+
+    /// One photo on the board, as the strip, the preview and the side card
+    /// draw it — the least-crop row or the fixed placement, in tile terms.
+    struct BoardTile: Identifiable, Equatable {
+        var id: UUID
+        var title: String
+        /// The place in the play order; −1 for a rejected photo.
+        var index: Int
+        /// The source's pixel size and the shape's bounds in it.
+        var frame: CGSize
+        var shapeBounds: CGRect
+        /// Where the whole photo lies in a tile of the rect's aspect, unit coordinates of the tile.
+        var placedRect: CGRect
+        /// Least crop: where the shape is put, unit coordinates of the rect.
+        var target: CGPoint?
+        var badgeLabel: String
+        var badgeColour: Color
+        var rejected: Bool
+        var rejectedByHand: Bool
+        var isKey: Bool
+        var holdLabel: String?
+        var shareLine: String
+        var naturalLine: String
+        var metricLabel: String
+        var metricLine: String
+        var marginsLine: String?
+        var fixedVerdict: ShapemationPlan.Placement.Feasibility.Verdict?
+        /// What stays of the source, unit coordinates of the source.
+        var sourceWindow: CGRect
+
+        var shapeRectInSource: CGRect {
+            CGRect(x: shapeBounds.minX / max(frame.width, 1), y: shapeBounds.minY / max(frame.height, 1),
+                   width: shapeBounds.width / max(frame.width, 1), height: shapeBounds.height / max(frame.height, 1))
+        }
+        var shapeRectInTile: CGRect {
+            let s = shapeRectInSource
+            return CGRect(x: placedRect.minX + s.minX * placedRect.width, y: placedRect.minY + s.minY * placedRect.height,
+                          width: s.width * placedRect.width, height: s.height * placedRect.height)
+        }
+    }
+
+    /// The board's tiles in play order — the rejected ones after, when shown.
+    func boardTiles(for family: DetectedShape.Family) -> [BoardTile] {
+        let items = items(for: family)
+        let byID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let holds = holds(for: family)
+        func holdLabel(_ id: UUID) -> String? { timing.override(for: id).map { "hold \($0.title)" } }
+        if mode == .frame {
+            guard let plan = plan(for: family) else { return [] }
+            let outW = Double(plan.canvas.width), outH = Double(plan.canvas.height)
+            return plan.placements.enumerated().compactMap { i, p -> BoardTile? in
+                guard let item = byID[p.itemID] else { return nil }
+                let placed = CGRect(x: Double(p.footprint.minX) / outW, y: Double(p.footprint.minY) / outH,
+                                    width: Double(p.footprint.width) / outW, height: Double(p.footprint.height) / outH)
+                let wl = max(0, -Double(placed.minX) / Double(placed.width)), wt = max(0, -Double(placed.minY) / Double(placed.height))
+                let wr = min(1, (1 - Double(placed.minX)) / Double(placed.width)), wb = min(1, (1 - Double(placed.minY)) / Double(placed.height))
+                let f = p.feasibility
+                let short = [("L", f.shortfall.left), ("T", f.shortfall.top), ("R", f.shortfall.right), ("B", f.shortfall.bottom)]
+                    .map { String(format: "%@ %.0f", $0.0, $0.1) }.joined(separator: " ")
+                let bounds = item.shape.bounds(in: item.pixelSize)
+                return BoardTile(id: item.id, title: item.title, index: i, frame: item.pixelSize, shapeBounds: bounds, placedRect: placed, target: nil,
+                                 badgeLabel: Self.verdictLabel(p), badgeColour: f.verdict.isFlagged ? (f.verdict.isUpscaled ? LL.levelFar : LL.amber) : LL.levelGood,
+                                 rejected: false, rejectedByHand: false, isKey: false, holdLabel: holdLabel(item.id),
+                                 shareLine: "\(Int(item.shape.nativeDiameterPx)) px · \(Self.pct(ShapemationSort.share(of: item))) of the frame",
+                                 naturalLine: String(format: "%.2f · %.2f", Double(bounds.midX) / Double(item.pixelSize.width), Double(bounds.midY) / Double(item.pixelSize.height)),
+                                 metricLabel: "placement", metricLine: String(format: "scale ×%.2f · short %@ px", f.upscale, short),
+                                 marginsLine: nil, fixedVerdict: f.verdict,
+                                 sourceWindow: CGRect(x: wl, y: wt, width: max(0, wr - wl), height: max(0, wb - wt)))
+            }
+        }
+        let board = board(for: family)
+        func tile(_ r: ShapemationLeastCrop.Row) -> BoardTile? {
+            guard let item = byID[r.id] else { return nil }
+            let win = r.evaluation.window
+            let placed = CGRect(x: -Double(win.minX) / Double(win.width), y: -Double(win.minY) / Double(win.height),
+                                width: 1 / Double(win.width), height: 1 / Double(win.height))
+            let ev = r.evaluation
+            let m = item.shape.margins(in: item.pixelSize)
+            return BoardTile(id: item.id, title: item.title, index: r.index, frame: item.pixelSize, shapeBounds: r.photo.bounds, placedRect: placed, target: r.target,
+                             badgeLabel: r.rejected ? "rejected · \(Self.pct(ev.crop))" : "crop \(Self.pct(ev.crop))",
+                             badgeColour: r.rejected ? Color.secondary : Self.colour(r.verdict),
+                             rejected: r.rejected, rejectedByHand: r.rejectedByHand, isKey: r.key != nil, holdLabel: holdLabel(item.id),
+                             shareLine: "\(Int(r.photo.longSidePx)) px · \(Self.pct(r.photo.share)) of the frame → \(Self.pct(ev.renderedShare)) of the rect",
+                             naturalLine: String(format: "%.2f · %.2f → target %.2f · %.2f", Double(ev.natural.place.x), Double(ev.natural.place.y), Double(r.target.x), Double(r.target.y)),
+                             metricLabel: "crop", metricLine: String(format: "%@ · loss %@ · zoom ×%.2f (x %.2f · y %.2f)", Self.pct(ev.crop), Self.pct(ev.loss), ev.zoom, ev.zoomX, ev.zoomY),
+                             marginsLine: String(format: "L %.0f %% · T %.0f %% · R %.0f %% · B %.0f %%", m.left / Double(item.pixelSize.width) * 100, m.top / Double(item.pixelSize.height) * 100,
+                                                 m.right / Double(item.pixelSize.width) * 100, m.bottom / Double(item.pixelSize.height) * 100),
+                             fixedVerdict: nil, sourceWindow: win)
+        }
+        var tiles = board.rows.compactMap(tile)
+        if showRejected { tiles += board.rejected.compactMap(tile) }
+        _ = holds
+        return tiles
+    }
+
+    /// The selected photo at a size the board's preview deserves; the last
+    /// four decodes are kept. Nil until the decode lands.
+    @Published private var bigThumbnails: [UUID: CGImage] = [:]
+    private var bigOrder: [UUID] = []
+    private var bigRequested: Set<UUID> = []
+    func bigThumbnail(for id: UUID) -> CGImage? {
+        if let cg = bigThumbnails[id] { return cg }
+        guard !bigRequested.contains(id), let project = projects.first(where: { $0.id == id }) else { return nil }
+        bigRequested.insert(id)
+        let rep = project.representative
+        Task { [weak self] in
+            let image = await MediaWorkQueue.shared.run { RepresentativeLoader.image(rep, maxPixelSize: 1200) }
+            guard let image, let image else { return }
+            await MainActor.run {
+                guard let self else { return }
+                self.bigThumbnails[id] = image
+                self.bigOrder.append(id)
+                while self.bigOrder.count > 4 {
+                    let gone = self.bigOrder.removeFirst()
+                    self.bigThumbnails[gone] = nil
+                    self.bigRequested.remove(gone)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Re-render: the record's members are the set, each with the shape it
+    /// was rendered with, and its board settings, timing and framing are
+    /// restored. A member whose project has left the library is dropped.
+    func lock(to record: ShapemationStore.Record) {
+        lockedRecord = record
+        mode = record.mode.hasBoard ? record.mode : .leastCrop
+        matches[record.family] = record.match ?? ShapeMatch(family: record.family)
+        if let s = record.sort { sort = s }
+        if let t = record.timing { timing = t }
+        if let f = record.framing {
+            framing = f
+            endSizeFollowsStart = false; endPlaceFollowsStart = false
+        }
+        if let s = record.leastCrop {
+            leastCrop = s
+            rectRatio = s.aspect
+            frameLongEdge = Int(max(s.outputSize.width, s.outputSize.height))
+        } else if let f = record.framing {
+            rectRatio = Double(f.outputSize.width) / Double(max(f.outputSize.height, 1))
+            frameLongEdge = Int(max(f.outputSize.width, f.outputSize.height))
+        }
+        selection = [:]
+        snapshotShapes = [:]
+        for member in record.members ?? [] where projects.contains(where: { $0.id == member.id }) {
+            selection[member.id] = member.shape.id
+            snapshotShapes[member.id] = member.shape
+        }
     }
 
     /// The Output step's one line under the scrub: what the frame leaves
@@ -197,7 +445,10 @@ final class ShapemationBuilder: ObservableObject {
         var title: String
         var image: CGImage
         var placement: ShapemationPlan.Placement
-        var verdict: String { ShapemationBuilder.verdictLabel(placement) }
+        /// The badge: the crop under least crop, the shipped verdict under Output frame.
+        var verdict: String { placement.crop.map { "crop \(ShapemationBuilder.pct($0.evaluation.crop))" } ?? ShapemationBuilder.verdictLabel(placement) }
+        var isFlagged: Bool { placement.crop.map { $0.verdict != .green } ?? placement.feasibility.verdict.isFlagged }
+        var colour: Color { placement.crop.map { ShapemationBuilder.colour($0.verdict) } ?? (placement.feasibility.verdict.isFlagged ? LL.amber : LL.levelGood) }
     }
     @Published private(set) var framePreview: FramePreview?
     /// The last few decodes, so moving the scrub back is free and a framing
@@ -218,13 +469,15 @@ final class ShapemationBuilder: ObservableObject {
     func framePreview(index: Int, family: DetectedShape.Family) {
         previewGeneration += 1
         let generation = previewGeneration
-        guard mode == .frame, let plan = plan(for: family) else { framePreview = nil; return }
-        let items = items(for: family)
+        guard mode.hasBoard, let plan = plan(for: family) else { framePreview = nil; return }
+        // The play order is the plan's: under least crop the rejects have no placement.
+        let all = items(for: family)
+        let items = plan.placements.compactMap { p in all.first { $0.id == p.itemID } }
         guard items.indices.contains(index),
               let placement = plan.placements.first(where: { $0.itemID == items[index].id }),
               let rep = projects.first(where: { $0.id == items[index].id })?.representative else { framePreview = nil; return }
         let item = items[index]
-        let outputSize = framing.outputSize
+        let outputSize = plan.canvas.size
         let scale = min(1, Self.previewLongEdge / max(Double(outputSize.width), Double(outputSize.height)))
         let previewSize = CGSize(width: (Double(outputSize.width) * scale).rounded(), height: (Double(outputSize.height) * scale).rounded())
         let canvas = plan.canvas
@@ -326,7 +579,11 @@ final class ShapemationBuilder: ObservableObject {
     /// (by the share of the frame of the shape that would be picked) — the
     /// Kit's rule, so the builder and the `lapse` CLI order the same way.
     func projects(for family: DetectedShape.Family) -> [ProjectShapes] {
-        let admitted = projects.filter { !shapes(of: $0, for: family).isEmpty }
+        var admitted = projects.filter { !shapes(of: $0, for: family).isEmpty }
+        if let members = lockedRecord?.members {
+            let ids = Set(members.map(\.id))
+            admitted = projects.filter { ids.contains($0.id) }
+        }
         return sort.sorted(admitted) { share(of: $0, for: family) }
     }
 
@@ -336,8 +593,7 @@ final class ShapemationBuilder: ObservableObject {
         let shapes = shapes(of: project, for: family)
         let shape = selection[project.id].flatMap { id in shapes.first { $0.id == id } } ?? shapes.first
         guard let shape else { return 0 }
-        let short = Double(min(project.frameSize.width, project.frameSize.height))
-        return short > 0 ? shape.nativeDiameterPx / short : 0
+        return ShapemationSort.share(of: snapshotShapes[project.id] ?? shape, in: project.frameSize)
     }
 
     /// How many projects and shapes the family's match admits — the Match
@@ -380,28 +636,41 @@ final class ShapemationBuilder: ObservableObject {
 
     /// The picked items in the Sort's order — the order they play.
     func items(for family: DetectedShape.Family) -> [ShapemationItem] {
-        projects(for: family).compactMap { project in
-            guard let shapeID = selection[project.id],
-                  let shape = project.register.shapes.first(where: { $0.id == shapeID }) else { return nil }
+        // `projects` is in capture order (oldest first): that index is the
+        // capture order whatever the sort.
+        let order = Dictionary(projects.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return projects(for: family).compactMap { project in
+            let shape: DetectedShape?
+            if let snapshot = snapshotShapes[project.id] { shape = snapshot }
+            else if let shapeID = selection[project.id] { shape = project.register.shapes.first { $0.id == shapeID } }
+            else { shape = nil }
+            guard let shape else { return nil }
             return ShapemationItem(id: project.id, title: project.capture.displayTitle, imageURL: project.representative.url,
                                    pixelSize: CGSize(width: project.register.representative.width, height: project.register.representative.height),
-                                   shape: shape, frameFraction: project.representative.frameFraction)
+                                   shape: shape, frameFraction: project.representative.frameFraction, captureIndex: order[project.id])
         }
     }
 
-    /// The plan under the mode — the framing rides along for `.frame` only.
+    /// The plan under the mode — the framing rides along for `.frame`, the
+    /// board's settings for `.leastCrop`.
     func plan(for family: DetectedShape.Family) -> ShapemationPlan? {
-        ShapemationPlan.make(items: items(for: family), mode: mode, match: match(for: family), framing: mode == .frame ? framing : nil)
+        ShapemationPlan.make(items: items(for: family), mode: mode, match: match(for: family),
+                             framing: mode == .frame ? framing(for: family) : nil,
+                             leastCrop: mode == .leastCrop ? settings(for: family) : nil)
     }
 
-    /// The Timing step's estimate for the pictures picked.
+    /// The Timing step's estimate for the pictures that play.
     func estimate(for family: DetectedShape.Family) -> String {
-        timing.estimate(count: items(for: family).count)
+        let ids = playOrder(for: family)
+        return String(format: "%@ · %.1f s of playback · %d frames", ids.count == 1 ? "1 photo" : "\(ids.count) photos",
+                      timing.totalSeconds(for: ids), timing.totalFrames(for: ids))
     }
 
     func render(family: DetectedShape.Family, size: CGSize, store: ShapemationStore) {
         guard !isRendering, let plan = plan(for: family) else { return }
-        let items = items(for: family)
+        let all = items(for: family)
+        // The plan's order plays: the board's kept rows under least crop.
+        let items = plan.placements.compactMap { p in all.first { $0.id == p.itemID } }
         let reps = Dictionary(uniqueKeysWithValues: projects(for: family).map { ($0.id, $0.representative) })
         let id = UUID()
         let outputURL = store.outputURL(for: id)
@@ -411,6 +680,13 @@ final class ShapemationBuilder: ObservableObject {
         // The record keeps the framing a `.frame` render was made with (§6),
         // and the filter the photos were narrowed by.
         let framing = mode == .frame ? plan.framing : nil
+        let leastCrop = mode == .leastCrop ? plan.leastCropSettings : nil
+        // The members as rendered — each shape a snapshot — so the list's
+        // Re-render can rebuild this board whatever the registers say later.
+        let placed = Set(items.map(\.id))
+        let members: [ShapemationStore.Record.Member]? = mode.hasBoard ? all.map {
+            .init(id: $0.id, title: $0.title, frame: $0.pixelSize, shape: $0.shape, captureIndex: $0.captureIndex ?? 0, rejected: !placed.contains($0.id))
+        } : nil
         let filterTags = tagSelection.isEmpty ? nil : tagSelection.sorted()
         let filterText = trimmedQueryText.isEmpty ? nil : trimmedQueryText
         isRendering = true
@@ -433,10 +709,10 @@ final class ShapemationBuilder: ObservableObject {
                 let record = ShapemationStore.Record(
                     id: id, title: "\(family.title) · \(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short))",
                     createdAt: Date(), family: family, mode: mode, itemCount: items.count,
-                    width: Int(size.width), height: Int(size.height), seconds: timing.totalSeconds(count: items.count),
+                    width: Int(size.width), height: Int(size.height), seconds: timing.totalSeconds(for: items.map(\.id)),
                     fileName: outputURL.lastPathComponent, posterFileName: poster == nil ? nil : posterURL.lastPathComponent,
                     match: match, sort: sort, timing: timing, framing: framing,
-                    filterTags: filterTags, filterText: filterText)
+                    filterTags: filterTags, filterText: filterText, leastCrop: leastCrop, members: members)
                 await MainActor.run {
                     store.add(record)
                     self?.rendered = record
@@ -461,17 +737,27 @@ enum ShapemationBuildStep: Hashable {
     case match(DetectedShape.Family)
     case projects(DetectedShape.Family)
     case mode(DetectedShape.Family)
+    /// The Sequence board — between Mode and Timing under the frame modes.
+    case board(DetectedShape.Family)
     case timing(DetectedShape.Family)
     case output(DetectedShape.Family)
 }
 
 /// What a launch hook stages in the builder once its projects have loaded.
-enum ShapemationBuilderSeed {
+enum ShapemationBuilderSeed: Equatable {
     /// `LL_SHAPEMATION=family`: past the filters, on the shape step.
     case family
     /// `LL_SHAPEMATION=frame`: every project of the first family with shapes
     /// picked, `.frame` chosen, the Output step showing.
     case frame
+    /// `LL_SHAPEMATION=board`: the same set, Least crop chosen, the Sequence
+    /// board showing.
+    case board
+    /// `LL_SHAPEMATION=projects|mode`: the same set, landed on that step.
+    case projects
+    case mode
+    /// The list's Re-render: the record's members locked, on its board.
+    case rerender(ShapemationStore.Record)
 }
 
 /// The builder's root — step 1, Apply filters — and the owner of its state
@@ -484,25 +770,38 @@ struct ShapemationBuilderView: View {
     var seed: ShapemationBuilderSeed? = nil
     /// Pushes a step onto the sheet's stack — the seed's way past this screen.
     var push: ((ShapemationBuildStep) -> Void)? = nil
+    /// Pops that many steps — the Output step's way back to the board.
+    var pop: ((Int) -> Void)? = nil
+    /// Whether the board is on screen — the sheet's size on the Mac.
+    var onBoard: ((Bool) -> Void)? = nil
     @State private var seeded = false
+    /// The seed's step has appeared; a push the stack swallowed is retried.
+    @State private var seedLanded = false
 
     var body: some View {
         ShapemationFiltersView(builder: builder)
         .navigationDestination(for: ShapemationBuildStep.self) { step in
-            switch step {
-            case .family: ShapemationFamilyView(builder: builder)
-            case .match(let family): ShapemationMatchView(builder: builder, family: family)
-            case .projects(let family): ShapemationProjectsView(builder: builder, family: family)
-            case .mode(let family): ShapemationModeView(builder: builder, family: family)
-            case .timing(let family): ShapemationTimingView(builder: builder, family: family)
-            case .output(let family): ShapemationOutputView(builder: builder, store: store, family: family)
+            Group {
+                switch step {
+                case .family: ShapemationFamilyView(builder: builder)
+                case .match(let family): ShapemationMatchView(builder: builder, family: family)
+                case .projects(let family): ShapemationProjectsView(builder: builder, family: family)
+                case .mode(let family): ShapemationModeView(builder: builder, family: family)
+                case .board(let family): ShapemationBoardView(builder: builder, family: family, onBoard: onBoard)
+                case .timing(let family): ShapemationTimingView(builder: builder, family: family).onAppear { onBoard?(false) }
+                case .output(let family): ShapemationOutputView(builder: builder, store: store, family: family, pop: pop).onAppear { onBoard?(false) }
+                }
             }
+            .onAppear { seedLanded = true }
         }
         .onAppear {
             if !builder.loaded {
                 #if DEBUG
-                if let chips = ListDebugHooks.chips { builder.tagSelection = chips }
-                if let text = ListDebugHooks.queryText { builder.queryText = text }
+                // A re-render loads the whole library: its members may sit outside any filter.
+                if case .rerender? = seed {} else {
+                    if let chips = ListDebugHooks.chips { builder.tagSelection = chips }
+                    if let text = ListDebugHooks.queryText { builder.queryText = text }
+                }
                 #endif
                 builder.load(model: model)
             } else {
@@ -510,24 +809,59 @@ struct ShapemationBuilderView: View {
             }
         }
         .onChange(of: builder.loaded) { _, _ in applySeed() }
+        // The list's Re-render hands its record over after the builder is
+        // up; a seed that arrives late is applied when it arrives.
+        .onChange(of: seed) { _, _ in applySeed() }
     }
 
     /// The seed, once the projects are in: `family` steps past the filters;
     /// `frame` takes the first family with shapes, picks every one of its
-    /// projects, sets the mode and pushes the stack to the Output step.
+    /// projects, sets the mode and pushes the stack to the Output step. A
+    /// push the stack swallows (the screen never appears) is tried again.
     private func applySeed() {
         guard let seed, builder.loaded, !seeded else { return }
         seeded = true
+        LLog("shapemation: applying the seed \(seedName(seed)) over \(builder.projects.count) registers")
+        seedPush(seed, attempt: 1)
+    }
+
+    private func seedName(_ seed: ShapemationBuilderSeed) -> String {
+        if case .rerender(let record) = seed { return "rerender(\(record.id.uuidString.prefix(8)), \(record.members?.count ?? 0) members)" }
+        return "\(seed)"
+    }
+
+    private func seedPush(_ seed: ShapemationBuilderSeed, attempt: Int) {
+        seedLanded = false
+        pushSeed(seed)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            guard !seedLanded, attempt < 4 else { return }
+            LLog("shapemation: the seed's push was dropped (attempt \(attempt)); trying again")
+            seedPush(seed, attempt: attempt + 1)
+        }
+    }
+
+    private func pushSeed(_ seed: ShapemationBuilderSeed) {
         switch seed {
         case .family:
             push?(.family)
-        case .frame:
-            guard let family = DetectedShape.Family.allCases.first(where: { (builder.familyCounts[$0] ?? 0) > 0 }) else { return }
+        case .frame, .board, .projects, .mode:
+            // The family with the most shapes — a library's one stray circle
+            // must not take the board away from its eighty rectangles.
+            guard let family = builder.familyCounts.filter({ $0.value > 0 }).max(by: { $0.value < $1.value })?.key else { return }
             for project in builder.projects(for: family) where builder.selection[project.id] == nil {
                 builder.toggle(project, family: family)
             }
-            builder.mode = .frame
-            push?(.output(family))
+            builder.mode = seed == .frame ? .frame : .leastCrop
+            switch seed {
+            case .frame: push?(.output(family))
+            case .projects: push?(.projects(family))
+            case .mode: push?(.mode(family))
+            default: push?(.board(family))
+            }
+        case .rerender(let record):
+            builder.lock(to: record)
+            LLog("shapemation: members locked — \(builder.selection.count) of \(record.members?.count ?? 0) found in the library; pushing the board")
+            push?(.board(record.family))
         }
     }
 }
@@ -708,6 +1042,7 @@ struct ShapemationProjectsView: View {
 
     var body: some View {
         let projects = builder.projects(for: family)
+        let badges = builder.rowBadges(for: family)
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -738,7 +1073,7 @@ struct ShapemationProjectsView: View {
                 }
                 LazyVStack(spacing: 10) {
                     ForEach(projects) { project in
-                        ShapemationProjectRow(builder: builder, project: project, family: family)
+                        ShapemationProjectRow(builder: builder, project: project, family: family, badge: badges[project.id])
                     }
                 }
             }
@@ -774,6 +1109,9 @@ struct ShapemationProjectRow: View {
     @ObservedObject var builder: ShapemationBuilder
     let project: ShapemationBuilder.ProjectShapes
     let family: DetectedShape.Family
+    /// The board's crop badge for this photo under least crop, so the list
+    /// and the board agree before the board is seen.
+    var badge: (label: String, colour: Color)? = nil
 
     var body: some View {
         let shapes = builder.shapes(of: project, for: family)
@@ -815,6 +1153,13 @@ struct ShapemationProjectRow: View {
                     Text("\(Int(first.nativeDiameterPx)) px · \(Int((builder.share(of: project, for: family) * 100).rounded())) % of the frame")
                         .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
+                }
+                if let badge, picked != nil {
+                    HStack(spacing: 5) {
+                        Circle().fill(badge.colour).frame(width: 8, height: 8)
+                        Text(badge.label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("Badge: \(badge.label)")
                 }
             }
             Spacer()
@@ -867,7 +1212,10 @@ struct ShapeOverlayThumbnail: View {
     }
 }
 
-/// Step 3: mode.
+/// Step 3: mode — four tabs over one card with a low-fi preview of the
+/// picked photos through the chosen mode, looping; the copy alone did not
+/// explain the modes (prototype hand-off, Required). Least crop and Output
+/// frame go on to the Sequence board; the stack modes to Timing.
 struct ShapemationModeView: View {
     @ObservedObject var builder: ShapemationBuilder
     let family: DetectedShape.Family
@@ -877,58 +1225,72 @@ struct ShapemationModeView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("How should the photos be laid out?")
                     .font(.system(size: 17, weight: .semibold))
-                ForEach(ShapemationMode.allCases, id: \.self) { mode in
-                    Button { builder.mode = mode } label: {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: modeSymbol(mode))
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(builder.mode == mode ? .white : LL.accent)
-                                .frame(width: 34, height: 34)
-                                .background(builder.mode == mode ? LL.accent : LL.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(mode.title).font(.system(size: 16, weight: .semibold))
-                                Text(mode.summary).font(.system(size: 13)).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                            Image(systemName: builder.mode == mode ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 22))
-                                .foregroundStyle(builder.mode == mode ? LL.accent : Color.secondary.opacity(0.5))
-                        }
-                        .padding(14)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .llCard(cornerRadius: 16)
+                Picker("Mode", selection: $builder.mode) {
+                    ForEach(ShapemationMode.allCases, id: \.self) { Text(tabTitle($0)).tag($0) }
                 }
+                .pickerStyle(.segmented).labelsHidden()
+                .accessibilityLabel("Mode: \(builder.mode.title)")
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: modeSymbol(builder.mode))
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(LL.accent, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(builder.mode.title).font(.system(size: 16, weight: .semibold))
+                            Text(builder.mode.summary).font(.system(size: 13)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    ShapemationModePreview(builder: builder, family: family)
+                }
+                .padding(16)
+                .llCard(cornerRadius: 18)
                 if let plan = builder.plan(for: family) {
                     Text(planSummary(plan))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else if builder.mode == .crop {
                     Text("These photos share no common area once the shape is locked — crop mode has nothing to show. Pick fewer, or use stack mode.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(LL.accentDeep)
+                } else if builder.mode == .leastCrop {
+                    Text("Every photo would pay more than the tolerance allows — see the board, or loosen it there.")
                         .font(.system(size: 12))
                         .foregroundStyle(LL.accentDeep)
                 }
             }
             .padding(16)
+            .padding(.bottom, 80)
         }
         .background(LL.screenBackground.ignoresSafeArea())
         .navigationTitle("Mode")
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Spacer()
-                NavigationLink(value: ShapemationBuildStep.timing(family)) {
-                    Text("Next · timing")
+                NavigationLink(value: builder.mode.hasBoard ? ShapemationBuildStep.board(family) : ShapemationBuildStep.timing(family)) {
+                    Text(builder.mode.hasBoard ? "Next · board" : "Next · timing")
                         .font(.system(size: 15, weight: .semibold))
                         .padding(.horizontal, 18).padding(.vertical, 10)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(LL.accent)
-                .disabled(builder.plan(for: family) == nil)
+                .disabled(builder.plan(for: family) == nil && !builder.mode.hasBoard)
             }
             .padding(16)
             .background(.regularMaterial)
+        }
+        .onAppear { for p in builder.projects(for: family) { builder.thumbnail(for: p) } }
+    }
+
+    private func tabTitle(_ mode: ShapemationMode) -> String {
+        switch mode {
+        case .stack: return "Stack · fit"
+        case .crop: return "Stack · crop"
+        case .frame: return "Output frame"
+        case .leastCrop: return "Least crop"
         }
     }
 
@@ -937,6 +1299,7 @@ struct ShapemationModeView: View {
         case .stack: return "rectangle.stack"
         case .crop: return "crop"
         case .frame: return "viewfinder.rectangular"
+        case .leastCrop: return "arrow.down.left.and.arrow.up.right"
         }
     }
 
@@ -950,25 +1313,130 @@ struct ShapemationModeView: View {
             let u = plan.unionCanvas.size
             return "Crop \(Int(c.width))×\(Int(c.height)) of a \(Int(u.width))×\(Int(u.height)) stack; the shape is \(shape) px across."
         case .frame:
-            // The frame is fixed; the Output step sets it and says what is flagged.
             let last = Int(plan.placements.last?.targetSizePx ?? plan.shapeSizePx)
             let sizes = last == shape ? "\(shape) px across" : "\(shape) px across at the first photo, \(last) at the last"
             let flagged = plan.flagged.count
-            let tail = flagged == 0 ? "every photo fills it." : "\(flagged) photo\(flagged == 1 ? "" : "s") flagged — see Output."
+            let tail = flagged == 0 ? "every photo fills it." : "\(flagged) photo\(flagged == 1 ? "" : "s") flagged — see the board."
             return "Frame \(Int(c.width))×\(Int(c.height)); the shape is \(sizes); \(tail)"
+        case .leastCrop:
+            guard let board = plan.leastCrop else { return "" }
+            return "Frame \(Int(c.width))×\(Int(c.height)) · least crop; \(board.countLine) · mean crop \(ShapemationBuilder.pct(board.meanCrop)) — the rejects, keys and tolerance live on the board."
         }
     }
 }
 
-/// Step 4: output size, then render. Under `.frame` the step is the frame
-/// itself (docs/shapemation/output-frame.md §6, code first 2026-09-19):
-/// aspect and size, the face's size and place at the first and last photo,
-/// the ease, a scrub over the photos through the evaluator with each one's
-/// verdict, and the line that says what the frame leaves flagged.
+/// The Mode step's looping preview: the picked photos through the chosen
+/// mode at thumbnail size — the stack modes accumulate their first ten on
+/// the black table, the frame modes show one photo per frame with its badge.
+struct ShapemationModePreview: View {
+    @ObservedObject var builder: ShapemationBuilder
+    let family: DetectedShape.Family
+    @State private var index = 0
+    @State private var playing = true
+    private let ticker = Timer.publish(every: 0.7, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        let tiles = builder.mode.hasBoard ? builder.boardTiles(for: family).filter { !$0.rejected } : []
+        let plan = builder.mode.hasBoard ? nil : builder.plan(for: family)
+        let stackCount = plan.map { min(10, $0.placements.count) } ?? 0
+        let count = builder.mode.hasBoard ? tiles.count : stackCount
+        let i = count > 0 ? min(index, count - 1) : 0
+        let ratio: CGFloat = {
+            if let plan { return plan.canvas.width / max(plan.canvas.height, 1) }
+            return builder.rectRatio(for: family)
+        }()
+        VStack(alignment: .leading, spacing: 10) {
+            GeometryReader { geo in
+                let w = min(geo.size.width, geo.size.height * ratio), h = w / ratio
+                ZStack(alignment: .topTrailing) {
+                    Color.black
+                    if let plan, count > 0 {
+                        stackFrame(plan: plan, upTo: i, size: CGSize(width: w, height: h))
+                        badge("\(i + 1) on the table", colour: LL.levelGood)
+                    } else if count > 0 {
+                        let tile = tiles[i]
+                        ShapemationBoardTileImage(tile: tile, image: builder.thumbnails[tile.id], size: CGSize(width: w, height: h), shapeBox: true)
+                        badge(tile.badgeLabel, colour: tile.badgeColour)
+                    }
+                }
+                .frame(width: w, height: h)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(maxWidth: .infinity)
+            }
+            .aspectRatio(max(ratio, 0.75), contentMode: .fit)
+            .frame(maxHeight: 300)
+            HStack(spacing: 10) {
+                Button { playing.toggle() } label: {
+                    Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 12))
+                        .frame(width: 28, height: 28).background(LL.accent, in: Circle()).foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(playing ? "Pause preview" : "Play preview")
+                if count > 1 {
+                    Slider(value: Binding(get: { Double(i) }, set: { index = Int($0); playing = false }), in: 0...Double(count - 1), step: 1)
+                        .tint(LL.accent)
+                        .accessibilityLabel("Preview frame")
+                }
+                Text(count > 0 ? "\(i + 1) / \(count)" : "—").font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
+            }
+            Text(note(plan: plan, tiles: tiles)).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .onReceive(ticker) { _ in
+            guard playing, count > 1 else { return }
+            index = (i + 1) % count
+        }
+    }
+
+    /// The first `upTo + 1` placements over the black table, each drawn into
+    /// its footprint — the affine approximation of a low-fi preview; the
+    /// scrub and the render go through the evaluator.
+    private func stackFrame(plan: ShapemationPlan, upTo: Int, size: CGSize) -> some View {
+        let sx = size.width / max(plan.canvas.width, 1), sy = size.height / max(plan.canvas.height, 1)
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(plan.placements.prefix(upTo + 1).enumerated()), id: \.offset) { _, p in
+                if let cg = builder.thumbnails[p.itemID] {
+                    Image(decorative: cg, scale: 1).resizable()
+                        .frame(width: p.footprint.width * sx, height: p.footprint.height * sy)
+                        .offset(x: p.footprint.minX * sx, y: p.footprint.minY * sy)
+                }
+            }
+        }
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .clipped()
+    }
+
+    private func badge(_ label: String, colour: Color) -> some View {
+        Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(colour)
+            .padding(.horizontal, 9).padding(.vertical, 3).background(.black.opacity(0.6), in: Capsule())
+            .padding(8)
+    }
+
+    private func note(plan: ShapemationPlan?, tiles: [ShapemationBuilder.BoardTile]) -> String {
+        let n = builder.items(for: family).count
+        switch builder.mode {
+        case .stack, .crop:
+            guard let plan else { return "" }
+            let shown = min(10, plan.placements.count)
+            return "\(builder.mode == .stack ? "The canvas holds every photo; black shows until it is covered." : "Cropped to what every photo covers.") The shape is \(Int(plan.shapeSizePx)) px across. Preview: the first \(shown) of \(n), \(n > 10 ? "the rest render the same way" : "all of them")."
+        case .frame:
+            let flagged = tiles.filter { $0.fixedVerdict?.isFlagged == true }.count
+            return "Every shape put at \(Int((builder.startKey.size * 100).rounded())) % of the height; \(flagged) of \(tiles.count) flagged. The board sets size, place and ease."
+        case .leastCrop:
+            let board = builder.board(for: family)
+            return "Cover-fitted into \(ShapemationFraming.aspectLabel(ratio: builder.rectRatio(for: family))), shifted along the median path; \(board.rejected.count) rejected, mean crop \(ShapemationBuilder.pct(board.meanCrop)). The board is where the rejects, keys and tolerance live."
+        }
+    }
+}
+
+/// Step 4: output size, then render. Under the frame modes the rect and
+/// everything about it was decided on the board: the step shows the frame
+/// and the members, a way back to the board, the scrub through the
+/// evaluator with each photo's badge, and Create.
 struct ShapemationOutputView: View {
     @ObservedObject var builder: ShapemationBuilder
     @ObservedObject var store: ShapemationStore
     let family: DetectedShape.Family
+    var pop: ((Int) -> Void)? = nil
     @State private var chosen: ShapemationPlan.OutputOption?
     @State private var playing: ShapemationStore.Record?
     /// The scrub's photo index, in the play order.
@@ -983,19 +1451,20 @@ struct ShapemationOutputView: View {
                     doneCard(record)
                 } else if let progress = builder.renderProgress {
                     progressCard(progress)
-                } else if builder.mode == .frame {
-                    Text("Output frame")
+                } else if builder.mode.hasBoard {
+                    Text(builder.mode == .frame ? "Output frame" : "Least crop")
                         .font(.system(size: 17, weight: .semibold))
-                    Text("Every photo is scaled and placed to put its \(family.title.lowercased()) here. One that cannot reach the frame's edges, or would be blown up to, is flagged and kept.")
+                    Text(builder.mode == .frame
+                         ? "Every photo is scaled and placed to put its \(family.title.lowercased()) here. One that cannot reach the frame's edges, or would be blown up to, is flagged and kept."
+                         : "Every photo is cover-fitted to the frame and shifted only as far as the path asks. The crop each one pays is the badge; rejected photos are left out.")
                         .font(.system(size: 13)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    frameCard
+                    summaryCard(plan)
                     scrubCard(plan)
                     if let error = builder.renderError {
                         Text(error).font(.system(size: 12)).foregroundStyle(.red)
                     }
                     estimate
-                    createButton(enabled: plan != nil) { builder.render(family: family, size: builder.framing.outputSize, store: store) }
                 } else {
                     Text("Output size")
                         .font(.system(size: 17, weight: .semibold))
@@ -1023,31 +1492,47 @@ struct ShapemationOutputView: View {
                         Text(error).font(.system(size: 12)).foregroundStyle(.red)
                     }
                     estimate
-                    createButton(enabled: !options.isEmpty) {
-                        if let option = chosen ?? options.first { builder.render(family: family, size: option.size, store: store) }
-                    }
                 }
             }
             .padding(16)
+            .padding(.bottom, 80)
         }
         .background(LL.screenBackground.ignoresSafeArea())
         .navigationTitle("Output")
+        .safeAreaInset(edge: .bottom) {
+            // Create is pinned like every step's Next, so it is never below the fold.
+            if builder.rendered == nil, builder.renderProgress == nil {
+                HStack {
+                    Spacer()
+                    createButton(enabled: builder.mode.hasBoard ? plan != nil : !options.isEmpty) {
+                        if builder.mode.hasBoard {
+                            if let plan { builder.render(family: family, size: plan.canvas.size, store: store) }
+                        } else if let option = chosen ?? options.first {
+                            builder.render(family: family, size: option.size, store: store)
+                        }
+                    }
+                }
+                .padding(16)
+                .background(.regularMaterial)
+            }
+        }
         .sheet(item: $playing) { record in
             ShapemationPlayerSheet(record: record, store: store)
         }
         .onAppear { refreshPreview() }
         .onChange(of: scrub) { _, _ in refreshPreview() }
         .onChange(of: builder.framing) { _, _ in refreshPreview() }
+        .onChange(of: builder.leastCrop) { _, _ in refreshPreview() }
         .onChange(of: builder.mode) { _, _ in refreshPreview() }
     }
 
     /// What Timing decided, restated where Create is pressed.
     private var estimate: some View {
         VStack(alignment: .leading, spacing: 3) {
-            let count = builder.items(for: family).count
-            Text("\(count) photo\(count == 1 ? "" : "s") · \(builder.timing.summary)")
+            let ids = builder.playOrder(for: family)
+            Text("\(ids.count) photo\(ids.count == 1 ? "" : "s") · \(builder.timing.summary)")
             Text(String(format: "%.1f s of playback · %d frames · %@",
-                        builder.timing.totalSeconds(count: count), builder.timing.totalFrames(count: count),
+                        builder.timing.totalSeconds(for: ids), builder.timing.totalFrames(for: ids),
                         builder.sort.title.lowercased()))
         }
         .font(.system(size: 12))
@@ -1057,81 +1542,53 @@ struct ShapemationOutputView: View {
     private func createButton(enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text("Create Shape-mation")
-                .font(.system(size: 16, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .font(.system(size: 15, weight: .semibold))
+                .padding(.horizontal, 18).padding(.vertical, 10)
         }
         .buttonStyle(.borderedProminent)
         .tint(LL.accent)
         .disabled(!enabled)
+        .accessibilityLabel("Create the Shape-mation")
     }
 
-    // MARK: - The output frame
+    // MARK: - The frame modes
 
-    private var startSizePct: Int { Int((builder.startKey.size * 100).rounded()) }
-    private var endSizePct: Int { Int((builder.endKey.size * 100).rounded()) }
-
-    /// Aspect chips and the size menu, the face's size and place at the
-    /// start and the end, the ease — the Match step's label-above style.
-    private var frameCard: some View {
-        let size = builder.framing.outputSize
-        return VStack(alignment: .leading, spacing: 16) {
-            group("Aspect") {
-                FlowChips(options: ShapemationFraming.aspectPresets.map(\.label), selected: builder.frameAspect.label, title: { $0 }) { label in
-                    if let aspect = ShapemationFraming.aspectPresets.first(where: { $0.label == label }) { builder.frameAspect = aspect }
-                }
+    /// The frame and the members, and the way back to the board.
+    private func summaryCard(_ plan: ShapemationPlan?) -> some View {
+        let size = builder.rectSize(for: family)
+        let label = ShapemationFraming.aspectLabel(ratio: builder.rectRatio(for: family))
+        let board = builder.mode == .leastCrop ? plan?.leastCrop : nil
+        let ids = builder.playOrder(for: family)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Frame").font(.system(size: 15))
+                Spacer()
+                Text("\(label) · \(Int(size.width))×\(Int(size.height)) · \(builder.mode == .frame ? "fixed shape \(Int((builder.startKey.size * 100).rounded())) %" : "least crop")")
+                    .font(.system(size: 13)).foregroundStyle(.secondary)
             }
             HStack {
-                Text("Size").font(.system(size: 15))
+                Text("Members").font(.system(size: 15))
                 Spacer()
-                Text("\(Int(size.width))×\(Int(size.height))").font(.system(size: 13)).foregroundStyle(.secondary)
-                Picker("Size", selection: $builder.frameLongEdge) {
-                    ForEach(ShapemationFraming.sizePresets, id: \.self) { Text("\($0)").tag($0) }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .tint(.secondary)
-                .accessibilityLabel("Size: \(builder.frameLongEdge) long edge")
+                Text(board.map { "\(ids.count) photos · \($0.rejected.count) rejected · \(builder.leastCrop.keys.count) keys · \(builder.sort.title.lowercased())" }
+                     ?? "\(ids.count) photos · \(builder.sort.title.lowercased())")
+                    .font(.system(size: 13)).foregroundStyle(.secondary)
             }
-            .frame(minHeight: 32)
-            group("Face size") {
-                Stepper("Start \(startSizePct) % of the height",
-                        value: Binding(get: { startSizePct }, set: { builder.setStartSize(Double($0) / 100) }),
-                        in: ShapemationBuilder.faceSizeRange, step: ShapemationBuilder.faceSizeStep)
-                    .font(.system(size: 14))
-                Stepper("End \(endSizePct) %" + (builder.endSizeFollowsStart ? " · Same" : ""),
-                        value: Binding(get: { endSizePct }, set: { builder.setEndSize(Double($0) / 100) }),
-                        in: ShapemationBuilder.faceSizeRange, step: ShapemationBuilder.faceSizeStep)
-                    .font(.system(size: 14))
-            }
-            group("Face place") {
-                HStack(alignment: .top, spacing: 24) {
-                    VStack(spacing: 6) {
-                        ShapemationFacePlacePicker(aspect: size, selected: builder.startKey.face, name: "start") { builder.setStartFace($0) }
-                        Text("Start").font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    VStack(spacing: 6) {
-                        ShapemationFacePlacePicker(aspect: size, selected: builder.endKey.face, name: "end") { builder.setEndFace($0) }
-                        Text(builder.endPlaceFollowsStart ? "End · Same" : "End").font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            group("Ease") {
-                Picker("Ease", selection: Binding(get: { builder.framing.ease }, set: { builder.setEase($0) })) {
-                    ForEach(ShapemationFraming.Ease.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented).labelsHidden()
+            if let pop {
+                Button("Adjust on the board") { pop(2) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LL.accent)
             }
         }
         .padding(16)
         .llCard(cornerRadius: 18)
     }
 
-    /// The scrub: photo *i* through the evaluator, its title and verdict, the
-    /// slider over the photos, and the flagged line.
+    /// The scrub: photo *i* through the evaluator, its title and badge, the
+    /// slider over the photos that play, and the tally line.
     private func scrubCard(_ plan: ShapemationPlan?) -> some View {
-        let count = builder.items(for: family).count
-        let size = builder.framing.outputSize
+        let count = builder.playOrder(for: family).count
+        let size = builder.rectSize(for: family)
         let preview = builder.framePreview
         let current = preview?.index == Int(scrub) ? preview : nil
         return VStack(alignment: .leading, spacing: 10) {
@@ -1154,7 +1611,7 @@ struct ShapemationOutputView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
                 Spacer()
-                if let current { verdictBadge(current.placement) }
+                if let current { verdictBadge(current) }
             }
             if count > 1 {
                 Slider(value: $scrub, in: 0...Double(count - 1), step: 1)
@@ -1164,38 +1621,36 @@ struct ShapemationOutputView: View {
                 Text("Photo \(Int(scrub) + 1) of \(count)")
                     .font(.system(size: 12)).foregroundStyle(.tertiary)
             }
-            Text(builder.feasibilitySummary(for: family))
+            Text(tally(plan))
                 .font(.system(size: 12))
-                .foregroundStyle(plan?.flagged.isEmpty == false ? LL.accentDeep : .secondary)
+                .foregroundStyle(LL.accentDeep)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .llCard(cornerRadius: 18)
     }
 
-    private func verdictBadge(_ placement: ShapemationPlan.Placement) -> some View {
-        let flagged = placement.feasibility.verdict.isFlagged
-        return Text(ShapemationBuilder.verdictLabel(placement))
+    private func tally(_ plan: ShapemationPlan?) -> String {
+        if builder.mode == .frame { return builder.feasibilitySummary(for: family) }
+        guard let board = plan?.leastCrop else { return "" }
+        return "\(board.rejected.count) rejected · \(board.flagged) flagged · mean crop \(ShapemationBuilder.pct(board.meanCrop)) · mean loss \(ShapemationBuilder.pct(board.meanLoss)) · jump \(String(format: "%.2f", board.renderedJump))"
+    }
+
+    private func verdictBadge(_ preview: ShapemationBuilder.FramePreview) -> some View {
+        Text(preview.verdict)
             .font(.system(size: 11, weight: .medium))
             .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(flagged ? LL.amber.opacity(0.25) : LL.levelGood.opacity(0.2), in: Capsule())
+            .background(preview.colour.opacity(0.25), in: Capsule())
             .foregroundStyle(.primary)
             .lineLimit(1)
-            .accessibilityLabel("Verdict: \(ShapemationBuilder.verdictLabel(placement))")
+            .accessibilityLabel("Verdict: \(preview.verdict)")
     }
 
     private func refreshPreview() {
-        guard builder.mode == .frame else { return }
-        let count = builder.items(for: family).count
+        guard builder.mode.hasBoard else { return }
+        let count = builder.playOrder(for: family).count
         if scrub > Double(max(count - 1, 0)) { scrub = Double(max(count - 1, 0)) }
         builder.framePreview(index: Int(scrub), family: family)
-    }
-
-    private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 14))
-            content()
-        }
     }
 
     private func progressCard(_ progress: ShapemationRenderer.Progress) -> some View {
@@ -1217,6 +1672,10 @@ struct ShapemationOutputView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             Text(record.title).font(.system(size: 15, weight: .semibold))
             Text(record.subtitle).font(.system(size: 12)).foregroundStyle(.secondary)
+            if record.members != nil {
+                Text("Saved with its members — Re-render it from the list at another rate, rect or framing.")
+                    .font(.system(size: 12)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+            }
             HStack(spacing: 12) {
                 Button { playing = record } label: { Label("Play", systemImage: "play.fill") }
                     .buttonStyle(.borderedProminent).tint(LL.accent)
@@ -1515,6 +1974,11 @@ struct ShapemationTimingView: View {
                     Text(footer(t))
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let n = t.overrides?.count, n > 0 {
+                        Text("\(n) photo\(n == 1 ? " has its" : "s have their") own hold from the board — the override wins over the ramp for that photo.")
+                            .font(.system(size: 12)).foregroundStyle(LL.accentDeep)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(16)
                 .llCard(cornerRadius: 18)

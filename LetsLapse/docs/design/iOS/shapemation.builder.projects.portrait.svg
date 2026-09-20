@@ -1,15 +1,38 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Shape-mation · builder · projects · portrait</title>
-  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationProjectsView + ShapemationProjectRow + ShapeOverlayThumbnail, step 2 of the shape-slideshow builder) over ShapemationBuilder. 2026-09-11, code first, mirrored from the running app. Pushed from the family step (shapemation.builder.family.portrait.svg) inside the Shape-mation sheet: back chevron + "Shape slideshow" in accent, large title "Circles" (the family's title, pluralised), then the count line "5 of 5 picked" (13 secondary) and a LazyVStack of white llCards (radius 14, spacing 10, padding 12), one per project whose register holds at least one instance of the family, in capture order. Each row: the project's representative picture on the leading side, fitted into a 96×96 frame (so a 3:4 portrait is 72×96, a 4:3 landscape 96×72) with every instance of the family traced over it — white at 85% (1.5 pt), the picked instance in amber (2.5 pt); then the title (15 semibold, one line), "1 circle · Photo" (12 secondary — instance count · capture mode) and "519 px across" (12 tertiary — the largest instance's native diameter); a Spacer; and the pick mark, checkmark.circle.fill (22, accent) when picked or circle (22, secondary at 50%) when not. Tapping anywhere on the row toggles it. INSTANCE PILLS — when a picked project holds SEVERAL instances of the family, the "px across" line is replaced by a row of capsules, one per instance, "1 · 519 px", "2 · 312 px" … (11 medium, 8×4 padding, spacing 6; the chosen instance accent-filled with white text, the rest secondary at 15% with primary text); tapping one makes it the instance the slideshow locks on. An unpicked multi-instance project shows the plain "px across" line. None of the 2026-09-11 circle projects holds more than one, so no pill is drawn here. Bottom: a safeAreaInset bar over .regularMaterial (drawn flat, 92% opaque) — "Clear" when everything is picked, otherwise "Pick all" (17, accent, leading) and the "Next · mode" NavigationLink (15 semibold, 18×10 padding, borderedProminent in accent, radius ~10) to ShapemationBuildStep.mode(family); it is DISABLED until at least two projects are picked (near-white #F8F8F7 fill, #C6C6C8 label). DRAWN STATE: everything picked — "5 of 5 picked", amber rings, accent check marks, "Clear", Next live. The unpicked state (ios-shapemation-build-projects.png) is the same layout with "0 of 5 picked", white rings on the pictures, grey ring marks, "Pick all" and the greyed Next. The fifth project's card starts at y 728 and lies under the bar until the list scrolls; its copy is not visible in the screenshot, so it is drawn as a bare card. Sample data is the 2026-09-11 library: Photo 9. 9. at 09:26 (a street traffic light, 519 px), Photo 9. 9. at 09:26 (the Gros-Horloge dial, 1 350 px), Photo 9. 9. at 10:07 (a museum façade clock, landscape, 530 px), Photo 9. 9. at 17:15 (a no-parking sign, 879 px). Pictures are flat placeholders. Measured from an iPhone 16 Pro screenshot (402×874 pt) and re-anchored to this 393×852 canvas: leading/top positions as measured, the pick marks 9 pt further left, the bottom bar 22 pt higher. SORT (design-first, 2026-09-11, Steven): a Menu on the count line's trailing side — "Sort  Largest first ⌄" — with Largest first (the DEFAULT, on for every new slideshow) · Smallest first · Capture order (the order given, oldest → newest as the builder loads them — the only order until now; called "Newest first" until 2026-09-19, a misnomer). The key is the picked instance's share of its photo — nativeDiameterPx over the photo's short edge — not its pixel size, so a small photo with a big circle sorts ahead of a large photo with a small one; the tertiary line now says both ("1 350 px · 45 % of the frame" — "across" dropped so it stays one line on a 402-pt phone). The rows are drawn in that order (45 · 29 · 18 · 17 %), which is also the order the slideshow plays: largest share first, each photo a little further away than the last, which is what makes the playback read as a zoom rather than a shuffle. The sort is saved with the Shape-mation record.</desc>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationProjectsView + ShapemationProjectRow + ShapeOverlayThumbnail, the projects step of the shape-slideshow builder) over ShapemationBuilder. 2026-09-11, code first, mirrored from the running app; redrawn 2026-09-20 from the Debug build on the iPhone 16 Pro simulator over an APFS clone of the tram library (LL_SHAPEMATION=build LL_CHIPS=tram, then Next · shape → Rectangle → Next · projects → Pick all), the copy checked against the Mac Debug build's AX dump. Pushed from the Match step (back reads "Match") inside the Shape-mation sheet: large title "Rectangles" (the family's title, pluralised), then the count line "83 of 83 picked" (13 secondary) — SINCE 2026-09-20 the count is of the FILTERED set (Apply filters' lit tags and words), not the library — and a LazyVStack of white llCards (radius 14, spacing 10, padding 12), one per filtered project whose register holds at least one instance of the family that passes Match. Each row: the project's representative picture on the leading side, fitted into a 96×96 frame (the tram photos are 3:4 portraits, so 72×96) with every instance of the family traced over it — white at 85% (1.5 pt) when unpicked, the picked instance in amber (2.5 pt); then the title (15 semibold, one line), "1 rectangle · Photo" (12 secondary — instance count · capture mode) and "2 860 px · 95 % of the frame" (12 tertiary — the picked instance's native long side and its share of the photo's short edge); a Spacer; and the pick mark, checkmark.circle.fill (22, accent) when picked or circle (22, secondary at 50%) when not. Tapping anywhere on the row toggles it. INSTANCE PILLS — when a picked project holds SEVERAL instances of the family, the px line is replaced by a row of capsules, one per instance, "1 · 2 860 px", "2 · 1 120 px" … (11 medium, 8×4 padding, spacing 6; the chosen instance accent-filled with white text, the rest secondary at 15% with primary text); tapping one makes it the instance the slideshow locks on. One of the 83 tram projects holds two rectangles, but it is far down the list, so no pill is drawn here. SORT (design-first 2026-09-11, Steven, ON by default): a Menu on the count line's trailing side — "Sort  Largest first ⌄" (the word Sort is the tinted Menu label — accent at ~55 % over the screen, measured (218,174,123) on the capture; "Largest first" full accent semibold) — Largest first (the DEFAULT) · Smallest first · Capture order (called "Newest first" until 2026-09-19); the key is the picked instance's share of its photo, and the rows and the playback follow it, largest share first (95 · 92 · 85 · 76 % here), which is what makes the movie read as a zoom. Bottom: a safeAreaInset bar over .regularMaterial (drawn flat, 92% opaque) — "Clear" when everything is picked, otherwise "Pick all" (17, accent, leading) and the "Next · mode" NavigationLink (15 semibold, borderedProminent in accent, radius ~10) to the Mode step; DISABLED until at least two projects are picked (near-white #F8F8F7 fill, #C6C6C8 label). DRAWN STATE: Pick all pressed — "83 of 83 picked", amber traces, accent check marks, "Clear", Next live. The unpicked state (builder.projects.unpicked capture, same day) is the same layout with "0 of 83 picked", white traces on the pictures, grey ring marks, "Pick all" and the greyed Next. The fifth card starts at y 740.7 and lies under the bar until the list scrolls; its copy is not visible in the capture, so it is drawn as a bare card. Sample data is the tram clone on 2026-09-20: Photo 13. 9. at 12:57 (2 860 px · 95 %), Photo 13. 9. at 12:49 (2 783 px · 92 %), Photo 13. 9. at 12:47 (2 569 px · 85 %), Photo 13. 9. at 12:49 (2 311 px · 76 %) — the pictures are flat placeholders in the app's tile style (a street scene with a tram face where the found rectangle is; the tram-face glyph is not the photo, the traced rectangle is where the register puts it). Measured from the 402×874-pt simulator capture and re-anchored to this 393×852 canvas: top-anchored content follows the 59-pt safe top (the capture's 62), the pick marks and Sort menu sit 9 pt further left, the bottom bar 22 pt higher; the sheet's top at safe-top + 10 (69).</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
-    <clipPath id="sheet"><rect x="0" y="56" width="393" height="796" rx="10"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
     <clipPath id="pic-portrait"><rect width="72" height="96"/></clipPath>
-    <clipPath id="pic-landscape"><rect width="96" height="72"/></clipPath>
     <!-- checkmark.circle.fill, 22 pt, origin at the circle's centre -->
     <symbol id="check" overflow="visible">
       <circle r="10.85" fill="#C36A00"/>
       <path d="M-5.2 0.6 L-1.6 4.2 L5.4 -3.8" stroke="#FFF" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <!-- the tile-style placeholder for a 3:4 tram photo: sky, a terrace of façades, the road with its rails -->
+    <symbol id="street" viewBox="0 0 72 96">
+      <rect width="72" height="96" fill="#C9CBD0"/>
+      <rect y="28" width="72" height="36" fill="#A9A49B"/>
+      <rect y="28" width="22" height="36" fill="#B7B1A6"/>
+      <rect x="50" y="24" width="22" height="40" fill="#9E988D"/>
+      <g fill="#7E7870">
+        <rect x="4" y="34" width="4" height="6"/><rect x="12" y="34" width="4" height="6"/><rect x="4" y="46" width="4" height="6"/><rect x="12" y="46" width="4" height="6"/>
+        <rect x="55" y="32" width="4" height="6"/><rect x="63" y="32" width="4" height="6"/><rect x="55" y="44" width="4" height="6"/><rect x="63" y="44" width="4" height="6"/>
+      </g>
+      <rect y="64" width="72" height="32" fill="#8E8E90"/>
+      <path d="M0 96 L20 64 M72 96 L52 64" stroke="#B9B9BB" stroke-width="1"/>
+    </symbol>
+    <!-- a Tatra T3 face, drawn to fill the found rectangle: cream cab, dark windscreen, red skirt, two headlights -->
+    <symbol id="tram-face" viewBox="0 0 50 66" preserveAspectRatio="none">
+      <rect width="50" height="66" rx="3" fill="#E9DFC6"/>
+      <rect x="4" y="3" width="42" height="7" rx="1.5" fill="#D9CFB6"/>
+      <rect x="4" y="13" width="42" height="18" rx="2" fill="#4B4F55"/>
+      <rect x="6" y="15" width="18" height="14" rx="1" fill="#5D636B"/>
+      <rect x="0" y="36" width="50" height="30" fill="#A8383A"/>
+      <rect x="0" y="34" width="50" height="3" fill="#8D2C2E"/>
+      <circle cx="9" cy="44" r="3.2" fill="#F5EBD0"/><circle cx="41" cy="44" r="3.2" fill="#F5EBD0"/>
+      <rect x="20" y="41" width="10" height="4" rx="1" fill="#F5EBD0"/>
     </symbol>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.ter{fill:#C4C4C7}</style>
@@ -27,111 +50,89 @@
         <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
       </g>
       <!-- the parent's top edge, scaled back behind the sheet -->
-      <rect x="16" y="44" width="361" height="30" rx="10" fill="#C7C7CC"/>
+      <rect x="16" y="59" width="361" height="30" rx="10" fill="#D5D5D9"/>
 
-      <!-- the sheet: Shape-mation's NavigationStack, two screens in -->
+      <!-- the sheet: Shape-mation's NavigationStack, four screens in -->
       <g id="shapemation-builder-projects" clip-path="url(#sheet)">
-        <rect x="0" y="56" width="393" height="796" fill="#F2F2F7"/>
+        <rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
 
-        <!-- nav bar: back to the family step -->
-        <g id="nav-back">
-          <path d="M18.6 76.1 L11 84 L18.6 91.9" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
-          <text x="31" y="90" font-size="17" fill="#C36A00">Shape slideshow</text>
+        <!-- nav bar: back to the Match step -->
+        <g id="nav-bar">
+          <path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="30" y="103" font-size="17" fill="#C36A00">Match</text>
+          <text x="16" y="161" font-size="34" class="b" fill="#000">Rectangles</text>
         </g>
-        <text x="16" y="148" font-size="34" class="b" fill="#000">Circles</text>
 
-        <text id="picked-count" x="16" y="192" font-size="13" class="sec">5 of 5 picked</text>
+        <!-- the count line counts the FILTERED set (2026-09-20) -->
+        <text id="picked-count" x="16" y="205" font-size="13" class="sec">83 of 83 picked</text>
         <!-- SORT (design-first 2026-09-11; third item renamed 2026-09-19): a Menu on the count line's trailing side — Largest first (default) · Smallest first · Capture order; the rows below follow it -->
         <g id="sort-menu" data-control="Menu">
-          <text x="286" y="192" font-size="13" class="sec" text-anchor="end">Sort</text>
-          <text x="364" y="192" font-size="13" class="sb" fill="#C36A00" text-anchor="end">Largest first</text>
-          <path d="M369 186.5 l4 4 4 -4" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+          <text x="279" y="205" font-size="13" fill="#C36A00" fill-opacity="0.55" text-anchor="end">Sort</text>
+          <text x="362" y="205" font-size="13" class="sb" fill="#C36A00" text-anchor="end">Largest first</text>
+          <path d="M366.5 199.5 l4 4 4 -4" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
         </g>
 
-        <!-- traffic light: 17 % of its frame, so last under Largest first (drawn at y 208, moved to 598) -->
-        <g id="row-0926-traffic" transform="translate(0,390)">
-          <rect x="16" y="208" width="361" height="120" rx="14" fill="#FFF"/>
-          <g transform="translate(40,220)" clip-path="url(#pic-portrait)">
-            <rect width="72" height="96" fill="#CFCAC2"/>
-            <rect width="72" height="18" fill="#DCD9D3"/>
-            <rect y="10" width="22" height="66" fill="#B6AFA5"/>
-            <rect x="50" y="12" width="22" height="62" fill="#C3BCB1"/>
-            <rect x="4" y="18" width="6" height="9" fill="#8E877D"/><rect x="12" y="18" width="6" height="9" fill="#8E877D"/>
-            <rect x="55" y="20" width="5" height="8" fill="#9A9288"/><rect x="63" y="20" width="5" height="8" fill="#9A9288"/>
-            <rect y="70" width="72" height="26" fill="#A8A39B"/>
-            <rect x="30" y="24" width="12" height="72" rx="1.5" fill="#4A4A4E"/>
-            <circle cx="36" cy="33" r="3.6" fill="#2C2C30"/>
-            <circle cx="36" cy="44.9" r="3.6" fill="#2C2C30"/>
-            <circle cx="38.3" cy="44.9" r="5.75" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+        <!-- row 1: 95 % of its frame, first under Largest first -->
+        <g id="row-1257">
+          <rect x="16" y="220.7" width="361" height="120" rx="14" fill="#FFF"/>
+          <g transform="translate(40,232.7)" clip-path="url(#pic-portrait)">
+            <use href="#street" width="72" height="96"/>
+            <use href="#tram-face" x="22" y="14" width="50" height="66"/>
+            <rect x="22" y="14" width="50" height="66" fill="none" stroke="#FFB340" stroke-width="2.5" data-role="picked-instance"/>
           </g>
-          <text x="136" y="234.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 09:26</text>
-          <text x="136" y="254.5" font-size="12" class="sec">1 circle · Photo</text>
-          <text x="136" y="275" font-size="12" class="ter">519 px · 17 % of the frame</text>
-          <use href="#check" x="352" y="233" data-symbol="checkmark.circle.fill"/>
+          <text x="136" y="247" font-size="15" class="sb" fill="#000">Photo 13. 9. at 12:57</text>
+          <text x="136" y="267.2" font-size="12" class="sec">1 rectangle · Photo</text>
+          <text x="136" y="287.7" font-size="12" class="ter">2 860 px · 95 % of the frame</text>
+          <use href="#check" x="352" y="245.7" data-symbol="checkmark.circle.fill"/>
         </g>
 
-        <!-- the Gros-Horloge dial: 45 %, first under Largest first (drawn at y 338, moved to 208) -->
-        <g id="row-0926-clock" transform="translate(0,-130)">
-          <rect x="16" y="338" width="361" height="120" rx="14" fill="#FFF"/>
-          <g transform="translate(40,350)" clip-path="url(#pic-portrait)">
-            <rect width="72" height="96" fill="#CDC7BF"/>
-            <rect width="72" height="20" fill="#D8D3CC"/>
-            <rect x="8" y="4" width="8" height="12" fill="#6F7A86"/>
-            <path d="M0 96 V70 a36 36 0 0 1 72 0 V96 Z" fill="#8E8378"/>
-            <path d="M10 96 V78 a26 26 0 0 1 52 0 V96 Z" fill="#3A342F"/>
-            <circle cx="39.3" cy="51.2" r="14" fill="#D6A742"/>
-            <circle cx="39.3" cy="51.2" r="10.5" fill="#2F4A7A"/>
-            <circle cx="39.3" cy="51.2" r="4" fill="#E9C76A"/>
-            <circle cx="39.3" cy="51.2" r="16.1" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+        <!-- row 2: 92 % -->
+        <g id="row-1249a">
+          <rect x="16" y="350.7" width="361" height="120" rx="14" fill="#FFF"/>
+          <g transform="translate(40,362.7)" clip-path="url(#pic-portrait)">
+            <use href="#street" width="72" height="96"/>
+            <rect y="0" width="72" height="30" fill="#8B9A78"/>
+            <use href="#tram-face" x="14" y="30" width="54" height="62"/>
+            <rect x="14" y="30" width="54" height="62" fill="none" stroke="#FFB340" stroke-width="2.5" data-role="picked-instance"/>
           </g>
-          <text x="136" y="364.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 09:26</text>
-          <text x="136" y="384.5" font-size="12" class="sec">1 circle · Photo</text>
-          <text x="136" y="405" font-size="12" class="ter">1 350 px · 45 % of the frame</text>
-          <use href="#check" x="352" y="363" data-symbol="checkmark.circle.fill"/>
+          <text x="136" y="377" font-size="15" class="sb" fill="#000">Photo 13. 9. at 12:49</text>
+          <text x="136" y="397.2" font-size="12" class="sec">1 rectangle · Photo</text>
+          <text x="136" y="417.7" font-size="12" class="ter">2 783 px · 92 % of the frame</text>
+          <use href="#check" x="352" y="375.7" data-symbol="checkmark.circle.fill"/>
         </g>
 
-        <!-- row 3: museum façade clock, landscape, picked -->
-        <g id="row-1007-museum" transform="translate(0,0)">
-          <rect x="16" y="468" width="361" height="120" rx="14" fill="#FFF"/>
-          <g transform="translate(28,492)" clip-path="url(#pic-landscape)">
-            <rect width="96" height="72" fill="#C9BBA4"/>
-            <rect width="96" height="28" fill="#C0C8D4"/>
-            <path d="M0 34 V22 L20 20 Q47 -2 74 20 L96 22 V34 Z" fill="#4E535C"/>
-            <rect y="34" width="96" height="38" fill="#CBBDA6"/>
-            <rect x="8" y="24" width="8" height="6" fill="#33373E"/><rect x="80" y="24" width="8" height="6" fill="#33373E"/>
-            <rect x="10" y="44" width="12" height="18" fill="#8B8073"/><rect x="42" y="44" width="12" height="18" fill="#8B8073"/><rect x="74" y="44" width="12" height="18" fill="#8B8073"/>
-            <circle cx="47.2" cy="25.8" r="5.5" fill="#F4F0E6"/>
-            <circle cx="47.2" cy="25.8" r="6.3" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+        <!-- row 3: 85 % -->
+        <g id="row-1247">
+          <rect x="16" y="480.7" width="361" height="120" rx="14" fill="#FFF"/>
+          <g transform="translate(40,492.7)" clip-path="url(#pic-portrait)">
+            <use href="#street" width="72" height="96"/>
+            <use href="#tram-face" x="22" y="36" width="44" height="56"/>
+            <rect x="22" y="36" width="44" height="56" fill="none" stroke="#FFB340" stroke-width="2.5" data-role="picked-instance"/>
           </g>
-          <text x="136" y="494.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 10:07</text>
-          <text x="136" y="514.5" font-size="12" class="sec">1 circle · Photo</text>
-          <text x="136" y="535" font-size="12" class="ter">530 px · 18 % of the frame</text>
-          <use href="#check" x="352" y="493" data-symbol="checkmark.circle.fill"/>
+          <text x="136" y="507" font-size="15" class="sb" fill="#000">Photo 13. 9. at 12:47</text>
+          <text x="136" y="527.2" font-size="12" class="sec">1 rectangle · Photo</text>
+          <text x="136" y="547.7" font-size="12" class="ter">2 569 px · 85 % of the frame</text>
+          <use href="#check" x="352" y="505.7" data-symbol="checkmark.circle.fill"/>
         </g>
 
-        <!-- row 4: no-parking sign in foliage, portrait, picked -->
-        <g id="row-1715-sign" transform="translate(0,-260)">
-          <rect x="16" y="598" width="361" height="120" rx="14" fill="#FFF"/>
-          <g transform="translate(40,610)" clip-path="url(#pic-portrait)">
-            <rect width="72" height="96" fill="#7C8457"/>
-            <rect y="52" width="72" height="44" fill="#B5B48A"/>
-            <rect y="0" width="72" height="14" fill="#5E6743"/>
-            <rect x="35" y="54" width="3" height="42" fill="#6B6B66"/>
-            <rect x="26" y="45" width="21" height="7" fill="#FFF"/>
-            <rect x="43" y="45" width="6" height="7" fill="#1E4FA8"/>
-            <circle cx="36.7" cy="34.3" r="9" fill="#E8ECEF" stroke="#D9302A" stroke-width="2.4"/>
-            <path d="M31 28.6 L42.4 40 M42.4 28.6 L31 40" stroke="#1E4FA8" stroke-width="2"/>
-            <circle cx="36.7" cy="34.3" r="10.4" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+        <!-- row 4: 76 % -->
+        <g id="row-1249b">
+          <rect x="16" y="610.7" width="361" height="120" rx="14" fill="#FFF"/>
+          <g transform="translate(40,622.7)" clip-path="url(#pic-portrait)">
+            <use href="#street" width="72" height="96"/>
+            <rect y="0" width="72" height="34" fill="#7F8C6C"/>
+            <use href="#tram-face" x="10" y="40" width="46" height="52"/>
+            <rect x="10" y="40" width="46" height="52" fill="none" stroke="#FFB340" stroke-width="2.5" data-role="picked-instance"/>
           </g>
-          <text x="136" y="624.3" font-size="15" class="sb" fill="#000">Photo 9. 9. at 17:15</text>
-          <text x="136" y="644.5" font-size="12" class="sec">1 circle · Photo</text>
-          <text x="136" y="665" font-size="12" class="ter">879 px · 29 % of the frame</text>
-          <use href="#check" x="352" y="623" data-symbol="checkmark.circle.fill"/>
+          <text x="136" y="637" font-size="15" class="sb" fill="#000">Photo 13. 9. at 12:49</text>
+          <text x="136" y="657.2" font-size="12" class="sec">1 rectangle · Photo</text>
+          <text x="136" y="677.7" font-size="12" class="ter">2 311 px · 76 % of the frame</text>
+          <use href="#check" x="352" y="635.7" data-symbol="checkmark.circle.fill"/>
         </g>
 
-        <!-- row 5: under the bar until the list scrolls; its copy is not visible in the screenshot -->
+        <!-- row 5: under the bar until the list scrolls; its copy is not visible in the capture -->
         <g id="row-5-under-bar">
-          <rect x="16" y="728" width="361" height="120" rx="14" fill="#FFF"/>
+          <rect x="16" y="740.7" width="361" height="120" rx="14" fill="#FFF"/>
         </g>
 
         <!-- bottom inset bar: Pick all / Clear · Next -->
@@ -152,5 +153,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · projects · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationProjectsView (step 2) — Circles · 5 of 5 picked · Sort Largest first · Clear · Next · mode</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationProjectsView — Rectangles · 83 of 83 picked (the filtered set) · Sort Largest first · Clear · Next · mode</text>
 </svg>

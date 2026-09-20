@@ -310,19 +310,30 @@ struct CreateView: View {
             if let spec = environment["LL_AUTOAPPLY"] {
                 ManagePresetsView.debugSeedAutoApply(spec)
             }
-            // `LL_SHAPEMATION=home|find|build|family|list|frame` — the
+            // `LL_SHAPEMATION=home|find|build|family|list|frame|board` — the
             // Shape-mation sheet on the requested screen, over whatever the
             // library holds; `build` is the builder's first step, Apply
             // filters (`LL_CHIPS=tag,tag` / `LL_QUERY=<words>` pre-fill it as
             // they do the lists); `family` is one step on, the shape step;
             // `frame` is `build` with `.frame` chosen over every project of
-            // the first family with shapes, landed on the Output step.
+            // the first family with shapes, landed on the Output step; `board`
+            // (or `least`) the same set under Least crop, on the Sequence board.
             if let screen = environment["LL_SHAPEMATION"] {
                 switch screen {
                 case "find": shapemationInitialPath = [.find]
-                case "build": shapemationInitialPath = [.build]
-                case "family": shapemationInitialPath = [.build]; shapemationBuilderSeed = .family
-                case "frame": shapemationInitialPath = [.build]; shapemationBuilderSeed = .frame
+                case "build": shapemationInitialPath = [.build()]
+                case "family": shapemationInitialPath = [.build()]; shapemationBuilderSeed = .family
+                case "frame": shapemationInitialPath = [.build()]; shapemationBuilderSeed = .frame
+                case "board", "least": shapemationInitialPath = [.build()]; shapemationBuilderSeed = .board
+                case "projects": shapemationInitialPath = [.build()]; shapemationBuilderSeed = .projects
+                case "mode": shapemationInitialPath = [.build()]; shapemationBuilderSeed = .mode
+                case let s where s.hasPrefix("rerender"):
+                    // `rerender` or `rerender:<uuid>`: the list's Re-render on that
+                    // record (the newest with members when none is named).
+                    let named = s.split(separator: ":").dropFirst().first.flatMap { UUID(uuidString: String($0)) }
+                    let store = ShapemationStore.shared
+                    let record = named.flatMap { id in store.records.first { $0.id == id } } ?? store.records.first { $0.members != nil }
+                    if let record { shapemationInitialPath = [.build(rerender: record.id)] } else { shapemationInitialPath = [.list] }
                 case "list": shapemationInitialPath = [.list]
                 default: shapemationInitialPath = []
                 }

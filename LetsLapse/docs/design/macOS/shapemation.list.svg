@@ -1,0 +1,89 @@
+<svg viewBox="0 0 800 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · list · 760×680</title>
+  <desc>Mirrors App/Shapemation/ShapemationListView.swift (the sheet&#x27;s List Shape-mations route) over the library&#x27;s Shapemations/shapemations.json. Mirrored from the Debug build on the tram clone 2026-09-20 after one render (Tatra T3 · Rectangle Any · Output frame · 4 photos · 1080×1920); capture scratchpad/mirrors/mac/list.png (2×, key window), copy from its AX dump. One 120 pt card per Shape-mation: the poster (109×80, black, the 9:16 frame pillarboxed in the middle) wearing a play badge (Play button), 15 pt bold title &#x27;Rectangle · 20. 9. 2026 at 13:40&#x27; (family · render date), the 13 pt grey summary &#x27;Tatra T3 · Rectangle Any · Normal · frame · 4 photos · 1080×1920 · 25 fps · 1 s each&#x27; wrapped to two lines (filter tag · match · ramp · mode · count · size · rate · dwell), the duration &#x27;4 s&#x27; (11 pt), and the three accent text buttons ▶ Play · ⬆ Share · 🗑 Delete. Play opens the player as a second sheet (640×480 min); Delete confirms. The &#x27;None yet&#x27; state is the home door&#x27;s subtitle, not a screen. The poster is drawn as a placeholder (ink band + tram-face glyph), not the captured picture. GEOMETRY: sheet 680 pt from y=32; card 116–644 × 96–216; poster at 128,107.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <linearGradient id="hdrfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.10"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- the Shape-mation sheet: 560 pt wide, 680 pt tall, overhanging the 680 pt window -->
+  <g id="sheet" filter="url(#sheetshadow)"><rect x="120" y="52" width="560" height="680" rx="12" fill="#F2F2F7"/></g>
+  <clipPath id="sheetclip"><rect x="120" y="52" width="560" height="680" rx="12"/></clipPath>
+  <g clip-path="url(#sheetclip)">
+    <g id="sheet-header"><rect x="120" y="52" width="560" height="48" fill="#FCFCFE"/>
+      <rect x="120" y="100" width="560" height="14" fill="url(#hdrfade)"/>
+      <g data-symbol="chevron.left"><circle cx="145" cy="77" r="15" fill="#C36A00"/><path d="M147.5 71 l-6 6 6 6" fill="none" stroke="#FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="168" y="81.5" font-size="13" class="b" fill="#1C1C1E">Shape-mations</text>
+    </g>
+    <rect x="136" y="116" width="528" height="120" rx="12" fill="#FFFFFF"/>
+    <g data-thumbnail="poster"><rect x="148" y="127" width="109" height="80" rx="8" fill="#000"/>
+      <rect x="178.5" y="127" width="48" height="80" fill="#1C1C1E"/>
+      <rect x="190.5" y="168" width="24" height="26" rx="3" fill="#3A3A3E"/><rect x="193.5" y="171" width="18" height="8" rx="1.5" fill="#8E8E93"/>
+      <g data-symbol="play.circle.fill"><circle cx="202.5" cy="167" r="14" fill="#FFF" fill-opacity="0.9"/><path d="M198.5 160.5 v13 l11 -6.5 z" fill="#1C1C1E"/></g></g>
+    <text x="270" y="141" font-size="15" class="b" fill="#1C1C1E">Rectangle · 20. 9. 2026 at 13:40</text>
+    <text x="270" y="163.5" font-size="13" fill="#6D6D72">Tatra T3 · Rectangle Any · Normal · frame · 4 photos · 1080×1920</text>
+    <text x="270" y="178.5" font-size="13" fill="#6D6D72">· 25 fps · 1 s each</text>
+    <text x="270" y="196" font-size="11" fill="#A0A0A5">4 s</text>
+    <g data-symbol="play.fill"><path d="M272 214.5 v11 l9 -5.5 z" fill="#C36A00"/></g>
+    <text x="288" y="221" font-size="13" class="sb" fill="#C36A00">Play</text>
+    <g data-symbol="square.and.arrow.up"><path d="M331 217 v6 h9 v-6 M335.5 221 v-9 M332.5 215 l3 -3 3 3" fill="none" stroke="#C36A00" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <text x="347" y="221" font-size="13" class="sb" fill="#C36A00">Share</text>
+    <g data-symbol="trash"><path d="M404.5 214 h9 M406 214 v9 h6 v-9 M407.5 212.5 h3" fill="none" stroke="#C36A00" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <text x="419" y="221" font-size="13" class="sb" fill="#C36A00">Delete</text>
+  </g>
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="758" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation · list · 760×680 pt window, 560×680 pt sheet</text>
+  <text x="400" y="776" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/ShapemationListView.swift — one Shape-mation, the 9:16 frame render · Play · Share · Delete</text>
+</svg>

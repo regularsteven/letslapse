@@ -1,0 +1,134 @@
+<svg viewBox="0 0 800 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · builder · projects (Rectangles) · 760×680</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift, the projects step (&#x27;Rectangles&#x27; — which photos go in) with its Sort menu and the per-project rows. Mirrored from the Debug build on the tram clone 2026-09-20 after Pick all; capture scratchpad/mirrors/mac/builder.projects.png (2×, key window), copy from its AX dump. Header: back circle · &#x27;Rectangles&#x27; (the AX dump lists a Clear button beside the title; it is the bottom bar&#x27;s — the bar&#x27;s leading button reads Pick all until everything is picked, then Clear). Under it &#x27;83 of 83 picked&#x27; with the &#x27;Sort&#x27; menu button trailing (chevron.down · Sort · chevron — the label is secondary grey, measured (122,122,124) on the capture, the two chevrons accent; the menu is Largest first / Smallest first / Newest / Oldest — &#x27;Sort Largest first&#x27; on iOS). One 120 pt card per project, 10 pt apart: the project&#x27;s thumbnail (72×96, the found rectangle traced over it — AMBER when picked, white when not), 15 pt bold title &#x27;Photo 13. 9. at 12:57&#x27;, &#x27;1 rectangle · Photo&#x27;, &#x27;2 860 px · 95 % of the frame&#x27; (the shape&#x27;s size and share of the frame), and the accent check circle top-trailing (r 11). Rows are plain tap gestures (not AX-pressable). The list scrolls inside the sheet (AXScrollBar at x=648, thumb short: 83 rows) above the pinned 80 pt bar: tinted &#x27;Clear&#x27; leading, &#x27;Next · mode&#x27; (146×47) trailing; the fourth card is cut by the bar. Rows drawn: 12:57 / 2 860 px · 95 %, 12:49 / 2 783 px · 92 %, 12:47 / 2 569 px · 85 %, 12:49 / 2 311 px · 76 % — largest first, as the AX dump lists them. The thumbnails are placeholders in the tile style (ink tile + tram-face glyph), not the captured pictures. GEOMETRY: sheet 680 pt from y=32; cards x 116–626 (the scroller takes the rest), y 124 + 130·i.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <linearGradient id="hdrfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.10"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- the Shape-mation sheet: 560 pt wide, 680 pt tall, overhanging the 680 pt window -->
+  <g id="sheet" filter="url(#sheetshadow)"><rect x="120" y="52" width="560" height="680" rx="12" fill="#F2F2F7"/></g>
+  <clipPath id="sheetclip"><rect x="120" y="52" width="560" height="680" rx="12"/></clipPath>
+  <g clip-path="url(#sheetclip)">
+    <g id="sheet-header"><rect x="120" y="52" width="560" height="48" fill="#FCFCFE"/>
+      <rect x="120" y="100" width="560" height="14" fill="url(#hdrfade)"/>
+      <g data-symbol="chevron.left"><circle cx="145" cy="77" r="15" fill="#C36A00"/><path d="M147.5 71 l-6 6 6 6" fill="none" stroke="#FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="168" y="81.5" font-size="13" class="b" fill="#1C1C1E">Rectangles</text>
+    </g>
+    <text x="136" y="128.5" font-size="15" fill="#6D6D72">83 of 83 picked</text>
+    <g data-symbol="chevron.down"><path d="M588 121 l5 5 5 -5" fill="none" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="604" y="129" font-size="15" fill="#6D6D72">Sort</text>
+      <path d="M635 122 l4 4 4 -4" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <rect x="136" y="144" width="510" height="120" rx="12" fill="#FFFFFF"/>
+    <g data-thumbnail="tram"><rect x="160" y="156" width="72" height="96" rx="6" fill="#1C1C1E"/>
+      <rect x="180.0" y="191.76" width="32" height="36" rx="4" fill="#3A3A3E"/>
+      <rect x="184.0" y="196.76" width="24" height="10" rx="2" fill="#8E8E93"/>
+      <circle cx="188.0" cy="218.76" r="2.5" fill="#FFB340"/><circle cx="204.0" cy="218.76" r="2.5" fill="#FFB340"/>
+      <line x1="196.0" y1="160" x2="196.0" y2="191.76" stroke="#5A5A5E" stroke-width="1"/>
+      <rect x="170" y="182" width="44" height="66" fill="none" stroke="#FFB340" stroke-width="2"/>
+    </g>
+    <text x="256" y="170" font-size="15" class="b" fill="#1C1C1E">Photo 13. 9. at 12:57</text>
+    <text x="256" y="193" font-size="13" fill="#6D6D72">1 rectangle · Photo</text>
+    <text x="256" y="214" font-size="13" fill="#A0A0A5">2 860 px · 95 % of the frame</text>
+    <g data-symbol="checkmark.circle.fill"><circle cx="621.5" cy="168.5" r="11" fill="#C36A00"/><path d="M616.5 168.5 l3.5 3.5 6.5 -7" fill="none" stroke="#FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <rect x="136" y="274" width="510" height="120" rx="12" fill="#FFFFFF"/>
+    <g data-thumbnail="tram"><rect x="160" y="286" width="72" height="96" rx="6" fill="#1C1C1E"/>
+      <rect x="180.0" y="321.76" width="32" height="36" rx="4" fill="#3A3A3E"/>
+      <rect x="184.0" y="326.76" width="24" height="10" rx="2" fill="#8E8E93"/>
+      <circle cx="188.0" cy="348.76" r="2.5" fill="#FFB340"/><circle cx="204.0" cy="348.76" r="2.5" fill="#FFB340"/>
+      <line x1="196.0" y1="290" x2="196.0" y2="321.76" stroke="#5A5A5E" stroke-width="1"/>
+      <rect x="170" y="316" width="42" height="60" fill="none" stroke="#FFB340" stroke-width="2"/>
+    </g>
+    <text x="256" y="300" font-size="15" class="b" fill="#1C1C1E">Photo 13. 9. at 12:49</text>
+    <text x="256" y="323" font-size="13" fill="#6D6D72">1 rectangle · Photo</text>
+    <text x="256" y="344" font-size="13" fill="#A0A0A5">2 783 px · 92 % of the frame</text>
+    <g data-symbol="checkmark.circle.fill"><circle cx="621.5" cy="298.5" r="11" fill="#C36A00"/><path d="M616.5 298.5 l3.5 3.5 6.5 -7" fill="none" stroke="#FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <rect x="136" y="404" width="510" height="120" rx="12" fill="#FFFFFF"/>
+    <g data-thumbnail="tram"><rect x="160" y="416" width="72" height="96" rx="6" fill="#1C1C1E"/>
+      <rect x="180.0" y="451.76" width="32" height="36" rx="4" fill="#3A3A3E"/>
+      <rect x="184.0" y="456.76" width="24" height="10" rx="2" fill="#8E8E93"/>
+      <circle cx="188.0" cy="478.76" r="2.5" fill="#FFB340"/><circle cx="204.0" cy="478.76" r="2.5" fill="#FFB340"/>
+      <line x1="196.0" y1="420" x2="196.0" y2="451.76" stroke="#5A5A5E" stroke-width="1"/>
+      <rect x="174" y="452" width="40" height="54" fill="none" stroke="#FFB340" stroke-width="2"/>
+    </g>
+    <text x="256" y="430" font-size="15" class="b" fill="#1C1C1E">Photo 13. 9. at 12:47</text>
+    <text x="256" y="453" font-size="13" fill="#6D6D72">1 rectangle · Photo</text>
+    <text x="256" y="474" font-size="13" fill="#A0A0A5">2 569 px · 85 % of the frame</text>
+    <g data-symbol="checkmark.circle.fill"><circle cx="621.5" cy="428.5" r="11" fill="#C36A00"/><path d="M616.5 428.5 l3.5 3.5 6.5 -7" fill="none" stroke="#FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <rect x="136" y="534" width="510" height="120" rx="12" fill="#FFFFFF"/>
+    <g data-thumbnail="tram"><rect x="160" y="546" width="72" height="96" rx="6" fill="#1C1C1E"/>
+      <rect x="180.0" y="581.76" width="32" height="36" rx="4" fill="#3A3A3E"/>
+      <rect x="184.0" y="586.76" width="24" height="10" rx="2" fill="#8E8E93"/>
+      <circle cx="188.0" cy="608.76" r="2.5" fill="#FFB340"/><circle cx="204.0" cy="608.76" r="2.5" fill="#FFB340"/>
+      <line x1="196.0" y1="550" x2="196.0" y2="581.76" stroke="#5A5A5E" stroke-width="1"/>
+      <rect x="172" y="578" width="40" height="54" fill="none" stroke="#FFB340" stroke-width="2"/>
+    </g>
+    <text x="256" y="560" font-size="15" class="b" fill="#1C1C1E">Photo 13. 9. at 12:49</text>
+    <text x="256" y="583" font-size="13" fill="#6D6D72">1 rectangle · Photo</text>
+    <text x="256" y="604" font-size="13" fill="#A0A0A5">2 311 px · 76 % of the frame</text>
+    <g data-symbol="checkmark.circle.fill"><circle cx="621.5" cy="558.5" r="11" fill="#C36A00"/><path d="M616.5 558.5 l3.5 3.5 6.5 -7" fill="none" stroke="#FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <rect x="666" y="100" width="12" height="552" fill="#000" fill-opacity="0.05"/>
+    <rect x="668" y="102" width="8" height="35" rx="4" fill="#000" fill-opacity="0.32"/>
+    <!-- pinned bottom bar (the step's own scroller sits above it) -->
+    <rect x="120" y="652" width="560" height="80" fill="#F1EBE8"/>
+    <rect x="518" y="669" width="146" height="47" rx="10" fill="#C36A00"/>
+    <text x="591.0" y="697.9" font-size="15" class="b" text-anchor="middle" fill="#FFF">Next · mode</text>
+    <rect x="136" y="681" width="50" height="24" rx="6" fill="#FBF2E8"/>
+    <text x="161.0" y="697.5" font-size="15" text-anchor="middle" fill="#C36A00">Clear</text>
+  </g>
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="758" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation · builder · projects · Rectangles · 760×680 pt window, 560×680 pt sheet</text>
+  <text x="400" y="776" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/ShapemationBuilderView.swift — 83 of 83 picked after Pick all · Sort · thumbnails as tile placeholders, the found rectangle traced in amber</text>
+</svg>

@@ -1,0 +1,164 @@
+<svg viewBox="0 0 800 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · builder · Output step, frame mode — scrubbed to a flagged photo (sheet) · 760×680</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationOutputView in FRAME mode (docs/shapemation/output-frame.md §6, code first 2026-09-19): frameCard (Aspect · Size · Face size · Face place · Ease), scrubCard (the evaluator's preview, verdictBadge, the scrub Slider, feasibilitySummary), the estimate and Create Shape-mation, with ShapemationFacePlacePicker for the two 3×3 grids — in the Mac's 560-wide Shape-mation sheet over the Create tab. Drawn 2026-09-20, mirrored from the Debug build on the tram clone (LL_SHAPEMATION=build LL_CHIPS=tram, then Mode → Output frame → Next · timing → Next · output by hand over the 83 rectangle projects — LL_SHAPEMATION=frame was not used: that seed takes the first family with shapes, Circle, 1 project; captures builder.output.frame.png (top) and builder.output.frame.wontfill.png (scrolled, axslider scrub 40) + AX dumps). THIS FILE is the step SCROLLED BY 441.5 pt so the scrub card sits in the sheet (the Face place labels, Ease and the frame card's foot show at the top): the scrub at photo 41 of 83 — 'Photo 13. 9. at 13:04', the verdict badge 'won't fill the frame' (LL.amber 25 % capsule, 11/500 ink; a fitting photo reads 'fits' on LL.levelGood 20 % — builder.output.frame.fits.png, scrub 82, the one photo of the 83 that fills a 16:9 frame at face 25 %), the accent-tinted Slider (0…82, step 1) with its 83 tick marks, 'Photo 41 of 83' 12 tertiary, and feasibilitySummary '82 photos won't fill the frame' 12 pt in LL.accentDeep (secondary when nothing is flagged). GEOMETRY: window, title bar, sheet and nav bar as in shapemation.builder.mode.svg; this step scrolls inside the sheet with an always-on 15 pt scroller gutter at the sheet's right edge (thumb drawn as captured), so the cards are 511 wide, not 527. 'Output frame' 17/600, then 13 secondary 'Every photo is scaled and placed to put its rectangle here. One that cannot reach the frame's edges, or would be blown up to, is flagged and kept.' FRAME CARD (llCard radius 18, 511×450.5 at y 191.5, 16 pt padding, 16 between groups; group titles 14 pt): ASPECT — FlowChips 1:1 · 4:5 · 3:2 · 16:9 · 2:3 · 9:16 as 25.5 pt capsules (#E9E9EB, 13 pt; the chosen one accent with a white 13/500 label; the sixth wraps to a second row 8 below); SIZE — 'Size' 15 pt, the pixel size 13 secondary and an NSPopUpButton of ShapemationFraming.sizePresets (80.5×23.5, '1 920'; its AX description 'Size: 1 920 long edge'); FACE SIZE — two 14 pt Steppers 'Start 25 % of the height' and 'End 25 % · Same' (the End follows the Start until it is touched — endSizeFollowsStart), each with the macOS 19.5×24.5 stepper (#EBEBEB, chevron.up.chevron.down); FACE PLACE — two ShapemationFacePlacePicker grids 24 apart (95.5×53.5, radius 8, #E9E9EB; nine dots 4.5 pt #C9C9CA, the chosen place a 6.5 pt accent dot; AX 'Face start: centre middle' etc.), captioned 'Start' and 'End · Same' 12 secondary (endPlaceFollowsStart); EASE — Linear · Ease in and out segmented (two 116.75 pt seats, Linear chosen). SCRUB CARD (llCard radius 18, 511×393.5, 12 under the frame card): the FramePreview image — the photo at ≤ 2048 px placed and cropped to the frame at ≤ 960 px on the long edge, over black — in a 461.5×259.5 (16:9) black table with radius 10; here the 3:4 tram still stands 168.5×223.5 in the middle of it with its rectangle face at 25 % of the height (drawn as a flat tram stand-in, never a PNG), which is exactly why it cannot fill a 16:9 frame; the title 14/600 with the verdict badge at the trailing edge; the Slider; the counter; the flagged line. 9:16 (builder.output.frame.916*.png, desc-only): Size reads 1 080×1 920 and 66 photos won't fill the frame; the 4-project Tatra T3 selection at 9:16 reads '3 photos won't fill the frame' / '4 photos · 25 fps · 1 s each' / '4.0 s of playback · 100 frames · largest first' (builder.output.frame.small.png) — the state the done card was rendered from. Then the ESTIMATE 12 secondary ('83 photos · 25 fps · 1 s each' / '83.0 s of playback · 2075 frames · largest first') and CREATE SHAPE-MATION (511×50.5, radius 10, 16/600 white), which renders at the framing's size (builder.framing.outputSize) and lands on shapemation.builder.done.svg. Same screen on iOS: ../iOS/shapemation.builder.output.frame.portrait.svg (planned; captured 2026-09-20 on the iPhone 16 Pro simulator, not yet drawn).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <clipPath id="sheet"><rect x="120" y="52" width="560" height="679.5" rx="10"/></clipPath>
+    <clipPath id="content"><rect x="120" y="100" width="560" height="631.5"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <filter id="knob" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.25"/></filter>
+    <clipPath id="tram"><rect x="316.5" y="253.5" width="168.5" height="223.5"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums;font-family:'SF Mono', Menlo, monospace}</style>
+
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- The sheet: 560 pt wide, its top under the title bar, 679.5 tall — taller than the
+       680 pt window, so its foot overhangs the window's bottom edge by 31.5 pt as captured. -->
+  <g id="sheet">
+    <rect x="120" y="52" width="560" height="679.5" rx="10" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+    <g clip-path="url(#sheet)">
+      <g id="navbar">
+        <rect x="120" y="52" width="560" height="47.5" fill="#FFFFFF"/>
+        <line x1="120" y1="99.75" x2="680" y2="99.75" stroke="#000" stroke-opacity="0.14" stroke-width="0.5"/>
+        <circle cx="144" cy="76" r="14.5" fill="#C36A00"/>
+        <path d="M146.5 70.5 l-5.5 5.5 5.5 5.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+        <text x="168.5" y="80.5" font-size="13" class="b" fill="#000">Output</text>
+      </g>
+      <g id="content" clip-path="url(#content)">
+        <text x="136.5" y="-309.5" font-size="17" class="sb" fill="#000">Output frame</text>
+        <text x="136.5" y="-281.0" font-size="13" fill="#6D6D72">Every photo is scaled and placed to put its rectangle here. One that cannot reach</text>
+        <text x="136.5" y="-265.0" font-size="13" fill="#6D6D72">the frame's edges, or would be blown up to, is flagged and kept.</text>
+        <!-- frameCard (llCard radius 18): Aspect chips, Size, Face size steppers, Face place grids, Ease -->
+        <rect x="136.5" y="-250.0" width="511" height="450.5" rx="18" fill="#FFFFFF"/>
+        <text x="152.5" y="-220.0" font-size="14" fill="#000">Aspect</text>
+        <rect x="152" y="-207.0" width="43.5" height="25.5" rx="12.75" fill="#E9E9EB"/><text x="173.75" y="-189.5" font-size="13" text-anchor="middle" fill="#000">1:1</text>
+        <rect x="204" y="-207.0" width="48" height="25.5" rx="12.75" fill="#E9E9EB"/><text x="228.0" y="-189.5" font-size="13" text-anchor="middle" fill="#000">4:5</text>
+        <rect x="260.5" y="-207.0" width="47.5" height="25.5" rx="12.75" fill="#E9E9EB"/><text x="284.25" y="-189.5" font-size="13" text-anchor="middle" fill="#000">3:2</text>
+        <rect x="316.5" y="-207.0" width="55" height="25.5" rx="12.75" fill="#C36A00"/><text x="344.0" y="-189.5" font-size="13" class="m" text-anchor="middle" fill="#FFFFFF">16:9</text>
+        <rect x="380.5" y="-207.0" width="47.5" height="25.5" rx="12.75" fill="#E9E9EB"/><text x="404.25" y="-189.5" font-size="13" text-anchor="middle" fill="#000">2:3</text>
+        <rect x="152" y="-168.0" width="54" height="25.5" rx="12.75" fill="#E9E9EB"/><text x="179.0" y="-150.5" font-size="13" text-anchor="middle" fill="#000">9:16</text>
+        <text x="152.5" y="-103.5" font-size="15" fill="#000">Size</text>
+        <text x="540.5" y="-104.0" font-size="13" text-anchor="end" fill="#6D6D72">1 920×1 080</text>
+        <rect x="550" y="-120.0" width="80.5" height="23.5" rx="5" fill="#000" fill-opacity="0.05"/><rect x="550" y="-120.5" width="80.5" height="23.5" rx="5" fill="#F7F7F7" stroke="#000" stroke-opacity="0.10" stroke-width="0.75"/><text x="561.5" y="-104.25" font-size="13" fill="#000">1 920</text><g fill="none" stroke="#6D6D72" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"><path d="M614.0 -110.75 l3 -3 3 3"/><path d="M614.0 -106.75 l3 3 3 -3"/></g>
+        <text x="152.5" y="-62.5" font-size="14" fill="#000">Face size</text>
+        <text x="152.5" y="-34.5" font-size="14" fill="#000">Start 25 % of the height</text>
+        <rect x="315" y="-52.0" width="19.5" height="24.5" rx="5" fill="#EBEBEB"/><g fill="none" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"><path d="M321 -42.5 l3.75 -3.75 3.75 3.75"/><path d="M321 -37.0 l3.75 3.75 3.75 -3.75"/></g>
+        <text x="152.5" y="-2.0" font-size="14" fill="#000">End 25 % · Same</text>
+        <rect x="270" y="-19.5" width="19.5" height="24.5" rx="5" fill="#EBEBEB"/><g fill="none" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"><path d="M276 -10.0 l3.75 -3.75 3.75 3.75"/><path d="M276 -4.5 l3.75 3.75 3.75 -3.75"/></g>
+        <text x="152.5" y="34.5" font-size="14" fill="#000">Face place</text>
+        <rect x="152" y="45.0" width="95.5" height="53.5" rx="8" fill="#E9E9EB"/>
+        <circle cx="176" cy="60.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="200" cy="60.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="224" cy="60.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="176" cy="74.0" r="4.5" fill="#C9C9CA"/>
+        <circle cx="200" cy="74.0" r="6.5" fill="#C36A00"/>
+        <circle cx="224" cy="74.0" r="4.5" fill="#C9C9CA"/>
+        <circle cx="176" cy="87.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="200" cy="87.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="224" cy="87.5" r="4.5" fill="#C9C9CA"/>
+        <rect x="272" y="45.0" width="95.5" height="53.5" rx="8" fill="#E9E9EB"/>
+        <circle cx="296" cy="60.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="320" cy="60.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="344" cy="60.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="296" cy="74.0" r="4.5" fill="#C9C9CA"/>
+        <circle cx="320" cy="74.0" r="6.5" fill="#C36A00"/>
+        <circle cx="344" cy="74.0" r="4.5" fill="#C9C9CA"/>
+        <circle cx="296" cy="87.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="320" cy="87.5" r="4.5" fill="#C9C9CA"/>
+        <circle cx="344" cy="87.5" r="4.5" fill="#C9C9CA"/>
+        <text x="199.75" y="117.0" font-size="12" text-anchor="middle" fill="#6D6D72">Start</text>
+        <text x="319.75" y="117.0" font-size="12" text-anchor="middle" fill="#6D6D72">End · Same</text>
+        <text x="152.5" y="150.5" font-size="14" fill="#000">Ease</text>
+        <rect x="152" y="161.0" width="233.5" height="23.5" rx="6" fill="#E8E8E8"/>
+<rect x="152.0" y="161.0" width="116.75" height="23.5" rx="6" fill="#C36A00"/>
+<text x="210.375" y="177.25" font-size="13" class="m" text-anchor="middle" fill="#FFFFFF">Linear</text>
+<text x="327.125" y="177.25" font-size="13" text-anchor="middle" fill="#000">Ease in and out</text>
+        <!-- scrubCard: the evaluator preview over black, title + verdict badge, the scrub slider, counter, flagged line -->
+        <rect x="136.5" y="215.5" width="511" height="393.5" rx="18" fill="#FFFFFF"/>
+        <rect x="160.5" y="228.5" width="461.5" height="259.5" rx="10" fill="#000000"/>
+        <g clip-path="url(#tram)">
+        <rect x="316.5" y="253.5" width="168.5" height="223.5" fill="#B9AFA4"/>
+        <rect x="316.5" y="253.5" width="168.5" height="138.57" fill="#A69B8D"/>
+        <rect x="316.5" y="280.32" width="168.5" height="6.705" fill="#8E8377"/>
+        <rect x="316.5" y="320.55" width="168.5" height="6.705" fill="#8E8377"/>
+        <rect x="346.83" y="333.96" width="26.96" height="58.11" rx="13.48" fill="#6E655C"/>
+        <rect x="410.86" y="333.96" width="26.96" height="58.11" rx="13.48" fill="#6E655C"/>
+        <rect x="316.5" y="392.07" width="168.5" height="84.93" fill="#8F8781"/>
+        <rect x="319.87" y="351.84000000000003" width="90.99000000000001" height="80.46" rx="6.74" fill="#E9E1CF"/>
+        <rect x="319.87" y="392.07" width="90.99000000000001" height="40.23" rx="5.055" fill="#B23A2E"/>
+        <rect x="328.295" y="360.78" width="74.14" height="26.82" rx="3.37" fill="#3B4650"/>
+        <rect x="340.09000000000003" y="333.96" width="50.55" height="17.88" fill="#7D756C"/>
+      </g>
+        <text x="152.5" y="515.5" font-size="14" class="sb" fill="#000">Photo 13. 9. at 13:04</text>
+        <rect x="514.0" y="498.5" width="116.5" height="23" rx="11.5" fill="#FFB340" fill-opacity="0.25"/>
+        <text x="572.25" y="514.0" font-size="11" class="m" text-anchor="middle" fill="#000">won't fill the frame</text>
+        <rect x="152" y="535.0" width="478.5" height="6" rx="3" fill="#E4E4E4"/>
+        <rect x="152" y="535.0" width="233.41463414634143" height="6" rx="3" fill="#C36A00"/>
+        <circle cx="385.4146341463414" cy="538.0" r="10" fill="#FFFFFF" filter="url(#knob)"/>
+        <line x1="153" y1="546.0" x2="630" y2="546.0" stroke="#C3C3C3" stroke-width="2" stroke-dasharray="2 3.82" stroke-linecap="round"/>
+        <text x="152.5" y="568.5" font-size="12" fill="#000" fill-opacity="0.35">Photo 41 of 83</text>
+        <text x="152.5" y="594.0" font-size="12" fill="#8A4A00">82 photos won't fill the frame</text>
+        <text x="136.5" y="637.0" font-size="12" fill="#6D6D72">83 photos · 25 fps · 1 s each</text>
+        <text x="136.5" y="655.0" font-size="12" fill="#6D6D72">83.0 s of playback · 2075 frames · largest first</text>
+        <rect x="136.5" y="670.5" width="511" height="50.5" rx="10" fill="#C36A00"/>
+        <text x="392" y="701.5" font-size="16" class="sb" text-anchor="middle" fill="#FFFFFF">Create Shape-mation</text>
+      </g>
+      <!-- the sheet's own scroller (always-on scroll bars on the bench): a 15 pt gutter takes the content from 527 to 511 wide -->
+      <rect x="666" y="345.5" width="10.5" height="376.5" rx="5.25" fill="#747476"/>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="758" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation sheet · builder · Output — frame mode, scrolled 441.5 pt to the scrub card: Photo 41 of 83 · won't fill the frame · 82 flagged · 760×680 pt window, 560 pt sheet</text>
+  <text x="400" y="776" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationOutputView.scrubCard, verdictBadge, feasibilitySummary) — scrub by AX (axslider scrub 40) on the tram clone, 2026-09-20</text>
+</svg>

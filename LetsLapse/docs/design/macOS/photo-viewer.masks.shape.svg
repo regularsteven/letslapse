@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Photo viewer / grading editor · Masks tab · found shape selected · 1000×700</title>
-  <desc>Mirrors App/PhotoViewerView.swift (masksTab, controlRail; selectedShapeID, shapeTool, shapeSquareLock, selectedRegisterShapeIndex, registerShapeBinding, shapesEdited) hosting App/Overlay/OverlayMasksPanel.swift (shapesCard, shapeTile, RegisterShapeTile, shapeDetailCard, shapeCaption, shapeToolMenu) with App/Overlay/RegisterShapeOverlay.swift on the picture and LetsLapseKit/Shapes/ShapeRegister.swift (DetectedShape: kind, family, source, obliquity) behind the captions. Code first, mirrored from the running app 2026-09-11 (captures mac-masks-shape-selected.png, 1000×700, and mac-masks-shape-selected-tall.png, 1000×1000, for the whole detail card; 2×, window top at px 52). Same window, same project and picture as photo-viewer.masks.svg: the Masks tab with a REGISTER SHAPE selected — the &quot;◎ Circle&quot; tile the Find shapes pass found on the clock face — and no mask selected, so the deck shows no ring and the mask detail card is absent (a register selection and a deck selection are exclusive; choosing one clears the other). THE RAIL IS DRAWN SCROLLED BY 66 pt so that the Shapes card and the whole shape detail card sit inside the 1000×700 window (the capture at 700 clips the card after its hint; the 1000-tall capture supplies the rest): the pinned tab bar stays at y 60–96, the scroll viewport runs y 102–720, the creation toolbar (Linear · Radial · ＋ Shape · ＋ Custom…, see photo-viewer.masks.svg) has scrolled above it and is not drawn, the deck&#8217;s top 16 pt are clipped, and the Custom Masks card&#8217;s top edge just enters at the bottom. Unscrolled the cards sit at deck 152, Shapes 335, shape detail 608, Custom Masks 784. Content width 293 pt beside the 15 pt scroller gutter (thumb drawn). SHAPES CARD: &quot;Shapes&quot; 13/600 secondary + mono &quot;5 shapes&quot;; a 3-column grid (8 pt columns, 10 pt rows) of RegisterShapeTile — LL.ink 4:3 tiles (83×62.25, radius 7) with the picture&#8217;s 3:4 frame letterboxed inside (46 pt wide, 0.5 pt white-25% hairline) and the shape filled white-90% at its place; the selected tile carries a 2 pt accent strokeBorder (inside the tile). Captions &quot;◎ Square&quot; · &quot;◎ Square&quot; · &quot;◎ Rectangle&quot; / &quot;◎ Circle&quot; · &quot;✎ Square&quot;: the 9 pt glyph is the source (◎ detected by Find shapes, ✎ drawn here with ＋ Shape), the 11/600 name the family — Circle when obliquity (minor ÷ major) ≥ 0.85, else Oval; Square when the quad&#8217;s sides are within tolerance, else Rectangle — or the user&#8217;s own name. Legend in two lines. SHAPE DETAIL CARD (shapeDetailCard, 14 pt padding, 12 pt rows): a 30×24 RegisterShapeTile thumbnail (no ring), the &quot;Shape name&quot; TextField — plain style, 14/700, showing its PLACEHOLDER because this found shape has no name yet; typing one names it (the caption and the tile then use it; Return commits) — and Remove 12/600 secondary, which drops the shape from the register; the caption 11.5 pt secondary &quot;Circle · found by Find shapes · 1350 px across · 93% round&quot; (family · origin · major axis in NATIVE pixels of the register&#8217;s frame · obliquity as a percentage; wraps after the last dot at this width); the hint 11 pt secondary &quot;Drag the centre to move it, the axis handles to size it, the stalk to turn it.&quot; (wrapping after &quot;to&quot;); and the bordered &quot;◌ Use as Radial mask&quot; button (macOS .bordered: 22 pt white, radius 6, hairline + soft shadow, circle.dashed + 12.5/600 label) which copies the ellipse into the deck as a Radial mask — the deck&#8217;s &quot;Circle&quot; in photo-viewer.masks.svg is exactly that copy, which is why both files draw the same ellipse. QUAD VARIANT (desc-only): a Rectangle / Square tile selected shows four corner handles plus the centre on the picture; the card gains a &quot;Square lock&quot; checkbox (13.5/600) under the caption with its own footnote — on: &quot;Corner drags scale the whole shape, so a square stays square.&quot;; off: &quot;Each corner moves on its own — a rectangle, or a quad seen at an angle.&quot; — and the caption reads &quot;Square · drawn here · 812×812 px&quot;-style width×height; where the button would be, the tertiary line &quot;Rectangle masks come later.&quot; PICTURE CHROME (RegisterShapeOverlay, ellipse; every coordinate in picture points, top-left origin — the 3:4 still is 504×672 at x 98, native 3024×4032, so 1 pt = 6 px): centre (372.5, 409), semi-axes 112.5 × 104.5 (1350 × 1255 px), rotation −10°. The outline is stroked twice — 1.4 pt white, then LL.amber-90% 1.2 pt dashed 5/4; the two axes are ticked white-50% 1 pt dashed 3/3 from end to end; the CENTRE HANDLE is a 22 pt amber disc with a 1.5 pt white strokeBorder and a 9 pt bold white arrow.up.and.down.and.arrow.left.and.right (drag = move; a rectangle&#8217;s corners move with it); the two AXIS HANDLES are 13.2 pt white squares (radius 3, amber 1.5 pt border) at the +major (east) and −minor (north) ends — the east one sets majorAxis, the north one minorAxis, each clamped to ≥ 4 pt; the ROTATION STALK is a 1 pt white-70% line from the east handle to a knob at major + 34 pt — a 22 pt disc of black-35% with the white border and a white arrow.clockwise; dragging it sets rotation from the pointer&#8217;s angle about the centre. While a handle is down the HUD reads &quot;Circle · 1350 px across · −10°&quot; (a quad: &quot;Square · 812×812 px&quot;); on release the shape is re-measured in the native frame and the register saved. Handles take a drag before the armed-tool gesture. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_RAIL=masks, LL_SHAPETOOL=ellipse|rect|square (arms ＋ Shape at launch); the selection itself is a click on the tile. Verified against the running Mac app 2026-09-11.</desc>
+  <desc>Mirrors App/PhotoViewerView.swift (masksTab, controlRail; selectedShapeID, shapeTool, shapeSquareLock, selectedRegisterShapeIndex, registerShapeBinding, shapesEdited) hosting App/Overlay/OverlayMasksPanel.swift (shapesCard, shapeTile, RegisterShapeTile, shapeDetailCard, shapeCaption, shapeToolMenu) with App/Overlay/RegisterShapeOverlay.swift on the picture and LetsLapseKit/Shapes/ShapeRegister.swift (DetectedShape: kind, family, source, obliquity) behind the captions. Code first, mirrored from the running app 2026-09-11 (captures mac-masks-shape-selected.png, 1000×700, and mac-masks-shape-selected-tall.png, 1000×1000, for the whole detail card; 2×, window top at px 52). Same window, same project and picture as photo-viewer.masks.svg: the Masks tab with a REGISTER SHAPE selected — the &quot;◎ Circle&quot; tile the Find shapes pass found on the clock face — and no mask selected, so the deck shows no ring and the mask detail card is absent (a register selection and a deck selection are exclusive; choosing one clears the other). THE RAIL IS DRAWN SCROLLED BY 160 pt so that the Shapes card and the whole shape detail card sit inside the 1000×700 window (the capture at 700 clips the card after its hint; the 1000-tall capture supplies the rest): the pinned tab bar stays at y 60–96, the scroll viewport runs y 102–720, the creation toolbar (Linear · Radial · ＋ Shape · ＋ Custom…, see photo-viewer.masks.svg) has scrolled above it and is not drawn, the deck has scrolled off but for its tile captions and legend, and the Custom Masks card&#8217;s top edge sits exactly at the bottom. Unscrolled the cards sit at deck 152, Shapes 335 (357 tall), shape detail 704, Custom Masks 880. Content width 293 pt beside the 15 pt scroller gutter (thumb drawn). SHAPES CARD: &quot;Shapes&quot; 13/600 secondary + mono &quot;5 shapes&quot;; the FIND ROW (findRow, 2026-09-12 — added to this file 2026-09-20 from the item-view capture photo-viewer.masks.locked.png: the Use all detector menu 99×23.5 on #ECECEC and the accent Find button 48×23.5 at the trailing edge, then the engine&#8217;s one-line detail 11 secondary in four lines — enabled here; on a LOCKED register Find is disabled with the help text &quot;Shapes written by a newer LetsLapse&quot;, see photo-viewer.masks.locked.svg); then a 3-column grid (8 pt columns, 10 pt rows) of RegisterShapeTile — LL.ink 4:3 tiles (83×62.25, radius 7) with the picture&#8217;s 3:4 frame letterboxed inside (46 pt wide, 0.5 pt white-25% hairline) and the shape filled white-90% at its place; the selected tile carries a 2 pt accent strokeBorder (inside the tile). Captions &quot;◎ Square&quot; · &quot;◎ Square&quot; · &quot;◎ Rectangle&quot; / &quot;◎ Circle&quot; · &quot;✎ Square&quot;: the 9 pt glyph is the source (◎ detected by Find shapes, ✎ drawn here with ＋ Shape), the 11/600 name the family — Circle when obliquity (minor ÷ major) ≥ 0.85, else Oval; Square when the quad&#8217;s sides are within tolerance, else Rectangle — or the user&#8217;s own name. Legend in two lines. SHAPE DETAIL CARD (shapeDetailCard, 14 pt padding, 12 pt rows): a 30×24 RegisterShapeTile thumbnail (no ring), the &quot;Shape name&quot; TextField — plain style, 14/700, showing its PLACEHOLDER because this found shape has no name yet; typing one names it (the caption and the tile then use it; Return commits) — and Remove 12/600 secondary, which drops the shape from the register; the caption 11.5 pt secondary &quot;Circle · found by Find shapes · 1350 px across · 93% round&quot; (family · origin · major axis in NATIVE pixels of the register&#8217;s frame · obliquity as a percentage; wraps after the last dot at this width); the hint 11 pt secondary &quot;Drag the centre to move it, the axis handles to size it, the stalk to turn it.&quot; (wrapping after &quot;to&quot;); and the bordered &quot;◌ Use as Radial mask&quot; button (macOS .bordered: 22 pt white, radius 6, hairline + soft shadow, circle.dashed + 12.5/600 label) which copies the ellipse into the deck as a Radial mask — the deck&#8217;s &quot;Circle&quot; in photo-viewer.masks.svg is exactly that copy, which is why both files draw the same ellipse. QUAD VARIANT (desc-only): a Rectangle / Square tile selected shows four corner handles plus the centre on the picture; the card gains a &quot;Square lock&quot; checkbox (13.5/600) under the caption with its own footnote — on: &quot;Corner drags scale the whole shape, so a square stays square.&quot;; off: &quot;Each corner moves on its own — a rectangle, or a quad seen at an angle.&quot; — and the caption reads &quot;Square · drawn here · 812×812 px&quot;-style width×height; where the button would be, the tertiary line &quot;Rectangle masks come later.&quot; PICTURE CHROME (RegisterShapeOverlay, ellipse; every coordinate in picture points, top-left origin — the 3:4 still is 504×672 at x 98, native 3024×4032, so 1 pt = 6 px): centre (372.5, 409), semi-axes 112.5 × 104.5 (1350 × 1255 px), rotation −10°. The outline is stroked twice — 1.4 pt white, then LL.amber-90% 1.2 pt dashed 5/4; the two axes are ticked white-50% 1 pt dashed 3/3 from end to end; the CENTRE HANDLE is a 22 pt amber disc with a 1.5 pt white strokeBorder and a 9 pt bold white arrow.up.and.down.and.arrow.left.and.right (drag = move; a rectangle&#8217;s corners move with it); the two AXIS HANDLES are 13.2 pt white squares (radius 3, amber 1.5 pt border) at the +major (east) and −minor (north) ends — the east one sets majorAxis, the north one minorAxis, each clamped to ≥ 4 pt; the ROTATION STALK is a 1 pt white-70% line from the east handle to a knob at major + 34 pt — a 22 pt disc of black-35% with the white border and a white arrow.clockwise; dragging it sets rotation from the pointer&#8217;s angle about the centre. While a handle is down the HUD reads &quot;Circle · 1350 px across · −10°&quot; (a quad: &quot;Square · 812×812 px&quot;); on release the shape is re-measured in the native frame and the register saved. Handles take a drag before the armed-tool gesture. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_RAIL=masks, LL_SHAPETOOL=ellipse|rect|square (arms ＋ Shape at launch); the selection itself is a click on the tile. Verified against the running Mac app 2026-09-11; the Find row and the 160 pt scroll are the 2026-09-20 refresh (the tiles, captions and detail card were not recaptured — the host is the Gallery item view since 2026-09-13, whose rail is the same code at 280.5 pt content width; this file keeps the former standalone window).</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
     <clipPath id="photo"><rect x="98" y="48" width="504" height="672"/></clipPath>
@@ -92,7 +92,7 @@
 
     <line x1="680" y1="48" x2="680" y2="720" stroke="#000" stroke-opacity="0.1"/>
 
-    <!-- Control rail · Masks tab (OverlayMasksPanel), SCROLLED BY 66 pt. The
+    <!-- Control rail · Masks tab (OverlayMasksPanel), SCROLLED BY 160 pt. The
          tab bar is pinned; the content below it is clipped to the scroll
          viewport (y 102–720). The toolbar has scrolled off above. -->
     <g id="rail">
@@ -105,108 +105,125 @@
       </g>
 
       <!-- Scroller thumb, as captured, moved down for the 66 pt scroll. -->
-      <rect x="1009" y="148" width="8" height="439" rx="4" fill="#C2C2C2"/>
+      <rect x="1009" y="209" width="8" height="439" rx="4" fill="#C2C2C2"/>
 
       <g id="railcontent" clip-path="url(#railscroll)">
         <!-- The deck (unscrolled y 152): nothing selected here, so no ring. -->
         <g id="deck">
-          <rect x="696" y="86" width="293" height="171" rx="12" fill="#FFFFFF"/>
-          <text x="710" y="113" font-size="13" class="sb" fill="#6D6D72">Masks</text>
-          <text x="975" y="113" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">3 masks</text>
+          <rect x="696" y="-8" width="293" height="171" rx="12" fill="#FFFFFF"/>
+          <text x="710" y="19" font-size="13" class="sb" fill="#6D6D72">Masks</text>
+          <text x="975" y="19" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">3 masks</text>
 
           <g id="tile-sky">
-            <rect x="710" y="126" width="83" height="62.25" rx="6" fill="#FFFFFF"/>
-            <path clip-path="url(#tile-sky)" d="M710 150 L722 148 L734 152 L746 147 L758 151 L770 146 L782 150 L793 148 L793 188.25 L710 188.25 Z" fill="#1C1C1E"/>
-            <rect x="713" y="129" width="26" height="11" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
-            <text x="726" y="137.5" font-size="7.5" class="sb mono" text-anchor="middle" fill="#1C1C1E">AUTO</text>
-            <rect x="710" y="126" width="83" height="62.25" rx="6" fill="none" stroke="#000" stroke-opacity="0.14"/>
-            <text x="751.5" y="203" font-size="11" class="sb" text-anchor="middle" fill="#000">Sky</text>
+            <rect x="710" y="32" width="83" height="62.25" rx="6" fill="#FFFFFF"/>
+            <path clip-path="url(#tile-sky)" d="M710 56 L722 54 L734 58 L746 53 L758 57 L770 52 L782 56 L793 54 L793 94.25 L710 94.25 Z" fill="#1C1C1E"/>
+            <rect x="713" y="35" width="26" height="11" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
+            <text x="726" y="43.5" font-size="7.5" class="sb mono" text-anchor="middle" fill="#1C1C1E">AUTO</text>
+            <rect x="710" y="32" width="83" height="62.25" rx="6" fill="none" stroke="#000" stroke-opacity="0.14"/>
+            <text x="751.5" y="109" font-size="11" class="sb" text-anchor="middle" fill="#000">Sky</text>
           </g>
           <g id="tile-land">
-            <rect x="801" y="126" width="83" height="62.25" rx="6" fill="#FFFFFF"/>
-            <rect x="804" y="129" width="26" height="11" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
-            <text x="817" y="137.5" font-size="7.5" class="sb mono" text-anchor="middle" fill="#1C1C1E">AUTO</text>
-            <rect x="801" y="126" width="83" height="62.25" rx="6" fill="none" stroke="#000" stroke-opacity="0.14"/>
-            <text x="842.5" y="203" font-size="11" class="sb" text-anchor="middle" fill="#000">Land</text>
+            <rect x="801" y="32" width="83" height="62.25" rx="6" fill="#FFFFFF"/>
+            <rect x="804" y="35" width="26" height="11" rx="3" fill="#FFFFFF" fill-opacity="0.85"/>
+            <text x="817" y="43.5" font-size="7.5" class="sb mono" text-anchor="middle" fill="#1C1C1E">AUTO</text>
+            <rect x="801" y="32" width="83" height="62.25" rx="6" fill="none" stroke="#000" stroke-opacity="0.14"/>
+            <text x="842.5" y="109" font-size="11" class="sb" text-anchor="middle" fill="#000">Land</text>
           </g>
           <g id="tile-circle">
-            <rect x="892" y="126" width="83" height="62.25" rx="6" fill="#1C1C1E"/>
-            <ellipse cx="937.5" cy="159" rx="18" ry="10" transform="rotate(-10 937.5 159)" fill="url(#soft)"/>
-            <text x="933.5" y="203" font-size="11" class="sb" text-anchor="middle" fill="#000">Circle</text>
+            <rect x="892" y="32" width="83" height="62.25" rx="6" fill="#1C1C1E"/>
+            <ellipse cx="937.5" cy="65" rx="18" ry="10" transform="rotate(-10 937.5 65)" fill="url(#soft)"/>
+            <text x="933.5" y="109" font-size="11" class="sb" text-anchor="middle" fill="#000">Circle</text>
           </g>
 
-          <text x="710" y="227" font-size="10.5" fill="#6D6D72">AUTO re-segments per seam · amber dot = graded</text>
-          <text x="710" y="240" font-size="10.5" fill="#6D6D72">inside · ⊘ = graded inverted</text>
+          <text x="710" y="133" font-size="10.5" fill="#6D6D72">AUTO re-segments per seam · amber dot = graded</text>
+          <text x="710" y="146" font-size="10.5" fill="#6D6D72">inside · ⊘ = graded inverted</text>
         </g>
 
-        <!-- The Shapes card (unscrolled y 335). ◎ Circle is selected: a 2 pt
+        <!-- The Shapes card (unscrolled y 335; 357 tall since the Find row). ◎ Circle is selected: a 2 pt
              accent border inside the tile. -->
         <g id="shapes">
-          <rect x="696" y="269" width="293" height="261" rx="12" fill="#FFFFFF"/>
-          <text x="710" y="296" font-size="13" class="sb" fill="#6D6D72">Shapes</text>
-          <text x="975" y="296" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">5 shapes</text>
+          <rect x="696" y="175" width="293" height="357" rx="12" fill="#FFFFFF"/>
+          <text x="710" y="202" font-size="13" class="sb" fill="#6D6D72">Shapes</text>
+          <text x="975" y="202" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">5 shapes</text>
+          <!-- The FIND ROW (findRow, 2026-09-12; measured 2026-09-20 in the item view): the Use all detector
+               menu and the Find button, then the engine's one-line detail. -->
+          <g id="findrow">
+            <rect x="710" y="214.5" width="99" height="23.5" rx="6" fill="#ECECEC"/>
+            <text x="722.5" y="230.5" font-size="13" class="sb" fill="#1C1C1E">Use all</text>
+            <path d="M771.5 224 l3.25 3.25 3.25 -3.25" fill="none" stroke="#1C1C1E" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+            <line x1="788.5" y1="219.5" x2="788.5" y2="233.5" stroke="#000" stroke-opacity="0.10"/>
+            <path d="M795.5 224 l3.5 3.5 3.5 -3.5" fill="none" stroke="#1C1C1E" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+            <rect x="927" y="214.5" width="48" height="23.5" rx="6" fill="#C36A00"/>
+            <text x="951" y="230.5" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Find</text>
+          </g>
+          <g font-size="11" fill="#6D6D72">
+            <text x="710" y="255">Find shapes in this picture · Every detector in turn; a</text>
+            <text x="710" y="268">shape found by more than one is listed once with</text>
+            <text x="710" y="281">who found it, and every Add or dismissal scores</text>
+            <text x="710" y="294">each detector</text>
+          </g>
 
           <g id="shape-tiles" fill="#1C1C1E">
-            <rect x="710" y="309" width="83" height="62.25" rx="7"/>
-            <rect x="801" y="309" width="83" height="62.25" rx="7"/>
-            <rect x="892" y="309" width="83" height="62.25" rx="7"/>
-            <rect x="710" y="399.5" width="83" height="62.25" rx="7"/>
-            <rect x="801" y="399.5" width="83" height="62.25" rx="7"/>
+            <rect x="710" y="311" width="83" height="62.25" rx="7"/>
+            <rect x="801" y="311" width="83" height="62.25" rx="7"/>
+            <rect x="892" y="311" width="83" height="62.25" rx="7"/>
+            <rect x="710" y="401.5" width="83" height="62.25" rx="7"/>
+            <rect x="801" y="401.5" width="83" height="62.25" rx="7"/>
           </g>
           <g fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="0.5">
-            <rect x="728.5" y="309" width="46" height="62.25"/><rect x="819.5" y="309" width="46" height="62.25"/><rect x="910.5" y="309" width="46" height="62.25"/>
-            <rect x="728.5" y="399.5" width="46" height="62.25"/><rect x="819.5" y="399.5" width="46" height="62.25"/>
+            <rect x="728.5" y="311" width="46" height="62.25"/><rect x="819.5" y="311" width="46" height="62.25"/><rect x="910.5" y="311" width="46" height="62.25"/>
+            <rect x="728.5" y="401.5" width="46" height="62.25"/><rect x="819.5" y="401.5" width="46" height="62.25"/>
           </g>
           <g fill="#FFFFFF" fill-opacity="0.9">
-            <rect x="764" y="316" width="10" height="9"/>
-            <polygon points="844,317.5 851,317.5 851,327.5 845,326"/>
-            <rect x="919" y="333.5" width="4" height="10.5"/>
-            <ellipse cx="753.75" cy="433" rx="10.25" ry="9.5" transform="rotate(-10 753.75 433)"/>
-            <rect x="851.5" y="410" width="7.5" height="7"/>
+            <rect x="764" y="318" width="10" height="9"/>
+            <polygon points="844,319.5 851,319.5 851,329.5 845,328"/>
+            <rect x="919" y="335.5" width="4" height="10.5"/>
+            <ellipse cx="753.75" cy="435" rx="10.25" ry="9.5" transform="rotate(-10 753.75 435)"/>
+            <rect x="851.5" y="412" width="7.5" height="7"/>
           </g>
-          <rect x="711" y="400.5" width="81" height="60.25" rx="6" fill="none" stroke="#C36A00" stroke-width="2"/>
+          <rect x="711" y="402.5" width="81" height="60.25" rx="6" fill="none" stroke="#C36A00" stroke-width="2"/>
           <g font-size="11" class="sb" text-anchor="middle" fill="#000">
-            <text x="751.5" y="386.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Square</text>
-            <text x="842.5" y="386.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Square</text>
-            <text x="933.5" y="386.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Rectangle</text>
-            <text x="751.5" y="476.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Circle</text>
-            <text x="842.5" y="476.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">✎</tspan> Square</text>
+            <text x="751.5" y="388.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Square</text>
+            <text x="842.5" y="388.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Square</text>
+            <text x="933.5" y="388.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Rectangle</text>
+            <text x="751.5" y="478.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">◎</tspan> Circle</text>
+            <text x="842.5" y="478.5"><tspan font-size="9" font-weight="400" fill="#6D6D72">✎</tspan> Square</text>
           </g>
-          <text x="710" y="499.5" font-size="10.5" fill="#6D6D72">◎ found by Find shapes · ✎ drawn here · an ellipse</text>
-          <text x="710" y="512" font-size="10.5" fill="#6D6D72">can become a Radial mask</text>
+          <text x="710" y="501.5" font-size="10.5" fill="#6D6D72">◎ found by Find shapes · ✎ drawn here · an ellipse</text>
+          <text x="710" y="514" font-size="10.5" fill="#6D6D72">can become a Radial mask</text>
         </g>
 
-        <!-- The shape detail card (unscrolled y 608) for the found Circle. -->
+        <!-- The shape detail card (unscrolled y 704) for the found Circle. -->
         <g id="shape-detail">
-          <rect x="696" y="542" width="293" height="164" rx="12" fill="#FFFFFF"/>
+          <rect x="696" y="544" width="293" height="164" rx="12" fill="#FFFFFF"/>
 
-          <rect x="710" y="556" width="30" height="24" rx="5" fill="#1C1C1E"/>
-          <g fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="0.5"><rect x="716" y="556" width="18" height="24"/></g>
-          <circle cx="725.5" cy="568.8" r="4" fill="#FFFFFF" fill-opacity="0.9"/>
+          <rect x="710" y="558" width="30" height="24" rx="5" fill="#1C1C1E"/>
+          <g fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="0.5"><rect x="716" y="558" width="18" height="24"/></g>
+          <circle cx="725.5" cy="570.8" r="4" fill="#FFFFFF" fill-opacity="0.9"/>
           <!-- TextField placeholder: the shape has no name yet. -->
-          <text x="750" y="573" font-size="14" class="b" fill="#BFBFC4">Shape name</text>
-          <text x="975" y="572.5" font-size="12" class="sb" text-anchor="end" fill="#6D6D72">Remove</text>
+          <text x="750" y="575" font-size="14" class="b" fill="#BFBFC4">Shape name</text>
+          <text x="975" y="574.5" font-size="12" class="sb" text-anchor="end" fill="#6D6D72">Remove</text>
 
-          <text x="710" y="603" font-size="11.5" fill="#6D6D72">Circle · found by Find shapes · 1350 px across ·</text>
-          <text x="710" y="617" font-size="11.5" fill="#6D6D72">93% round</text>
+          <text x="710" y="605" font-size="11.5" fill="#6D6D72">Circle · found by Find shapes · 1350 px across ·</text>
+          <text x="710" y="619" font-size="11.5" fill="#6D6D72">93% round</text>
 
-          <text x="710" y="643" font-size="11" fill="#6D6D72">Drag the centre to move it, the axis handles to</text>
-          <text x="710" y="657" font-size="11" fill="#6D6D72">size it, the stalk to turn it.</text>
+          <text x="710" y="645" font-size="11" fill="#6D6D72">Drag the centre to move it, the axis handles to</text>
+          <text x="710" y="659" font-size="11" fill="#6D6D72">size it, the stalk to turn it.</text>
 
           <!-- macOS .bordered button: white, hairline, soft shadow. -->
-          <rect x="710" y="672" width="156" height="22" rx="6" fill="#000" fill-opacity="0.06"/>
-          <rect x="710" y="671" width="156" height="22" rx="6" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12" stroke-width="0.75"/>
-          <circle cx="725.25" cy="681.5" r="5.25" fill="none" stroke="#1C1C1E" stroke-width="1.3" stroke-dasharray="2.2 1.8" data-symbol="circle.dashed"/>
-          <text x="742" y="686" font-size="12.5" class="sb" fill="#1C1C1E">Use as Radial mask</text>
+          <rect x="710" y="674" width="156" height="22" rx="6" fill="#000" fill-opacity="0.06"/>
+          <rect x="710" y="673" width="156" height="22" rx="6" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12" stroke-width="0.75"/>
+          <circle cx="725.25" cy="683.5" r="5.25" fill="none" stroke="#1C1C1E" stroke-width="1.3" stroke-dasharray="2.2 1.8" data-symbol="circle.dashed"/>
+          <text x="742" y="688" font-size="12.5" class="sb" fill="#1C1C1E">Use as Radial mask</text>
         </g>
 
-        <!-- Custom Masks card (unscrolled y 784) — its top edge just enters. -->
-        <rect x="696" y="718" width="293" height="176" rx="12" fill="#FFFFFF"/>
+        <!-- Custom Masks card (unscrolled y 880) — its top edge just enters. -->
+        <rect x="696" y="720" width="293" height="176" rx="12" fill="#FFFFFF"/>
       </g>
     </g>
   </g>
 
   <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
-  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Masks tab · found Circle shape selected · 1000×700 pt window, rail scrolled 66 pt</text>
+  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Masks tab · found Circle shape selected · 1000×700 pt window, rail scrolled 160 pt</text>
   <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (masksTab) + App/Overlay/OverlayMasksPanel.swift (shapesCard, shapeDetailCard) + App/Overlay/RegisterShapeOverlay.swift — the mask-selected rail is photo-viewer.masks.svg</text>
 </svg>

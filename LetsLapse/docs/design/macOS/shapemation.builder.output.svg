@@ -1,0 +1,107 @@
+<svg viewBox="0 0 800 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · builder · Output step, stack mode (sheet) · 760×680</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationOutputView in STACK mode (Output size: the intro, the option list, the estimate, Create Shape-mation) in the Mac's 560-wide Shape-mation sheet over the Create tab. Drawn 2026-09-20, mirrored from the Debug build on the tram clone (LL_SHAPEMATION=build LL_CHIPS=tram; Rectangle · Any · 83 of 83 projects · Stack, fit in frame · 25 fps · 1 s; capture builder.output.png + AX dump). Window, title bar, sheet and nav bar as in shapemation.builder.mode.svg; this step has NO pinned bottom bar — the Create button is the last item of the scrolling content and the sheet's foot is plain LL.screenBackground. CONTENT (16 pt padding, 12 pt spacing): 'Output size' 17/600 (baseline 132); the intro 13 secondary wrapping to two lines: 'Sizes come from the pictures you picked: the native canvas keeps every pixel; the fits scale it down.'; the OPTION LIST (llCard radius 16, 527×240 at y 191.5): one Button row per ShapemationPlan.OutputOption, 48 pt tall (16 horizontal · 12 vertical padding), the label 15 pt — 'Native 3274×4924' · 'Fit 3840 · 2552×3840' · 'Fit 2160 · 1436×2160' · 'Fit 1920 · 1276×1920' · 'Fit 1080 · 718×1080' (the canvas the 83 rectangle projects need, and its fits) — with checkmark.circle.fill 20 pt accent on the chosen row (the first by default) and circle 20 pt secondary-50 % on the others, hairline dividers inset 16; the ESTIMATE 12 secondary in two lines 3 pt apart: '83 photos · 25 fps · 1 s each' / '83.0 s of playback · 2075 frames · largest first'; CREATE SHAPE-MATION: a full-width borderedProminent button (accent, 50.5 tall, radius 10, 16/600 white) — pressing it renders (progressCard: 'Rendering n of N' 15/600, an accent ProgressView, the current title 12 secondary — the 83-photo render at the native canvas was not captured; the 4-photo frame render finished in under 1.5 s, so no progress state exists in the captures) and then shows the done card (shapemation.builder.done.svg). Under the render error path a 12 pt red line would sit between the estimate and the button (not staged). Output FRAME mode replaces this step's body with the frame itself: shapemation.builder.output.frame.svg. Same screen on iOS: ../iOS/shapemation.builder.output.portrait.svg.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <clipPath id="sheet"><rect x="120" y="52" width="560" height="679.5" rx="10"/></clipPath>
+    <clipPath id="content"><rect x="120" y="100" width="560" height="631.5"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <filter id="knob" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.25"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums;font-family:'SF Mono', Menlo, monospace}</style>
+
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- The sheet: 560 pt wide, its top under the title bar, 679.5 tall — taller than the
+       680 pt window, so its foot overhangs the window's bottom edge by 31.5 pt as captured. -->
+  <g id="sheet">
+    <rect x="120" y="52" width="560" height="679.5" rx="10" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+    <g clip-path="url(#sheet)">
+      <g id="navbar">
+        <rect x="120" y="52" width="560" height="47.5" fill="#FFFFFF"/>
+        <line x1="120" y1="99.75" x2="680" y2="99.75" stroke="#000" stroke-opacity="0.14" stroke-width="0.5"/>
+        <circle cx="144" cy="76" r="14.5" fill="#C36A00"/>
+        <path d="M146.5 70.5 l-5.5 5.5 5.5 5.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+        <text x="168.5" y="80.5" font-size="13" class="b" fill="#000">Output</text>
+      </g>
+      <g id="content" clip-path="url(#content)">
+        <text x="136.5" y="132" font-size="17" class="sb" fill="#000">Output size</text>
+        <text x="136.5" y="160.5" font-size="13" fill="#6D6D72">Sizes come from the pictures you picked: the native canvas keeps every pixel; the fits</text>
+        <text x="136.5" y="176.5" font-size="13" fill="#6D6D72">scale it down.</text>
+        <!-- the size list (llCard radius 16): one Button row per ShapemationPlan.OutputOption, 48 pt, dividers inset 16 -->
+        <rect x="136.5" y="191.5" width="527" height="240" rx="16" fill="#FFFFFF"/>
+        <text x="152.5" y="220.5" font-size="15" fill="#000">Native 3274×4924</text>
+        <circle cx="637.5" cy="215.5" r="11" fill="#C36A00" data-symbol="checkmark.circle.fill"/><path d="M632.5 215.5 l3.5 3.5 6.5 -7" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="152.5" y1="239.5" x2="663.5" y2="239.5" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+        <text x="152.5" y="268.5" font-size="15" fill="#000">Fit 3840 · 2552×3840</text>
+        <circle cx="637.5" cy="263.5" r="10" fill="none" stroke="#6D6D72" stroke-opacity="0.5" stroke-width="1.6" data-symbol="circle"/>
+        <line x1="152.5" y1="287.5" x2="663.5" y2="287.5" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+        <text x="152.5" y="316.5" font-size="15" fill="#000">Fit 2160 · 1436×2160</text>
+        <circle cx="637.5" cy="311.5" r="10" fill="none" stroke="#6D6D72" stroke-opacity="0.5" stroke-width="1.6" data-symbol="circle"/>
+        <line x1="152.5" y1="335.5" x2="663.5" y2="335.5" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+        <text x="152.5" y="364.5" font-size="15" fill="#000">Fit 1920 · 1276×1920</text>
+        <circle cx="637.5" cy="359.5" r="10" fill="none" stroke="#6D6D72" stroke-opacity="0.5" stroke-width="1.6" data-symbol="circle"/>
+        <line x1="152.5" y1="383.5" x2="663.5" y2="383.5" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+        <text x="152.5" y="412.5" font-size="15" fill="#000">Fit 1080 · 718×1080</text>
+        <circle cx="637.5" cy="407.5" r="10" fill="none" stroke="#6D6D72" stroke-opacity="0.5" stroke-width="1.6" data-symbol="circle"/>
+        <text x="136.5" y="455" font-size="12" fill="#6D6D72">83 photos · 25 fps · 1 s each</text>
+        <text x="136.5" y="473.5" font-size="12" fill="#6D6D72">83.0 s of playback · 2075 frames · largest first</text>
+        <rect x="136.5" y="488.5" width="527" height="50.5" rx="10" fill="#C36A00"/>
+        <text x="400" y="519.5" font-size="16" class="sb" text-anchor="middle" fill="#FFFFFF">Create Shape-mation</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="758" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation sheet · builder · Output — stack mode, Native 3274×4924 chosen, Create Shape-mation · 760×680 pt window, 560 pt sheet</text>
+  <text x="400" y="776" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationOutputView, stack) — LL_SHAPEMATION=build LL_CHIPS=tram on the tram clone, 2026-09-20; frame mode is shapemation.builder.output.frame.svg</text>
+</svg>

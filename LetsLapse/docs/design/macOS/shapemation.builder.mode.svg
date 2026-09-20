@@ -1,0 +1,116 @@
+<svg viewBox="0 0 800 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · builder · Mode step (sheet) · 760×680</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationModeView (the builder's Mode step: the question, three mode cards, planSummary, the pinned Next · timing bar) inside ShapemationBuilderView's NavigationStack, presented from ShapemationHomeView as the Mac's 560-wide sheet over the Create tab. Drawn 2026-09-20, mirrored from the Debug build on the tram clone (Steven's KEEP library, 164 tram projects) with LL_SHAPEMATION=build LL_CHIPS=tram, the Rectangle family, Any aspect, 83 of 83 projects picked; capture builder.mode.png + its AX dump. GEOMETRY (1 unit = 1 pt): the 760×680 window, a 32 pt title bar (traffic lights at y 36, the title 'Create' 13/600 beside them), the Create page dimmed 17 % under the sheet. The sheet is 560 wide at x 120, its top at y 52 right under the title bar, and 679.5 tall — TALLER than the window, so its foot overhangs the window's bottom edge by 31.5 pt (as captured: every builder step is ~680 tall on the Mac, the home sheet ~745). Nav bar 47.5 pt white with a hairline: a 29 pt accent circle with a white chevron.left (Back) at (144, 76) and the step title 13/700 at x 168.5. Content on LL.screenBackground, 16 pt padding: the question 17/600 (baseline 132); THREE MODE CARDS (llCard radius 16, 527 wide, 83 tall, 12 apart at y 147.5 / 242.5 / 337.5; each a Button, 14 pt padding): a 34 pt icon tile (radius 9; accent with a white 17/600 symbol when chosen, accent-12 % with an accent symbol otherwise — rectangle.stack · crop · viewfinder.rectangular), the title 16/600 with the summary 13 secondary under it (wrapping to two lines at this width), and at the trailing edge checkmark.circle.fill 22 pt accent (chosen) or circle 22 pt secondary-50 %. Copy is the app's: 'Stack, fit in frame — The canvas holds every photo. Each lands on top of the last, the shape locked in place; the black table shows until it is covered.' · 'Stack, crop to fill — The same stack, cropped to what every photo covers. No black — but one off-centre shape crops everyone.' · 'Output frame — Pick the frame; the face is put at a chosen size and place in every photo; what won't fill it is flagged.' (the third card is docs/shapemation/output-frame.md §6, code first 2026-09-19). Under the cards planSummary 12 secondary: 'Canvas 3274×4924 holds every photo; the shape is 398 px across.' (stack mode over the 83 rectangle projects). OUTPUT FRAME CHOSEN (builder.mode.frame.png, desc-only — same layout, the third card checked): the line reads 'Frame 1920×1080; the shape is 270 px across; 82 photos flagged — see Output.' The crop-mode empty-intersection warning ('These photos share no common area once the shape is locked — crop mode has nothing to show. Pick fewer, or use stack mode.', 12 pt red) is not staged. BOTTOM BAR pinned under the scroller (y 653–731.5, accent 6 % over the sheet): 'Next · timing' 15/600 white in a 44 pt accent capsule-cornered button (radius 8, 150 wide, trailing 16). Same screen on iOS: ../iOS/shapemation.builder.mode.portrait.svg (stale: drawn before the third card).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <clipPath id="sheet"><rect x="120" y="52" width="560" height="679.5" rx="10"/></clipPath>
+    <clipPath id="content"><rect x="120" y="100" width="560" height="553"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <filter id="knob" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.25"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums;font-family:'SF Mono', Menlo, monospace}</style>
+
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- The sheet: 560 pt wide, its top under the title bar, 679.5 tall — taller than the
+       680 pt window, so its foot overhangs the window's bottom edge by 31.5 pt as captured. -->
+  <g id="sheet">
+    <rect x="120" y="52" width="560" height="679.5" rx="10" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+    <g clip-path="url(#sheet)">
+      <g id="navbar">
+        <rect x="120" y="52" width="560" height="47.5" fill="#FFFFFF"/>
+        <line x1="120" y1="99.75" x2="680" y2="99.75" stroke="#000" stroke-opacity="0.14" stroke-width="0.5"/>
+        <circle cx="144" cy="76" r="14.5" fill="#C36A00"/>
+        <path d="M146.5 70.5 l-5.5 5.5 5.5 5.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+        <text x="168.5" y="80.5" font-size="13" class="b" fill="#000">Mode</text>
+      </g>
+      <g id="content" clip-path="url(#content)">
+        <text x="136.5" y="132" font-size="17" class="sb" fill="#000">How should the photos be laid out?</text>
+        <!-- mode card 1: a Button — the whole card selects -->
+        <rect x="136.5" y="147.5" width="527" height="83" rx="16" fill="#FFFFFF"/>
+        <rect x="150.5" y="161.5" width="34" height="34" rx="9" fill="#C36A00"/>
+        <g fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linejoin="round" data-symbol="rectangle.stack"><rect x="159.5" y="174.5" width="16" height="11" rx="2"/><path d="M161.5 172.0 h12 M163.5 169.5 h8"/></g>
+        <text x="196.5" y="176.5" font-size="16" class="sb" fill="#000">Stack, fit in frame</text>
+        <text x="196.5" y="197.0" font-size="13" fill="#6D6D72">The canvas holds every photo. Each lands on top of the last, the</text>
+        <text x="196.5" y="213.5" font-size="13" fill="#6D6D72">shape locked in place; the black table shows until it is covered.</text>
+        <circle cx="637.5" cy="174.5" r="11" fill="#C36A00" data-symbol="checkmark.circle.fill"/><path d="M632.5 174.5 l3.5 3.5 6.5 -7" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- mode card 2: a Button — the whole card selects -->
+        <rect x="136.5" y="242.5" width="527" height="83" rx="16" fill="#FFFFFF"/>
+        <rect x="150.5" y="256.5" width="34" height="34" rx="9" fill="#C36A00" fill-opacity="0.12"/>
+        <g fill="none" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" data-symbol="crop"><path d="M162.5 264.5 v14 h14 M158.5 268.5 h14 v14"/></g>
+        <text x="196.5" y="271.5" font-size="16" class="sb" fill="#000">Stack, crop to fill</text>
+        <text x="196.5" y="292.0" font-size="13" fill="#6D6D72">The same stack, cropped to what every photo covers. No black</text>
+        <text x="196.5" y="308.5" font-size="13" fill="#6D6D72">— but one off-centre shape crops everyone.</text>
+        <circle cx="637.5" cy="269.5" r="10" fill="none" stroke="#6D6D72" stroke-opacity="0.5" stroke-width="1.6" data-symbol="circle"/>
+        <!-- mode card 3: a Button — the whole card selects -->
+        <rect x="136.5" y="337.5" width="527" height="83" rx="16" fill="#FFFFFF"/>
+        <rect x="150.5" y="351.5" width="34" height="34" rx="9" fill="#C36A00" fill-opacity="0.12"/>
+        <g fill="none" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" data-symbol="viewfinder.rectangular"><path d="M159.5 365.5 v-4 a1.5 1.5 0 0 1 1.5 -1.5 h4 M170.0 360.0 h4 a1.5 1.5 0 0 1 1.5 1.5 v4 M175.5 371.5 v4 a1.5 1.5 0 0 1 -1.5 1.5 h-4 M165.0 377.0 h-4 a1.5 1.5 0 0 1 -1.5 -1.5 v-4"/></g>
+        <text x="196.5" y="366.5" font-size="16" class="sb" fill="#000">Output frame</text>
+        <text x="196.5" y="387.0" font-size="13" fill="#6D6D72">Pick the frame; the face is put at a chosen size and place in every</text>
+        <text x="196.5" y="403.5" font-size="13" fill="#6D6D72">photo; what won't fill it is flagged.</text>
+        <circle cx="637.5" cy="364.5" r="10" fill="none" stroke="#6D6D72" stroke-opacity="0.5" stroke-width="1.6" data-symbol="circle"/>
+        <text x="136.5" y="445" font-size="12" fill="#6D6D72">Canvas 3274×4924 holds every photo; the shape is 398 px across.</text>
+      </g>
+      <g id="bottombar">
+        <rect x="120" y="653" width="560" height="78.5" fill="#C36A00" fill-opacity="0.06"/>
+        <rect x="513.5" y="670.5" width="150" height="44" rx="8" fill="#C36A00"/>
+        <text x="588.5" y="697.5" font-size="15" class="sb" text-anchor="middle" fill="#FFFFFF">Next · timing</text>
+      </g>
+
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="758" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation sheet · builder · Mode — three mode cards, Stack, fit in frame chosen · 760×680 pt window, 560 pt sheet</text>
+  <text x="400" y="776" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationModeView) — LL_SHAPEMATION=build LL_CHIPS=tram on the tram clone, 2026-09-20; the Output-frame choice is desc-only</text>
+</svg>

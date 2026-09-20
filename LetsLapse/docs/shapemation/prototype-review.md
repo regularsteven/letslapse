@@ -229,8 +229,10 @@ narrower — as the grouping key.
     then *prefers* the biggest jumps. The tram never hits it because its shape
     is wider than tall in a portrait frame. Define the share on each axis as a
     fraction of the frame's own extent, `s = max(w ÷ W, h ÷ H)`: bounded by 1
-    for any shape inside its frame, and identical to today's number for the
-    tram. §6, Q2.
+    for any shape inside its frame. The tram's face is taller than wide, so
+    its long side runs along the frame's long edge and it reads about a
+    quarter lower than today (976 ÷ 4032, not 976 ÷ 3024); the size order of
+    a one-orientation set is unchanged. §6, Q2.
 12. Small: `support.js` loads React and Babel from unpkg, so the "runs from
     the repo with no build" prototype needs a network; `github.md` names branch
     `main` — the design docs live on `ios-app`, `main` is the Pi project; the
@@ -285,8 +287,10 @@ square-shot manhole set would have Source 1:1.
 
 **Q2 · A bounded share.** A fix to confirm, not a choice (§4, fault 11):
 `s = max(w ÷ W, h ÷ H)`. It changes the Projects row's "% of the frame" for
-tall shapes in portrait frames and wide shapes in landscape ones, nothing for
-the trams.
+every shape whose long side runs along the frame's long edge — a door in a
+portrait photo, and the tram's face, which is taller than wide (about a
+quarter lower); a shape whose long side runs along the short edge is
+unchanged.
 
 **Q3 · The crop line is a tolerance.** Rule: flag and reject are a
 per-sequence setting with named levels, the way Match has strictness —

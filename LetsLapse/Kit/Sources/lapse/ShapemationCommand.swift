@@ -26,6 +26,7 @@ func shapemationSort(named name: String) -> ShapemationSort? {
     case "largest": return .largestFirst
     case "smallest": return .smallestFirst
     case "capture": return .captureOrder
+    case "alignment": return .alignment
     default: return nil
     }
 }
@@ -188,6 +189,25 @@ struct ShapemationPlanJSON: Codable {
         var target: [Double]
         var targetSizePx: Double
         var feasibility: ShapemationFeasibilityJSON
+        /// `.leastCrop` only: the crop paid, the loss, the badge, the output window over the source (unit coordinates).
+        var crop: Double?
+        var loss: Double?
+        var verdict: String?
+        var window: [Double]?
+    }
+    /// `.leastCrop` only: the board's numbers and its rejects.
+    struct LeastCrop: Codable {
+        var members: Int
+        var rejected: [String]
+        var flagged: Int
+        var red: Int
+        var meanCrop: Double
+        var meanLoss: Double
+        var renderedJump: Double
+        var largestStep: Double
+        var sumJ: Double
+        var floorHit: Bool
+        var settings: ShapemationLeastCrop.Settings
     }
     var mode: String
     var family: String?
@@ -200,6 +220,7 @@ struct ShapemationPlanJSON: Codable {
     var framing: ShapemationFramingJSON?
     var flaggedShort: Int
     var flaggedUpscaled: Int
+    var leastCrop: LeastCrop?
     var items: [Item]
     var dropped: [ShapemationDroppedJSON]
 }
@@ -251,6 +272,8 @@ struct ShapemationPlanContext {
     var dropped: [ShapemationDroppedJSON]
     /// `.frame` only: the framing the plan was asked for.
     var framing: ShapemationFraming?
+    /// `.leastCrop` only: the board's settings the plan was asked for.
+    var leastCrop: ShapemationLeastCrop.Settings?
 
     var placedItems: [ShapemationItem] {
         guard let plan else { return [] }
@@ -260,7 +283,7 @@ struct ShapemationPlanContext {
 }
 
 func shapemationBuildPlan(projects: [String], mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort,
-                          framing: ShapemationFraming? = nil) -> ShapemationPlanContext {
+                          framing: ShapemationFraming? = nil, leastCrop: ShapemationLeastCrop.Settings? = nil) -> ShapemationPlanContext {
     var items: [ShapemationItem] = []
     var folders: [UUID: URL] = [:]
     var dropped: [ShapemationDroppedJSON] = []
@@ -286,11 +309,16 @@ func shapemationBuildPlan(projects: [String], mode: ShapemationMode, family: Det
         }
         let id = shapemationItemID(for: label)
         folders[id] = folder
+        // The order given is the capture order (the CLI never reads createdAt).
         items.append(ShapemationItem(id: id, title: label, imageURL: folder.appendingPathComponent(register.representative.relativePath),
-                                     pixelSize: register.frameSize, shape: shape, frameFraction: register.representative.frameFraction))
+                                     pixelSize: register.frameSize, shape: shape, frameFraction: register.representative.frameFraction,
+                                     captureIndex: items.count))
     }
     let sorted = sort.sorted(items)
-    let plan = sorted.isEmpty ? nil : ShapemationPlan.make(items: sorted, mode: mode, match: match, framing: framing)
+    // Under `.leastCrop` the board sorts for itself, by the settings' sort.
+    var settings = leastCrop
+    settings?.sort = sort
+    let plan = sorted.isEmpty ? nil : ShapemationPlan.make(items: sorted, mode: mode, match: match, framing: framing, leastCrop: settings)
     if let plan {
         // Unreachable while `make`'s only silent skip is the majorPx check
         // above; kept so a new skip in `make` can never lose a project quietly.
@@ -301,7 +329,24 @@ func shapemationBuildPlan(projects: [String], mode: ShapemationMode, family: Det
     } else {
         for item in sorted { dropped.append(.init(project: item.title, reason: "plan returned nil")) }
     }
-    return ShapemationPlanContext(mode: mode, family: family, sort: sort, items: sorted, folders: folders, plan: plan, dropped: dropped, framing: framing)
+    return ShapemationPlanContext(mode: mode, family: family, sort: sort, items: sorted, folders: folders, plan: plan, dropped: dropped,
+                                  framing: framing, leastCrop: settings)
+}
+
+/// The least-crop board's numbers in one line, for the plan header and the
+/// render's tally: members, rejects, flags, mean crop and loss, the jump.
+func shapemationLeastCropLine(_ board: ShapemationLeastCrop.Board, settings: ShapemationLeastCrop.Settings) -> String {
+    String(format: "  least crop · rect %.0f×%.0f · %@ · window %d · %@ ends · %@ · %@ · mean crop %.1f %% · mean loss %.1f %% · jump %.2f (largest step %.3f) · Σ J %.2f%@",
+           settings.outputSize.width, settings.outputSize.height, settings.tolerance.rawValue, settings.window, settings.ends.rawValue,
+           settings.autoReject ? (settings.fixpoint ? "fixpoint" : "one pass") : "auto-reject off",
+           board.countLine, board.meanCrop * 100, board.meanLoss * 100, board.renderedJump, board.largestStep, board.sumJ,
+           board.floorHit ? " · floor hit" : "")
+}
+
+/// The crop column of the plan table under `.leastCrop`: `crop 24 % · L 29 % · amber`.
+func shapemationCropColumn(_ row: ShapemationLeastCrop.Row) -> String {
+    String(format: "crop %.0f %% · L %.0f %% · %@%@", row.evaluation.crop * 100, row.evaluation.loss * 100, row.verdict.rawValue,
+           row.key != nil ? " · key" : "")
 }
 
 func shapemationPlanJSON(_ context: ShapemationPlanContext) -> ShapemationPlanJSON {
@@ -313,9 +358,19 @@ func shapemationPlanJSON(_ context: ShapemationPlanContext) -> ShapemationPlanJS
                      footprint: [Double(p.footprint.minX), Double(p.footprint.minY), Double(p.footprint.width), Double(p.footprint.height)],
                      placed: ShapemationPlacedJSON(shape: item.shape, frame: item.pixelSize, through: p.transform),
                      target: [Double(p.target.x), Double(p.target.y)], targetSizePx: p.targetSizePx,
-                     feasibility: ShapemationFeasibilityJSON(p.feasibility))
+                     feasibility: ShapemationFeasibilityJSON(p.feasibility),
+                     crop: p.crop?.evaluation.crop, loss: p.crop?.evaluation.loss, verdict: p.crop?.verdict.rawValue,
+                     window: p.crop.map { [Double($0.evaluation.window.minX), Double($0.evaluation.window.minY),
+                                           Double($0.evaluation.window.width), Double($0.evaluation.window.height)] })
     }
     let tally = plan?.feasibilitySummary ?? (short: 0, upscaled: 0)
+    let leastCrop: ShapemationPlanJSON.LeastCrop? = (plan?.leastCrop).flatMap { board in
+        guard let settings = plan?.leastCropSettings else { return nil }
+        return .init(members: board.rows.count, rejected: board.rejected.map { byID[$0.id]?.title ?? $0.id.uuidString },
+                     flagged: board.flagged, red: board.red, meanCrop: board.meanCrop, meanLoss: board.meanLoss,
+                     renderedJump: board.renderedJump, largestStep: board.largestStep, sumJ: board.sumJ, floorHit: board.floorHit,
+                     settings: settings)
+    }
     return ShapemationPlanJSON(
         mode: context.mode.rawValue, family: context.family?.rawValue, sort: context.sort.rawValue,
         shapeSizePx: plan?.shapeSizePx ?? 0,
@@ -323,7 +378,7 @@ func shapemationPlanJSON(_ context: ShapemationPlanContext) -> ShapemationPlanJS
         canvas: plan.map { [Double($0.canvas.width), Double($0.canvas.height)] } ?? [0, 0],
         unionCanvas: plan.map { [Double($0.unionCanvas.width), Double($0.unionCanvas.height)] } ?? [0, 0],
         framing: (plan?.framing ?? context.framing).map(ShapemationFramingJSON.init),
-        flaggedShort: tally.short, flaggedUpscaled: tally.upscaled,
+        flaggedShort: tally.short, flaggedUpscaled: tally.upscaled, leastCrop: leastCrop,
         items: items, dropped: context.dropped)
 }
 
@@ -352,6 +407,15 @@ func printShapemationPlanHeader(_ context: ShapemationPlanContext, placed: Int? 
     let dropped = dropped ?? context.dropped.count
     say("shapemation plan · \(context.mode.rawValue) · \(family) · sort \(context.sort.rawValue) · \(placed) placed · \(dropped) dropped")
     if let framing = context.plan?.framing ?? context.framing { say("  " + shapemationFramingLine(framing)) }
+    if let board = context.plan?.leastCrop, let settings = context.plan?.leastCropSettings {
+        say(shapemationLeastCropLine(board, settings: settings))
+        if !board.rejected.isEmpty {
+            let byID = Dictionary(context.items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            say("  rejected: " + board.rejected.map { r in
+                String(format: "%@ (crop %.0f %%%@)", byID[r.id]?.title ?? r.id.uuidString, r.evaluation.crop * 100, r.rejectedByHand ? ", by hand" : "")
+            }.joined(separator: " · "))
+        }
+    }
     if let plan = context.plan {
         say(String(format: "  shape %.1f px at (%.1f, %.1f) · canvas %.0f×%.0f · union %.0f×%.0f", plan.shapeSizePx, plan.anchor.x, plan.anchor.y,
                    plan.canvas.width, plan.canvas.height, plan.unionCanvas.width, plan.unionCanvas.height))
@@ -446,8 +510,8 @@ func runShapemationStage(scenes: [String], out: String, link: Bool, project writ
 // MARK: - plan
 
 func runShapemationPlan(projects: [String], mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort,
-                        framing: ShapemationFraming?, jsonPath: String?) throws {
-    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort, framing: framing)
+                        framing: ShapemationFraming?, leastCrop: ShapemationLeastCrop.Settings?, jsonPath: String?) throws {
+    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort, framing: framing, leastCrop: leastCrop)
     if let jsonPath {
         try writeShapemationJSON(shapemationPlanJSON(context), to: jsonPath)
         return
@@ -469,10 +533,12 @@ func runShapemationPlan(projects: [String], mode: ShapemationMode, family: Detec
             print("  \(padded("\(n + 1)", 3)) \(padded(item.title, 36)) "
                   + String(format: "%6.3f   %7.1f, %7.1f, %6.0f×%-6.0f   ", p.scale,
                            p.footprint.minX, p.footprint.minY, p.footprint.width, p.footprint.height)
-                  + padded(placedText, 20) + " " + padded(targetText, 22) + " " + shapemationVerdictColumn(p.feasibility))
+                  + padded(placedText, 20) + " " + padded(targetText, 22) + " " + (p.crop.map(shapemationCropColumn) ?? shapemationVerdictColumn(p.feasibility)))
         }
-        let tally = plan.feasibilitySummary
-        print(shapemationTallyLine(short: tally.short, upscaled: tally.upscaled))
+        if plan.mode != .leastCrop {
+            let tally = plan.feasibilitySummary
+            print(shapemationTallyLine(short: tally.short, upscaled: tally.upscaled))
+        }
     }
     printShapemationDropped(context.dropped)
 }
@@ -480,8 +546,8 @@ func runShapemationPlan(projects: [String], mode: ShapemationMode, family: Detec
 // MARK: - score
 
 func runShapemationScore(projects: [String], mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort,
-                         framing: ShapemationFraming?, jsonPath: String?) throws {
-    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort, framing: framing)
+                         framing: ShapemationFraming?, leastCrop: ShapemationLeastCrop.Settings?, jsonPath: String?) throws {
+    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort, framing: framing, leastCrop: leastCrop)
     var dropped = context.dropped
     var truths: [UUID: SceneManifest.Geometry] = [:]
     for item in context.placedItems {
@@ -598,8 +664,9 @@ func shapemationOutputSize(plan: ShapemationPlan, longEdge: Double) -> CGSize {
 /// The clip: `plan`'s layout through `ShapemationRenderer` with the
 /// Timing step's answer, every representative decoded as it reads.
 func runShapemationRender(projects: [String], out: String, mode: ShapemationMode, family: DetectedShape.Family?, sort: ShapemationSort,
-                          timing: ShapemationTiming, longEdge: Double, framing: ShapemationFraming?, jsonPath: String?) throws {
-    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort, framing: framing)
+                          timing: ShapemationTiming, longEdge: Double, framing: ShapemationFraming?,
+                          leastCrop: ShapemationLeastCrop.Settings?, jsonPath: String?) throws {
+    let context = shapemationBuildPlan(projects: projects, mode: mode, family: family, sort: sort, framing: framing, leastCrop: leastCrop)
     if let jsonPath { try writeShapemationJSON(shapemationPlanJSON(context), to: jsonPath) }
     printShapemationPlanHeader(context, say: { printErr($0) })
     printShapemationDropped(context.dropped, say: { printErr($0) })
@@ -607,7 +674,7 @@ func runShapemationRender(projects: [String], out: String, mode: ShapemationMode
     let items = context.placedItems
     // Under `.frame` the canvas IS the output rect: the clip is written at
     // the framing's size and --size has no say.
-    let outputSize = plan.framing?.outputSize ?? shapemationOutputSize(plan: plan, longEdge: longEdge)
+    let outputSize = plan.framing?.outputSize ?? plan.leastCropSettings?.outputSize ?? shapemationOutputSize(plan: plan, longEdge: longEdge)
     printErr("  \(timing.summary) · \(timing.estimate(count: items.count)) · output \(Int(outputSize.width))×\(Int(outputSize.height))")
     if plan.mode == .frame {
         let tally = plan.feasibilitySummary
@@ -634,7 +701,7 @@ func runShapemationRender(projects: [String], out: String, mode: ShapemationMode
 
 func runShapemation(subcommand: String, args: [String], out: String?, link: Bool, project: Bool, mode: ShapemationMode,
                     family: DetectedShape.Family?, sort: ShapemationSort?, timing: ShapemationTiming, longEdge: Double,
-                    framing: ShapemationFraming?, jsonPath: String?) throws {
+                    framing: ShapemationFraming?, leastCrop: ShapemationLeastCrop.Settings? = nil, jsonPath: String?) throws {
     switch subcommand {
     case "stage":
         guard let out else { fail("shapemation stage needs --out <projects-dir>") }
@@ -642,10 +709,12 @@ func runShapemation(subcommand: String, args: [String], out: String?, link: Bool
         try runShapemationStage(scenes: args, out: out, link: link, project: project)
     case "plan":
         guard !args.isEmpty else { fail("shapemation plan needs at least one project folder") }
-        try runShapemationPlan(projects: args, mode: mode, family: family, sort: sort ?? .largestFirst, framing: framing, jsonPath: jsonPath)
+        try runShapemationPlan(projects: args, mode: mode, family: family, sort: sort ?? (mode == .leastCrop ? .smallestFirst : .largestFirst),
+                               framing: framing, leastCrop: leastCrop, jsonPath: jsonPath)
     case "score":
         guard !args.isEmpty else { fail("shapemation score needs at least one project folder") }
-        try runShapemationScore(projects: args, mode: mode, family: family, sort: sort ?? .largestFirst, framing: framing, jsonPath: jsonPath)
+        try runShapemationScore(projects: args, mode: mode, family: family, sort: sort ?? (mode == .leastCrop ? .smallestFirst : .largestFirst),
+                                framing: framing, leastCrop: leastCrop, jsonPath: jsonPath)
     case "pack":
         guard let out else { fail("shapemation pack needs --out <dir>") }
         guard !args.isEmpty else { fail("shapemation pack needs at least one project folder") }
@@ -656,8 +725,9 @@ func runShapemation(subcommand: String, args: [String], out: String?, link: Bool
         // `.captureOrder` keeps the order given (the CLI never reads createdAt):
         // a staged sequence's zero-padded ids glob in approach order, so the
         // default plays them as shot.
-        try runShapemationRender(projects: args, out: out, mode: mode, family: family, sort: sort ?? .captureOrder,
-                                 timing: timing, longEdge: longEdge, framing: framing, jsonPath: jsonPath)
+        try runShapemationRender(projects: args, out: out, mode: mode, family: family,
+                                 sort: sort ?? (mode == .leastCrop ? .smallestFirst : .captureOrder),
+                                 timing: timing, longEdge: longEdge, framing: framing, leastCrop: leastCrop, jsonPath: jsonPath)
     default:
         fail("shapemation needs stage | plan | score | pack | render, not '\(subcommand)'")
     }

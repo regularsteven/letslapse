@@ -13,7 +13,12 @@ import LetsLapseKit
 
 enum ShapemationRoute: Hashable {
     case find
-    case build
+    /// The builder; with a record's id, opened on that record's board with
+    /// its members locked (the list's Re-render). The record rides in the
+    /// route rather than in a state the destination closure would read —
+    /// a read there is not a dependency, so the closure kept seeing nil
+    /// (2026-09-20).
+    case build(rerender: UUID? = nil)
     case list
 }
 
@@ -24,10 +29,16 @@ struct ShapemationHomeView: View {
     /// Type-erased: the builder pushes its own step values onto this stack.
     @State private var path: NavigationPath
     @State private var registerCounts: (analysed: Int, withShapes: Int, families: [DetectedShape.Family: Int])?
+    /// The Sequence board is on screen: the Mac sheet grows to 900 × 720 for it.
+    @State private var boardShowing = false
+    /// A pushed route's screen has appeared — the hook's push is verified by
+    /// this, not by the path: a push the stack swallows leaves the path
+    /// non-empty and the home screen showing (2026-09-20).
+    @State private var landed = false
 
     private let initialRoutes: [ShapemationRoute]
     /// What the builder stages once its projects have loaded (the
-    /// `LL_SHAPEMATION=family|frame` hooks); nil for a hand-driven sheet.
+    /// `LL_SHAPEMATION=family|frame|board` hooks); nil for a hand-driven sheet.
     private let builderSeed: ShapemationBuilderSeed?
 
     init(initialPath: [ShapemationRoute] = [], builderSeed: ShapemationBuilderSeed? = nil) {
@@ -54,11 +65,22 @@ struct ShapemationHomeView: View {
                 }
             }
             .navigationDestination(for: ShapemationRoute.self) { route in
-                switch route {
-                case .find: FindShapesView(onFinished: refreshCounts)
-                case .build: ShapemationBuilderView(store: store, seed: builderSeed) { path.append($0) }
-                case .list: ShapemationListView(store: store)
+                Group {
+                    switch route {
+                    case .find: FindShapesView(onFinished: refreshCounts)
+                    case .build(let rerenderID):
+                        let record = rerenderID.flatMap { id in store.records.first { $0.id == id } }
+                        ShapemationBuilderView(store: store, seed: record.map { .rerender($0) } ?? builderSeed,
+                                               push: { path.append($0) }, pop: { n in path.removeLast(min(n, path.count)) },
+                                               onBoard: { boardShowing = $0 })
+                    case .list:
+                        ShapemationListView(store: store) { record in
+                            LLog("shapemation: re-render asked for \(record.id.uuidString.prefix(8)); opening the builder on its board")
+                            path.append(ShapemationRoute.build(rerender: record.id))
+                        }
+                    }
                 }
+                .onAppear { landed = true }
             }
         }
         .onAppear(perform: refreshCounts)
@@ -70,17 +92,23 @@ struct ShapemationHomeView: View {
         // a push the stack drops is tried again while it stays empty.
         .task(id: initialRoutes) {
             guard path.isEmpty, !initialRoutes.isEmpty else { return }
-            for attempt in 1...8 {
+            for attempt in 1...4 {
                 try? await Task.sleep(nanoseconds: 350_000_000)
-                guard path.isEmpty else { return }
+                guard !landed else { return }
+                // A swallowed push leaves the path non-empty and nothing
+                // shown, and the next push renders (the door pressed by hand
+                // always lands) — so push again rather than start the path
+                // over, which leaves the sheet blank (2026-09-20).
                 for route in initialRoutes { path.append(route) }
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                if !path.isEmpty { return }
-                LLog("shapemation: the hook's push was dropped (attempt \(attempt)); trying again")
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                if landed { return }
+                LLog("shapemation: the hook's push was dropped (attempt \(attempt)); pushing again")
             }
         }
         #if os(macOS)
-        .frame(minWidth: 560, minHeight: 680)
+        .frame(width: boardShowing ? ShapemationBoardView.wideSheet.width : 560,
+               height: boardShowing ? ShapemationBoardView.wideSheet.height : 680)
+        .animation(.easeInOut(duration: 0.25), value: boardShowing)
         #endif
     }
 
@@ -95,7 +123,7 @@ struct ShapemationHomeView: View {
             door(.find, icon: "viewfinder.circle", color: LL.accent, title: "Find shapes",
                  detail: "Analyse projects not yet checked")
             Divider().padding(.leading, 58)
-            door(.build, icon: "square.stack.3d.down.right", color: Color(red: 0x6E / 255, green: 0x5A / 255, blue: 0xC8 / 255),
+            door(.build(), icon: "square.stack.3d.down.right", color: Color(red: 0x6E / 255, green: 0x5A / 255, blue: 0xC8 / 255),
                  title: "Create shape slideshow", detail: "Filter by tag, pick the shape, the projects, and a mode")
             Divider().padding(.leading, 58)
             door(.list, icon: "list.and.film", color: LL.accentDeep, title: "List Shape-mations",

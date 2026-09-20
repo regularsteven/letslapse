@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Shape-mation · builder · Output frame · portrait</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationOutputView under the Output frame mode (frameCard, the scrubCard's top edge, ShapemationFacePlacePicker; docs/shapemation/output-frame.md §6). Code first 2026-09-19 (Steven's call); mirrored 2026-09-20 from the Debug build on the iPhone 16 Pro simulator over an APFS clone of the tram library — LL_SHAPEMATION=build LL_CHIPS=tram, then Next · shape → Rectangle → Next · projects → Pick all → Next · mode → Output frame → Next · timing → Next · output, at the step's defaults — the copy checked against the Mac Debug build's AX dump. The same pushed screen as shapemation.builder.output.portrait.svg (back "Timing", large title "Output") but a different body: the heading "Output frame" (17 semibold) and one explanatory 13-pt secondary paragraph, "Every photo is scaled and placed to put its rectangle here. One that cannot reach the frame's edges, or would be blown up to, is flagged and kept." (the family's word in it; wrapped as the phone wraps it). Then ONE white card (radius 16, 16-pt padding) in the Match step's label-above grammar: ASPECT — capsule chips 1:1 · 4:5 · 3:2 · 16:9 · 2:3 · 9:16 (29 pt, 13-pt labels, E9E9EB, the chosen one accent with white text; 16:9 is the default, the row wraps after 2:3 on a 402-pt phone); SIZE — the label (15) with the even W×H "1 920×1 080" in 13 secondary and a .menu Picker of the long edge (1080 · 1920 · 2160, 15 secondary "1 920" with chevron.up.chevron.down) trailing; FACE SIZE — two rows, "Start 25 % of the height" and "End 25 % · Same", each with a Stepper (10–80 % by 5; the plain iOS stepper, 93×31.7, ECECED, a hairline between − and +); End reads "· Same" and follows Start until touched; FACE PLACE — two nine-point pickers side by side, each a 96-pt-wide frame in the output's aspect (96×54 at 16:9, E9E9EB, radius 10) with dots at x 0.25 · 0.5 · 0.75 × y 0.30 · 0.55 · 0.80 (grey 8.6 pt, the chosen one accent 13.6 pt), labelled "Start" and "End · Same" (12 secondary, centred under each); the middle dot is the Kit's default (0.5, 0.55); EASE — a segmented Linear / Ease in and out (E9E9EB track, white knob, 13 semibold on the knob). Under the card the SCRUB card begins — its black preview just showing at the foot of the screen; the whole of it, the estimate lines and Create are in shapemation.builder.output.frame.scrub.portrait.svg (the same screen scrolled to its end). Measured from the 402×874-pt simulator capture and re-anchored to this 393×852 canvas as the other builder steps are: top-anchored content follows the 59-pt safe top (the capture's 62), the card keeps its 16-pt margins so its trailing controls sit 9 pt further left; the sheet's top at safe-top + 10 (69).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
+    <filter id="knob" x="-10%" y="-30%" width="120%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.12"/></filter>
+    <!-- a nine-point face-place picker, 96×54 (16:9): dots at x 0.25/0.5/0.75 × y 0.30/0.55/0.80; the chosen one accent -->
+    <symbol id="face-place-16x9" overflow="visible">
+      <rect width="96" height="54.7" rx="10" fill="#E9E9EB"/>
+      <g fill="#C3C3C6">
+        <circle cx="24" cy="16.4" r="4.3"/><circle cx="48" cy="16.4" r="4.3"/><circle cx="72" cy="16.4" r="4.3"/>
+        <circle cx="24" cy="30.1" r="4.3"/><circle cx="72" cy="30.1" r="4.3"/>
+        <circle cx="24" cy="43.8" r="4.3"/><circle cx="48" cy="43.8" r="4.3"/><circle cx="72" cy="43.8" r="4.3"/>
+      </g>
+      <circle cx="48" cy="30.1" r="6.8" fill="#C36A00" data-selected="true"/>
+    </symbol>
+    <!-- the plain iOS Stepper -->
+    <symbol id="stepper" overflow="visible">
+      <rect width="93" height="31.7" rx="8" fill="#ECECED"/>
+      <line x1="46.5" y1="6" x2="46.5" y2="25.7" stroke="#D2D2D4" stroke-width="1"/>
+      <path d="M17 15.85 H29" stroke="#1C1C1E" stroke-width="2" stroke-linecap="round" data-symbol="minus"/>
+      <path d="M64 15.85 H76 M70 9.85 V21.85" stroke="#1C1C1E" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
+    </symbol>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.sec{fill:#6D6D72}.ter{fill:#C4C4C7}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar over the shrunken Create tab behind the sheet -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="59" width="361" height="30" rx="10" fill="#D5D5D9"/>
+
+      <!-- the sheet -->
+      <g id="shapemation-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
+
+        <g id="nav-bar">
+          <path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="30" y="103" font-size="17" fill="#C36A00">Timing</text>
+          <text x="16" y="161" font-size="34" class="b" fill="#000">Output</text>
+        </g>
+
+        <text x="16" y="209" font-size="17" class="sb" fill="#000">Output frame</text>
+        <g id="intro" font-size="13" class="sec">
+          <text x="16" y="237.3">Every photo is scaled and placed to put its rectangle here.</text>
+          <text x="16" y="253">One that cannot reach the frame's edges, or would be blown</text>
+          <text x="16" y="268.7">up to, is flagged and kept.</text>
+        </g>
+
+        <!-- the frame card: Aspect · Size · Face size · Face place · Ease -->
+        <g id="frame-card">
+          <rect x="16" y="284" width="361" height="474.7" rx="16" fill="#FFF"/>
+
+          <g id="aspect">
+            <text x="32" y="313" font-size="14" fill="#000">Aspect</text>
+            <g font-size="13" fill="#000" text-anchor="middle">
+              <rect x="32" y="325.3" width="44" height="29" rx="14.5" fill="#E9E9EB"/><text x="54" y="344.3">1:1</text>
+              <rect x="84" y="325.3" width="48" height="29" rx="14.5" fill="#E9E9EB"/><text x="108" y="344.3">4:5</text>
+              <rect x="140" y="325.3" width="48" height="29" rx="14.5" fill="#E9E9EB"/><text x="164" y="344.3">3:2</text>
+              <g id="chip-16x9" data-selected="true"><rect x="196" y="325.3" width="56" height="29" rx="14.5" fill="#C36A00"/><text x="224" y="344.3" class="sb" fill="#FFF">16:9</text></g>
+              <rect x="260" y="325.3" width="47" height="29" rx="14.5" fill="#E9E9EB"/><text x="283.5" y="344.3">2:3</text>
+              <rect x="32" y="362.7" width="54" height="29" rx="14.5" fill="#E9E9EB"/><text x="59" y="381.7">9:16</text>
+            </g>
+          </g>
+
+          <g id="size" data-control="Picker(.menu)">
+            <text x="32" y="430" font-size="15" fill="#000">Size</text>
+            <text x="269" y="429" font-size="13" class="sec" text-anchor="end">1 920×1 080</text>
+            <text x="337" y="430" font-size="15" class="sec" text-anchor="end">1 920</text>
+            <path d="M345 422.5 l3 -3 3 3 M345 428.5 l3 3 3 -3" stroke="#6D6D72" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
+          </g>
+
+          <g id="face-size">
+            <text x="32" y="472" font-size="14" fill="#000">Face size</text>
+            <text x="32" y="504" font-size="15" fill="#000">Start 25 % of the height</text>
+            <use href="#stepper" x="268" y="483.7" data-control="Stepper"/>
+            <text x="32" y="544" font-size="15" fill="#000">End 25 % · Same</text>
+            <use href="#stepper" x="268" y="523.7" data-control="Stepper"/>
+          </g>
+
+          <g id="face-place" data-control="ShapemationFacePlacePicker">
+            <text x="32" y="585" font-size="14" fill="#000">Face place</text>
+            <use href="#face-place-16x9" x="32" y="596.7"/>
+            <use href="#face-place-16x9" x="152" y="596.7"/>
+            <g font-size="12" class="sec" text-anchor="middle">
+              <text x="80" y="667">Start</text>
+              <text x="200" y="667">End · Same</text>
+            </g>
+          </g>
+
+          <g id="ease" data-control="Picker(.segmented)">
+            <text x="32" y="700" font-size="14" fill="#000">Ease</text>
+            <rect x="32" y="712" width="329" height="32" rx="8" fill="#E9E9EB"/>
+            <rect x="34" y="714" width="163" height="28" rx="7" fill="#FFF" filter="url(#knob)"/>
+            <g font-size="13" fill="#000" text-anchor="middle">
+              <text x="115.5" y="732.5" class="sb">Linear</text>
+              <text x="279" y="732.5">Ease in and out</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- the scrub card begins: its black 16:9 preview just shows above the fold (whole card in the .scrub file) -->
+        <g id="scrub-card-top">
+          <rect x="16" y="771" width="361" height="120" rx="16" fill="#FFF"/>
+          <rect x="32" y="787" width="329" height="185" rx="8" fill="#000"/>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · Output frame · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationOutputView (frameCard) — Aspect 16:9 · Size 1 920 · Face size 25 % · Face place centre · Ease Linear · the scrub card below the fold</text>
+</svg>

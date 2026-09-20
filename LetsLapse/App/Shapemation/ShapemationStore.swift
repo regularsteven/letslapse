@@ -46,6 +46,24 @@ final class ShapemationStore: ObservableObject {
         /// was lit, and on records from before the step existed.
         var filterTags: [String]?
         var filterText: String?
+        /// The Sequence board's answer a `.leastCrop` render was made with
+        /// (docs/shapemation/prototype-review.md); nil under the other modes
+        /// and on records from before the board. Its own decoder is tolerant.
+        var leastCrop: ShapemationLeastCrop.Settings?
+        /// The members as rendered — each photo's shape a snapshot, its
+        /// capture order, whether the board rejected it — so Re-render can
+        /// rebuild the board whatever the registers say later. Nil on records
+        /// from before the board and under the stack modes.
+        var members: [Member]?
+
+        struct Member: Codable, Equatable {
+            var id: UUID
+            var title: String
+            var frame: CGSize
+            var shape: DetectedShape
+            var captureIndex: Int
+            var rejected: Bool
+        }
 
         var subtitle: String {
             var line = "\(match?.summary ?? family.title) · \(modeWord) · \(itemCount) photo\(itemCount == 1 ? "" : "s") · \(width)×\(height)"
@@ -67,6 +85,7 @@ final class ShapemationStore: ObservableObject {
             case .stack: return "fit"
             case .crop: return "crop"
             case .frame: return "frame"
+            case .leastCrop: return "least crop"
             }
         }
     }

@@ -1,0 +1,112 @@
+<svg viewBox="0 0 800 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · builder · Output step · done card (sheet) · 760×680</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationOutputView.doneCard after a render lands (builder.rendered set), with ShapemationPosterView from App/Shapemation/ShapemationListView.swift — in the Mac's 560-wide Shape-mation sheet over the Create tab. Drawn 2026-09-20, mirrored from the Debug build on the tram clone: the Output step's Create pressed by AX (axsheetpress 'Create Shape-mation' — the plain ax press hits the Create page's own door first) over the 4-project Tatra T3 selection (LL_SHAPEMATION=build LL_CHIPS=tram, then the Tatra T3 tag chip; chips intersect, and Tatra T3 holds four rectangle projects) in FRAME mode at 9:16 · 1 080 × 1 920 · face 25 % centre → centre · Linear · 25 fps · 1 s; capture builder.done.png + AX dump. The render finished in under 1.5 s, so the progressCard between Create and this state ('Rendering n of N' 15/600 over an accent ProgressView and the current title 12 secondary) was never on screen — no mirror, no capture. The step keeps its 'Output' nav title and Back; the size list / frame card, estimate and Create are gone — the done card is the whole content. DONE CARD (llCard radius 18, 527×363 at y 118.5, 16 pt padding, 12 pt spacing): the POSTER — ShapemationPosterView on a black table 240 tall, full width, clipped to a 12 pt continuous radius; the 9:16 poster.jpg (1080×1920) scaledToFit inside it is 134.5 wide and centred, black pillars either side (drawn as a flat stand-in: the first photo's street, facade and the Tatra T3's cream-and-red face on the 25 % face line — never a PNG); the record's TITLE 15/600 'Rectangle · 20. 9. 2026 at 13:40' (family · date); the SUBTITLE 12 secondary 'Tatra T3 · Rectangle Any · Normal · frame · 4 photos · 1080×1920 · 25 fps · 1 s each' (the filter's tag · family + match · sort · mode · count · size · timing); then PLAY (borderedProminent, accent, play.fill + 'Play' 13/500 white, 69×23.5) and SHARE (bordered ShareLink on the movie file — on the Mac a tinted 7 % accent capsule-cornered button with an accent square.and.arrow.up + 'Share' 13/500, 80.5×23.5) 12 apart. Play opens ShapemationPlayerSheet (a second sheet, 640×480 min; not drawn). The same record then heads the list (shapemation.list.*): 'Rectangle · 20. 9. 2026 at 13:40', the subtitle, '4 s', Play · Share · Delete. Same screen on iOS: ../iOS/shapemation.builder.done.portrait.svg (2026-09-11: a Circle render at its native canvas, before frame mode).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <clipPath id="sheet"><rect x="120" y="52" width="560" height="679.5" rx="10"/></clipPath>
+    <clipPath id="content"><rect x="120" y="100" width="560" height="631.5"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <filter id="knob" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.25"/></filter>
+    <clipPath id="poster"><rect x="152" y="131.5" width="495.5" height="239.5" rx="12"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums;font-family:'SF Mono', Menlo, monospace}</style>
+
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- The sheet: 560 pt wide, its top under the title bar, 679.5 tall — taller than the
+       680 pt window, so its foot overhangs the window's bottom edge by 31.5 pt as captured. -->
+  <g id="sheet">
+    <rect x="120" y="52" width="560" height="679.5" rx="10" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+    <g clip-path="url(#sheet)">
+      <g id="navbar">
+        <rect x="120" y="52" width="560" height="47.5" fill="#FFFFFF"/>
+        <line x1="120" y1="99.75" x2="680" y2="99.75" stroke="#000" stroke-opacity="0.14" stroke-width="0.5"/>
+        <circle cx="144" cy="76" r="14.5" fill="#C36A00"/>
+        <path d="M146.5 70.5 l-5.5 5.5 5.5 5.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+        <text x="168.5" y="80.5" font-size="13" class="b" fill="#000">Output</text>
+      </g>
+      <g id="content" clip-path="url(#content)">
+        <!-- doneCard (llCard radius 18, 16 pt padding): ShapemationPosterView 240 tall in a 12-pt-radius clip, title, subtitle, Play · Share -->
+        <rect x="136.5" y="118.5" width="527" height="363" rx="18" fill="#FFFFFF"/>
+        <rect x="152" y="131.5" width="495.5" height="239.5" rx="12" fill="#000000"/>
+        <!-- the poster: the 9:16 frame's first photo — a street with the tram centred on its face (a flat stand-in for the real poster.jpg) -->
+        <g clip-path="url(#poster)">
+          <rect x="332.5" y="131.5" width="134.5" height="239.5" fill="#C9C2B8"/>
+          <rect x="332.5" y="131.5" width="134.5" height="70" fill="#5E6B58"/>
+          <rect x="402.5" y="145" width="64.5" height="120" fill="#C4B4A6"/>
+          <g fill="#5A5148"><rect x="410.5" y="160" width="8" height="12"/><rect x="428.5" y="160" width="8" height="12"/><rect x="446.5" y="160" width="8" height="12"/><rect x="410.5" y="186" width="8" height="12"/><rect x="428.5" y="186" width="8" height="12"/><rect x="446.5" y="186" width="8" height="12"/></g>
+          <rect x="332.5" y="240" width="134.5" height="131" fill="#8F8B87"/>
+          <rect x="332.5" y="250" width="134.5" height="2" fill="#B8B4AE"/>
+          <path d="M372.5 371 L394.5 262 L412.5 262 L428.5 371 Z" fill="#A19C96"/>
+          <rect x="362.5" y="205" width="52" height="66" rx="5" fill="#E9E1CF"/>
+          <rect x="362.5" y="238" width="52" height="33" rx="3" fill="#B23A2E"/>
+          <rect x="367.5" y="211" width="42" height="17" rx="2" fill="#3B4650"/>
+          <rect x="370.5" y="200" width="36" height="6" fill="#7D756C"/>
+          <g fill="#F4E7A6"><circle cx="369.5" cy="246" r="2.5"/><circle cx="407.5" cy="246" r="2.5"/></g>
+        </g>
+        <text x="152.5" y="399" font-size="15" class="sb" fill="#000">Rectangle · 20. 9. 2026 at 13:40</text>
+        <text x="152.5" y="427" font-size="12" fill="#6D6D72">Tatra T3 · Rectangle Any · Normal · frame · 4 photos · 1080×1920 · 25 fps · 1 s each</text>
+        <!-- Play (borderedProminent, play.fill) · Share (bordered ShareLink, square.and.arrow.up) -->
+        <rect x="152" y="442.5" width="69" height="23.5" rx="6" fill="#C36A00"/>
+        <path d="M165 448.5 l9 5.75 -9 5.75 z" fill="#FFFFFF" data-symbol="play.fill"/>
+        <text x="180" y="459" font-size="13" class="m" fill="#FFFFFF">Play</text>
+        <rect x="233.5" y="442.5" width="80.5" height="23.5" rx="6" fill="#C36A00" fill-opacity="0.07"/>
+        <g fill="none" stroke="#C36A00" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" data-symbol="square.and.arrow.up"><path d="M249 453.5 v6.5 a1.5 1.5 0 0 0 1.5 1.5 h9 a1.5 1.5 0 0 0 1.5 -1.5 v-6.5 M255 458 v-11 M251.5 450.5 l3.5 -3.5 3.5 3.5"/></g>
+        <text x="267" y="459" font-size="13" class="m" fill="#C36A00">Share</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="758" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation sheet · builder · Output — the done card: Rectangle · Tatra T3 · frame · 4 photos · 1080×1920, Play · Share · 760×680 pt window, 560 pt sheet</text>
+  <text x="400" y="776" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/ShapemationBuilderView.swift (ShapemationOutputView.doneCard) + ShapemationListView.swift (ShapemationPosterView) — rendered on the tram clone 2026-09-20 at 13:40</text>
+</svg>

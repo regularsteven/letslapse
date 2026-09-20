@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Shape-mation · builder · mode · portrait</title>
-  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationModeView, the Mode step of the Shape-mation slideshow builder (2026-09-11, code first, mirrored from the running app; redrawn 2026-09-20 from the Debug build on the iPhone 16 Pro simulator over an APFS clone of the tram library — LL_SHAPEMATION=build LL_CHIPS=tram, then Next · shape → Rectangle → Next · projects → Pick all → Next · mode — the copy checked against the Mac Debug build's AX dump). Pushed from the projects step inside the Shape-mation sheet, which owns its NavigationStack the way Presets does; back reads the family's plural ("Rectangles"), large title "Mode". The question reads "How should the photos be laid out?" (since 2026-09-20 — the third card does not stack) then one card per ShapemationMode: "Stack, fit in frame" (selected — accent-filled 34-pt icon tile, rectangle.stack in white, checkmark.circle.fill trailing), "Stack, crop to fill" (the same tile at accent 12%, crop glyph in accent, an empty ring trailing) and — NEW 2026-09-19 (docs/shapemation/output-frame.md §6) — "Output frame" (viewfinder.rectangular in accent on the 12% tile; "Pick the frame; the face is put at a chosen size and place in every photo; what won't fill it is flagged."), each with its Kit summary wrapped as the app wraps it. Under the cards the plan summary in 12-pt secondary — for the stack modes the canvas the stack needs and the locked shape's size ("Canvas 3274×4924 holds every photo; the shape is 398 px across." over the 83 tram rectangles, wrapped after "398"); with Output frame chosen it reads "Frame 1920×1080; the shape is 270 px across; 82 photos flagged — see Output." (shapemation.builder.mode.frame.portrait.svg). The bottom safeAreaInset bar is regularMaterial with the "Next · timing" borderedProminent button trailing (disabled when the plan is nil, which crop mode can be); it read "Next · output" before the Timing step went in on 2026-09-11. Measured from the 402×874-pt capture mapped to this 393×852 canvas: top-anchored content follows the 59-pt safe top (the capture's 62), the bar follows the 34-pt bottom, cards keep their 16-pt margins. The sheet's top sits at safe-top + 10 as measured (69 here).</desc>
+  <title>iOS · Shape-mation · builder · mode · Output frame · portrait</title>
+  <desc>The VARIANT of shapemation.builder.mode.portrait.svg with the third card chosen: mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationModeView, the Mode step of the Shape-mation slideshow builder (2026-09-11, code first, mirrored from the running app; redrawn 2026-09-20 from the Debug build on the iPhone 16 Pro simulator over an APFS clone of the tram library — LL_SHAPEMATION=build LL_CHIPS=tram, then Next · shape → Rectangle → Next · projects → Pick all → Next · mode — the copy checked against the Mac Debug build's AX dump). Pushed from the projects step inside the Shape-mation sheet, which owns its NavigationStack the way Presets does; back reads the family's plural ("Rectangles"), large title "Mode". The question reads "How should the photos be laid out?" (since 2026-09-20 — the third card does not stack) then one card per ShapemationMode: "Stack, fit in frame" (selected — accent-filled 34-pt icon tile, rectangle.stack in white, checkmark.circle.fill trailing), "Stack, crop to fill" (the same tile at accent 12%, crop glyph in accent, an empty ring trailing) and — NEW 2026-09-19 (docs/shapemation/output-frame.md §6) — "Output frame" (viewfinder.rectangular in accent on the 12% tile; "Pick the frame; the face is put at a chosen size and place in every photo; what won't fill it is flagged."), each with its Kit summary wrapped as the app wraps it. Under the cards the plan summary in 12-pt secondary — for the stack modes the canvas the stack needs and the locked shape's size ("Canvas 3274×4924 holds every photo; the shape is 398 px across." over the 83 tram rectangles, wrapped after "398"); with Output frame chosen it reads "Frame 1920×1080; the shape is 270 px across; 82 photos flagged — see Output." (shapemation.builder.mode.frame.portrait.svg). The bottom safeAreaInset bar is regularMaterial with the "Next · timing" borderedProminent button trailing (disabled when the plan is nil, which crop mode can be); it read "Next · output" before the Timing step went in on 2026-09-11. Measured from the 402×874-pt capture mapped to this 393×852 canvas: top-anchored content follows the 59-pt safe top (the capture's 62), the bar follows the 34-pt bottom, cards keep their 16-pt margins. The sheet's top sits at safe-top + 10 as measured (69 here).</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
@@ -34,11 +34,11 @@
 
         <text x="16" y="209" font-size="17" class="sb" fill="#000">How should the photos be laid out?</text>
 
-        <g id="mode-stack" data-selected="true">
+        <g id="mode-stack">
           <rect x="16" y="225.3" width="361" height="113.7" rx="16" fill="#FFF"/>
           <g id="tile-stack">
-            <rect x="30" y="239.3" width="34" height="34" rx="9" fill="#C36A00"/>
-            <g data-symbol="rectangle.stack" stroke="#FFF" stroke-width="1.7" fill="none" stroke-linecap="round">
+            <rect x="30" y="239.3" width="34" height="34" rx="9" fill="#C36A00" opacity="0.12"/>
+            <g data-symbol="rectangle.stack" stroke="#C36A00" stroke-width="1.7" fill="none" stroke-linecap="round">
               <rect x="38.7" y="252.4" width="16.6" height="13.4" rx="3"/>
               <path d="M41.3 249.6 q5.7 -2.4 11.4 0"/>
               <path d="M42.8 246.9 q4.2 -1.8 8.4 0"/>
@@ -51,10 +51,7 @@
             <text x="76" y="306">locked in place; the black table shows</text>
             <text x="76" y="321.5">until it is covered.</text>
           </g>
-          <g data-symbol="checkmark.circle.fill">
-            <circle cx="350" cy="252.2" r="11" fill="#C36A00"/>
-            <path d="M344.8 252.6 l3.6 3.6 l6.8 -7.2" stroke="#FFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-          </g>
+          <circle cx="350" cy="252.2" r="10.25" fill="none" stroke="#C2C2C4" stroke-width="1.5" data-symbol="circle"/>
         </g>
 
         <g id="mode-crop">
@@ -75,11 +72,11 @@
           <circle cx="350" cy="377.7" r="10.25" fill="none" stroke="#C2C2C4" stroke-width="1.5" data-symbol="circle"/>
         </g>
 
-        <g id="mode-frame">
+        <g id="mode-frame" data-selected="true">
           <rect x="16" y="461" width="361" height="98" rx="16" fill="#FFF"/>
           <g id="tile-frame">
-            <rect x="30" y="475.3" width="34" height="34" rx="9" fill="#C36A00" opacity="0.12"/>
-            <g data-symbol="viewfinder.rectangular" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="30" y="475.3" width="34" height="34" rx="9" fill="#C36A00"/>
+            <g data-symbol="viewfinder.rectangular" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
               <path d="M39.5 488.3 V485.8 a1.8 1.8 0 0 1 1.8 -1.8 H44"/>
               <path d="M50 484 H52.7 a1.8 1.8 0 0 1 1.8 1.8 V488.3"/>
               <path d="M54.5 496.3 V498.8 a1.8 1.8 0 0 1 -1.8 1.8 H50"/>
@@ -92,12 +89,15 @@
             <text x="76" y="526.3">chosen size and place in every photo;</text>
             <text x="76" y="542">what won't fill it is flagged.</text>
           </g>
-          <circle cx="350" cy="487.7" r="10.25" fill="none" stroke="#C2C2C4" stroke-width="1.5" data-symbol="circle"/>
+          <g data-symbol="checkmark.circle.fill">
+            <circle cx="350" cy="487.7" r="11" fill="#C36A00"/>
+            <path d="M344.8 488.1 l3.6 3.6 l6.8 -7.2" stroke="#FFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
         </g>
 
         <g id="plan-summary" font-size="12" class="sec">
-          <text x="16" y="582.3">Canvas 3274×4924 holds every photo; the shape is 398</text>
-          <text x="16" y="596.6">px across.</text>
+          <text x="16" y="582.3">Frame 1920×1080; the shape is 270 px across; 82 photos</text>
+          <text x="16" y="596.6">flagged — see Output.</text>
         </g>
 
         <!-- bottom safeAreaInset bar: regularMaterial, Next trailing -->
@@ -114,6 +114,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · mode · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationModeView — pushed from Rectangles inside the Shape-mation sheet · Stack, fit in frame selected · Output frame the third card · Next · timing</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · mode · Output frame · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationModeView — pushed from Rectangles inside the Shape-mation sheet · Output frame selected — Frame 1920×1080; 82 photos flagged · Next · timing</text>
 </svg>

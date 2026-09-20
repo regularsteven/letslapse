@@ -1,0 +1,121 @@
+<svg viewBox="0 0 800 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · Find shapes (plan) · 760×680</title>
+  <desc>Mirrors App/Shapemation/FindShapesView.swift (the plan: Detector card, Projects card, run card) over ShapeFinder.swift (inventory / scopes) and ShapeDetectionMode — the sheet&#x27;s Find shapes route. Mirrored from the Debug build on the tram clone 2026-09-20 with LL_SHAPEMATION=find LL_SHAPES_SCOPE=all; capture scratchpad/mirrors/mac/find.png (2×, key window), copy from its AX dump. DETECTOR card: pop-up &#x27;Use all&#x27; (menu over ShapeDetectionMode.Engine: Use all · Standard · Vision only · Regions at 1024 · Standard + edge chains · Edge chains, no regions · Python reference · Python edge drawing) with the engine&#x27;s one-line detail under it — &#x27;Every detector in turn; a shape found by more than one is listed once with who found it, and every Add or dismissal scores each detector&#x27; — then three segmented rows: Sensitivity High|Medium|Low (High), Size All|Large|Mid|Small (All), Family All|Circular|Rectangular (All); the Mac&#x27;s stored defaults (Use all / high), where a fresh simulator reads Standard / medium. PROJECTS card: &#x27;114 of 114&#x27; trailing the title, pop-up &#x27;All photo projects · 114&#x27; (menu: Needing analysis · 113 / All photo projects · 114 / No shapes yet · 0 / Chosen projects · 0), the scope&#x27;s sentence &#x27;Every photo project. Found shapes are replaced; shapes you drew or kept on the viewfinder stay.&#x27; and the inventory line &#x27;1 analysed by the current detector · 0 by an older one · 113 never · 0 video shoots left out&#x27;. NB this screen counts 114 photo projects where the builder counts 164 — the app&#x27;s own numbers (the inventory leaves out projects with no drawable picture). RUN card: &#x27;Find shapes in 114 projects&#x27; (accent, 50 pt, 17 pt bold), the footer copy, and the tinted destructive &#x27;Remove found shapes…&#x27; (a confirmation follows). Not drawn: the progress card and the summary card (find.done; the locked-register row states of WP0b live in the find.locked capture and are desc-only here: &#x27;N register(s) left as it was/they were: written by a newer LetsLapse, or unreadable.&#x27; under the summary, a &#x27;failed&#x27; row with the amber &#x27;Shapes written by a newer LetsLapse&#x27; note in By project). GEOMETRY: sheet 680 pt from y=32, overhanging the window by 32 pt; cards 528 wide at x=116; pop-ups 24 pt (rx 6, accent tint); segmented controls 24 pt at x=216.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <linearGradient id="hdrfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.10"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- the Shape-mation sheet: 560 pt wide, 680 pt tall, overhanging the 680 pt window -->
+  <g id="sheet" filter="url(#sheetshadow)"><rect x="120" y="52" width="560" height="680" rx="12" fill="#F2F2F7"/></g>
+  <clipPath id="sheetclip"><rect x="120" y="52" width="560" height="680" rx="12"/></clipPath>
+  <g clip-path="url(#sheetclip)">
+    <g id="sheet-header"><rect x="120" y="52" width="560" height="48" fill="#FCFCFE"/>
+      <rect x="120" y="100" width="560" height="14" fill="url(#hdrfade)"/>
+      <g data-symbol="chevron.left"><circle cx="145" cy="77" r="15" fill="#C36A00"/><path d="M147.5 71 l-6 6 6 6" fill="none" stroke="#FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="168" y="81.5" font-size="13" class="b" fill="#1C1C1E">Find shapes</text>
+    </g>
+    <rect x="136" y="116" width="528" height="224" rx="12" fill="#FFFFFF"/>
+    <text x="152" y="144.5" font-size="13" class="sb" fill="#6D6D72">Detector</text>
+    <g data-symbol="chevron.up.chevron.down"><rect x="152" y="157.5" width="193" height="24" rx="6" fill="#FBF2E8"/>
+    <text x="164" y="174.0" font-size="13" fill="#C36A00">Use all</text>
+    <path d="M328 167.5 l3.5 -3.5 3.5 3.5 M328 171.5 l3.5 3.5 3.5 -3.5" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <text x="152" y="202.5" font-size="11.5" fill="#6D6D72">Every detector in turn; a shape found by more than one is listed once with who found it,</text>
+    <text x="152" y="217.5" font-size="11.5" fill="#6D6D72">and every Add or dismissal scores each detector</text>
+    <text x="152" y="247" font-size="13" fill="#1C1C1E">Sensitivity</text>
+    <rect x="236" y="231" width="217" height="24" rx="7" fill="#E9E9EB"/>
+    <rect x="236" y="231" width="72" height="24" rx="7" fill="#C36A00"/>
+    <text x="272.0" y="247.5" font-size="13" class="sb" text-anchor="middle" fill="#FFF">High</text>
+    <text x="345.0" y="247.5" font-size="13" text-anchor="middle" fill="#1C1C1E">Medium</text>
+    <line x1="382" y1="237" x2="382" y2="249" stroke="#000" stroke-opacity="0.15"/>
+    <text x="417.5" y="247.5" font-size="13" text-anchor="middle" fill="#1C1C1E">Low</text>
+    <text x="152" y="281" font-size="13" fill="#1C1C1E">Size</text>
+    <rect x="236" y="265" width="234" height="24" rx="7" fill="#E9E9EB"/>
+    <rect x="236" y="265" width="58" height="24" rx="7" fill="#C36A00"/>
+    <text x="265.0" y="281.5" font-size="13" class="sb" text-anchor="middle" fill="#FFF">All</text>
+    <text x="323.5" y="281.5" font-size="13" text-anchor="middle" fill="#1C1C1E">Large</text>
+    <line x1="353" y1="271" x2="353" y2="283" stroke="#000" stroke-opacity="0.15"/>
+    <text x="382.0" y="281.5" font-size="13" text-anchor="middle" fill="#1C1C1E">Mid</text>
+    <line x1="411" y1="271" x2="411" y2="283" stroke="#000" stroke-opacity="0.15"/>
+    <text x="440.5" y="281.5" font-size="13" text-anchor="middle" fill="#1C1C1E">Small</text>
+    <text x="152" y="315" font-size="13" fill="#1C1C1E">Family</text>
+    <rect x="236" y="299" width="291" height="24" rx="7" fill="#E9E9EB"/>
+    <rect x="236" y="299" width="97" height="24" rx="7" fill="#C36A00"/>
+    <text x="284.5" y="315.5" font-size="13" class="sb" text-anchor="middle" fill="#FFF">All</text>
+    <text x="381.5" y="315.5" font-size="13" text-anchor="middle" fill="#1C1C1E">Circular</text>
+    <line x1="430" y1="305" x2="430" y2="317" stroke="#000" stroke-opacity="0.15"/>
+    <text x="478.5" y="315.5" font-size="13" text-anchor="middle" fill="#1C1C1E">Rectangular</text>
+    <rect x="136" y="356" width="528" height="145" rx="12" fill="#FFFFFF"/>
+    <text x="152" y="384" font-size="13" class="sb" fill="#6D6D72">Projects</text>
+    <text x="648" y="384" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">114 of 114</text>
+    <g data-symbol="chevron.up.chevron.down"><rect x="152" y="397" width="185" height="24" rx="6" fill="#FBF2E8"/>
+    <text x="164" y="413.5" font-size="13" fill="#C36A00">All photo projects · 114</text>
+    <path d="M320 407 l3.5 -3.5 3.5 3.5 M320 411 l3.5 3.5 3.5 -3.5" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <text x="152" y="443.5" font-size="13" fill="#3C3C43">Every photo project. Found shapes are replaced; shapes you drew or kept on the</text>
+    <text x="152" y="458.5" font-size="13" fill="#3C3C43">viewfinder stay.</text>
+    <text x="152" y="482.5" font-size="11.5" fill="#A0A0A5">1 analysed by the current detector · 0 by an older one · 113 never · 0 video shoots left out</text>
+    <rect x="136" y="520" width="528" height="169" rx="12" fill="#FFFFFF"/>
+    <rect x="152" y="534" width="496" height="50" rx="10" fill="#C36A00"/>
+    <text x="400.0" y="565.12" font-size="17" class="b" text-anchor="middle" fill="#FFF">Find shapes in 114 projects</text>
+    <text x="152" y="606.5" font-size="13" fill="#3C3C43">One picture per project — the rendered blend where there is one, else the middle frame</text>
+    <text x="152" y="621.5" font-size="13" fill="#3C3C43">— is searched for circles, ovals, squares and rectangles. Found shapes replace the last</text>
+    <text x="152" y="636.5" font-size="13" fill="#3C3C43">run&#x27;s; shapes you drew or kept stay.</text>
+    <rect x="152" y="649.5" width="168" height="24" rx="6" fill="#FBF2E8"/>
+    <text x="236" y="666" font-size="13" text-anchor="middle" fill="#C36A00">Remove found shapes…</text>
+  </g>
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="758" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation · Find shapes · plan · 760×680 pt window, 560×680 pt sheet</text>
+  <text x="400" y="776" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/FindShapesView.swift — LL_SHAPEMATION=find LL_SHAPES_SCOPE=all on the tram clone · Use all / high / all / all · 114 of 114</text>
+</svg>

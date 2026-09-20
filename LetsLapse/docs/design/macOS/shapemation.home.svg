@@ -1,0 +1,111 @@
+<svg viewBox="0 0 800 855" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · home (sheet) · 760×680</title>
+  <desc>Mirrors App/Shapemation/ShapemationView.swift (the sheet&#x27;s home route: intro copy, the three doors, the SHAPE REGISTER card, the Done bar) presented from the Create tab&#x27;s &#x27;Create Shape-mation&#x27; row (App/CreateView.swift) as a 560 pt sheet. Mirrored from the Debug build on the tram clone (-storage.libraryRootPath …/tram-root) 2026-09-20 with LL_SHAPEMATION=home LL_CHIPS=tram; capture scratchpad/mirrors/mac/shapemation.home.png (2×, taken with the window NOT key — drawn here in the key-window look, the accent Done button, as shapemation.home.one-video.png shows it). STATE DRAWN: the &#x27;None yet&#x27; state — Find shapes / &#x27;Analyse projects not yet checked&#x27;, Create shape slideshow / &#x27;Filter by tag, pick the shape, the projects, and a mode&#x27;, List Shape-mations / &#x27;None yet&#x27;; after a render the third door reads &#x27;1 video&#x27; (one-video capture). SHAPE REGISTER: &#x27;1 project analysed · 84 with shapes&#x27; over three family pills ○ 1 · □ 1 · ▭ 84 (the tram clone&#x27;s 84 registers; only one was analysed by the current detector, which is why the two counts differ). GEOMETRY: the sheet is 745 pt tall from y=32 and overhangs the 680 pt window by 97 pt; its foot is a 65 pt white Done bar, Done (accent, 64×23, rx 6) trailing. Doors: 59 pt rows, 30 pt rounded icons (viewfinder.circle in accent, cube.transparent in purple, list.and.film in accentDeep), 17 pt title, 13 pt subtitle, chevron at 623.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <linearGradient id="hdrfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.10"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- the Shape-mation sheet: 560 pt wide, 745 pt tall, overhanging the 680 pt window -->
+  <g id="sheet" filter="url(#sheetshadow)"><rect x="120" y="52" width="560" height="745" rx="12" fill="#F2F2F7"/></g>
+  <clipPath id="sheetclip"><rect x="120" y="52" width="560" height="745" rx="12"/></clipPath>
+  <g clip-path="url(#sheetclip)">
+    <g id="sheet-header"><rect x="120" y="52" width="560" height="48" fill="#FCFCFE"/>
+      <rect x="120" y="100" width="560" height="14" fill="url(#hdrfade)"/>
+      <text x="168" y="81.5" font-size="13" class="b" fill="#1C1C1E">Shape-mation</text>
+    </g>
+    <text x="136" y="129.5" font-size="13" fill="#6D6D72">Find a shape that repeats across your photos — a clock face, a sign, a window —</text>
+    <text x="136" y="146.5" font-size="13" fill="#6D6D72">and stack the photos so the shape holds still while the world changes behind it.</text>
+    <rect x="136" y="166" width="528" height="175" rx="12" fill="#FFFFFF"/>
+    <g data-symbol="viewfinder.circle"><rect x="152" y="180.5" width="30" height="30" rx="7" fill="#C36A00"/>
+      <circle cx="167" cy="195.5" r="6" fill="none" stroke="#FFF" stroke-width="1.6"/><circle cx="167" cy="195.5" r="2.2" fill="#FFF"/>
+    </g>
+    <text x="194" y="192.5" font-size="17" fill="#1C1C1E">Find shapes</text>
+    <text x="194" y="210.0" font-size="13" fill="#6D6D72">Analyse projects not yet checked</text>
+    <path d="M640 190.5 l5 5 -5 5" fill="none" stroke="#A0A0A5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="194" y1="224.5" x2="664" y2="224.5" stroke="#000" stroke-opacity="0.10"/>
+    <g data-symbol="cube.transparent"><rect x="152" y="239.0" width="30" height="30" rx="7" fill="#6B5BC1"/>
+      <path d="M167 246.0 l7 4 v8 l-7 4 -7 -4 v-8 z M167 254.0 l7 -4 M167 254.0 l-7 -4 M167 254.0 v8" fill="none" stroke="#FFF" stroke-width="1.5" stroke-linejoin="round"/>
+    </g>
+    <text x="194" y="251.0" font-size="17" fill="#1C1C1E">Create shape slideshow</text>
+    <text x="194" y="268.5" font-size="13" fill="#6D6D72">Filter by tag, pick the shape, the projects, and a mode</text>
+    <path d="M640 249.0 l5 5 -5 5" fill="none" stroke="#A0A0A5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="194" y1="283.0" x2="664" y2="283.0" stroke="#000" stroke-opacity="0.10"/>
+    <g data-symbol="list.and.film"><rect x="152" y="297.5" width="30" height="30" rx="7" fill="#8A4A00"/>
+      <path d="M159 306.5 h6 M159 312.5 h6 M159 318.5 h6" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/><rect x="168" y="305.5" width="8" height="14" rx="1.5" fill="none" stroke="#FFF" stroke-width="1.4"/>
+    </g>
+    <text x="194" y="309.5" font-size="17" fill="#1C1C1E">List Shape-mations</text>
+    <text x="194" y="327.0" font-size="13" fill="#6D6D72">None yet</text>
+    <path d="M640 307.5 l5 5 -5 5" fill="none" stroke="#A0A0A5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="136" y="357.5" width="528" height="105" rx="12" fill="#FFFFFF"/>
+    <text x="152" y="384" font-size="12" class="sb" fill="#6D6D72">SHAPE REGISTER</text>
+    <text x="152" y="408.5" font-size="15" fill="#1C1C1E">1 project analysed · 84 with shapes</text>
+    <g data-symbol="circle"><rect x="158" y="421.5" width="38" height="22" rx="6" fill="#FBF2E8"/>
+      <circle cx="170" cy="432.5" r="5" fill="none" stroke="#1C1C1E" stroke-width="1.4"/>
+      <text x="188" y="437" font-size="13" text-anchor="end" fill="#1C1C1E">1</text></g>
+    <g data-symbol="square"><rect x="216" y="421.5" width="37" height="22" rx="6" fill="#FBF2E8"/>
+      <rect x="223" y="427.5" width="10" height="10" rx="1.5" fill="none" stroke="#1C1C1E" stroke-width="1.4"/>
+      <text x="245" y="437" font-size="13" text-anchor="end" fill="#1C1C1E">1</text></g>
+    <g data-symbol="rectangle"><rect x="274" y="421.5" width="51" height="22" rx="6" fill="#FBF2E8"/>
+      <rect x="280" y="428.5" width="13" height="8" rx="1.5" fill="none" stroke="#1C1C1E" stroke-width="1.4"/>
+      <text x="317" y="437" font-size="13" text-anchor="end" fill="#1C1C1E">84</text></g>
+    <rect x="120" y="732" width="560" height="65" fill="#FFFFFF"/><line x1="120" y1="732" x2="680" y2="732" stroke="#000" stroke-opacity="0.10"/>
+    <rect x="596" y="754" width="64" height="23" rx="6" fill="#C36A00"/>
+    <text x="628" y="770" font-size="13" class="sb" text-anchor="middle" fill="#FFF">Done</text>
+  </g>
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="823" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation · home · 760×680 pt window, 560×745 pt sheet</text>
+  <text x="400" y="841" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/ShapemationView.swift — LL_SHAPEMATION=home on the tram clone · &#x27;None yet&#x27; state; the sheet overhangs the window by 97 pt</text>
+</svg>

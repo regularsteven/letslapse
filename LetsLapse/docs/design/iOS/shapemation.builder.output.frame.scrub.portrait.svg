@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Shape-mation · builder · Output frame · scrub · portrait</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationOutputView under the Output frame mode, SCROLLED TO ITS END: the scrubCard, the estimate lines and Create (ShapemationFrameEvaluator behind the preview; docs/shapemation/output-frame.md §6). Code first 2026-09-19 (Steven's call); mirrored 2026-09-20 from the Debug build on the iPhone 16 Pro simulator over an APFS clone of the tram library — the same route as shapemation.builder.output.frame.portrait.svg, then the sheet scrolled to the bottom — the copy checked against the Mac Debug build's AX dump. The large title has collapsed to the inline bar: chevron + "Timing" leading, "Output" (17 semibold) centred, a hairline under the material. The frame card's foot is still in view (the End stepper peeking under the bar, Face place, Ease). Then the SCRUB card (white, radius 16, 16-pt padding): a black preview in the frame's aspect (16:9 here, the card's full width, so 329×185 on this canvas — 338×190 on the 402-pt phone; at most 260 pt tall) with photo i put through the evaluator at a ≤ 2048-px decode, ≤ 960-px preview — at the defaults photo 1 (Photo 13. 9. at 12:57, the largest share) lands as a 51×67-pt tile in the middle of black, its rectangle 25 % of the frame's height at (0.5, 0.55); under it the photo's title (16 semibold) with its verdict badge trailing (12 medium on a 21-pt capsule: "fits" on confirm green at 20 % / "won't fill the frame" on LL.amber at 15 %, drawn / "upscaled ×2.2"); a Slider over the photos (4-pt track E2E2E4, the run before the knob in accent, 26-pt white knob) with "Photo 1 of 83" (12 tertiary) under it; and the tally "82 photos won't fill the frame" (13, LL.accentDeep — "· M would be upscaled past ×2" when any would, "Every photo fills the frame" when none is flagged). Below the card the estimate restated as on the stack/crop step — "83 photos · 25 fps · 1 s each" / "83.0 s of playback · 2075 frames · largest first" (12 secondary) — and the full-width Create Shape-mation button (borderedProminent, 57 pt); Create renders at the framing's size and the record stores the framing. The other captured scrub position, photo 83 of 83 (Photo 13. 9. at 13:11, the smallest share), fills the frame and reads "fits" in green — shapemation.builder.output.frame.scrub.fits.portrait.svg. Measured from the 402×874-pt simulator capture and re-anchored to this 393×852 canvas: the bar follows the 59-pt safe top (the capture's 62), the scrolled content is bottom-anchored (22 pt higher than the capture), and the preview being 5 pt shorter at the canvas width, the frame card's foot above it sits 17 pt higher — which puts the End row under the bar here, where the 402-pt phone shows it peeking 24 pt below it; trailing edges 9 pt further left.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
+    <clipPath id="preview"><rect x="32" y="367" width="329" height="185" rx="8"/></clipPath>
+    <filter id="knob" x="-10%" y="-30%" width="120%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.12"/></filter>
+    <filter id="thumb" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#000" flood-opacity="0.22"/></filter>
+    <symbol id="face-place-16x9" overflow="visible">
+      <rect width="96" height="54.7" rx="10" fill="#E9E9EB"/>
+      <g fill="#C3C3C6">
+        <circle cx="24" cy="16.4" r="4.3"/><circle cx="48" cy="16.4" r="4.3"/><circle cx="72" cy="16.4" r="4.3"/>
+        <circle cx="24" cy="30.1" r="4.3"/><circle cx="72" cy="30.1" r="4.3"/>
+        <circle cx="24" cy="43.8" r="4.3"/><circle cx="48" cy="43.8" r="4.3"/><circle cx="72" cy="43.8" r="4.3"/>
+      </g>
+      <circle cx="48" cy="30.1" r="6.8" fill="#C36A00" data-selected="true"/>
+    </symbol>
+    <symbol id="stepper" overflow="visible">
+      <rect width="93" height="31.7" rx="8" fill="#ECECED"/>
+      <line x1="46.5" y1="6" x2="46.5" y2="25.7" stroke="#D2D2D4" stroke-width="1"/>
+      <path d="M17 15.85 H29" stroke="#1C1C1E" stroke-width="2" stroke-linecap="round" data-symbol="minus"/>
+      <path d="M64 15.85 H76 M70 9.85 V21.85" stroke="#1C1C1E" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
+    </symbol>
+    <!-- the photo tile placeholder (3:4): a street with the tram face where the register's rectangle is -->
+    <symbol id="tram-photo" viewBox="0 0 72 96">
+      <rect width="72" height="96" fill="#C9CBD0"/>
+      <rect y="28" width="72" height="36" fill="#A9A49B"/>
+      <rect y="28" width="22" height="36" fill="#B7B1A6"/>
+      <rect y="64" width="72" height="32" fill="#8E8E90"/>
+      <path d="M0 96 L20 64 M72 96 L52 64" stroke="#B9B9BB" stroke-width="1"/>
+      <g transform="translate(22,14)">
+        <rect width="50" height="66" rx="3" fill="#E9DFC6"/>
+        <rect x="4" y="13" width="42" height="18" rx="2" fill="#4B4F55"/>
+        <rect x="0" y="36" width="50" height="30" fill="#A8383A"/>
+        <circle cx="9" cy="44" r="3.2" fill="#F5EBD0"/><circle cx="41" cy="44" r="3.2" fill="#F5EBD0"/>
+      </g>
+    </symbol>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.sec{fill:#6D6D72}.ter{fill:#C4C4C7}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar over the shrunken Create tab behind the sheet -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="59" width="361" height="30" rx="10" fill="#D5D5D9"/>
+
+      <!-- the sheet -->
+      <g id="shapemation-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
+
+        <!-- the frame card's foot, scrolled up under the bar -->
+        <g id="frame-card-foot">
+          <rect x="16" y="20" width="361" height="318.7" rx="16" fill="#FFF"/>
+          <text x="32" y="125" font-size="15" fill="#000">End 25 % · Same</text>
+          <use href="#stepper" x="268" y="103.7" data-control="Stepper"/>
+          <g id="face-place" data-control="ShapemationFacePlacePicker">
+            <text x="32" y="165" font-size="14" fill="#000">Face place</text>
+            <use href="#face-place-16x9" x="32" y="176.7"/>
+            <use href="#face-place-16x9" x="152" y="176.7"/>
+            <g font-size="12" class="sec" text-anchor="middle">
+              <text x="80" y="247">Start</text>
+              <text x="200" y="247">End · Same</text>
+            </g>
+          </g>
+          <g id="ease" data-control="Picker(.segmented)">
+            <text x="32" y="280" font-size="14" fill="#000">Ease</text>
+            <rect x="32" y="292" width="329" height="32" rx="8" fill="#E9E9EB"/>
+            <rect x="34" y="294" width="163" height="28" rx="7" fill="#FFF" filter="url(#knob)"/>
+            <g font-size="13" fill="#000" text-anchor="middle">
+              <text x="115.5" y="312.5" class="sb">Linear</text>
+              <text x="279" y="312.5">Ease in and out</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- the scrub card -->
+        <g id="scrub-card">
+          <rect x="16" y="351" width="361" height="338" rx="16" fill="#FFF"/>
+          <g id="preview" clip-path="url(#preview)">
+            <rect x="32" y="367" width="329" height="185" fill="#000"/>
+            <!-- photo 1 placed by its rectangle: 25 % of the frame's height at (0.5, 0.55) — a 51×67 tile in the middle of black -->
+            <g filter="url(#thumb)"><rect x="171" y="435" width="51" height="67" fill="#8E8E90"/></g>
+            <use href="#tram-photo" x="171" y="435" width="51" height="67"/>
+          </g>
+          <text x="32" y="578" font-size="16" class="sb" fill="#000">Photo 13. 9. at 12:57</text>
+          <g id="verdict" data-verdict="wontFill">
+            <rect x="243" y="562" width="118" height="21" rx="10.5" fill="#FFB340" fill-opacity="0.15"/>
+            <text x="302" y="576.5" font-size="12" class="m" fill="#000" text-anchor="middle">won't fill the frame</text>
+          </g>
+          <g id="scrub-slider" data-control="Slider">
+            <rect x="32" y="607" width="329" height="4" rx="2" fill="#E2E2E4"/>
+            <circle cx="45" cy="609" r="13" fill="#FFF" filter="url(#thumb)"/>
+          </g>
+          <text x="32" y="645" font-size="12" class="ter">Photo 1 of 83</text>
+          <text x="32" y="670.5" font-size="13" fill="#8A4A00">82 photos won't fill the frame</text>
+        </g>
+
+        <!-- the estimate restated above Create, as on the stack/crop step -->
+        <g id="playback-estimate" font-size="12" class="sec">
+          <text x="16" y="712">83 photos · 25 fps · 1 s each</text>
+          <text x="16" y="729">83.0 s of playback · 2075 frames · largest first</text>
+        </g>
+        <g id="create-button">
+          <rect x="16" y="744.7" width="361" height="57.3" rx="11" fill="#C36A00"/>
+          <text x="196.5" y="779.1" font-size="16" class="sb" fill="#FFF" text-anchor="middle">Create Shape-mation</text>
+        </g>
+
+        <!-- the collapsed nav bar over the scrolled content -->
+        <g id="nav-bar-inline">
+          <rect x="0" y="69" width="393" height="56" fill="#F7F7F9" fill-opacity="0.94"/>
+          <line x1="0" y1="125" x2="393" y2="125" stroke="#000" stroke-opacity="0.18" stroke-width="0.5"/>
+          <path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="30" y="103" font-size="17" fill="#C36A00">Timing</text>
+          <text x="196.5" y="103" font-size="17" class="sb" fill="#000" text-anchor="middle">Output</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · Output frame · scrub · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationOutputView (scrubCard) scrolled to the end — Photo 1 of 83 won't fill the frame · 82 photos won't fill · Create Shape-mation</text>
+</svg>

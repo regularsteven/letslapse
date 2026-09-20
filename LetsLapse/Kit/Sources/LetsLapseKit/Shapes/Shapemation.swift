@@ -13,25 +13,36 @@ import CoreVideo
 // model for a real set: the user picks the output rectangle and where the
 // face sits in it, every photo is scaled and placed to put its face there,
 // one photo per frame over black, and what does not fill the frame is
-// flagged — never dropped.
+// flagged — never dropped. Mode 4 (`leastCrop`, docs/shapemation/
+// prototype-review.md) keeps every photo at cover fit and shifts it only as
+// far as its neighbours ask: the shape keeps its own size, the crop each photo
+// pays is known before the render, and the ones that would pay too much are
+// rejected — `ShapemationLeastCrop`.
 
 public enum ShapemationMode: String, Codable, CaseIterable, Sendable {
-    case stack, crop, frame
+    case stack, crop, frame, leastCrop
 
     public var title: String {
         switch self {
         case .stack: return "Stack, fit in frame"
         case .crop: return "Stack, crop to fill"
         case .frame: return "Output frame"
+        case .leastCrop: return "Least crop"
         }
     }
     public var summary: String {
         switch self {
         case .stack: return "The canvas holds every photo. Each lands on top of the last, the shape locked in place; the black table shows until it is covered."
         case .crop: return "The same stack, cropped to what every photo covers. No black — but one off-centre shape crops everyone."
-        case .frame: return "Pick the frame; the face is put at a chosen size and place in every photo; what won't fill it is flagged."
+        case .frame: return "Pick the frame; the shape is put at a chosen size and place in every photo; what won't fill it is flagged."
+        case .leastCrop: return "Pick the frame; every photo is cover-fitted and shifted only as far as its neighbours ask; the shape keeps its own size, and the crop each photo pays is shown before rendering."
         }
     }
+    /// The stack modes feed each frame back as the next photo's table; the
+    /// frame modes write one photo per hold over black.
+    public var accumulates: Bool { self == .stack || self == .crop }
+    /// The modes with a fixed output rect and the Sequence board.
+    public var hasBoard: Bool { self == .frame || self == .leastCrop }
 }
 
 /// One photo in the sequence: where its picture is and which shape holds still.
@@ -44,10 +55,14 @@ public struct ShapemationItem: Identifiable, Equatable, Sendable {
     public var shape: DetectedShape
     /// Clips: the fraction of duration the frame comes from.
     public var frameFraction: Double?
+    /// The place in the capture order (oldest first), whatever order the
+    /// items are handed over in — the least-crop model's `captureOrder`.
+    public var captureIndex: Int?
 
-    public init(id: UUID = UUID(), title: String, imageURL: URL, pixelSize: CGSize, shape: DetectedShape, frameFraction: Double? = nil) {
+    public init(id: UUID = UUID(), title: String, imageURL: URL, pixelSize: CGSize, shape: DetectedShape, frameFraction: Double? = nil,
+                captureIndex: Int? = nil) {
         self.id = id; self.title = title; self.imageURL = imageURL; self.pixelSize = pixelSize
-        self.shape = shape; self.frameFraction = frameFraction
+        self.shape = shape; self.frameFraction = frameFraction; self.captureIndex = captureIndex
     }
 }
 
@@ -118,11 +133,14 @@ public struct ShapemationPlan: Equatable, Sendable {
         /// The shape's long side there.
         public var targetSizePx: Double
         public var feasibility: Feasibility
+        /// `.leastCrop` only: the board's row this placement was made from —
+        /// the window, the crop, the verdict.
+        public var crop: ShapemationLeastCrop.Row?
 
         public init(itemID: UUID, transform: Homography, footprint: CGRect, scale: Double,
-                    target: CGPoint, targetSizePx: Double, feasibility: Feasibility) {
+                    target: CGPoint, targetSizePx: Double, feasibility: Feasibility, crop: ShapemationLeastCrop.Row? = nil) {
             self.itemID = itemID; self.transform = transform; self.footprint = footprint; self.scale = scale
-            self.target = target; self.targetSizePx = targetSizePx; self.feasibility = feasibility
+            self.target = target; self.targetSizePx = targetSizePx; self.feasibility = feasibility; self.crop = crop
         }
     }
 
@@ -137,6 +155,9 @@ public struct ShapemationPlan: Equatable, Sendable {
     public var unionCanvas: CGRect
     /// `.frame` only: the framing the plan was made from.
     public var framing: ShapemationFraming?
+    /// `.leastCrop` only: the board the placements follow, and its settings.
+    public var leastCrop: ShapemationLeastCrop.Board? = nil
+    public var leastCropSettings: ShapemationLeastCrop.Settings? = nil
 
     public var canvasSize: CGSize { canvas.size }
 
@@ -197,9 +218,19 @@ public struct ShapemationPlan: Equatable, Sendable {
     /// stack modes, scaled to that size and translated there. Nothing is
     /// excluded: a photo that leaves output pixels uncovered or is scaled up
     /// past the framing's cap is flagged in its `feasibility` and kept.
+    ///
+    /// Under `.leastCrop` (`leastCrop` required) the canvas is the settings'
+    /// output rect and the placements are the board's kept rows in its play
+    /// order — the order the items came in only decides the capture order
+    /// where an item carries none — each photo's window scaled to fill the
+    /// rect. The board's rejects have no placement.
     public static func make(items: [ShapemationItem], mode: ShapemationMode, match: ShapeMatch? = nil,
-                            framing: ShapemationFraming? = nil) -> ShapemationPlan? {
+                            framing: ShapemationFraming? = nil, leastCrop: ShapemationLeastCrop.Settings? = nil) -> ShapemationPlan? {
         guard !items.isEmpty else { return nil }
+        if mode == .leastCrop {
+            guard let leastCrop else { return nil }
+            return makeLeastCrop(items: items, settings: leastCrop)
+        }
         if mode == .frame {
             guard let framing else { return nil }
             return makeFrame(items: items, match: match, framing: framing)
@@ -287,6 +318,34 @@ public struct ShapemationPlan: Equatable, Sendable {
         guard let first = placements.first, let union else { return nil }
         return ShapemationPlan(mode: .frame, shapeSizePx: first.targetSizePx, anchor: first.target, canvas: canvas,
                                placements: placements, unionCanvas: CGRect(origin: .zero, size: union.size), framing: framing)
+    }
+
+    /// The `.leastCrop` plan: see `make`.
+    static func makeLeastCrop(items: [ShapemationItem], settings: ShapemationLeastCrop.Settings) -> ShapemationPlan? {
+        let outW = Double(settings.outputSize.width), outH = Double(settings.outputSize.height)
+        guard outW > 0, outH > 0 else { return nil }
+        let photos = items.enumerated().map { i, item in ShapemationLeastCrop.Photo(item: item, captureOrder: i) }
+        let board = ShapemationLeastCrop.board(photos, settings: settings)
+        guard !board.rows.isEmpty else { return nil }
+        let byID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let canvas = CGRect(x: 0, y: 0, width: outW, height: outH)
+        var placements: [Placement] = []
+        for row in board.rows {
+            guard let item = byID[row.id] else { continue }
+            let W = Double(item.pixelSize.width), H = Double(item.pixelSize.height)
+            let win = row.evaluation.window
+            guard win.width > 0, win.height > 0, W > 0, H > 0 else { continue }
+            // The window's top-left to the origin, then the window's width to the rect's.
+            let s = outW / (Double(win.width) * W)
+            let h = Homography.scale(s, s) * Homography.translate(-Double(win.minX) * W, -Double(win.minY) * H)
+            let footprint = CGRect(x: -Double(win.minX) * W * s, y: -Double(win.minY) * H * s, width: W * s, height: H * s)
+            let target = CGPoint(x: Double(row.target.x) * outW, y: Double(row.target.y) * outH)
+            placements.append(Placement(itemID: item.id, transform: h, footprint: footprint, scale: s, target: target,
+                                        targetSizePx: row.photo.longSidePx * s, feasibility: .fits(scale: s), crop: row))
+        }
+        guard let first = placements.first else { return nil }
+        return ShapemationPlan(mode: .leastCrop, shapeSizePx: first.targetSizePx, anchor: first.target, canvas: canvas,
+                               placements: placements, unionCanvas: canvas, framing: nil, leastCrop: board, leastCropSettings: settings)
     }
 
     /// One photo's placement by its family, with the shape's centre at the
@@ -427,7 +486,7 @@ public final class ShapemationRenderer {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let width = Int(outputSize.width), height = Int(outputSize.height)
         let fps: Int32 = timing.map { Int32($0.fps) } ?? self.fps
-        let holds = timing?.holds(count: items.count)
+        let holds = timing?.holds(for: items.map(\.id))
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let settings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -479,8 +538,8 @@ public final class ShapemationRenderer {
                 frameIndex += 1
             }
             // The frame just written is the next photo's table — under the
-            // stack modes; the output frame keeps its black one.
-            if plan.mode != .frame { background = CIImage(cvPixelBuffer: buffer) }
+            // stack modes; the frame modes keep their black one.
+            if plan.mode.accumulates { background = CIImage(cvPixelBuffer: buffer) }
             lastBuffer = buffer
         }
         input.markAsFinished()

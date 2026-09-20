@@ -1,0 +1,107 @@
+<svg viewBox="0 0 800 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Shape-mation · builder · Match (rectangle) · 760×680</title>
+  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift, the Match step for the Rectangle family (&#x27;How strict about the rectangle?&#x27;) over the per-family strictness model (Shape-mation Match/Sort/Timing, 2026-09-11: aspect classes + orientation). Mirrored from the Debug build on the tram clone 2026-09-20 after choosing Rectangle; capture scratchpad/mirrors/mac/builder.match.rectangle.png (2×, key window), copy from its AX dump. One card: &#x27;Aspect&#x27; over eight 28 pt capsule chips in two rows — Any (lit, accent) · 4:3 · 3:2 · 16:9 · Page / 5:4 · 2:1 · Custom (controlFill #E9E9EB, 15 pt); &#x27;Orientation&#x27; over a 24 pt segmented Any|Landscape|Portrait (Any); then the strictness sentence &#x27;Every rectangle. Measured on the true rectangle and corrected for the camera angle where the lens is known — 2 of 84 here; the others matched as they appear on screen.&#x27; Under the card the live tally &#x27;83 projects · 84 rectangles match&#x27;. Pinned bottom bar with &#x27;Next · projects&#x27; (165×47). The Circle / Oval / Square variants (roundness, aspect) are the iOS files shapemation.builder.match.{circle,oval,square}.portrait.svg; the Mac renders the same step. GEOMETRY: sheet 680 pt from y=32; heading at x=120 (this step&#x27;s cards are inset 118–643, two points wider than the others&#x27; 116–644 — the app&#x27;s own layout); chips y 169 and 207.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/></filter>
+    <linearGradient id="hdrfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.10"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <!-- The Create tab behind the sheet, dimmed 17 % (NSWindow sheet dimming): title, the two
+       preset cards and the door rows show at the sheet's sides, as captured. -->
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="32" fill="#F6F6F8"/>
+      <circle cx="36.5" cy="36" r="6" fill="#FF736A"/><circle cx="59" cy="36" r="6" fill="#FEBC2E"/><circle cx="81.5" cy="36" r="6" fill="#19C332"/>
+      <text x="104" y="40.5" font-size="13" class="sb" fill="#000" fill-opacity="0.85">Create</text>
+    </g>
+    <g id="create-page">
+      <text x="39" y="89.5" font-size="28" class="b" fill="#000">Create</text>
+      <text x="39" y="114" font-size="13" fill="#6D6D72">What do you want to make?</text>
+      <rect x="36.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="146" width="324" height="84.5" rx="8" fill="#8794A5"/>
+      <rect x="49" y="190" width="324" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+      <text x="49" y="256" font-size="15" class="sb" fill="#000">Smooth timelapse</text>
+      <text x="49" y="273" font-size="12" fill="#6D6D72">Hours become seconds, motion melts into streaks</text>
+      <rect x="397.5" y="132" width="349" height="170" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="146" width="324" height="84.5" rx="8" fill="#7E8899"/>
+      <text x="410" y="256" font-size="15" class="sb" fill="#000">Long exposure</text>
+      <text x="410" y="273" font-size="12" fill="#6D6D72">Interval photos into a timelapse, or one long exposure</text>
+      <rect x="36.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="49" y="333" width="324" height="84.5" rx="8" fill="#9A8D82"/>
+      <text x="49" y="439" font-size="15" class="sb" fill="#000">Speed ramp</text>
+      <text x="49" y="457" font-size="12" fill="#6D6D72">Speed rises or falls across the clip</text>
+      <rect x="397.5" y="319.5" width="349" height="167.5" rx="14" fill="#FFFFFF"/>
+      <rect x="410" y="333" width="324" height="84.5" rx="8" fill="#C7C2B3"/>
+      <text x="410" y="439" font-size="15" class="sb" fill="#000">Custom blend</text>
+      <text x="410" y="457" font-size="12" fill="#6D6D72">Every dial, no presets</text>
+      <rect x="36.5" y="504.5" width="710" height="240" rx="14" fill="#FFFFFF"/>
+      <g id="doors" font-size="15" fill="#000">
+        <rect x="51.5" y="517" width="31" height="31" rx="8" fill="#D7A46A"/><circle cx="67" cy="532.5" r="7" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="67" cy="532.5" r="2.5" fill="#FFFFFF"/>
+        <text x="94" y="537.5">Record now</text>
+        <line x1="94" y1="560.5" x2="746.5" y2="560.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="574" width="31" height="31" rx="8" fill="#9FB0C8"/><rect x="58" y="583.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="594.5">Import a video…</text>
+        <line x1="94" y1="617.5" x2="746.5" y2="617.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="631" width="31" height="31" rx="8" fill="#ABA3C8"/><rect x="58" y="640.5" width="18" height="12" rx="2" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <text x="94" y="651.5">Import photos…</text>
+        <line x1="94" y1="674.5" x2="746.5" y2="674.5" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="51.5" y="682" width="31" height="31" rx="8" fill="#B5AB94"/>
+        <text x="94" y="702.5">Import a LetsLapse project…</text>
+        <g fill="none" stroke="#000" stroke-opacity="0.3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right">
+          <path d="M723 527.5 l5 5 -5 5"/><path d="M723 584.5 l5 5 -5 5"/><path d="M723 641.5 l5 5 -5 5"/><path d="M723 692.5 l5 5 -5 5"/>
+        </g>
+      </g>
+      <rect x="766" y="57" width="8" height="370" rx="4" fill="#8E8E93" fill-opacity="0.6"/>
+    </g>
+    <rect x="20" y="20" width="760" height="680" fill="#000" fill-opacity="0.17"/>
+  </g>
+
+  <!-- the Shape-mation sheet: 560 pt wide, 680 pt tall, overhanging the 680 pt window -->
+  <g id="sheet" filter="url(#sheetshadow)"><rect x="120" y="52" width="560" height="680" rx="12" fill="#F2F2F7"/></g>
+  <clipPath id="sheetclip"><rect x="120" y="52" width="560" height="680" rx="12"/></clipPath>
+  <g clip-path="url(#sheetclip)">
+    <g id="sheet-header"><rect x="120" y="52" width="560" height="48" fill="#FCFCFE"/>
+      <rect x="120" y="100" width="560" height="14" fill="url(#hdrfade)"/>
+      <g data-symbol="chevron.left"><circle cx="145" cy="77" r="15" fill="#C36A00"/><path d="M147.5 71 l-6 6 6 6" fill="none" stroke="#FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="168" y="81.5" font-size="13" class="b" fill="#1C1C1E">Match</text>
+    </g>
+    <text x="140" y="131" font-size="17" class="b" fill="#1C1C1E">How strict about the rectangle?</text>
+    <rect x="138" y="148" width="525" height="234" rx="12" fill="#FFFFFF"/>
+    <text x="156" y="177" font-size="15" fill="#1C1C1E">Aspect</text>
+    <rect x="156" y="189" width="52" height="28" rx="14" fill="#C36A00"/>
+    <text x="182.0" y="208" font-size="15" class="b" text-anchor="middle" fill="#FFF">Any</text>
+    <rect x="216" y="189" width="48" height="28" rx="14" fill="#E9E9EB"/>
+    <text x="240.0" y="208" font-size="15" text-anchor="middle" fill="#1C1C1E">4:3</text>
+    <rect x="272" y="189" width="48" height="28" rx="14" fill="#E9E9EB"/>
+    <text x="296.0" y="208" font-size="15" text-anchor="middle" fill="#1C1C1E">3:2</text>
+    <rect x="328" y="189" width="55" height="28" rx="14" fill="#E9E9EB"/>
+    <text x="355.5" y="208" font-size="15" text-anchor="middle" fill="#1C1C1E">16:9</text>
+    <rect x="391" y="189" width="58" height="28" rx="14" fill="#E9E9EB"/>
+    <text x="420.0" y="208" font-size="15" text-anchor="middle" fill="#1C1C1E">Page</text>
+    <rect x="156" y="227" width="48" height="28" rx="14" fill="#E9E9EB"/>
+    <text x="180.0" y="246" font-size="15" text-anchor="middle" fill="#1C1C1E">5:4</text>
+    <rect x="212" y="227" width="46" height="28" rx="14" fill="#E9E9EB"/>
+    <text x="235.0" y="246" font-size="15" text-anchor="middle" fill="#1C1C1E">2:1</text>
+    <rect x="266" y="227" width="74" height="28" rx="14" fill="#E9E9EB"/>
+    <text x="303.0" y="246" font-size="15" text-anchor="middle" fill="#1C1C1E">Custom</text>
+    <text x="156" y="286" font-size="15" fill="#1C1C1E">Orientation</text>
+    <rect x="156" y="297.5" width="270" height="24" rx="7" fill="#E9E9EB"/>
+    <rect x="156" y="297.5" width="89" height="24" rx="7" fill="#C36A00"/>
+    <text x="200.5" y="314.0" font-size="13" class="sb" text-anchor="middle" fill="#FFF">Any</text>
+    <text x="291.0" y="314.0" font-size="13" text-anchor="middle" fill="#1C1C1E">Landscape</text>
+    <line x1="337" y1="303.5" x2="337" y2="315.5" stroke="#000" stroke-opacity="0.15"/>
+    <text x="381.5" y="314.0" font-size="13" text-anchor="middle" fill="#1C1C1E">Portrait</text>
+    <text x="156" y="349.5" font-size="13" fill="#6D6D72">Every rectangle. Measured on the true rectangle and corrected for the camera angle</text>
+    <text x="156" y="364.5" font-size="13" fill="#6D6D72">where the lens is known — 2 of 84 here; the others matched as they appear on screen.</text>
+    <text x="140" y="407" font-size="13" fill="#6D6D72">83 projects · 84 rectangles match</text>
+    <!-- pinned bottom bar (the step's own scroller sits above it) -->
+    <rect x="120" y="652" width="560" height="80" fill="#F1EBE8"/>
+    <rect x="499" y="669" width="165" height="47" rx="10" fill="#C36A00"/>
+    <text x="581.5" y="697.9" font-size="15" class="b" text-anchor="middle" fill="#FFF">Next · projects</text>
+  </g>
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="758" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Shape-mation · builder · Match · rectangle · 760×680 pt window, 560×680 pt sheet</text>
+  <text x="400" y="776" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/Shapemation/ShapemationBuilderView.swift — Aspect Any · Orientation Any · 83 projects · 84 rectangles match</text>
+</svg>

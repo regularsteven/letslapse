@@ -131,13 +131,15 @@ final class ShapemationMatchTests: XCTestCase {
     }
 
     func testSortIsByShareOfTheFrame() {
+        // The share is the shape's extent over the frame's, per axis, the
+        // larger of the two (bounded by 1 since 2026-09-20): a circle of
+        // `diameter` centred in a portrait frame reads diameter ÷ width.
         func item(_ diameter: Double, frame: CGSize) -> ShapemationItem {
-            var shape = ellipse(1, frame: frame)
-            shape.nativeDiameterPx = diameter
+            let shape = DetectedShape.ellipse(centre: CGPoint(x: frame.width / 2, y: frame.height / 2), semiAxisX: diameter / 2, semiAxisY: diameter / 2, rotation: 0, frame: frame)
             return ShapemationItem(title: "\(Int(diameter))", imageURL: URL(fileURLWithPath: "/x"), pixelSize: frame, shape: shape)
         }
         let big = item(1350, frame: CGSize(width: 3024, height: 4032))       // 45 %
-        let small = item(1400, frame: CGSize(width: 6000, height: 8000))     // 17 %, more pixels
+        let small = item(1400, frame: CGSize(width: 6000, height: 8000))     // 23 %, more pixels
         let mid = item(500, frame: CGSize(width: 1080, height: 1440))        // 46 %
         let given = [small, big, mid]
         XCTAssertEqual(ShapemationSort.largestFirst.sorted(given).map(\.title), ["500", "1350", "1400"])
