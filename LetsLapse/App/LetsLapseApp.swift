@@ -937,8 +937,11 @@ struct ContentView: View {
         if environment["LL_PRESETS"] != nil {
             selectedTab = .create
         }
-        // LL_SHAPEMATION=home|find|build|list — the Shape-mation sheet, on the
-        // Create tab for the same reason; `CreateView` reads the value.
+        // LL_SHAPEMATION=home|find|build|family|list|frame — the Shape-mation
+        // sheet, on the Create tab for the same reason; `CreateView` reads the
+        // value (`build` = the builder's Apply filters step, which LL_CHIPS
+        // and LL_QUERY pre-fill; `family` = its shape step; `frame` = the
+        // builder on its Output step in Output frame mode).
         if environment["LL_SHAPEMATION"] != nil {
             selectedTab = .create
         }

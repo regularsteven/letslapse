@@ -117,6 +117,24 @@ extension AppModel {
         }
     }
 
+    /// The tags present among the projects an index query matches, with how
+    /// many carry each — `tagChips(for:)`'s rule and order with the counts
+    /// kept (the Shape-mation builder's Apply filters rows, which narrow
+    /// with the lit tags and the words exactly as the Gallery's do). Empty
+    /// without an index.
+    func tagCounts(_ query: LibraryIndex.ProjectQuery) -> [(tag: String, count: Int)] {
+        guard let index = libraryIndex else { return [] }
+        do {
+            let counts = Dictionary(try index.tagCounts(query).map { ($0.tag, $0.count) }, uniquingKeysWith: +)
+            let custom = counts.keys.filter(SceneMetadata.isCustom)
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            return (SceneMetadata.orderedTaxonomy.filter { counts[$0] != nil } + custom).map { ($0, counts[$0] ?? 0) }
+        } catch {
+            LLog("index: tag query failed (\(error))")
+            return []
+        }
+    }
+
     /// The records behind `projectIDs(for:)`, in the same order; a project
     /// the index lists but whose document cannot be read is skipped rather
     /// than shown blank.

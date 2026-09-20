@@ -3,9 +3,10 @@ import LetsLapseKit
 
 // The Shape-mation sheet — reached from the Create tab's "Create Shape-mation"
 // row. Three doors: Find shapes (analyse the library into per-project
-// registers), Create shape slideshow (pick a shape family, the projects and
-// their instances, a mode, an output size), and List Shape-mations (play,
-// share, delete). Owns its NavigationStack like the Presets sheet.
+// registers), Create shape slideshow (filter by tag and words the way the
+// Gallery does, pick a shape family, the projects and their instances, a
+// mode, an output size), and List Shape-mations (play, share, delete). Owns
+// its NavigationStack like the Presets sheet.
 //
 // Code first, 2026-09-10 (Steven's call); SVG mirrors owed after sign-off —
 // see docs/design/iOS/INDEX.md.
@@ -25,9 +26,13 @@ struct ShapemationHomeView: View {
     @State private var registerCounts: (analysed: Int, withShapes: Int, families: [DetectedShape.Family: Int])?
 
     private let initialRoutes: [ShapemationRoute]
+    /// What the builder stages once its projects have loaded (the
+    /// `LL_SHAPEMATION=family|frame` hooks); nil for a hand-driven sheet.
+    private let builderSeed: ShapemationBuilderSeed?
 
-    init(initialPath: [ShapemationRoute] = []) {
+    init(initialPath: [ShapemationRoute] = [], builderSeed: ShapemationBuilderSeed? = nil) {
         initialRoutes = initialPath
+        self.builderSeed = builderSeed
         _path = State(initialValue: NavigationPath())
     }
 
@@ -51,7 +56,7 @@ struct ShapemationHomeView: View {
             .navigationDestination(for: ShapemationRoute.self) { route in
                 switch route {
                 case .find: FindShapesView(onFinished: refreshCounts)
-                case .build: ShapemationBuilderView(store: store)
+                case .build: ShapemationBuilderView(store: store, seed: builderSeed) { path.append($0) }
                 case .list: ShapemationListView(store: store)
                 }
             }
@@ -59,10 +64,20 @@ struct ShapemationHomeView: View {
         .onAppear(perform: refreshCounts)
         // A sheet presented with a pre-filled path drops it on iOS (the
         // destinations register after the first body); push once it is up.
-        .task {
+        // On the Mac the sheet's content is built before the hook's state
+        // write lands (2026-09-19: the first task saw no routes at all), so
+        // the task is keyed on the routes and runs again when they arrive;
+        // a push the stack drops is tried again while it stays empty.
+        .task(id: initialRoutes) {
             guard path.isEmpty, !initialRoutes.isEmpty else { return }
-            try? await Task.sleep(nanoseconds: 80_000_000)
-            for route in initialRoutes { path.append(route) }
+            for attempt in 1...8 {
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard path.isEmpty else { return }
+                for route in initialRoutes { path.append(route) }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                if !path.isEmpty { return }
+                LLog("shapemation: the hook's push was dropped (attempt \(attempt)); trying again")
+            }
         }
         #if os(macOS)
         .frame(minWidth: 560, minHeight: 680)
@@ -81,7 +96,7 @@ struct ShapemationHomeView: View {
                  detail: "Analyse projects not yet checked")
             Divider().padding(.leading, 58)
             door(.build, icon: "square.stack.3d.down.right", color: Color(red: 0x6E / 255, green: 0x5A / 255, blue: 0xC8 / 255),
-                 title: "Create shape slideshow", detail: "Pick a shape, the projects, and a mode")
+                 title: "Create shape slideshow", detail: "Filter by tag, pick the shape, the projects, and a mode")
             Divider().padding(.leading, 58)
             door(.list, icon: "list.and.film", color: LL.accentDeep, title: "List Shape-mations",
                  detail: store.records.isEmpty ? "None yet" : "\(store.records.count) video\(store.records.count == 1 ? "" : "s")")

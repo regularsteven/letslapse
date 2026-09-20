@@ -79,6 +79,9 @@ struct CreateView: View {
     @State private var showPresets = false
     @State private var showShapemation = false
     @State private var shapemationInitialPath: [ShapemationRoute] = []
+    /// `LL_SHAPEMATION=family`: the builder lands on the shape step, past the
+    /// filters; `frame`: on the Output step in `.frame` mode.
+    @State private var shapemationBuilderSeed: ShapemationBuilderSeed?
     @State private var presetsInitialPath: [PresetRoute] = []
     @State private var presetsInitialImport = false
     #if os(iOS)
@@ -307,12 +310,19 @@ struct CreateView: View {
             if let spec = environment["LL_AUTOAPPLY"] {
                 ManagePresetsView.debugSeedAutoApply(spec)
             }
-            // `LL_SHAPEMATION=home|find|build|list` — the Shape-mation sheet on
-            // the requested screen, over whatever the library holds.
+            // `LL_SHAPEMATION=home|find|build|family|list|frame` — the
+            // Shape-mation sheet on the requested screen, over whatever the
+            // library holds; `build` is the builder's first step, Apply
+            // filters (`LL_CHIPS=tag,tag` / `LL_QUERY=<words>` pre-fill it as
+            // they do the lists); `family` is one step on, the shape step;
+            // `frame` is `build` with `.frame` chosen over every project of
+            // the first family with shapes, landed on the Output step.
             if let screen = environment["LL_SHAPEMATION"] {
                 switch screen {
                 case "find": shapemationInitialPath = [.find]
                 case "build": shapemationInitialPath = [.build]
+                case "family": shapemationInitialPath = [.build]; shapemationBuilderSeed = .family
+                case "frame": shapemationInitialPath = [.build]; shapemationBuilderSeed = .frame
                 case "list": shapemationInitialPath = [.list]
                 default: shapemationInitialPath = []
                 }
@@ -425,7 +435,7 @@ struct CreateView: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showShapemation) {
-            ShapemationHomeView(initialPath: shapemationInitialPath)
+            ShapemationHomeView(initialPath: shapemationInitialPath, builderSeed: shapemationBuilderSeed)
                 .environmentObject(model)
         }
     }

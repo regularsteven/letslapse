@@ -36,11 +36,38 @@ final class ShapemationStore: ObservableObject {
         var match: ShapeMatch?
         var sort: ShapemationSort?
         var timing: ShapemationTiming?
+        /// The output frame a `.frame` render was made with
+        /// (docs/shapemation/output-frame.md §6); nil under the stack modes
+        /// and on records from before it existed. The framing's own decoder
+        /// is tolerant, and a missing key reads as nil.
+        var framing: ShapemationFraming?
+        /// The Apply filters step's answer the slideshow was built from
+        /// (2026-09-20): the lit tags and the search words; nil when nothing
+        /// was lit, and on records from before the step existed.
+        var filterTags: [String]?
+        var filterText: String?
 
         var subtitle: String {
-            var line = "\(match?.summary ?? family.title) · \(mode == .stack ? "fit" : "crop") · \(itemCount) photo\(itemCount == 1 ? "" : "s") · \(width)×\(height)"
+            var line = "\(match?.summary ?? family.title) · \(modeWord) · \(itemCount) photo\(itemCount == 1 ? "" : "s") · \(width)×\(height)"
             if let timing { line += " · \(timing.summary)" }
+            if !filterWords.isEmpty { line = filterWords.joined(separator: " · ") + " · " + line }
             return line
+        }
+
+        /// The filter as the subtitle's prefix: the tags' labels, then the
+        /// words quoted.
+        private var filterWords: [String] {
+            var parts = (filterTags ?? []).map { SceneMetadata.label(for: $0) }
+            if let filterText, !filterText.isEmpty { parts.append("\u{201C}\(filterText)\u{201D}") }
+            return parts
+        }
+
+        private var modeWord: String {
+            switch mode {
+            case .stack: return "fit"
+            case .crop: return "crop"
+            case .frame: return "frame"
+            }
         }
     }
 
