@@ -344,13 +344,26 @@ struct ShapemationSortMenu: View {
                 }
             }
         } label: {
+            #if os(macOS)
             // One Text: the Mac's borderless menu shows only the first view of a label.
-            (Text("Sort · ").foregroundColor(.secondary) + Text(builder.sort.title).foregroundColor(LL.accent).fontWeight(.semibold))
-                .font(.system(size: 13))
-                .lineLimit(1)
+            sortText
+            #else
+            // The phone's Menu draws no indicator of its own; the chevron says it opens
+            // (it went missing with the one-Text label on 2026-09-21).
+            HStack(spacing: 4) {
+                sortText
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(LL.accent)
+            }
+            #endif
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .accessibilityLabel("Sort: \(builder.sort.title)")
+    }
+
+    private var sortText: some View {
+        (Text("Sort · ").foregroundColor(.secondary) + Text(builder.sort.title).foregroundColor(LL.accent).fontWeight(.semibold))
+            .font(.system(size: 13))
+            .lineLimit(1)
     }
 }
