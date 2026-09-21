@@ -78,17 +78,13 @@ struct ShapemationBoardView: View {
         .onPreferenceChange(BoardWidthKey.self) { measuredWidth = $0 }
         .background(LL.screenBackground.ignoresSafeArea())
         .navigationTitle("Sequence board")
+        #if !os(macOS)
         .toolbar {
             if let locked = builder.lockedRecord {
-                ToolbarItem(placement: .automatic) {
-                    Text("Members locked · \(locked.members?.count ?? 0) photos")
-                        .font(.system(size: 11, weight: .medium))
-                        .padding(.horizontal, 9).padding(.vertical, 3)
-                        .background(LL.accent.opacity(0.1), in: Capsule())
-                        .foregroundStyle(LL.accentDeep)
-                }
+                ToolbarItem(placement: .automatic) { lockedPill(locked) }
             }
         }
+        #endif
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Spacer()
@@ -114,6 +110,19 @@ struct ShapemationBoardView: View {
     }
 
     // MARK: - Header: the option seat, the rect, the toggles, the numbers
+
+    /// The Re-render's badge: the members are the record's, not the
+    /// shortlist's. On iOS it is a toolbar item; on the Mac a sheet's toolbar
+    /// item lands in a 61 pt bar under the content that draws nothing
+    /// (2026-09-21, the rerender launch), so the pill sits in the header.
+    private func lockedPill(_ locked: ShapemationStore.Record) -> some View {
+        Text("Members locked · \(locked.members?.count ?? 0) photos")
+            .font(.system(size: 11, weight: .medium))
+            .padding(.horizontal, 9).padding(.vertical, 3)
+            .background(LL.accent.opacity(0.1), in: Capsule())
+            .foregroundStyle(LL.accentDeep)
+            .accessibilityLabel("Members locked, \(locked.members?.count ?? 0) photos")
+    }
 
     private func header(board: ShapemationLeastCrop.Board, tiles: [ShapemationBuilder.BoardTile]) -> some View {
         let size = builder.rectSize(for: family)
@@ -143,6 +152,9 @@ struct ShapemationBoardView: View {
                 HStack(spacing: 14) {
                     optionSeat.frame(maxWidth: 220)
                     ShapemationSortMenu(builder: builder)
+                    #if os(macOS)
+                    if let locked = builder.lockedRecord { lockedPill(locked) }
+                    #endif
                     Spacer(minLength: 0)
                     sizeMenu
                 }
@@ -159,6 +171,9 @@ struct ShapemationBoardView: View {
                 optionSeat
                 HStack {
                     ShapemationSortMenu(builder: builder)
+                    #if os(macOS)
+                    if let locked = builder.lockedRecord { lockedPill(locked) }
+                    #endif
                     Spacer(minLength: 0)
                     sizeMenu
                 }
@@ -652,7 +667,11 @@ struct ShapemationBoardTileImage: View {
                     .offset(x: b.minX * size.width, y: b.minY * size.height)
             }
         }
-        .frame(width: size.width, height: size.height)
+        // The stack grows to the photo's footprint, and a fixed frame centres
+        // an oversized child: a footprint 2.5× the tile (Fixed shape, a small
+        // shape placed large) drew the photo's bottom corner in the tile — the
+        // cobblestones under a tram on 2026-09-21. Pin the stack's origin.
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
         .clipped()
     }
 }

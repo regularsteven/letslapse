@@ -1,18 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Shape-mation · builder · Apply filters · portrait</title>
-  <desc>Mirrors App/Shapemation/ShapemationBuilderView.swift — ShapemationFiltersView, the FIRST step of the Shape-mation slideshow builder (code first 2026-09-20, Steven's call; mirrored 2026-09-20 from the Debug build on the iPhone 16 Pro simulator over an APFS clone of the tram library — 164 photo projects — with LL_SHAPEMATION=build LL_CHIPS=tram; the copy checked against the Mac Debug build's AX dump of the same screen). Pushed from the sheet's home (back reads "Shape-mation"), large title "Apply filters". Body: one 13-pt secondary line "Narrow the photos before choosing the shape — the way the Gallery's Tags rows do." (wrapped after "way" on a 402-pt phone), the lists' SceneSearchField (35 pt, radius 10, tertiary fill, magnifyingglass, placeholder "Search titles and tags"), then one white llCard (radius 18) headed TAGS (13 semibold secondary, uppercase) with the Gallery sidebar's rows — a 7-pt dot, the tag's label (15), the project count trailing (13 secondary), 31 pt per row — Urban 3 · Vehicles 3 · Road 3 · Shape testing 1 · Škoda 15T 3 · Tatra KT8D5 4 · Tatra T3 6 · Tram 164; a lit tag (Tram, from LL_CHIPS) turns dot, label and count LL.accent; "Clear tags" (12 medium, accent) closes the card once any tag is lit. Under the card the live count "164 photo projects" (12 secondary). Bottom safeAreaInset bar over regularMaterial with "Next · shape" (borderedProminent, accent, 15 semibold) trailing — disabled only at 0 projects. Tags intersect (AND); nothing lit means the whole library. Measured from the 402×874-pt simulator capture and re-anchored to this 393×852 canvas as the other builder steps are: top-anchored content follows the 59-pt safe top (the capture's 62, so canvas y = capture y − 3), the bar follows the 34-pt bottom (− 22), trailing edges sit 9 pt further left. The sheet's top sits at safe-top + 10 (69).</desc>
+  <desc>Mirrors App/Shapemation/ShapemationFiltersView.swift — the builder's first step, Apply filters, REDRAWN 2026-09-21 for round two (code first, Steven's notes): the tags are the tag editor's chips (components/tag-suggestions: 33 pt, rx 16.5, 8 pt gaps, black 7 % with a 14-pt label at 75 % and the count in 13-pt secondary) wrapped by ShapemationFlowLayout and sorted by volume, the biggest first; the applied ones sit under APPLIED in accent with their count and an xmark, beside Clear tags (13 semibold accent); then the ASPECT card (iOS segmented All · Landscape · Portrait · Square, 329×32, and the line '1 landscape · 83 portrait · 0 square — a mixed-orientation set pays cover-fit crop on every photo of the minority.'), the POSITION card ('where the shape's centre lies' wrapped to two lines at this width) — its column buttons and 3×3 cells are in the scrolled twin shapemation.builder.filters.position.portrait.svg with the count line and the contact sheet. Mirrored 2026-09-21 from the iPhone 16 Pro simulator over the tram clone in the container (-storage.activeLibrary &lt;id&gt;, LL_SHAPEMATION=build LL_CHIPS=tram), the copy and widths checked against the Mac Debug build's accessibility dump of the same screen. Re-anchored from the 402×874 capture to this 393×852 canvas as its siblings are (top y − 3, trailing x − 9, the bar − 22). Photos are flat stand-ins.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
-  </defs>
-  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.sec{fill:#6D6D72}</style>
+    <clipPath id="content"><rect x="0" y="125" width="393" height="727"/></clipPath>
 
+    <filter id="knob" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.22"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}.sec{fill:#6D6D72}</style>
   <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
   <g clip-path="url(#screen)">
     <rect x="24" y="24" width="393" height="852" fill="#000"/>
     <g transform="translate(24,24)">
-
-      <!-- status bar over the shrunken Create tab behind the sheet -->
       <g id="status-bar" fill="#FFF">
         <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
         <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
@@ -21,104 +21,111 @@
       </g>
       <!-- the parent's top edge, scaled back behind the sheet -->
       <rect x="16" y="59" width="361" height="30" rx="10" fill="#D5D5D9"/>
-
-      <!-- the sheet: Shape-mation's NavigationStack, one screen in -->
-      <g id="shapemation-builder-filters" clip-path="url(#sheet)">
-        <rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
-
-        <g id="nav-bar">
-          <path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
-          <text x="30" y="103" font-size="17" fill="#C36A00">Shape-mation</text>
-          <text x="16" y="161" font-size="34" class="b" fill="#000">Apply filters</text>
-        </g>
-
-        <!-- the one explanatory line, wrapped as the phone wraps it -->
-        <g id="intro" font-size="13" class="sec">
-          <text x="16" y="206.5">Narrow the photos before choosing the shape — the way</text>
-          <text x="16" y="223">the Gallery's Tags rows do.</text>
-        </g>
-
-        <!-- SceneSearchField: the lists' own search box -->
-        <g id="search-field" data-control="SceneSearchField">
-          <rect x="16" y="243" width="361" height="35" rx="10" fill="#E3E3E8"/>
-          <g data-symbol="magnifyingglass" stroke="#8E8E93" stroke-width="1.8" fill="none" stroke-linecap="round">
-            <circle cx="33" cy="259.5" r="5.2"/>
-            <path d="M36.8 263.3 L40.5 267"/>
-          </g>
-          <text x="47" y="266" font-size="17" fill="#8E8E93">Search titles and tags</text>
-        </g>
-
-        <!-- TAGS card: the Gallery sidebar's rows, counts narrowing with the lit tags -->
-        <g id="tags-card">
-          <rect x="16" y="294" width="361" height="322" rx="18" fill="#FFF"/>
-          <text x="33" y="323" font-size="13" class="sb sec">TAGS</text>
-
-          <g id="tag-rows" font-size="15" fill="#000">
-            <g id="tag-urban">
-              <circle cx="35.3" cy="346" r="3.5" fill="#B5B5BA"/>
-              <text x="50" y="351">Urban</text>
-              <text x="360.7" y="350" font-size="13" class="sec" text-anchor="end">3</text>
-            </g>
-            <g id="tag-vehicles">
-              <circle cx="35.3" cy="377" r="3.5" fill="#B5B5BA"/>
-              <text x="50" y="382">Vehicles</text>
-              <text x="360.7" y="381" font-size="13" class="sec" text-anchor="end">3</text>
-            </g>
-            <g id="tag-road">
-              <circle cx="35.3" cy="408" r="3.5" fill="#B5B5BA"/>
-              <text x="50" y="413">Road</text>
-              <text x="360.7" y="412" font-size="13" class="sec" text-anchor="end">3</text>
-            </g>
-            <g id="tag-shape-testing">
-              <circle cx="35.3" cy="439" r="3.5" fill="#B5B5BA"/>
-              <text x="50" y="444">Shape testing</text>
-              <text x="360.7" y="443" font-size="13" class="sec" text-anchor="end">1</text>
-            </g>
-            <g id="tag-skoda-15t">
-              <circle cx="35.3" cy="470" r="3.5" fill="#B5B5BA"/>
-              <text x="50" y="475">Škoda 15T</text>
-              <text x="360.7" y="474" font-size="13" class="sec" text-anchor="end">3</text>
-            </g>
-            <g id="tag-tatra-kt8d5">
-              <circle cx="35.3" cy="501" r="3.5" fill="#B5B5BA"/>
-              <text x="50" y="506">Tatra KT8D5</text>
-              <text x="360.7" y="505" font-size="13" class="sec" text-anchor="end">4</text>
-            </g>
-            <g id="tag-tatra-t3">
-              <circle cx="35.3" cy="532" r="3.5" fill="#B5B5BA"/>
-              <text x="50" y="537">Tatra T3</text>
-              <text x="360.7" y="536" font-size="13" class="sec" text-anchor="end">6</text>
-            </g>
-            <!-- the lit tag (LL_CHIPS=tram): dot, label and count in accent -->
-            <g id="tag-tram" data-selected="true" fill="#C36A00">
-              <circle cx="35.3" cy="563" r="3.5"/>
-              <text x="50" y="568">Tram</text>
-              <text x="360.7" y="567" font-size="13" text-anchor="end">164</text>
-            </g>
-          </g>
-
-          <text id="clear-tags" x="33" y="597.5" font-size="12" class="m" fill="#C36A00">Clear tags</text>
-        </g>
-
-        <!-- the live count under the card -->
-        <text id="project-count" x="16" y="643" font-size="12" class="sec">164 photo projects</text>
-
-        <!-- bottom safeAreaInset bar: regularMaterial, Next · shape trailing -->
-        <g id="bottom-bar">
-          <rect x="0" y="734" width="393" height="118" fill="#FFF" opacity="0.2"/>
-          <g id="next-shape">
-            <rect x="228" y="750" width="149" height="52" rx="11" fill="#C36A00"/>
-            <text x="302.5" y="781.4" font-size="15" class="sb" fill="#FFF" text-anchor="middle">Next · shape</text>
-          </g>
-        </g>
-      </g>
-
+<g id="sheet-body" clip-path="url(#sheet)">
+<rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
+<g id="nav-bar"><path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+<text x="30" y="103" font-size="17" fill="#C36A00">Shape-mation</text>
+<text x="16" y="161" font-size="34" class="b" fill="#000">Apply filters</text>
+</g>
+<g id="intro" font-size="14" class="sec">
+<text x="16" y="204" font-size="14" fill="#6D6D72">Narrow the photos before choosing the shape — the way</text>
+<text x="16" y="221" font-size="14" fill="#6D6D72">the Gallery's Tags rows do.</text>
+</g>
+<g id="search-field" data-control="SceneSearchField">
+<rect x="16" y="243" width="361" height="35" rx="10" fill="#E3E3E8"/>
+<g data-symbol="magnifyingglass" stroke="#8E8E93" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="33" cy="259.5" r="5.2"/><path d="M36.74 263.24 L40.44 266.94"/></g>
+<text x="47" y="266" font-size="17" fill="#8E8E93">Search titles and tags</text>
+</g>
+<g id="tags-card">
+<rect x="16" y="294" width="361" height="243" rx="18" fill="#FFFFFF"/>
+<text x="33" y="323" font-size="13" class="sb" fill="#6D6D72">APPLIED</text>
+<text x="360" y="323" font-size="13" class="sb" text-anchor="end" fill="#C36A00">Clear tags</text>
+<rect x="32" y="335" width="107" height="33" rx="16.5" fill="#C36A00"/>
+<text x="44" y="356.5" font-size="14" class="sb" fill="#FFFFFF">Tram</text>
+<text x="113" y="356.5" font-size="14" text-anchor="end" fill="#FFFFFF" fill-opacity="0.8">164</text>
+<g data-symbol="xmark" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-opacity="0.8"><line x1="120.8" y1="348.3" x2="127.2" y2="354.7"/><line x1="120.8" y1="354.7" x2="127.2" y2="348.3"/></g>
+<text x="33" y="394" font-size="13" class="sb" fill="#6D6D72">TAGS</text>
+<rect x="32" y="406" width="93.5" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+<text x="44" y="427.5" font-size="14" fill="#1C1C1E" fill-opacity="0.75">Tatra T3</text>
+<text x="113.5" y="427" font-size="13" text-anchor="end" fill="#6D6D72">6</text>
+<rect x="133.5" y="406" width="121" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+<text x="145.5" y="427.5" font-size="14" fill="#1C1C1E" fill-opacity="0.75">Tatra KT8D5</text>
+<text x="242.5" y="427" font-size="13" text-anchor="end" fill="#6D6D72">4</text>
+<rect x="262.5" y="406" width="72.5" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+<text x="274.5" y="427.5" font-size="14" fill="#1C1C1E" fill-opacity="0.75">Road</text>
+<text x="323" y="427" font-size="13" text-anchor="end" fill="#6D6D72">3</text>
+<rect x="32" y="447" width="79" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+<text x="44" y="468.5" font-size="14" fill="#1C1C1E" fill-opacity="0.75">Urban</text>
+<text x="99" y="468" font-size="13" text-anchor="end" fill="#6D6D72">3</text>
+<rect x="119" y="447" width="93.5" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+<text x="131" y="468.5" font-size="14" fill="#1C1C1E" fill-opacity="0.75">Vehicles</text>
+<text x="200.5" y="468" font-size="13" text-anchor="end" fill="#6D6D72">3</text>
+<rect x="220.5" y="447" width="107" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+<text x="232.5" y="468.5" font-size="14" fill="#1C1C1E" fill-opacity="0.75">Škoda 15T</text>
+<text x="315.5" y="468" font-size="13" text-anchor="end" fill="#6D6D72">3</text>
+<rect x="32" y="488" width="126" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+<text x="44" y="509.5" font-size="14" fill="#1C1C1E" fill-opacity="0.75">Shape testing</text>
+<text x="146" y="509" font-size="13" text-anchor="end" fill="#6D6D72">1</text>
+</g>
+<g id="aspect-card">
+<rect x="16" y="553" width="361" height="125" rx="18" fill="#FFFFFF"/>
+<text x="33" y="582" font-size="13" class="sb" fill="#6D6D72">ASPECT</text>
+<rect x="32" y="595" width="329" height="32" rx="9" fill="#767680" fill-opacity="0.12"/>
+<rect x="34" y="597" width="81.25" height="28" rx="7" fill="#FFFFFF" filter="url(#knob)"/>
+<text x="74.62" y="615.68" font-size="13" class="m" text-anchor="middle" fill="#1C1C1E">All</text>
+<text x="155.88" y="615.68" font-size="13" text-anchor="middle" fill="#1C1C1E">Landscape</text>
+<line x1="196.5" y1="603" x2="196.5" y2="619" stroke="#8E8E93" stroke-width="1" stroke-opacity="0.4"/>
+<text x="237.12" y="615.68" font-size="13" text-anchor="middle" fill="#1C1C1E">Portrait</text>
+<line x1="277.75" y1="603" x2="277.75" y2="619" stroke="#8E8E93" stroke-width="1" stroke-opacity="0.4"/>
+<text x="318.38" y="615.68" font-size="13" text-anchor="middle" fill="#1C1C1E">Square</text>
+<text x="32" y="643" font-size="12" fill="#6D6D72">1 landscape · 83 portrait · 0 square — a mixed-orientation</text>
+<text x="32" y="657" font-size="12" fill="#6D6D72">set pays cover-fit crop on every photo of the minority.</text>
+</g>
+<g id="position-card">
+<rect x="16" y="694" width="361" height="174" rx="18" fill="#FFFFFF"/>
+<text x="33" y="723" font-size="13" class="sb" fill="#6D6D72">POSITION</text>
+<text x="360" y="722" font-size="12" text-anchor="end" fill="#6D6D72">where the shape's</text>
+<text x="360" y="737" font-size="12" text-anchor="end" fill="#6D6D72">centre lies</text>
+<rect x="32" y="750" width="107" height="24" rx="6" fill="#E9E9EB"/>
+<text x="79.65" y="766.5" font-size="12" class="m" text-anchor="middle" fill="#1C1C1E">Left</text>
+<text x="101.8" y="766.5" font-size="12" text-anchor="middle" fill="#1C1C1E" fill-opacity="0.6">0</text>
+<rect x="143" y="750" width="107" height="24" rx="6" fill="#E9E9EB"/>
+<text x="187.3" y="766.5" font-size="12" class="m" text-anchor="middle" fill="#1C1C1E">Centre</text>
+<text x="219.7" y="766.5" font-size="12" text-anchor="middle" fill="#1C1C1E" fill-opacity="0.6">81</text>
+<rect x="254" y="750" width="107" height="24" rx="6" fill="#E9E9EB"/>
+<text x="301.65" y="766.5" font-size="12" class="m" text-anchor="middle" fill="#1C1C1E">Right</text>
+<text x="327.25" y="766.5" font-size="12" text-anchor="middle" fill="#1C1C1E" fill-opacity="0.6">3</text>
+<rect x="32" y="778" width="107" height="22" rx="4" fill="#E9E9EB" fill-opacity="0.6"/>
+<text x="85.5" y="793" font-size="11" text-anchor="middle" fill="#1C1C1E">0</text>
+<rect x="143" y="778" width="107" height="22" rx="4" fill="#E9E9EB" fill-opacity="0.6"/>
+<text x="196.5" y="793" font-size="11" text-anchor="middle" fill="#1C1C1E">0</text>
+<rect x="254" y="778" width="107" height="22" rx="4" fill="#E9E9EB" fill-opacity="0.6"/>
+<text x="307.5" y="793" font-size="11" text-anchor="middle" fill="#1C1C1E">0</text>
+<rect x="32" y="804" width="107" height="22" rx="4" fill="#E9E9EB" fill-opacity="0.6"/>
+<text x="85.5" y="819" font-size="11" text-anchor="middle" fill="#1C1C1E">0</text>
+<rect x="143" y="804" width="107" height="22" rx="4" fill="#E9E9EB" fill-opacity="0.6"/>
+<text x="196.5" y="819" font-size="11" text-anchor="middle" fill="#1C1C1E">76</text>
+<rect x="254" y="804" width="107" height="22" rx="4" fill="#E9E9EB" fill-opacity="0.6"/>
+<text x="307.5" y="819" font-size="11" text-anchor="middle" fill="#1C1C1E">3</text>
+<rect x="32" y="830" width="107" height="22" rx="4" fill="#E9E9EB" fill-opacity="0.6"/>
+<text x="85.5" y="845" font-size="11" text-anchor="middle" fill="#1C1C1E">0</text>
+<rect x="143" y="830" width="107" height="22" rx="4" fill="#E9E9EB" fill-opacity="0.6"/>
+<text x="196.5" y="845" font-size="11" text-anchor="middle" fill="#1C1C1E">5</text>
+<rect x="254" y="830" width="107" height="22" rx="4" fill="#E9E9EB" fill-opacity="0.6"/>
+<text x="307.5" y="845" font-size="11" text-anchor="middle" fill="#1C1C1E">0</text>
+</g>
+<g id="bottom-bar">
+<rect x="0" y="734" width="393" height="118" fill="#F2F2F7" fill-opacity="0.94"/>
+<line x1="0" y1="734" x2="393" y2="734" stroke="#000" stroke-width="0.5" stroke-opacity="0.1"/>
+<rect x="228" y="750" width="149" height="52" rx="11" fill="#C36A00"/>
+<text x="302.5" y="781.4" font-size="15" class="sb" text-anchor="middle" fill="#FFFFFF">Next · shape</text>
+</g>
+</g>
       <!-- hardware -->
       <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
       <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
     </g>
   </g>
-
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · Apply filters · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationFiltersView — the builder's first step · TAGS · Tram lit · 164 photo projects · Next · shape</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationFiltersView — chips by volume · Tram applied · ASPECT · POSITION</text>
 </svg>

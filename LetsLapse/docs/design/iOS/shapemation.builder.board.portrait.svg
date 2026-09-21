@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Shape-mation · builder · Sequence board · portrait</title>
+  <desc>Mirrors App/Shapemation/ShapemationBoardView.swift on the phone — the Sequence board stacked in one column (measuredWidth &lt; 760): the option seat Least crop · Fixed shape (iOS segmented, full width), the Sort row ('Sort ' secondary + 'Smallest first' accent — one concatenated Text in a borderless Menu) with the size menu '1 920' and '1 440×1 920' trailing, the rect chips (Source · 3:4 lit, 1:1 · 4:5 · 3:2 · 16:9 · 2:3 · 9:16 in a horizontal scroll, the mean loss under each in 10-pt tertiary), the LL.ink numbers pill on its own row (jump 1.72 · crop 15 % · loss 16 %), Auto-reject (on) and Show rejected (off) at the row's two ends, the count line '62 members · 21 rejected · 31 flagged', then the preview (270×360, centred; a drag places a key only once one is armed, so the page scrolls over it), the strip (LL.ink, 84 pt, 51×68 tiles with the index badge, the verdict dot and the amber shape box, the selected tile ringed), its note, the source card (the source dimmed, the output window bright with a white edge; 'the source; the output window over it is what stays'; shape · natural · crop · margins in 12-pt tabular; Reject · Add key here in tinted capsules and the Hold · as timed menu), the charts card (Shape position: x and y dots, the smoothed path solid for x and dashed for y, end handles; Shape share as rendered with dips in red; the dips line) and the cog card 'Path and tolerance · normal · window 5 · median · fixpoint'. Pinned bar: Next · timing. Mirrored 2026-09-21 from the iPhone 16 Pro simulator over the tram clone in the container (-storage.activeLibrary &lt;id&gt;, LL_SHAPEMATION=board LL_CHIPS=tram), swiped by the simulator tool; the numbers are the Mac Debug build's accessibility dump of the same board. Re-anchored from the 402×874 capture to this 393×852 canvas as its siblings are. Photos are flat stand-ins. THIS FILE: the step as it opens — the header rows and the preview, the bar over its foot.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="69" width="393" height="783" rx="10"/></clipPath>
+    <clipPath id="content"><rect x="0" y="125" width="393" height="727"/></clipPath>
+    <clipPath id="chips"><rect x="16" y="270" width="361" height="55"/></clipPath>
+    <filter id="knob" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.22"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}.sec{fill:#6D6D72}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="59" width="361" height="30" rx="10" fill="#D5D5D9"/>
+<g id="sheet-body" clip-path="url(#sheet)">
+<rect x="0" y="69" width="393" height="783" fill="#F2F2F7"/>
+<g id="top-content" clip-path="url(#sheet)">
+<g id="header">
+<rect x="16" y="194" width="361" height="32" rx="9" fill="#767680" fill-opacity="0.12"/>
+<rect x="18" y="196" width="178.5" height="28" rx="7" fill="#FFFFFF" filter="url(#knob)"/>
+<text x="107.25" y="214.68" font-size="13" class="m" text-anchor="middle" fill="#1C1C1E">Least crop</text>
+<text x="285.75" y="214.68" font-size="13" text-anchor="middle" fill="#1C1C1E">Fixed shape</text>
+<text x="16" y="255" font-size="13" fill="#6D6D72">Sort </text>
+<text x="45" y="255" font-size="13" class="sb" fill="#C36A00">Smallest first</text>
+<path d="M136.8 249.4 l3.2 3.2 3.2 -3.2" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+<text x="227" y="257" font-size="17" fill="#1C1C1E">1 920</text>
+<g data-symbol="chevron.up.chevron.down" fill="none" stroke="#6D6D72" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M275.8 250 l3.2 -3.2 3.2 3.2"/><path d="M275.8 253 l3.2 3.2 3.2 -3.2"/></g>
+<text x="377" y="256" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1 440×1 920</text>
+<g id="rect-chips" clip-path="url(#chips)">
+<rect x="16" y="277" width="101" height="28" rx="14" fill="#C36A00"/>
+<text x="66.5" y="295.5" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Source · 3:4</text>
+<text x="66.5" y="318" font-size="10" text-anchor="middle" fill="#AEAEB2">L 16 %</text>
+<rect x="125" y="277" width="40" height="28" rx="14" fill="#E9E9EB"/>
+<text x="145" y="295.5" font-size="13" text-anchor="middle" fill="#1C1C1E">1:1</text>
+<text x="145" y="318" font-size="10" text-anchor="middle" fill="#AEAEB2">L 32 %</text>
+<rect x="173" y="277" width="44.5" height="28" rx="14" fill="#E9E9EB"/>
+<text x="195.25" y="295.5" font-size="13" text-anchor="middle" fill="#1C1C1E">4:5</text>
+<text x="195.25" y="318" font-size="10" text-anchor="middle" fill="#AEAEB2">L 18 %</text>
+<rect x="225.5" y="277" width="44" height="28" rx="14" fill="#E9E9EB"/>
+<text x="247.5" y="295.5" font-size="13" text-anchor="middle" fill="#1C1C1E">3:2</text>
+<text x="247.5" y="318" font-size="10" text-anchor="middle" fill="#AEAEB2">L 53 %</text>
+<rect x="277.5" y="277" width="50.5" height="28" rx="14" fill="#E9E9EB"/>
+<text x="302.75" y="295.5" font-size="13" text-anchor="middle" fill="#1C1C1E">16:9</text>
+<text x="302.75" y="318" font-size="10" text-anchor="middle" fill="#AEAEB2">L 60 %</text>
+<rect x="336" y="277" width="44" height="28" rx="14" fill="#E9E9EB"/>
+<text x="358" y="295.5" font-size="13" text-anchor="middle" fill="#1C1C1E">2:3</text>
+<text x="358" y="318" font-size="10" text-anchor="middle" fill="#AEAEB2">L 20 %</text>
+<rect x="388" y="277" width="50.5" height="28" rx="14" fill="#E9E9EB"/>
+<text x="413.25" y="295.5" font-size="13" text-anchor="middle" fill="#1C1C1E">9:16</text>
+<text x="413.25" y="318" font-size="10" text-anchor="middle" fill="#AEAEB2">L 32 %</text>
+</g>
+<rect x="16" y="331.5" width="218.5" height="28" rx="10" fill="#1C1C1E"/>
+<text x="28" y="350" font-size="11" fill="#FFFFFF" fill-opacity="0.55">jump</text>
+<text x="56" y="350" font-size="13" class="sb mono" fill="#FFB340">1.72</text>
+<text x="92" y="350" font-size="11" fill="#FFFFFF" fill-opacity="0.55">crop</text>
+<text x="118" y="350" font-size="13" class="sb mono" fill="#FFB340">15 %</text>
+<text x="156" y="350" font-size="11" fill="#FFFFFF" fill-opacity="0.55">loss</text>
+<text x="180" y="350" font-size="13" class="sb mono" fill="#FFB340">16 %</text>
+<text x="16" y="388.5" font-size="13" fill="#1C1C1E">Auto-reject</text>
+<rect x="92.5" y="369" width="51" height="31" rx="15.5" fill="#34C759"/>
+<circle cx="128" cy="384.5" r="13.5" fill="#FFFFFF" filter="url(#knob)"/>
+<text x="233.5" y="388.5" font-size="13" fill="#1C1C1E">Show rejected</text>
+<rect x="326" y="369" width="51" height="31" rx="15.5" fill="#E9E9EA"/>
+<circle cx="341.5" cy="384.5" r="13.5" fill="#FFFFFF" filter="url(#knob)"/>
+<text x="16" y="421" font-size="12" fill="#6D6D72">62 members · 21 rejected · 31 flagged</text>
+</g>
+<clipPath id="preview"><rect x="61.5" y="435" width="270" height="360" rx="10"/></clipPath>
+<g id="preview" clip-path="url(#preview)">
+<rect x="61.5" y="435" width="270" height="360" fill="#B9BFC7"/>
+<rect x="61.5" y="499.8" width="179.2" height="151.44" fill="#D8CBAF"/>
+<rect x="240.7" y="564.6" width="90.8" height="86.64" fill="#C7BBA7"/>
+<rect x="69.44" y="521.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="69.44" y="557.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="69.44" y="593.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="95.04" y="521.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="95.04" y="557.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="95.04" y="593.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="120.64" y="521.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="120.64" y="557.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="120.64" y="593.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="146.24" y="521.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="146.24" y="557.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="146.24" y="593.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="171.84" y="521.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="171.84" y="557.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="171.84" y="593.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="197.44" y="521.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="197.44" y="557.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="197.44" y="593.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="223.04" y="521.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="223.04" y="557.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="223.04" y="593.4" width="9.72" height="19.8" fill="#6F6A66" fill-opacity="0.55"/>
+<rect x="61.5" y="651.24" width="270" height="143.76" fill="#7D7D82"/>
+<rect x="61.5" y="651.24" width="270" height="4.32" fill="#A9A9AE"/>
+<line x1="61.5" y1="672.84" x2="331.5" y2="672.84" stroke="#6A6A6E" stroke-width="0.6" stroke-opacity="0.6"/>
+<line x1="61.5" y1="698.04" x2="331.5" y2="698.04" stroke="#6A6A6E" stroke-width="0.6" stroke-opacity="0.6"/>
+<line x1="61.5" y1="723.24" x2="331.5" y2="723.24" stroke="#6A6A6E" stroke-width="0.6" stroke-opacity="0.6"/>
+<line x1="61.5" y1="748.44" x2="331.5" y2="748.44" stroke="#6A6A6E" stroke-width="0.6" stroke-opacity="0.6"/>
+<line x1="61.5" y1="773.64" x2="331.5" y2="773.64" stroke="#6A6A6E" stroke-width="0.6" stroke-opacity="0.6"/>
+<line x1="61.5" y1="798.84" x2="331.5" y2="798.84" stroke="#6A6A6E" stroke-width="0.6" stroke-opacity="0.6"/>
+<rect x="199.2" y="623.78" width="64.8" height="33.7" rx="1" fill="#B23A30"/>
+<rect x="199.2" y="623.78" width="64.8" height="9.5" rx="1" fill="#E8DDC4"/>
+<rect x="183" y="618.6" width="27" height="43.2" rx="1.5" fill="#B23A30"/>
+<rect x="183" y="618.6" width="27" height="12.1" rx="1.5" fill="#E8DDC4"/>
+<rect x="187.05" y="632.42" width="18.9" height="12.96" rx="1" fill="#7E2620"/>
+<rect x="183" y="618.6" width="27" height="43.2" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+</g>
+<rect x="69.5" y="441" width="132" height="19" rx="9.5" fill="#000" fill-opacity="0.5"/>
+<text x="77.5" y="454.5" font-size="12" fill="#FFFFFF">Photo 13. 9. at 13:11</text>
+<rect x="251" y="443" width="72.5" height="20" rx="10" fill="#000" fill-opacity="0.6"/>
+<text x="287.25" y="457" font-size="11" class="sb" text-anchor="middle" fill="#FFB340">crop 17 %</text>
+</g>
+<g id="nav-bar"><path d="M18.6 89 L10.7 97 L18.6 105" stroke="#C36A00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+<text x="30" y="103" font-size="17" fill="#C36A00">Apply filters</text>
+<text x="16" y="161" font-size="34" class="b" fill="#000">Sequence board</text>
+</g>
+<g id="bottom-bar">
+<rect x="0" y="734" width="393" height="118" fill="#F2F2F7" fill-opacity="0.94"/>
+<line x1="0" y1="734" x2="393" y2="734" stroke="#000" stroke-width="0.5" stroke-opacity="0.1"/>
+<rect x="228" y="750" width="149" height="52" rx="11" fill="#C36A00"/>
+<text x="302.5" y="781.4" font-size="15" class="sb" text-anchor="middle" fill="#FFFFFF">Next · timing</text>
+</g>
+</g>
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Shape-mation · builder · Sequence board · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ShapemationBoardView (stacked) — Least crop · Sort · jump 1.72 · 62 members</text>
+</svg>
