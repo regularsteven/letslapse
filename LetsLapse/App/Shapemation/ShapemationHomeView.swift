@@ -72,7 +72,7 @@ struct ShapemationHomeView: View {
                         let record = rerenderID.flatMap { id in store.records.first { $0.id == id } }
                         ShapemationBuilderView(store: store, seed: record.map { .rerender($0) } ?? builderSeed,
                                                push: { path.append($0) }, pop: { n in path.removeLast(min(n, path.count)) },
-                                               onBoard: { boardShowing = $0 })
+                                               onBoard: { boardShowing = $0 }, close: { dismiss() })
                     case .list:
                         ShapemationListView(store: store) { record in
                             LLog("shapemation: re-render asked for \(record.id.uuidString.prefix(8)); opening the builder on its board")

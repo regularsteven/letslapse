@@ -140,8 +140,9 @@ struct ShapemationBoardView: View {
         let count = Text(countLine(board: board, tiles: tiles)).font(.system(size: 12)).foregroundStyle(.secondary)
         return VStack(alignment: .leading, spacing: 10) {
             if wide {
-                HStack(spacing: 12) {
+                HStack(spacing: 14) {
                     optionSeat.frame(maxWidth: 220)
+                    ShapemationSortMenu(builder: builder)
                     Spacer(minLength: 0)
                     sizeMenu
                 }
@@ -156,8 +157,12 @@ struct ShapemationBoardView: View {
             } else {
                 // The phone stacks: one control row at a time, nothing wider than the screen.
                 optionSeat
+                HStack {
+                    ShapemationSortMenu(builder: builder)
+                    Spacer(minLength: 0)
+                    sizeMenu
+                }
                 rectChips
-                sizeMenu
                 if builder.mode == .leastCrop { numbersPill(board).fixedSize() }
                 HStack(spacing: 14) {
                     autoReject
@@ -289,21 +294,32 @@ struct ShapemationBoardView: View {
         .frame(maxHeight: wide ? 420 : 360)
     }
 
+    /// The strip: on the Mac an AppKit scroller with its bar always shown
+    /// and the mouse wheel scrolling it; on iOS the SwiftUI scroll view.
     private func strip(tiles: [ShapemationBuilder.BoardTile]) -> some View {
-        let ratio = builder.rectRatio(for: family)
-        let frames = builder.holds(for: family)
-        return ScrollView(.horizontal, showsIndicators: true) {
-            LazyHStack(spacing: 3) {
-                ForEach(Array(tiles.enumerated()), id: \.element.id) { i, tile in
-                    let hold = Double(frames[tile.id] ?? builder.timing.each.frames(at: builder.timing.fps))
-                    let w = max(28, min(200, 68 * ratio * hold / Double(builder.timing.fps)))
-                    stripTile(tile, index: i, size: CGSize(width: w, height: 68))
-                }
-            }
-            .padding(8)
+        Group {
+            #if os(macOS)
+            MacHorizontalScroller { stripContent(tiles: tiles) }
+                .frame(height: 84 + 16)
+            #else
+            ScrollView(.horizontal, showsIndicators: true) { stripContent(tiles: tiles) }
+                .frame(height: 84)
+            #endif
         }
         .background(LL.ink, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .frame(height: 84)
+    }
+
+    private func stripContent(tiles: [ShapemationBuilder.BoardTile]) -> some View {
+        let ratio = builder.rectRatio(for: family)
+        let frames = builder.holds(for: family)
+        return HStack(spacing: 3) {
+            ForEach(Array(tiles.enumerated()), id: \.element.id) { i, tile in
+                let hold = Double(frames[tile.id] ?? builder.timing.each.frames(at: builder.timing.fps))
+                let w = max(28, min(200, 68 * ratio * hold / Double(builder.timing.fps)))
+                stripTile(tile, index: i, size: CGSize(width: w, height: 68))
+            }
+        }
+        .padding(8)
     }
 
     private func stripTile(_ tile: ShapemationBuilder.BoardTile, index: Int, size: CGSize) -> some View {

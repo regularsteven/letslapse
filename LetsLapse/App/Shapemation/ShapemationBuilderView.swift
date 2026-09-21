@@ -33,10 +33,31 @@ final class ShapemationBuilder: ObservableObject {
         }
 
         var frameSize: CGSize { register.frameSize }
+
+        /// The register's largest shape, any family — the position filter's anchor.
+        var largestShape: DetectedShape? { register.shapes.max { $0.nativeDiameterPx < $1.nativeDiameterPx } }
+
+        var orientation: ShapemationBuilder.AspectFilter {
+            let s = frameSize
+            return s.width > s.height ? .landscape : (s.width < s.height ? .portrait : .square)
+        }
+
+        /// The 3×3 cell (row-major) that holds the largest shape's centre; the middle with no shape.
+        var centreCell: Int {
+            guard let shape = largestShape, frameSize.width > 0, frameSize.height > 0 else { return 4 }
+            let b = shape.bounds(in: frameSize)
+            let cx = Double(b.midX) / Double(frameSize.width), cy = Double(b.midY) / Double(frameSize.height)
+            return min(2, max(0, Int(cy * 3))) * 3 + min(2, max(0, Int(cx * 3)))
+        }
     }
 
     @Published private(set) var projects: [ProjectShapes] = []
-    @Published private(set) var familyCounts: [DetectedShape.Family: Int] = [:]
+    /// Shapes per family among the projects the filters admit — the family step's rows.
+    var familyCounts: [DetectedShape.Family: Int] {
+        var counts: [DetectedShape.Family: Int] = [:]
+        for project in admittedProjects { for (f, n) in project.register.families() { counts[f, default: 0] += n } }
+        return counts
+    }
 
     // MARK: - Apply filters (the first step)
 
@@ -57,6 +78,95 @@ final class ShapemationBuilder: ObservableObject {
     /// How many photo and interval projects the filter admits — the step's
     /// count line, the whole library while nothing is lit.
     @Published private(set) var filteredCount = 0
+    /// Every tag's count over the whole library — the "of N" beside a chip once the set is narrowed.
+    @Published private(set) var totalTagCounts: [String: Int] = [:]
+
+    // MARK: - Aspect and position (the prototype's Apply filters, review §5a)
+
+    enum AspectFilter: String, CaseIterable {
+        case all, landscape, portrait, square
+        var title: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+    }
+    enum CellFilter: Equatable {
+        case column(Int)
+        case cell(Int)
+    }
+    /// The minority orientation pays cover-fit crop on every photo; a filter takes it out.
+    @Published var aspectFilter: AspectFilter = .all
+    /// A column or a cell of the 3×3 grid the shape's centre must lie in.
+    @Published var cellFilter: CellFilter?
+
+    /// Whether a project passes the aspect and position filters (the tags and
+    /// the words were the index's business before its register was read).
+    func admits(_ project: ProjectShapes) -> Bool {
+        if aspectFilter != .all, project.orientation != aspectFilter { return false }
+        switch cellFilter {
+        case .column(let c)?: return project.centreCell % 3 == c
+        case .cell(let cell)?: return project.centreCell == cell
+        case nil: return true
+        }
+    }
+    var admittedProjects: [ProjectShapes] { projects.filter(admits) }
+
+    /// The count line: the index's count while only tags and words narrow
+    /// (the whole library with nothing lit); the registers' once the aspect or
+    /// a position does, since only a register knows where its shape is.
+    var shortlistCount: Int {
+        aspectFilter == .all && cellFilter == nil ? filteredCount : admittedProjects.count
+    }
+
+    /// Projects per 3×3 cell among those the tags, words and aspect admit — the position card's numbers.
+    func cellCounts() -> [Int] {
+        var counts = [Int](repeating: 0, count: 9)
+        for p in projects where aspectFilter == .all || p.orientation == aspectFilter { counts[p.centreCell] += 1 }
+        return counts
+    }
+
+    func aspectCounts() -> (landscape: Int, portrait: Int, square: Int) {
+        var l = 0, p = 0, s = 0
+        for project in projects {
+            switch project.orientation {
+            case .landscape: l += 1
+            case .portrait: p += 1
+            case .square: s += 1
+            case .all: break
+            }
+        }
+        return (l, p, s)
+    }
+
+    struct TagChip: Equatable {
+        var tag: String
+        var label: String
+        /// "27", or "8 of 26" once the set is narrowed.
+        var count: String
+        var total: Int
+    }
+
+    /// The chips: the lit tags first (their narrowed count), then every
+    /// other tag present, largest volume first.
+    func tagChipRows() -> (applied: [TagChip], others: [TagChip]) {
+        let narrowed = isFiltered
+        var applied: [TagChip] = [], others: [TagChip] = []
+        for row in presentTags {
+            let total = totalTagCounts[row.tag] ?? row.count
+            let count = narrowed && row.count != total ? "\(row.count) of \(total)" : "\(total)"
+            let chip = TagChip(tag: row.tag, label: SceneMetadata.label(for: row.tag), count: count, total: total)
+            if tagSelection.contains(row.tag) { applied.append(chip) } else { others.append(chip) }
+        }
+        applied.sort { $0.total == $1.total ? $0.label < $1.label : $0.total > $1.total }
+        others.sort { $0.total == $1.total ? $0.label < $1.label : $0.total > $1.total }
+        return (applied, others)
+    }
+
+    /// The shortlist's own aspect — the contact sheet's cover-fit window.
+    func sourceRatioOfShortlist() -> Double {
+        let photos = admittedProjects.map { p -> ShapemationLeastCrop.Photo in
+            let bounds = p.largestShape?.bounds(in: p.frameSize) ?? CGRect(origin: .zero, size: p.frameSize)
+            return ShapemationLeastCrop.Photo(id: p.id, frame: p.frameSize, bounds: bounds, captureOrder: 0)
+        }
+        return ShapemationLeastCrop.dominantAspect(of: photos) ?? 0.8
+    }
 
     /// Whether a filter narrows the set at all.
     var isFiltered: Bool { !tagSelection.isEmpty || !trimmedQueryText.isEmpty }
@@ -506,6 +616,8 @@ final class ShapemationBuilder: ObservableObject {
 
     @Published private(set) var renderProgress: ShapemationRenderer.Progress?
     @Published private(set) var rendered: ShapemationStore.Record?
+    /// Back to the Output step's idle state after a render — Render again.
+    func renderAgain() { rendered = nil; renderError = nil }
     @Published private(set) var renderError: String?
     @Published private(set) var isRendering = false
 
@@ -530,23 +642,24 @@ final class ShapemationBuilder: ObservableObject {
         let captures = model.liveCaptures(query)
         filteredCount = captures.count
         presentTags = model.tagCounts(query)
+        // The whole library's counts, for the "of N": the same question with nothing lit.
+        var whole = ProjectListQuery(sort: .capture, ascending: true, filter: .all, query: SceneQuery(text: "", tags: []), listsScans: false).indexQuery
+        whole.categories = [.photo, .interval]
+        totalTagCounts = Dictionary(model.tagCounts(whole).map { ($0.tag, $0.count) }, uniquingKeysWith: max)
         let entries: [(AppModel.CaptureProject, URL)] = captures.map { ($0, model.projectFolderURL(for: $0)) }
         Task.detached(priority: .userInitiated) { [weak self] in
             var out: [ProjectShapes] = []
-            var counts: [DetectedShape.Family: Int] = [:]
             for (capture, folder) in entries {
                 guard let reg = ShapeRegister.load(inProjectFolder: folder), !reg.shapes.isEmpty else { continue }
                 let url = folder.appendingPathComponent(reg.representative.relativePath)
                 let rep = ShapeRepresentative(url: url, relativePath: reg.representative.relativePath,
                                               source: reg.representative.source, frameFraction: reg.representative.frameFraction)
                 out.append(ProjectShapes(capture: capture, folder: folder, register: reg, representative: rep))
-                for (f, n) in reg.families() { counts[f, default: 0] += n }
             }
             let sorted = out.sorted { $0.capture.createdAt < $1.capture.createdAt }
             await MainActor.run {
                 guard let self, generation == self.loadGeneration else { return }
                 self.projects = sorted
-                self.familyCounts = counts
                 let kept = Set(sorted.map(\.id))
                 self.selection = self.selection.filter { kept.contains($0.key) }
                 self.loaded = true
@@ -579,7 +692,7 @@ final class ShapemationBuilder: ObservableObject {
     /// (by the share of the frame of the shape that would be picked) — the
     /// Kit's rule, so the builder and the `lapse` CLI order the same way.
     func projects(for family: DetectedShape.Family) -> [ProjectShapes] {
-        var admitted = projects.filter { !shapes(of: $0, for: family).isEmpty }
+        var admitted = projects.filter { admits($0) && !shapes(of: $0, for: family).isEmpty }
         if let members = lockedRecord?.members {
             let ids = Set(members.map(\.id))
             admitted = projects.filter { ids.contains($0.id) }
@@ -774,6 +887,8 @@ struct ShapemationBuilderView: View {
     var pop: ((Int) -> Void)? = nil
     /// Whether the board is on screen — the sheet's size on the Mac.
     var onBoard: ((Bool) -> Void)? = nil
+    /// Closes the whole sheet — the done card's way out.
+    var close: (() -> Void)? = nil
     @State private var seeded = false
     /// The seed's step has appeared; a push the stack swallowed is retried.
     @State private var seedLanded = false
@@ -789,7 +904,7 @@ struct ShapemationBuilderView: View {
                 case .mode(let family): ShapemationModeView(builder: builder, family: family)
                 case .board(let family): ShapemationBoardView(builder: builder, family: family, onBoard: onBoard)
                 case .timing(let family): ShapemationTimingView(builder: builder, family: family).onAppear { onBoard?(false) }
-                case .output(let family): ShapemationOutputView(builder: builder, store: store, family: family, pop: pop).onAppear { onBoard?(false) }
+                case .output(let family): ShapemationOutputView(builder: builder, store: store, family: family, pop: pop, close: close).onAppear { onBoard?(false) }
                 }
             }
             .onAppear { seedLanded = true }
@@ -863,112 +978,6 @@ struct ShapemationBuilderView: View {
             LLog("shapemation: members locked — \(builder.selection.count) of \(record.members?.count ?? 0) found in the library; pushing the board")
             push?(.board(record.family))
         }
-    }
-}
-
-/// Step 1: Apply filters — the Gallery sidebar's Tags rows and its search,
-/// over the photo and interval projects, so the shape step works a smaller
-/// set. Optional: with nothing lit the count is the whole library and Next
-/// still goes on.
-struct ShapemationFiltersView: View {
-    @ObservedObject var builder: ShapemationBuilder
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Narrow the photos before choosing the shape — the way the Gallery's Tags rows do.")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                SceneSearchField(text: $builder.queryText, placeholder: "Search titles and tags")
-                tagsCard
-                Text(countLine)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(16)
-            .padding(.bottom, 80)
-        }
-        .background(LL.screenBackground.ignoresSafeArea())
-        .navigationTitle("Apply filters")
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                Spacer()
-                NavigationLink(value: ShapemationBuildStep.family) {
-                    Text("Next · shape")
-                        .font(.system(size: 15, weight: .semibold))
-                        .padding(.horizontal, 18).padding(.vertical, 10)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(LL.accent)
-                .disabled(builder.filteredCount == 0)
-            }
-            .padding(16)
-            .background(.regularMaterial)
-        }
-    }
-
-    private var countLine: String {
-        let n = builder.filteredCount
-        return "\(n) photo project\(n == 1 ? "" : "s")"
-    }
-
-    /// The TAGS rows in the sidebar's idiom — a dot, the label, the count
-    /// trailing, accent when on; Clear tags once any is.
-    private var tagsCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            LLSectionHeader("Tags")
-            if builder.presentTags.isEmpty {
-                Text(builder.tagSelection.isEmpty
-                     ? "No tags on these photos yet — Auto rename & tag in the Gallery adds them. Search still narrows."
-                     : "No photo carries every lit tag with these words.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, 4)
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(builder.presentTags, id: \.tag) { row in
-                        let isOn = builder.tagSelection.contains(row.tag)
-                        Button {
-                            if isOn { builder.tagSelection.remove(row.tag) } else { builder.tagSelection.insert(row.tag) }
-                        } label: {
-                            HStack(spacing: 10) {
-                                Circle()
-                                    .fill(isOn ? LL.accent : Color.primary.opacity(0.25))
-                                    .frame(width: 7, height: 7)
-                                Text(SceneMetadata.label(for: row.tag))
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(isOn ? LL.accent : .primary)
-                                Spacer(minLength: 0)
-                                Text("\(row.count)")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(isOn ? LL.accent : .secondary)
-                            }
-                            .padding(.vertical, 6)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(SceneMetadata.label(for: row.tag)), \(row.count)")
-                        .accessibilityAddTraits(isOn ? .isSelected : [])
-                    }
-                }
-            }
-            if !builder.tagSelection.isEmpty {
-                Button {
-                    builder.tagSelection = []
-                } label: {
-                    Text("Clear tags")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(LL.accent)
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .llCard(cornerRadius: 18)
     }
 }
 
@@ -1050,26 +1059,9 @@ struct ShapemationProjectsView: View {
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    // The order the photos play in — largest share first by
-                    // default, so the movie reads as a zoom, not a shuffle.
-                    Menu {
-                        ForEach(ShapemationSort.allCases, id: \.self) { sort in
-                            Button {
-                                builder.sort = sort
-                            } label: {
-                                if builder.sort == sort { Label(sort.title, systemImage: "checkmark") } else { Text(sort.title) }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text("Sort").font(.system(size: 13)).foregroundStyle(.secondary)
-                            Text(builder.sort.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(LL.accent)
-                            Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(LL.accent)
-                        }
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .accessibilityLabel("Sort: \(builder.sort.title)")
+                    // The order the photos play in — smallest first by default,
+                    // the approach; the same menu sits on the Sequence board.
+                    ShapemationSortMenu(builder: builder)
                 }
                 LazyVStack(spacing: 10) {
                     ForEach(projects) { project in
@@ -1437,6 +1429,8 @@ struct ShapemationOutputView: View {
     @ObservedObject var store: ShapemationStore
     let family: DetectedShape.Family
     var pop: ((Int) -> Void)? = nil
+    /// Closes the sheet — Done on the finished card.
+    var close: (() -> Void)? = nil
     @State private var chosen: ShapemationPlan.OutputOption?
     @State private var playing: ShapemationStore.Record?
     /// The scrub's photo index, in the play order.
@@ -1500,8 +1494,29 @@ struct ShapemationOutputView: View {
         .background(LL.screenBackground.ignoresSafeArea())
         .navigationTitle("Output")
         .safeAreaInset(edge: .bottom) {
-            // Create is pinned like every step's Next, so it is never below the fold.
-            if builder.rendered == nil, builder.renderProgress == nil {
+            // Create is pinned like every step's Next, so it is never below the
+            // fold; once the clip exists the bar is the way out — Render again
+            // or Done (the record is already in the Shape-mations list).
+            if builder.rendered != nil {
+                HStack {
+                    Button("Render again") { builder.renderAgain() }
+                        .buttonStyle(.bordered)
+                    Spacer()
+                    Button {
+                        close?()
+                    } label: {
+                        Text("Done")
+                            .font(.system(size: 15, weight: .semibold))
+                            .padding(.horizontal, 22).padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(LL.accent)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityLabel("Done, close the Shape-mation sheet")
+                }
+                .padding(16)
+                .background(.regularMaterial)
+            } else if builder.renderProgress == nil {
                 HStack {
                     Spacer()
                     createButton(enabled: builder.mode.hasBoard ? plan != nil : !options.isEmpty) {
@@ -1672,10 +1687,10 @@ struct ShapemationOutputView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             Text(record.title).font(.system(size: 15, weight: .semibold))
             Text(record.subtitle).font(.system(size: 12)).foregroundStyle(.secondary)
-            if record.members != nil {
-                Text("Saved with its members — Re-render it from the list at another rate, rect or framing.")
-                    .font(.system(size: 12)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
-            }
+            Text(record.members != nil
+                 ? "Saved to Shape-mations with its members — Play or Share it here, or Re-render it from the list at another rate, rect or framing. Done closes this sheet."
+                 : "Saved to Shape-mations — Play or Share it here. Done closes this sheet.")
+                .font(.system(size: 12)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
                 Button { playing = record } label: { Label("Play", systemImage: "play.fill") }
                     .buttonStyle(.borderedProminent).tint(LL.accent)
