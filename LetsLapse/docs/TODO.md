@@ -11,6 +11,40 @@ live inline.
 
 ## Open
 
+### iOS 27 exposure follow-ups — the video segment's lost connection, aperture priority, an f-stop control
+
+**Raised:** 2026-09-21 · **Size:** S + M + M · **Status:** owed; the crash they came from is fixed (`docs/fieldtests/2026-09-21-ios27-virtual-device-custom-exposure.md`)
+
+Three jobs left over from the iPhone 18 Pro / iOS 27 crash pull, in the order
+they matter:
+
+1. **A Video ramp take can abort in `startNextSegment`.** One report in the
+   same pull (`LetsLapse-2026-09-20-111526.ips`, 18 Pro): Video mode at 0.5×,
+   burst ramp 10→60 fps, resolution `4224x3024`, right after the lens pin had
+   swapped the input to the ultra-wide (`focus_carry inputSwap:true`), the
+   first segment's `startRecording` raised from `-[AVCaptureOutput
+   liveConnections]` — the movie output had no live video connection when the
+   segment started. Reproduce on the 18 Pro with that dial (the `4224x3024`
+   4:3 video format is new to this chassis), read the connection state after
+   the pin's `commitConfiguration` and the segment's `applyCaptureFormat`, and
+   guard the start on `movieOutput.connection(with: .video)?.isActive` with a
+   loud refusal rather than a crash. Small once reproduced.
+2. **Aperture priority for AE-driven modes on a variable-aperture lens.** The
+   18 Pro main camera's iris is under AE in Basic interval, Video and the
+   preview — a mid-run iris move is a depth-of-field and brightness step a
+   timelapse will show. iOS 27's priority modes take an aperture with
+   `AVCaptureDevice.autoExposureDuration` / `.autoISO` and are accepted on
+   virtual devices too (the probe's `aperturePriority` answer). Holding f/1.8
+   there means every hand-back to continuous AE (run end, exposure unlock,
+   format changes, bias writes) becomes an aperture-priority write instead of
+   `.continuousAutoExposure`, and the readout's exposure-mode logic learns
+   `.custom`-with-auto. Decision 2026-09-21: not now — custom writes only.
+3. **An f-stop control.** Design first (`docs/design/README.md`): where a
+   variable aperture is offered in Photo's M and the ramp's dials, its detents
+   from `Format.recommendedLensApertureStops`, what the EV readout shows, and
+   what a fixed lens shows instead. `CaptureAperturePolicy` is the one place
+   the locked value lives today.
+
 ### Shape-mation — the developer brief: inventory, photo collections, tween framing, synthetic corpus
 
 **Raised:** 2026-09-19 · **Size:** XL (fourteen work packages) · **Status:** WP0 / WP1 / WP2 committed 66e201c, first sweeps in `docs/shapemation/alignment-report.md`; WP0b committed 6e64237 (Kit reader/writer, lock, tests; chip + mirrors + hook owed, see the entry below); 2026-09-19 evening: the corpus is Steven's scene kit `docs/design/kit` (b46fc48 — the first agent missed it and drew its own tram; `tools/shapesynth/parts/` + `compose.py` deleted, `kit.py` reads the kit), WP4 built (`stage --project` · `pack` · `render`, `ShapemationStaging` + `StandaloneProject`), 60 kit scenes + a σ_centre 0.05 twin staged, scored (σ = 0 all zeros, dropped 0) and rendered, 12 packages imported and built in the app — the addendum atop `alignment-report.md`; uncommitted; WP0c / WP3 next

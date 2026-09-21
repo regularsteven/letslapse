@@ -169,6 +169,10 @@ enum WatchMessageKey {
     /// Photo mode's Find Shapes toggle, "on" | "off". The `setAutoShapes`
     /// command's payload key AND the state key, like `captureMode`.
     static let autoShapes = "autoShapes"
+    /// The still modes' output format for `setOutputFormat`: "jpeg" | "dng".
+    /// Payload key only — the state's `formatLine` already ends in the format
+    /// ("1920×1080 · JPEG"), which is what `--expect-format` reads back.
+    static let outputFormat = "outputFormat"
     static let stopAtUnit = "stopAtUnit"
     static let stopAtDeadline = "stopAtDeadline"
     static let stopAtTargetCount = "stopAtTargetCount"

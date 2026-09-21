@@ -84,6 +84,7 @@ enum HolyGrailFormatProbe {
             emit("LL_PROBE active (wide): \(describe(device.activeFormat))")
             emit("LL_PROBE active (wide): exposureMode=\(device.exposureMode.rawValue) exposureDuration=\(fixed(device.exposureDuration.seconds, 5))s ISO=\(fixed(Double(device.iso), 0)) bias=\(fixed(Double(device.exposureTargetBias), 2)) [\(fixed(Double(device.minExposureTargetBias), 2))…\(fixed(Double(device.maxExposureTargetBias), 2))]")
         }
+        probeCustomExposureSupport()
 
         // `device.formats` carries no Bayer subtypes on modern iPhones — RAW
         // is only visible once a photo output is connected, and then only for
@@ -178,6 +179,56 @@ enum HolyGrailFormatProbe {
         }
     }
 
+    /// iOS 27 validates every custom-exposure write per format, and aborts
+    /// the process on a refusal when the app is linked against its SDK. This
+    /// asks the question the setter asks — for the virtual optics device and
+    /// each of its constituents, on their active formats — so a lens's answer
+    /// is on the console before a run ever depends on it. What the 2026-09-21
+    /// crash measured: a fully locked write is refused on every virtual
+    /// device, accepted on every physical one.
+    private static func probeCustomExposureSupport() {
+        guard #available(iOS 27, *) else {
+            emit("LL_PROBE custom exposure: pre-iOS 27 — no per-format validation to ask")
+            return
+        }
+        let optics: [AVCaptureDevice.DeviceType] = [
+            .builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera, .builtInWideAngleCamera,
+        ]
+        guard let virtual = optics.lazy
+            .compactMap({ AVCaptureDevice.default($0, for: .video, position: .back) }).first
+        else { return }
+        var devices = [virtual]
+        devices.append(contentsOf: virtual.constituentDevices)
+        for device in devices {
+            let format = device.activeFormat
+            let name = device.deviceType.rawValue.replacingOccurrences(of: "AVCaptureDeviceTypeBuiltIn", with: "")
+            let duration = CMTimeMakeWithSeconds(
+                min(max(0.04, format.minExposureDuration.seconds), format.maxExposureDuration.seconds),
+                preferredTimescale: 1_000_000)
+            let iso = min(max(100, format.minISO), format.maxISO)
+            let policy = CaptureAperturePolicy.lockedFNumber(
+                minimum: format.minLensAperture, maximum: format.maxLensAperture,
+                recommended: format.recommendedLensApertureStops)
+            let stops = format.recommendedLensApertureStops.map { fixed(Double($0), 2) }.joined(separator: ",")
+            emit("LL_PROBE custom exposure \(name) (\(device.isVirtualDevice ? "virtual" : "physical"))"
+                 + " aperture f/\(fixed(Double(format.minLensAperture), 2))–f/\(fixed(Double(format.maxLensAperture), 2))"
+                 + " default f/\(fixed(Double(format.defaultLensAperture), 2)) now f/\(fixed(Double(device.lensAperture), 2))"
+                 + " stops [\(stops)] policy \(policy.map { "f/" + fixed(Double($0), 2) } ?? "current (fixed lens)")"
+                 + " · isExposureModeSupported(.custom)=\(device.isExposureModeSupported(.custom))")
+            func answer(_ label: String, _ aperture: Float, _ d: CMTime, _ i: Float) -> String {
+                "\(label)=\(format.supportsExposureModeCustom(lensAperture: aperture, duration: d, iso: i))"
+            }
+            emit("LL_PROBE   " + [
+                answer("allLocked(current)", AVCaptureDevice.currentLensAperture, duration, iso),
+                answer("allLocked(policy)", policy ?? AVCaptureDevice.currentLensAperture, duration, iso),
+                answer("shutterPriority", AVCaptureDevice.currentLensAperture, duration, AVCaptureDevice.autoISO),
+                answer("isoPriority", AVCaptureDevice.currentLensAperture, AVCaptureDevice.autoExposureDuration, iso),
+                answer("aperturePriority", policy ?? AVCaptureDevice.currentLensAperture,
+                       AVCaptureDevice.autoExposureDuration, AVCaptureDevice.autoISO),
+            ].joined(separator: " "))
+        }
+    }
+
     private static func photoArea(_ format: AVCaptureDevice.Format) -> Int {
         format.supportedMaxPhotoDimensions
             .map { Int($0.width) * Int($0.height) }
@@ -203,7 +254,11 @@ enum HolyGrailFormatProbe {
     }
 
     private static func envelope(_ format: AVCaptureDevice.Format) -> String {
-        "exp \(fixed(format.minExposureDuration.seconds, 5))s–\(fixed(format.maxExposureDuration.seconds, 4))s ISO \(fixed(Double(format.minISO), 0))–\(fixed(Double(format.maxISO), 0))"
+        var line = "exp \(fixed(format.minExposureDuration.seconds, 5))s–\(fixed(format.maxExposureDuration.seconds, 4))s ISO \(fixed(Double(format.minISO), 0))–\(fixed(Double(format.maxISO), 0))"
+        if #available(iOS 27, *), format.minLensAperture < format.maxLensAperture {
+            line += " aperture f/\(fixed(Double(format.minLensAperture), 2))–f/\(fixed(Double(format.maxLensAperture), 2))"
+        }
+        return line
     }
 
     private static func fixed(_ value: Double, _ places: Int) -> String {

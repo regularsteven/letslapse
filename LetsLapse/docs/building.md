@@ -9,10 +9,17 @@ product" errors and a Watch-app signing error — both decoded at the end.
 ## What you need
 
 - **A Mac with Apple silicon** (M1 or later) and about 40 GB free. Xcode is big.
-- **Xcode**, free from the Mac App Store. Last verified with Xcode 26.1.1 on
-  macOS 15.6. Your Xcode must be at least as new as the iOS on your phone —
-  a phone running a newer iOS than your Xcode knows will not appear as a
-  destination, so update Xcode first.
+- **Xcode**, free from the Mac App Store. Last verified with Xcode 27.0 on
+  macOS 27 (and 26.1.1 on macOS 15.6 before it). Your Xcode must be at least
+  as new as the iOS on your phone — a phone running a newer iOS than your
+  Xcode knows will not appear as a destination, so update Xcode first. Note
+  that the SDK you link against changes how the camera framework treats a
+  mistake: linked against the iOS 27 SDK, an AVFoundation API-contract
+  violation (an exposure the format refuses, a frame duration outside its
+  range) aborts the app, where an older-SDK build only logged it and dropped
+  the call. The app asks before it writes (`writeCustomExposure` in
+  `CameraController`), so a new device that refuses something says so in the
+  console rather than crashing.
 - **GitHub Desktop** (free), or any git client.
 - **An Apple ID.** A free one is enough to run the app on your own iPhone,
   iPad or Mac (Apple calls this a Personal Team), with limits: an app put on

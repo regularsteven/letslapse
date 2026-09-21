@@ -73,6 +73,7 @@ This bit us twice while building this skill.
 |---|---|---|
 | **Photo** | how many frames blend into the one image | `--blend auto\|1\|3\|5\|10\|20` |
 | **Interval** | MODE dial: Basic · Holy Grail · Scanner | `--interval-mode basic\|holygrail\|scanner` |
+| | output format, JPEG or DNG (Photo too) | `--output-format jpeg\|dng` |
 | | spacing, or Auto pacing (Holy Grail/Scanner only) | `--every 0.5\|1\|2\|3\|5\|10\|auto` |
 | | frames blended per captured frame | `--blend auto\|1\|3\|5\|10\|20` |
 | | Auto-blend decision logic, if `--blend auto` | `--strategy zone\|latitude\|lumen` |
@@ -84,7 +85,9 @@ This bit us twice while building this skill.
 | | how long to shoot | `--duration <seconds>` |
 
 **Then ask about the settings the remote cannot reach** (next section) and pass
-them as `--expect-format` / `--attest`.
+them as `--expect-format` / `--attest`. (The output format is reachable since
+2026-09-21 — `--output-format`, or `setOutputFormat:dng` to the probe — so the
+JPEG × DNG matrix needs no hand on the phone.)
 
 ### 3. Run it
 

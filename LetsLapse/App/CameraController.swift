@@ -309,6 +309,10 @@ final class CameraController: NSObject, ObservableObject {
     /// session input or re-derive zoom in virtual-device factor space — a
     /// shoot ends on the lens it started on. sessionQueue-confined.
     private var sequenceLensPin: (device: AVCaptureDevice, zoomFactor: CGFloat)?
+    /// True while a ramped blend run (Dynamic / Ladder, JPEG) holds the lens
+    /// pin above — its teardown releases it, the way a video take's does.
+    /// sessionQueue-confined.
+    private var rampRunHoldsLensPin = false
     /// Stop factor to restore once stops are derived (remembered settings).
     private var preferredStopFactor: Double?
     /// Last-applied "Enhanced lenses" setting, so reconcile re-derives when
@@ -3531,8 +3535,14 @@ final class CameraController: NSObject, ObservableObject {
             maxExposureSeconds
         )
         let duration = CMTimeMakeWithSeconds(seconds, preferredTimescale: 1_000_000)
-        if device.isExposureModeSupported(.custom) {
-            device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
+        if let refusal = writeCustomExposure(on: device, duration: duration, iso: iso).refusal {
+            // The values cannot be re-asserted on this lens (a virtual device
+            // on iOS 27 refuses a locked custom exposure) — hold what AE has
+            // rather than letting the segment flicker back to auto.
+            LLog("exposure lock: re-assert refused — \(refusal) — holding AE's value instead")
+            if device.isExposureModeSupported(.locked) {
+                device.exposureMode = .locked
+            }
         }
         #else
         if device.isExposureModeSupported(.locked) {
@@ -3737,12 +3747,19 @@ final class CameraController: NSObject, ObservableObject {
         }
         seconds = max(seconds, format.minExposureDuration.seconds)
         iso = min(max(iso, format.minISO), format.maxISO)
-        if device.isExposureModeSupported(.custom) {
-            device.setExposureModeCustom(
-                duration: CMTimeMakeWithSeconds(seconds, preferredTimescale: 1_000_000),
-                iso: iso,
-                completionHandler: latched.map { callback in { _ in callback() } }
-            )
+        let outcome = writeCustomExposure(
+            on: device,
+            duration: CMTimeMakeWithSeconds(seconds, preferredTimescale: 1_000_000),
+            iso: iso,
+            completionHandler: latched.map { callback in { _ in callback() } })
+        if let refusal = outcome.refusal {
+            // No custom pair on this lens: hold whatever AE has at the cut so
+            // the two files at least share a mode. `latched` never fires here,
+            // as documented above.
+            LLog("switch hold: custom exposure refused — \(refusal) — locking AE instead")
+            if device.isExposureModeSupported(.locked) {
+                device.exposureMode = .locked
+            }
         }
         if device.isWhiteBalanceModeSupported(.locked) {
             var gains = hold.whiteBalanceGains
@@ -4211,8 +4228,13 @@ final class CameraController: NSObject, ObservableObject {
                 let iso = min(max(device.iso, format.minISO), format.maxISO)
                 let duration = device.exposureDuration
                 let lens = device.lensPosition
-                if device.isExposureModeSupported(.custom) {
-                    device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
+                if let refusal = self.writeCustomExposure(on: device, duration: duration, iso: iso).refusal {
+                    // The lock still holds: AE's own lock keeps the exposure
+                    // where it is, only without numbers the readout can name.
+                    LLog("exposure lock: custom exposure refused — \(refusal) — locking AE instead")
+                    if device.isExposureModeSupported(.locked) {
+                        device.exposureMode = .locked
+                    }
                 }
                 #else
                 if device.isExposureModeSupported(.locked) {
@@ -4309,7 +4331,10 @@ final class CameraController: NSObject, ObservableObject {
                 let format = device.activeFormat
                 let clamped = min(max(iso, format.minISO), format.maxISO)
                 let duration = device.exposureDuration
-                device.setExposureModeCustom(duration: duration, iso: clamped, completionHandler: nil)
+                if let refusal = self.writeCustomExposure(on: device, duration: duration, iso: clamped).refusal {
+                    LLog("setISO: refused — \(refusal)")
+                    return
+                }
                 self.exposureLocked = true
                 self.lockedISOValue = clamped
                 self.lockedShutterValue = duration.seconds
@@ -4365,7 +4390,10 @@ final class CameraController: NSObject, ObservableObject {
                     maxSeconds
                 )
                 let duration = CMTimeMakeWithSeconds(seconds, preferredTimescale: 1_000_000)
-                device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
+                if let refusal = self.writeCustomExposure(on: device, duration: duration, iso: iso).refusal {
+                    LLog("exposure offset: refused — \(refusal)")
+                    return
+                }
                 self.exposureLocked = true
                 self.lockedISOValue = iso
                 self.lockedShutterValue = seconds
@@ -4658,27 +4686,140 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    /// The one write every manual-exposure call site shares, clamped
-    /// through the ACTIVE format every time: an out-of-range duration or
-    /// ISO makes `setExposureModeCustom` throw an uncatchable ObjC
-    /// exception, not a Swift error (the iPad bracket trap, CLAUDE.md) — the
-    /// detent tables alone are not enough of a guarantee, since a device's
-    /// real envelope can be narrower than the full list. sessionQueue.
+    /// The one write every manual-exposure call site shares — see
+    /// `writeCustomExposure` for the clamp and the refusal check. sessionQueue.
     private func writeManualExposure(device: AVCaptureDevice, shutterSeconds: Double, iso: Float) {
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
-            let format = device.activeFormat
-            let clampedISO = min(max(iso, format.minISO), format.maxISO)
-            var duration = CMTimeMakeWithSeconds(shutterSeconds, preferredTimescale: 1_000_000)
-            if CMTimeCompare(duration, format.minExposureDuration) < 0 {
-                duration = format.minExposureDuration
+            let duration = CMTimeMakeWithSeconds(shutterSeconds, preferredTimescale: 1_000_000)
+            if let refusal = writeCustomExposure(on: device, duration: duration, iso: iso).refusal {
+                LLog("manual exposure: refused — \(refusal)")
             }
-            if CMTimeCompare(duration, format.maxExposureDuration) > 0 {
-                duration = format.maxExposureDuration
-            }
-            device.setExposureModeCustom(duration: duration, iso: clampedISO, completionHandler: nil)
         } catch {}
+    }
+
+    // MARK: - Custom exposure writes
+
+    /// Why a custom-exposure write did or did not reach the camera.
+    enum CustomExposureWriteOutcome: Equatable {
+        /// Written. `lensAperture` is the f-number the write locked a
+        /// variable-aperture lens at (iOS 27); nil on a fixed lens.
+        case applied(lensAperture: Float?)
+        /// Not written: the format would have refused it, and why.
+        case rejected(String)
+
+        var refusal: String? {
+            if case .rejected(let reason) = self { return reason }
+            return nil
+        }
+    }
+
+    /// The f-number a custom exposure locks `format`'s lens at when that lens
+    /// can move (`CaptureAperturePolicy`), nil for a fixed one — which takes
+    /// `AVCaptureDevice.currentLensAperture` instead. iOS 27 is the first SDK
+    /// with a movable aperture; earlier systems have nothing to lock.
+    private func lockedLensAperture(for format: AVCaptureDevice.Format) -> Float? {
+        guard #available(iOS 27, *) else { return nil }
+        return CaptureAperturePolicy.lockedFNumber(
+            minimum: format.minLensAperture, maximum: format.maxLensAperture,
+            recommended: format.recommendedLensApertureStops)
+    }
+
+    /// The one `setExposureModeCustom` call in the app. Runs inside the
+    /// caller's `lockForConfiguration` scope, sessionQueue. Never raises:
+    ///
+    /// - Duration and ISO are clamped through the ACTIVE format every time —
+    ///   an out-of-range value is an uncatchable ObjC exception, not a Swift
+    ///   error (the iPad bracket trap, CLAUDE.md), and a device's real
+    ///   envelope can be narrower than any detent table.
+    /// - On iOS 27 the exact triple is put to the format first
+    ///   (`supportsExposureModeCustom(lensAperture:duration:iso:)`), because
+    ///   the setter now validates it and aborts the process on a refusal.
+    ///   The one that took the iPhone 18 Pro down on 2026-09-21: a fully
+    ///   locked custom exposure — which is what the two-argument call now
+    ///   means, aperture held at "current" — is refused on every VIRTUAL
+    ///   device (dual, dual-wide, triple camera) by
+    ///   `-[AVCaptureDeviceFormat _checkCustomExposureModeWithLensAperture:
+    ///   duration:ISO:entryPoint:]`, while `isExposureModeSupported(.custom)`
+    ///   keeps answering true there. Physical constituents pass, which is why
+    ///   the DNG pipeline and Photo's M — both already on a physical lens —
+    ///   never saw it (docs/fieldtests/2026-09-21-ios27-virtual-device-custom-
+    ///   exposure.md). A refusal comes back as `.rejected` with the facts.
+    /// - A variable-aperture lens is locked at the policy f-number; a fixed
+    ///   one keeps its own (a numeric value there is itself a refusal).
+    @discardableResult
+    private func writeCustomExposure(
+        on device: AVCaptureDevice, duration requested: CMTime, iso requestedISO: Float,
+        completionHandler: ((CMTime) -> Void)? = nil
+    ) -> CustomExposureWriteOutcome {
+        guard device.isExposureModeSupported(.custom) else {
+            return .rejected("this camera does not accept a custom exposure right now"
+                             + " · \(exposureDeviceFacts(device))")
+        }
+        let format = device.activeFormat
+        guard requestedISO.isFinite, requested.isValid, requested.seconds.isFinite else {
+            return .rejected(String(format: "not a number (%.4fs ISO %.0f)",
+                                    requested.seconds, Double(requestedISO)))
+        }
+        let iso = min(max(requestedISO, format.minISO), format.maxISO)
+        var duration = requested
+        if CMTimeCompare(duration, format.minExposureDuration) < 0 {
+            duration = format.minExposureDuration
+        }
+        if CMTimeCompare(duration, format.maxExposureDuration) > 0 {
+            duration = format.maxExposureDuration
+        }
+        if #available(iOS 27, *) {
+            let locked = lockedLensAperture(for: format)
+            let aperture = locked ?? AVCaptureDevice.currentLensAperture
+            guard format.supportsExposureModeCustom(lensAperture: aperture, duration: duration, iso: iso) else {
+                let dims = format.formatDescription.dimensions
+                let apertureLabel = locked.map { String(format: "f/%.2f", $0) } ?? "the lens's own aperture"
+                return .rejected(String(
+                    format: "the format refuses a locked custom exposure (%.4fs ISO %.0f at %@)"
+                        + " · %@ · format %d×%d exp %.5f–%.4fs ISO %.0f–%.0f aperture f/%.2f–f/%.2f",
+                    duration.seconds, Double(iso), apertureLabel, exposureDeviceFacts(device),
+                    Int(dims.width), Int(dims.height),
+                    format.minExposureDuration.seconds, format.maxExposureDuration.seconds,
+                    Double(format.minISO), Double(format.maxISO),
+                    Double(format.minLensAperture), Double(format.maxLensAperture)))
+            }
+            device.setExposureModeCustom(
+                lensAperture: aperture, duration: duration, iso: iso,
+                completionHandler: completionHandler)
+            return .applied(lensAperture: locked)
+        } else {
+            device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: completionHandler)
+            return .applied(lensAperture: nil)
+        }
+    }
+
+    /// What the camera is, for a refusal line: the facts the 2026-08-27
+    /// hypothesis ("a virtual device with switching unlocked refuses
+    /// `.custom`") could have been tested against, had they been recorded
+    /// anywhere a project carries — and the ones that named the 2026-09-21
+    /// cause once they were.
+    private func exposureDeviceFacts(_ device: AVCaptureDevice) -> String {
+        var parts = [device.localizedName]
+        if device.isVirtualDevice {
+            let active = device.activePrimaryConstituent?.deviceType.rawValue
+                .replacingOccurrences(of: "AVCaptureDeviceTypeBuiltIn", with: "") ?? "none"
+            parts.append("virtual on \(active), switching \(constituentSwitchRestore == nil ? "unlocked" : "locked")")
+        } else {
+            parts.append("physical")
+        }
+        parts.append("custom exposure \(device.isExposureModeSupported(.custom) ? "supported" : "unsupported")")
+        let mode: String
+        switch device.exposureMode {
+        case .locked: mode = "locked"
+        case .autoExpose: mode = "autoExpose"
+        case .continuousAutoExposure: mode = "continuousAutoExposure"
+        case .custom: mode = "custom"
+        @unknown default: mode = "unknown"
+        }
+        parts.append("mode \(mode)")
+        return parts.joined(separator: " · ")
     }
     #endif
 
@@ -6620,6 +6761,19 @@ final class CameraController: NSObject, ObservableObject {
         holyGrailLimits = limits
         let metered = HolyGrailRampEngine.ExposureTarget(
             shutterSeconds: device.exposureDuration.seconds, iso: device.iso)
+        // AE metered through the iris IT chose; the run locks the policy's
+        // (`CaptureAperturePolicy`, a variable-aperture lens only). The same
+        // light through a smaller hole needs more gain — f/1.48 → f/1.8 is
+        // +0.56 stop — or frame 0 of every shoot on that lens lands under.
+        var meteredGain = metered.lightGain
+        let meteredAperture = device.lensAperture
+        if meteredAperture.isFinite, meteredAperture > 0, limits.aperture > 0,
+           abs(limits.aperture / meteredAperture - 1) > 0.005 {
+            let ratio = pow(Double(limits.aperture / meteredAperture), 2)
+            meteredGain *= ratio
+            LLog(String(format: "holygrail: aperture locks f/%.2f (AE metered at f/%.2f) — seed gain ×%.2f",
+                        Double(limits.aperture), Double(meteredAperture), ratio))
+        }
         // AE's *exposure* is right; AE's *split* is not ours to inherit.
         //
         // What the device is delivering here is metered for the live preview,
@@ -6635,7 +6789,7 @@ final class CameraController: NSObject, ObservableObject {
         // policy puts the first frame on the exposure the ramp would have
         // chosen anyway, instead of leaving one preview-shaped frame at the
         // head of every dark shoot.
-        let seed = HolyGrailRampEngine.split(gain: metered.lightGain, limits: limits)
+        let seed = HolyGrailRampEngine.split(gain: meteredGain, limits: limits)
         let seedMoveStops = abs(log2(max(seed.shutterSeconds, 1e-6)
                                       / max(metered.shutterSeconds, 1e-6)))
         if seedMoveStops > 0.17 {
@@ -6682,7 +6836,10 @@ final class CameraController: NSObject, ObservableObject {
             maxShutter: HolyGrailRampEngine.time(ceiling),
             minISO: format.minISO,
             maxISO: format.maxISO,
-            aperture: device.lensAperture)
+            // The aperture every exposure write will lock — the policy's on a
+            // variable lens (iOS 27), the lens's own fixed one otherwise — so
+            // the EV maths and the frames' EXIF agree.
+            aperture: lockedLensAperture(for: format) ?? device.lensAperture)
     }
 
     /// How a window's worth of frames reported the scene.
@@ -7101,6 +7258,12 @@ final class CameraController: NSObject, ObservableObject {
     /// device's `lockForConfiguration` scope, every window, in place of the
     /// DNG pipeline's plain `.locked`.
     private func applyHolyGrailTrackedWhiteBalance(on device: AVCaptureDevice) {
+        // Custom gains on a lens that only takes `AVCaptureWhiteBalanceGainsCurrent`
+        // raise (uncatchable); such a lens gets the plain lock the DNG path uses.
+        guard device.isLockingWhiteBalanceWithCustomDeviceGainsSupported else {
+            device.whiteBalanceMode = .locked
+            return
+        }
         let maxGain = device.maxWhiteBalanceGain
         // Gray-world reads can be NaN or out of range mid-configuration; a
         // bad sample skips a window rather than poisoning the lock.
@@ -7162,6 +7325,10 @@ final class CameraController: NSObject, ObservableObject {
         case noDevice
         case noTarget
         case customExposureUnsupported
+        /// The format refused the exact write (iOS 27 validates every custom
+        /// exposure; a virtual device refuses a fully locked one). The reason
+        /// carries the device facts, so the run's issue trail names the lens.
+        case rejected(String)
         case lockFailed(String)
 
         /// Why not, phrased for the log. Nil when the write landed.
@@ -7175,6 +7342,8 @@ final class CameraController: NSObject, ObservableObject {
                 return "the ramp has no target"
             case .customExposureUnsupported:
                 return "this camera does not accept a custom exposure right now"
+            case .rejected(let reason):
+                return reason
             case .lockFailed(let message):
                 return "lockForConfiguration failed — \(message)"
             }
@@ -7186,11 +7355,10 @@ final class CameraController: NSObject, ObservableObject {
         guard let device = videoDevice else { return .noDevice }
         guard let target = holyGrailEngine?.currentTarget else { return .noTarget }
         guard device.isExposureModeSupported(.custom) else { return .customExposureUnsupported }
-        // Clamp to the format's REAL envelope before writing: an out-of-range
-        // duration or ISO makes `setExposureModeCustom` throw an ObjC
-        // exception (not a Swift error), and the 2026-08-20 field test's
-        // commanded ISO 18 sat below the iPad's floor. The engine's own
-        // limits should prevent this; this is the belt at the last write.
+        // The write clamps to the format's REAL envelope itself (the
+        // 2026-08-20 field test's commanded ISO 18 sat below the iPad's
+        // floor); this pre-computes the same clamp so a move the envelope
+        // forced is logged, and so the reference below is what was written.
         let format = device.activeFormat
         let iso = min(max(target.iso, format.minISO), format.maxISO)
         var duration = target.shutter
@@ -7226,7 +7394,9 @@ final class CameraController: NSObject, ObservableObject {
                 device.whiteBalanceMode = .locked
                 #endif
             }
-            device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
+            if let refusal = writeCustomExposure(on: device, duration: duration, iso: iso).refusal {
+                return .rejected(refusal)
+            }
         } catch {
             return .lockFailed(error.localizedDescription)
         }
@@ -7260,31 +7430,10 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    /// What the camera is, for a refusal line: the one set of facts the
-    /// 2026-08-27 hypothesis ("a virtual device with switching unlocked
-    /// refuses `.custom`") could have been tested against, had they been
-    /// recorded anywhere a project carries.
+    /// The active camera's facts for a refusal line (`exposureDeviceFacts`).
     private func holyGrailDeviceFacts() -> String {
         guard let device = videoDevice else { return "no capture device" }
-        var parts = [device.localizedName]
-        if device.isVirtualDevice {
-            let active = device.activePrimaryConstituent?.deviceType.rawValue
-                .replacingOccurrences(of: "AVCaptureDeviceTypeBuiltIn", with: "") ?? "none"
-            parts.append("virtual on \(active), switching \(constituentSwitchRestore == nil ? "unlocked" : "locked")")
-        } else {
-            parts.append("physical")
-        }
-        parts.append("custom exposure \(device.isExposureModeSupported(.custom) ? "supported" : "unsupported")")
-        let mode: String
-        switch device.exposureMode {
-        case .locked: mode = "locked"
-        case .autoExpose: mode = "autoExpose"
-        case .continuousAutoExposure: mode = "continuousAutoExposure"
-        case .custom: mode = "custom"
-        @unknown default: mode = "unknown"
-        }
-        parts.append("mode \(mode)")
-        return parts.joined(separator: " · ")
+        return exposureDeviceFacts(device)
     }
 
     /// Hands a camera-layer observation to whichever blend controller is
@@ -7786,11 +7935,14 @@ final class CameraController: NSObject, ObservableObject {
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
-            if device.isExposureModeSupported(.custom) {
-                device.setExposureModeCustom(
-                    duration: device.exposureDuration, iso: device.iso, completionHandler: nil)
-            } else if device.isExposureModeSupported(.locked) {
-                device.exposureMode = .locked
+            if let refusal = writeCustomExposure(
+                on: device, duration: device.exposureDuration, iso: device.iso).refusal {
+                // No knowable pair on this lens — AE's lock still freezes the
+                // set, the HUD just cannot name the numbers.
+                LLog("scanner: custom exposure refused — \(refusal) — locking AE instead")
+                if device.isExposureModeSupported(.locked) {
+                    device.exposureMode = .locked
+                }
             }
             if device.isWhiteBalanceModeSupported(.locked) {
                 device.whiteBalanceMode = .locked
@@ -8658,10 +8810,24 @@ final class CameraController: NSObject, ObservableObject {
     private func relaxVideoFrameDurationForBlend(interval: Double) {
         #if os(iOS)
         guard let device = videoDevice else { return }
-        let ceiling = min(device.activeFormat.maxExposureDuration.seconds,
+        var ceiling = min(device.activeFormat.maxExposureDuration.seconds,
                           max(0.05, interval))
         let current = device.activeVideoMaxFrameDuration
-        guard current.isValid, ceiling > current.seconds * 1.01 else { return }
+        guard current.isValid, current.seconds > 0 else { return }
+        // Bounded by the format's own slowest rate, like every other frame-
+        // duration write here (`setStreamRate`, `frameDuration(forNominal:in:)`):
+        // a duration outside the advertised range is an uncatchable
+        // NSException, and `maxExposureDuration` is not a promise about frame
+        // durations — a 16 Pro's formats happen to take 1 s, a lens this run
+        // was just pinned to may not.
+        let pinnedFPS = 1 / (pinnedVideoMinFrameDuration ?? device.activeVideoMinFrameDuration).seconds
+        let ranges = device.activeFormat.videoSupportedFrameRateRanges
+        if let range = ranges.first(where: { pinnedFPS >= $0.minFrameRate - 0.01 && pinnedFPS <= $0.maxFrameRate + 0.01 })
+            ?? ranges.min(by: { abs($0.maxFrameRate - pinnedFPS) < abs($1.maxFrameRate - pinnedFPS) }),
+           range.maxFrameDuration.isValid, range.maxFrameDuration.seconds > 0 {
+            ceiling = min(ceiling, range.maxFrameDuration.seconds)
+        }
+        guard ceiling > current.seconds * 1.01 else { return }
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
@@ -9320,12 +9486,38 @@ final class CameraController: NSObject, ObservableObject {
 
     /// sessionQueue-confined: the video-tap JPEG path.
     private func startLiveBlendStandard(every interval: Double, depth: BlendDepth, requestedOutputFormat: String) {
+            #if os(iOS)
+            // A ramped run shoots through the stop's own physical lens, the way
+            // a DNG run and Photo's M already do: iOS 27 refuses a fully locked
+            // custom exposure on every VIRTUAL device — and aborts the process
+            // for it when the app is linked against its SDK (the iPhone 18 Pro,
+            // 2026-09-21; `writeCustomExposure`). The same pin a video sequence
+            // takes: framing preserved, the stop becomes a crop of that lens,
+            // focus carried across the swap inside. It declines by itself, with
+            // a line, when the lens cannot shoot the run's format — the run
+            // then stays on the optics device and the seed's refusal is
+            // reported, not fatal.
+            let deviceBeforePin = self.videoDevice
+            if self.holyGrailRequestedForRun {
+                self.pinLensForSequence(
+                    configurations: [(self.selectedResolution, self.selectedFrameRate)])
+                if self.videoDevice !== deviceBeforePin {
+                    // Adding an input re-applies the session preset; the run's
+                    // pinned format (and the pin's zoom, via the re-assert) go
+                    // back on the lens that arrived.
+                    _ = self.applyCaptureFormat(
+                        resolution: self.selectedResolution, fps: self.selectedFrameRate)
+                    self.rampRunHoldsLensPin = true
+                    LLog("optics: ramp run on \(self.videoDevice?.localizedName ?? "?")"
+                         + " — a virtual device refuses a locked custom exposure on iOS 27")
+                }
+            }
+            #endif
             // Focus as the user framed it, before this path's session
             // transaction. Adding an output can have the session re-negotiate
             // the active format, and a format write hands the lens back to
             // continuous auto — the same reset the lens pin causes in a video
-            // take. Same device throughout here, so the position carries
-            // exactly.
+            // take. Same device from here on, so the position carries exactly.
             let focusBeforeStart = self.captureFocusState()
             if self.liveBlendOutput == nil {
                 let output = AVCaptureVideoDataOutput()
@@ -9457,7 +9649,17 @@ final class CameraController: NSObject, ObservableObject {
                     self.endHolyGrailIfActive()
                     self.trimRampSidecarAfterTooHotStop(result, ramped: ramped)
                     self.restoreConstituentSwitchingAfterRun()
+                    // On the lens the run relaxed it on — before that lens
+                    // leaves the session.
                     self.restoreVideoFrameDuration()
+                    if self.rampRunHoldsLensPin {
+                        self.rampRunHoldsLensPin = false
+                        // Optics device back, resting format re-pinned on it
+                        // (the video path's release); the stop list does not
+                        // change, the published format is re-read.
+                        self.releaseSequenceLensPin()
+                        self.publishFormat()
+                    }
                     #endif
                     self.releaseRunFocusLock()
                 }
@@ -9483,13 +9685,19 @@ final class CameraController: NSObject, ObservableObject {
             }
             #endif
             // A blend run is a timelapse like any other: focus stops at the
-            // shutter press and stays stopped. No input swap here, so there is
-            // nothing to settle first.
+            // shutter press and stays stopped. A ramped run swapped lenses
+            // above and gets the settle grace; a plain one has nothing to
+            // settle first.
+            #if os(iOS)
+            self.lockFocusForRun(deviceChanged: self.videoDevice !== deviceBeforePin)
+            #else
             self.lockFocusForRun(deviceChanged: false)
+            #endif
             #if os(iOS)
             // And the lens itself stops too: no silent constituent hand-offs
             // while frames are being averaged. (The DNG path already runs on
-            // a pinned physical device; this path stays on the virtual one.)
+            // a pinned physical device, and so does a ramped run now; a plain
+            // blend stays on the virtual one, pinned here.)
             self.lockConstituentSwitchingForRun()
             // Heat: the run ends at critical and the stream drops at serious.
             self.installRunThermalGuard()

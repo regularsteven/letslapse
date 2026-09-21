@@ -6033,6 +6033,27 @@ struct CaptureView: View {
                   token == "on" || token == "off" else { return false }
             autoShapesEnabled = token == "on"
             return true
+        case .setOutputFormat:
+            // Bench only (no watch or Mac control sends it). The still modes'
+            // Output picker, by token: writes the same model property the
+            // picker binds, so its `.onChange`s re-frame the preview and
+            // re-check Safe depth exactly as a tap would. Idle-only, and
+            // refused in Video — the format is Interval's and Photo's, and
+            // switching modes as a side effect would be a second command
+            // hiding in the first. DNG on a source without Bayer RAW is
+            // refused rather than downgraded: the phone owns that rule.
+            guard !isCapturing, mode == .interval || mode == .photo,
+                  let token = (payload[WatchMessageKey.outputFormat] as? String)?
+                    .trimmingCharacters(in: .whitespaces).lowercased() else { return false }
+            let wanted: IntervalOutputFormat
+            switch token {
+            case "jpeg", "standard": wanted = .jpeg
+            case "dng": wanted = .dng
+            default: return false
+            }
+            if wanted == .dng, !camera.liveBlendDNGSupport.isSupported { return false }
+            if model.intervalOutputFormat != wanted { model.intervalOutputFormat = wanted }
+            return true
         case .state:
             // Never reached: the receiver answers `state` from its cache
             // before consulting this handler. Kept for exhaustiveness.

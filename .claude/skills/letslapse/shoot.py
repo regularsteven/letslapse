@@ -473,6 +473,8 @@ def build_settings(args, body):
     steps = []
     if args.mode == "photo":
         steps.append("setCaptureMode:Photo")
+        if getattr(args, "output_format", None):
+            steps.append(f"setOutputFormat:{args.output_format}")
         steps.append(f"setFramesPerBlend:{blend_token(args.blend)}")
 
     elif args.mode == "interval":
@@ -482,6 +484,9 @@ def build_settings(args, body):
         # that "setCaptureMode:interval is refused" is really about the TOKEN:
         # the raw values are capitalised ("Photo"/"Interval"/"Video").
         steps.append(f"setIntervalMode:{token}")
+        # After the mode, never before: the phone refuses the format in Video.
+        if getattr(args, "output_format", None):
+            steps.append(f"setOutputFormat:{args.output_format}")
         if args.interval_mode == "scanner":
             pass                                  # Scanner owns the spacing entirely
         elif args.every == "auto":
@@ -1675,6 +1680,9 @@ def main():
     p.add_argument("--every", default="2",
                    help=f"Interval spacing: auto, or one of {INTERVAL_EVERY}")
     p.add_argument("--strategy", choices=STRATEGIES, help="Auto-blend decision logic")
+    p.add_argument("--output-format", choices=["jpeg", "dng"],
+                   help="the still modes' Output picker (Photo and Interval); "
+                        "DNG is refused on a source without Bayer RAW")
     p.add_argument("--dim", choices=["on", "off"],
                    help="set 'Dim screen during shoot' before firing "
                         "(display-only; accepted mid-run too)")

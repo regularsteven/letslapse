@@ -16,6 +16,7 @@
 //   setIntervalMode:scanner     a command with its String extra (the key is
 //                               inferred from the command — see `extraKey`)
 //   setLadder:builtin           arms Interval's Ladder MODE on that ladder
+//   setOutputFormat:dng         the still modes' Output picker (jpeg | dng)
 //                               (an id, a name, or `builtin`) — the Light
 //                               Ladder bench, docs/light-ladder.md §9
 //   setAutoInterval#1           a command with a numeric `value`
@@ -58,6 +59,7 @@ func extraKey(for command: String) -> String? {
     switch command {
     case "setIntervalMode": return WatchMessageKey.intervalMode
     case "setLadder": return WatchMessageKey.ladder
+    case "setOutputFormat": return WatchMessageKey.outputFormat
     case "setCaptureMode": return WatchMessageKey.captureMode
     case "setSequenceMode": return WatchMessageKey.sequenceMode
     case "scheduleStop": return WatchMessageKey.stopAtUnit

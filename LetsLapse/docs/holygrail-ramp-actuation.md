@@ -142,6 +142,21 @@ carries `rampDriving` / `rampRefusals` — so the bench verification this
 document owes no longer needs a console to read its own result:
 `tools/ramp_audit.py <project>` prints it.
 
+## Addendum 2026-09-21 — the hypothesis measured, and made fatal by iOS 27
+
+The refusal is the **virtual device's**, and switching state has nothing to do
+with it. Read from the iOS 27 `AVFCapture` binary after the iPhone 18 Pro
+aborted on every JPEG Dynamic / Ladder arm: iOS 27 validates every custom
+exposure per format, and a fully locked one (aperture + duration + ISO — what
+the two-argument `setExposureModeCustom` now means) is refused on the dual,
+dual-wide and triple cameras by device type, while `isExposureModeSupported(.custom)`
+keeps answering true. Linked against the iOS 27 SDK the refusal is an
+`NSInvalidArgumentException` that aborts the process; on iOS 26 it was the
+silent return this document chased. The ramped JPEG run now shoots through the
+stop's own physical lens (the video sequence's lens pin), and every custom
+write goes through one guarded writer. Full account, disassembly and the fix:
+`fieldtests/2026-09-21-ios27-virtual-device-custom-exposure.md`.
+
 ## See also
 
 - `jpeg-holygrail-wb-brief.md` — the other half of the JPEG Holy Grail story

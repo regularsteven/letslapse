@@ -124,6 +124,40 @@ enum CaptureOpticsStore {
     }
 }
 
+/// The aperture LetsLapse holds whenever it writes a custom exposure on a
+/// lens whose aperture can move — the iPhone 18 Pro main camera, the first
+/// one (iOS 27's `setExposureModeCustom(lensAperture:duration:iso:)`).
+///
+/// Decision (Steven, 2026-09-21): lock **f/1.8**, the fixed f/1.78 every
+/// earlier Pro main lens had, so a shoot reads the same across devices and
+/// the ramp's EV maths has one aperture to reason about. A fixed lens is
+/// never given a number — it takes `AVCaptureDevice.currentLensAperture`,
+/// and a numeric value there is itself a refusal ("is not the fixed aperture
+/// value"). AE-driven modes keep the system's automatic aperture for now;
+/// aperture-priority there and an f-stop control are later features
+/// (docs/TODO.md).
+enum CaptureAperturePolicy {
+    static let lockedFNumber: Float = 1.8
+
+    /// How far a format's recommended stop may sit from the policy value and
+    /// still be preferred to it: those are the calibrated iris positions
+    /// (f/1.78 for f/1.8), and one a hair off beats an uncalibrated exact one.
+    static let recommendedStopTolerance: Float = 0.03
+
+    /// The f-number to write for a lens whose aperture can move (`minimum <
+    /// maximum`), or nil for a fixed one. Clamped into the format's range;
+    /// snapped to a recommended stop only when one is within tolerance of the
+    /// policy value.
+    static func lockedFNumber(minimum: Float, maximum: Float, recommended: [Float]) -> Float? {
+        guard minimum.isFinite, maximum.isFinite, minimum > 0, maximum > minimum else { return nil }
+        let wanted = min(max(lockedFNumber, minimum), maximum)
+        let calibrated = recommended
+            .filter { $0.isFinite && $0 > 0 && abs($0 / wanted - 1) <= recommendedStopTolerance }
+            .min { abs($0 - wanted) < abs($1 - wanted) }
+        return min(max(calibrated ?? wanted, minimum), maximum)
+    }
+}
+
 extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil

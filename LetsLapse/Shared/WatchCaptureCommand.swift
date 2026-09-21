@@ -116,6 +116,13 @@ enum WatchCaptureCommand: String {
     /// which is a session transaction — and it writes the same `@AppStorage`
     /// the on-screen toggle does, so the two surfaces cannot disagree.
     case setAutoShapes
+    /// The still modes' output format (`WatchMessageKey.outputFormat` = jpeg |
+    /// dng). Bench only — no watch or Mac control offers it; it exists because
+    /// the 2026-09-21 iOS 27 matrix (JPEG × DNG × MODE) needed a hand on the
+    /// phone for exactly one dial. Interval and Photo, idle-only (the choice
+    /// re-frames the preview and decides the pipeline at start); DNG is
+    /// refused, not silently downgraded, on a source without Bayer RAW.
+    case setOutputFormat
     /// A state poll, not an action. The receiver answers it before its
     /// app-active and command-handler guards, so it stays truthful about a
     /// backgrounded phone rather than being refused by it.
@@ -144,7 +151,7 @@ extension WatchCaptureCommand {
              .setBurstFPS, .setBaseFPS, .setSequenceMode, .toggleMark,
              .scheduleStop, .cancelScheduledStop, .setDimDuringShoot,
              .armCamera, .cancelExport, .simulateTooHot,
-             .selectStop, .setAutoShapes:
+             .selectStop, .setAutoShapes, .setOutputFormat:
             return true
         }
     }
@@ -200,6 +207,8 @@ extension WatchCaptureCommand {
             return "The lens is unchanged."
         case .setAutoShapes:
             return "Find Shapes is unchanged."
+        case .setOutputFormat:
+            return "The output format is unchanged."
         case .setISO, .setLensPosition, .state, .previewFrame:
             return nil
         }
