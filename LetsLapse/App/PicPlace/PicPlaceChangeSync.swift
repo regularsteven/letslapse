@@ -88,7 +88,11 @@ extension PicPlaceController {
         let name = UIApplication.didBecomeActiveNotification
         #endif
         foregroundObserver = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.checkForChanges(reason: "foreground") }
+            Task { @MainActor in
+                self?.checkForChanges(reason: "foreground")
+                // An upload iOS suspended, or the connection dropped, goes again.
+                self?.resumeUploadJobs(reason: "foreground")
+            }
         }
     }
 
@@ -392,14 +396,14 @@ extension PicPlaceController {
             refreshUsage(rows: index.projects)
             scheduleOriginalsQueue()
             #if DEBUG
-            // `LL_PICPLACE_DOWNLOAD=<uuid>` / `LL_PICPLACE_UPLOAD=<uuid>` move a
-            // project's originals after the check (stage 5).
+            // `LL_PICPLACE_DOWNLOAD=<uuid>` moves a project's originals down
+            // after the check (stage 5).
             if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_DOWNLOAD"], let id = UUID(uuidString: raw), let capture = model.capture(id: id) {
                 downloadOriginals(capture)
             }
-            if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_UPLOAD"], let id = UUID(uuidString: raw), let capture = model.capture(id: id) {
-                uploadOriginals(capture)
-            }
+            // `LL_PICPLACE_UPLOAD` presses Upload at launch instead
+            // (`runUploadHookOnce`): a person's Upload does not wait for a
+            // check, which mobile data holds.
             // Free up space, once per process: `LL_PICPLACE_REMOVE=<uuid>[:originals|blends]`
             // presses the card's Remove (after its confirm) on that project;
             // `LL_PICPLACE_FREEUP=1` presses Settings' Remove originals already
@@ -458,6 +462,8 @@ extension PicPlaceController {
     #if DEBUG
     /// The free-up hooks run after the first check of a process, not every one.
     static var freeUpHooksRan = false
+    /// `LL_PICPLACE_UPLOAD` presses Upload once per process.
+    static var uploadHookRan = false
     #endif
 
     static func describe(_ error: Error) -> String {

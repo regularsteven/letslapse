@@ -328,6 +328,7 @@ struct ProjectSyncSheet: View {
                 }
                 statusLine
                 sendBlock
+                uploadsBlock
                 checkButton
                 settingsLink
             }
@@ -371,6 +372,107 @@ struct ProjectSyncSheet: View {
                 pauseResumeButton
             }
         }
+    }
+
+    /// A person's uploads of originals (2026-09-24): each with how far it
+    /// got and the one button that fits — Pause while it runs, Resume when
+    /// paused or interrupted, *Use mobile data* (this upload only) while it
+    /// waits for Wi-Fi — and Cancel once it is not running.
+    @ViewBuilder
+    private var uploadsBlock: some View {
+        let rows = picplace.uploadJobRows
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(rows) { row in
+                    VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(uploadTitle(row))
+                                .font(.system(size: 15, weight: .medium))
+                                .lineLimit(1)
+                            Text(row.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        ProgressView(value: row.progress?.fraction ?? row.job.fraction)
+                            .tint(row.isRunning ? LL.accent : Color.secondary)
+                        Text(uploadDetail(row))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        // The buttons get their own line: "Use mobile data"
+                        // beside a title does not fit a phone's drawer.
+                        HStack(spacing: 8) {
+                            Spacer(minLength: 0)
+                            if !row.isRunning {
+                                Button {
+                                    picplace.cancelUpload(row.id)
+                                } label: {
+                                    Text("Cancel")
+                                        .font(.system(size: 13.5, weight: .semibold))
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.secondary)
+                            }
+                            uploadButton(row)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    private func uploadButton(_ row: PicPlaceController.UploadJobRow) -> some View {
+        let (label, glyph): (String, String) = {
+            if row.isRunning { return ("Pause", "pause.fill") }
+            if row.job.hold == .waitingForWiFi { return ("Use mobile data", "antenna.radiowaves.left.and.right") }
+            return (row.job.hold == .failed ? "Try again" : "Resume", "play.fill")
+        }()
+        return Button {
+            if row.isRunning {
+                picplace.pauseUpload(row.id)
+            } else if row.job.hold == .waitingForWiFi {
+                picplace.allowMobileData(forUpload: row.id)
+            } else {
+                picplace.resumeUpload(row.id)
+            }
+        } label: {
+            Label(label, systemImage: glyph)
+                .font(.system(size: 13.5, weight: .semibold))
+        }
+        .buttonStyle(.bordered)
+        .tint(LL.accent)
+    }
+
+    private func uploadTitle(_ row: PicPlaceController.UploadJobRow) -> String {
+        if row.isRunning { return "Uploading originals" }
+        switch row.job.hold {
+        case .paused?: return "Upload paused"
+        case .waitingForWiFi?: return "Waiting for Wi-Fi"
+        case .interrupted?: return "Upload interrupted"
+        case .failed?: return "Upload stopped"
+        case nil: return "Upload waiting"
+        }
+    }
+
+    private func uploadDetail(_ row: PicPlaceController.UploadJobRow) -> String {
+        if let progress = row.progress {
+            guard progress.filesTotal > 0 else { return "Getting ready…" }
+            return "\(progress.filesDone.formatted()) of \(progress.filesTotal.formatted()) files · \(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
+                + (row.job.allowsMobileData ? " · mobile data allowed" : "")
+        }
+        var parts: [String] = []
+        if let counts = row.job.counts { parts.append(counts) }
+        switch row.job.hold {
+        case .waitingForWiFi?: parts.append("Only on Wi-Fi is on — it goes when Wi-Fi is back")
+        case .interrupted?: parts.append((row.job.lastError.map { "\($0) · " } ?? "") + "goes again on its own")
+        case .failed?: parts.append(row.job.lastError ?? "Something went wrong")
+        case .paused?: parts.append("what reached PicPlace stays — Resume sends the rest")
+        case nil: break
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var pauseResumeButton: some View {

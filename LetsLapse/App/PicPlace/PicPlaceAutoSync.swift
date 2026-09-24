@@ -69,12 +69,27 @@ extension PicPlaceController {
         // `LL_PICPLACE_NETWORK=cellular[:seconds]` pretends the path is mobile
         // data — for the given seconds, then Wi-Fi again — so the holds and
         // their release are exercised on a Mac that has no cellular.
+        // `cellular@<start>[:seconds]` starts on Wi-Fi and leaves it `start`
+        // seconds after launch: a phone walking out of the house mid-upload.
         if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_NETWORK"], raw.hasPrefix("cellular") {
             forcedNetwork = true
-            isOnWiFi = false
-            if let seconds = raw.split(separator: ":").dropFirst().first.flatMap({ Double($0) }) {
+            let spec = raw.dropFirst("cellular".count)
+            let start = spec.hasPrefix("@") ? Double(spec.dropFirst().split(separator: ":").first ?? "") ?? 0 : 0
+            let seconds = spec.split(separator: ":").dropFirst().first.flatMap { Double($0) }
+            if start > 0 {
                 Task { @MainActor [weak self] in
-                    try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                    try? await Task.sleep(nanoseconds: UInt64(start * 1_000_000_000))
+                    guard let self else { return }
+                    self.isOnWiFi = false
+                    LLog("picplace hook: network is mobile data")
+                    self.autoSyncSettingChanged()
+                }
+            } else {
+                isOnWiFi = false
+            }
+            if let seconds {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64((start + seconds) * 1_000_000_000))
                     guard let self else { return }
                     self.isOnWiFi = true
                     LLog("picplace hook: network back to Wi-Fi")
@@ -89,13 +104,20 @@ extension PicPlaceController {
         monitor.pathUpdateHandler = { [weak self] path in
             let unmetered = (path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet))
                 && !path.isExpensive && !path.isConstrained && path.status == .satisfied
+            let up = path.status == .satisfied
             Task { @MainActor in
                 guard let self else { return }
                 let was = self.isOnWiFi
+                let wasUp = self.isNetworkUp
                 self.isOnWiFi = unmetered
+                self.isNetworkUp = up
                 if was != unmetered {
                     LLog("picplace: network is \(unmetered ? "Wi-Fi/Ethernet" : "mobile or metered") — auto-sync \(self.autoAllowed ? "may run" : "waits")")
                     self.autoSyncSettingChanged()
+                } else if up, !wasUp {
+                    // Mobile data back after none: an interrupted upload
+                    // allowed on it goes again.
+                    self.resumeUploadJobs(reason: "network")
                 }
             }
         }
@@ -171,6 +193,9 @@ extension PicPlaceController {
     /// what now is — the pushes that were held, the check that was held,
     /// the first connection, the originals.
     func autoSyncSettingChanged() {
+        // A person's uploads first: the Wi-Fi rule applies to them whatever
+        // auto-sync says (2026-09-24).
+        uploadConditionsChanged()
         if !autoSyncEnabled {
             for task in pendingPushes.values { task.cancel() }
             pendingPushes.removeAll()
@@ -184,9 +209,13 @@ extension PicPlaceController {
             sendRunIDs.removeAll()
             if autoStatus?.hasPrefix("Syncing") == true { autoStatus = nil }
         }
-        if !originalsAllowed {
+        // The automatic queue stops — its project mid-upload too, between
+        // files. A person's walk from Settings answers only to the Wi-Fi
+        // rule and the pause (`uploadConditionsChanged`, `pauseSends`).
+        if !originalsAllowed, !originalsQueueManual {
             originalsQueueTask?.cancel()
             originalsQueueTask = nil
+            stopOriginalsQueueRun()
             if autoStatus?.hasPrefix("Uploading originals") == true { autoStatus = nil }
         }
         guard autoAllowed else { return }
@@ -224,6 +253,9 @@ extension PicPlaceController {
         syncMeta.sendsPaused = true
         saveSyncState()
         LLog("picplace: sending paused\(sendRun.map { " — \($0.left) left of \($0.total)" } ?? "")")
+        // Uploads of originals stop between files (2026-09-24) — a project
+        // of 11 GB is not "what is being sent finishes first".
+        pauseUploadJobs()
     }
 
     /// **Resume**: a person's press, so it runs on any network, as their own
@@ -237,6 +269,7 @@ extension PicPlaceController {
         LLog("picplace: sending resumed\(heldPushes.isEmpty ? "" : " — \(heldPushes.count) project(s) held")")
         let wasHolding = !heldPushes.isEmpty
         releaseHeldPushes(manual: true)
+        resumePausedUploadJobs()
         scheduleOriginalsQueue()
         if !wasHolding { checkForChanges(reason: "manual") }
     }
@@ -474,14 +507,20 @@ extension PicPlaceController {
     }
 
     /// A person's *Upload now* (Settings, beside free up space): the same
-    /// walk once, whatever the automatic switch or the network rule says —
-    /// a press works on any connection. A shoot being written still pauses it.
+    /// walk once, whatever the automatic switch says. *Only on Wi-Fi* holds
+    /// it (2026-09-24 — that switch is how a person says "not on my data";
+    /// a project's own Upload can be let onto mobile data, this walk not):
+    /// on mobile data it waits, and carries on when Wi-Fi is back. A shoot
+    /// being written still pauses it.
     func runOriginalsQueueManually() {
         guard canSync, originalsQueueTask == nil else { return }
+        manualOriginalsWaiting = false
+        originalsQueueManual = true
         originalsQueueTask = Task { [weak self] in
             guard let self else { return }
             await runOriginalsQueue(manual: true)
             originalsQueueTask = nil
+            originalsQueueManual = false
             if freeUp.estimate != nil { refreshFreeUpEstimate() }
         }
     }
@@ -506,6 +545,11 @@ extension PicPlaceController {
         for row in rows {
             guard manual ? canSync : originalsAllowed, !Task.isCancelled else { break }
             if manual, model.stage == .processing { break }
+            if manual, wifiOnly, !isOnWiFi {
+                LLog("picplace: originals queue — waiting for Wi-Fi")
+                manualOriginalsWaiting = true
+                break
+            }
             // The drawer's Pause holds a person's run too: the project being
             // sent finishes, the next one waits for Resume.
             if sendsPaused {
@@ -523,6 +567,8 @@ extension PicPlaceController {
             // removed to free space can still hold a blend PicPlace lacks.
             // What is here decides — a pulled preview has nothing heavy.
             guard syncTasks[capture.id] == nil, !removingProjects.contains(capture.id) else { continue }
+            // A person's upload job owns its project — paused means paused.
+            guard uploadJobs[capture.id] == nil else { continue }
             let folder = model.projectFolderURL(for: capture)
             let listing = await Task.detached(priority: .utility) { Self.heavyFiles(in: folder) }.value
             heavyListings[capture.id] = listing
@@ -544,7 +590,15 @@ extension PicPlaceController {
             }
             let bytes = listing.reduce(Int64(0)) { $0 + $1.bytes }
             autoStatus = "Uploading originals · \(capture.displayTitle) · \(listing.count.formatted()) files · \(LLFormat.bytes(bytes))"
+            originalsRunPaused = false
             await syncAndWait(capture, policy: .originals)
+            if originalsRunPaused {
+                // Stopped between files: what reached PicPlace stays, and the
+                // next walk sends the rest. Not the next project now.
+                originalsRunPaused = false
+                LLog("picplace: originals queue — stopped with \(capture.displayTitle) part-way; the next walk carries on")
+                break
+            }
             if records[origin]?.lastError != nil {
                 // One failure stops the walk; the next check re-arms the
                 // queue and this project waits out its backoff.

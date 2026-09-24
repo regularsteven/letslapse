@@ -118,12 +118,15 @@ final class PicPlaceBackgroundActivity {
     private var activity: NSObjectProtocol?
     #endif
 
-    init(_ name: String) {
+    /// `onExpire` runs when iOS is about to suspend the app — an upload
+    /// stops between files there, keeping what reached PicPlace.
+    init(_ name: String, onExpire: (@MainActor () -> Void)? = nil) {
         self.name = name
         #if os(iOS)
         identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
             MainActor.assumeIsolated {
                 LLog("picplace: background time for \(name) ran out — iOS suspends what is left; the retry finishes it in front")
+                onExpire?()
                 self?.end()
             }
         }

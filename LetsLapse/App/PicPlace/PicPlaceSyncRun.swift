@@ -150,8 +150,17 @@ struct PicPlaceSyncRun {
 
     struct Failed: LocalizedError {
         var caption: String
+        /// A lost connection or busy storage, not a refusal: an upload job
+        /// takes it as an interruption and goes again on its own.
+        var interrupted = false
         var errorDescription: String? { caption }
     }
+
+    /// The run stopped between files because it was asked to — a person's
+    /// Pause, Wi-Fi lost with Wi-Fi only on. Everything that had finished was
+    /// confirmed first, so the next run finds it unchanged and sends only
+    /// what is left. Not a failure.
+    struct Paused: Error {}
 
     struct FileItem {
         var name: String          // path within the project
@@ -185,6 +194,12 @@ struct PicPlaceSyncRun {
         var upload: PPUpload
     }
 
+    /// What the upload group hears: a file done, or the stop signal.
+    private enum UploadEvent {
+        case done(Uploaded)
+        case stopRequested
+    }
+
     /// What one PUT ended as.
     private struct Uploaded {
         var name: String
@@ -204,10 +219,15 @@ struct PicPlaceSyncRun {
     let thisDeviceID: String?
     /// Where a file found changed since it was hashed gets its fresh record.
     var assetStore: AssetRecordStore? = nil
+    /// A pause request, read between files (an originals upload's job).
+    var stop: PicPlaceStopSignal? = nil
     let progress: @MainActor (PicPlaceSyncProgress) -> Void
 
     private static let batchSize = 100
     private static let concurrentUploads = 4
+    /// Finished files are confirmed this many at a time while the upload
+    /// runs, so an interruption costs at most this many plus those in flight.
+    private static let confirmEvery = 8
     private static let claimTTL = 3600
     private static let reclaimAfter: TimeInterval = 20 * 60
 
@@ -350,26 +370,101 @@ struct PicPlaceSyncRun {
                 }
             }
 
-            // 5. PUT straight to object storage, a few at a time, exactly the headers the server signed.
+            // 5. PUT straight to object storage, a few at a time, exactly the
+            //    headers the server signed — and confirm what has finished as
+            //    the run goes, `confirmEvery` files at a time. A pause, a lost
+            //    network or a locked phone then costs only the files in flight:
+            //    a later run finds the confirmed ones unchanged and sends the
+            //    rest (2026-09-24 — every file was confirmed at the very end,
+            //    so an upload stopped at 90 % started again from nothing).
             await report { $0.phase = .uploading }
+            if !pending.isEmpty {
+                // The one line a long upload writes before it ends — how
+                // much is left, and how much a pause or a resume skipped.
+                let bytes = pending.reduce(Int64(0)) { $0 + $1.item.bytes }
+                LLog("picplace: \(project.name) — uploading \(pending.count) of \(files.count) file(s), \(LLFormat.bytes(bytes))\(files.count > pending.count ? "; \(files.count - pending.count) already on PicPlace" : "")")
+            }
             var uploaded: [Uploaded] = []
-            try await withThrowingTaskGroup(of: Uploaded.self) { group in
-                var iterator = pending.makeIterator()
-                var inFlight = 0
-                func enqueue() {
-                    guard let next = iterator.next() else { return }
-                    inFlight += 1
-                    group.addTask { try await self.upload(next) }
+            var unconfirmed: [Uploaded] = []
+            var failures: [String] = []
+            var stopped = false
+            let heavyNames = Set(files.filter { $0.heavyFile != nil }.map(\.name))
+            // A batch leaves `unconfirmed` only once PicPlace has answered, so
+            // the error path's last try still covers one that failed to go.
+            func confirmFinished() async throws {
+                let batch = unconfirmed.filter { !$0.divergent }
+                guard !batch.isEmpty else { unconfirmed.removeAll(); return }
+                lastClaim = try await reclaimIfStale(lastClaim)
+                for chunk in batch.chunked(Self.batchSize) {
+                    let request: [String: Any] = ["assets": chunk.map { ["id": $0.assetID, "sha256": $0.sha256] }]
+                    let response: [String: [PPConfirmResult]] = try await client.post("projects/\(uuid)/assets/confirm", json: request)
+                    let heavyByAssetID = Dictionary(
+                        chunk.filter { heavyNames.contains($0.name) }.map { ($0.assetID, $0.name) },
+                        uniquingKeysWith: { first, _ in first })
+                    for result in response["assets"] ?? [] {
+                        if let error = result.error {
+                            failures.append(result.message ?? error)
+                        } else if let name = heavyByAssetID[result.id], result.asset?.verified != true {
+                            // picplace.co reads it back within a minute or two.
+                            unverifiedHeavy.insert(name)
+                        }
+                    }
                 }
-                for _ in 0 ..< Self.concurrentUploads { enqueue() }
-                while inFlight > 0 {
-                    let done = try await group.next()!
-                    inFlight -= 1
-                    uploaded.append(done)
-                    await report { $0.filesDone += 1; $0.bytesDone += done.bytes }
-                    try Task.checkCancellation()
-                    enqueue()
+                unconfirmed.removeAll()
+            }
+            do {
+                try await withThrowingTaskGroup(of: UploadEvent.self) { group in
+                    var iterator = pending.makeIterator()
+                    var inFlight = 0
+                    func enqueue() {
+                        guard let next = iterator.next() else { return }
+                        inFlight += 1
+                        group.addTask { .done(try await self.upload(next)) }
+                    }
+                    // A pause is heard within a third of a second, not when
+                    // the next 40 MB file happens to finish.
+                    if let stop {
+                        group.addTask {
+                            while !stop.isRequested { try await Task.sleep(nanoseconds: 300_000_000) }
+                            return .stopRequested
+                        }
+                    }
+                    for _ in 0 ..< Self.concurrentUploads { enqueue() }
+                    while inFlight > 0 {
+                        guard let event = try await group.next() else { break }
+                        if case .done(let done) = event {
+                            inFlight -= 1
+                            uploaded.append(done)
+                            unconfirmed.append(done)
+                            await report { $0.filesDone += 1; $0.bytesDone += done.bytes }
+                            if unconfirmed.count >= Self.confirmEvery { try await confirmFinished() }
+                        }
+                        if case .stopRequested = event { stopped = true }
+                        if stopped || stop?.isRequested == true {
+                            stopped = true
+                            // The files in flight go again next time; one that
+                            // finished as the pause landed is kept.
+                            group.cancelAll()
+                            while let result = await group.nextResult() {
+                                if case .success(.done(let done)) = result {
+                                    uploaded.append(done)
+                                    unconfirmed.append(done)
+                                    await report { $0.filesDone += 1; $0.bytesDone += done.bytes }
+                                }
+                            }
+                            break
+                        }
+                        try Task.checkCancellation()
+                        enqueue()
+                    }
+                    // The stop watcher, when there is one, is still waiting.
+                    group.cancelAll()
                 }
+            } catch {
+                // What finished is kept before the error goes up: a dropped
+                // connection costs the files in flight, not the run.
+                if !(error is CancellationError) { try? await confirmFinished() }
+                throw error
             }
             divergent += uploaded.filter(\.divergent).map(\.name)
             // A file that had changed since it was recorded — seen before the
@@ -398,29 +493,15 @@ struct PicPlaceSyncRun {
                 LLog("picplace: \(project.name) — \(divergent.count) original(s) here differ from PicPlace's confirmed copies; PicPlace keeps its own: \(divergent.prefix(5).joined(separator: ", "))\(divergent.count > 5 ? ", …" : "")")
             }
 
-            // 6. Confirm in batches; the server checks each object's size and records it.
+            // 6. Confirm what is left (the server checks each object's size
+            //    and records it) — or, paused, keep what finished and step aside.
             await report { $0.phase = .confirming }
-            var failures: [String] = []
-            var confirmations: [(id: String, sha256: String)] = uploaded.filter { !$0.divergent }.map { ($0.assetID, $0.sha256) }
-            let heavyNames = Set(files.filter { $0.heavyFile != nil }.map(\.name))
-            let heavyByAssetID = Dictionary(
-                uploaded.filter { !$0.divergent && heavyNames.contains($0.name) }.map { ($0.assetID, $0.name) },
-                uniquingKeysWith: { first, _ in first })
-            for batch in confirmations.chunked(Self.batchSize) {
-                try Task.checkCancellation()
-                lastClaim = try await reclaimIfStale(lastClaim)
-                let request: [String: Any] = ["assets": batch.map { ["id": $0.id, "sha256": $0.sha256] }]
-                let response: [String: [PPConfirmResult]] = try await client.post("projects/\(uuid)/assets/confirm", json: request)
-                for result in response["assets"] ?? [] {
-                    if let error = result.error {
-                        failures.append(result.message ?? error)
-                    } else if let name = heavyByAssetID[result.id], result.asset?.verified != true {
-                        // picplace.co reads it back within a minute or two.
-                        unverifiedHeavy.insert(name)
-                    }
-                }
+            if stopped {
+                try? await confirmFinished()
+                LLog("picplace: \(project.name) — paused with \(uploaded.count) of \(pending.count) file(s) sent this run; the rest go when it resumes")
+                throw Paused()
             }
-            confirmations.removeAll()
+            try await confirmFinished()
             if !failures.isEmpty {
                 throw Failed(caption: failures.count == 1 ? failures[0] : "\(failures.count) files could not be confirmed")
             }
@@ -489,6 +570,13 @@ struct PicPlaceSyncRun {
             // A dropped connection or a 5xx from storage goes again
             // (`PicPlaceTransfer`); the body is a file, so the same bytes
             // are sent each time.
+            #if DEBUG
+            // `LL_PICPLACE_PUT_DELAY=<ms>` slows every PUT, so a bench server
+            // on this Mac is slow enough to pause mid-upload.
+            if let ms = ProcessInfo.processInfo.environment["LL_PICPLACE_PUT_DELAY"].flatMap(UInt64.init) {
+                try await Task.sleep(nanoseconds: ms * 1_000_000)
+            }
+            #endif
             (data, response) = try await PicPlaceTransfer.withRetries("PUT \(pending.item.name)") {
                 let (data, response) = try await Self.uploadSession.upload(for: request, fromFile: pending.item.url)
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -498,11 +586,15 @@ struct PicPlaceSyncRun {
                 return (data, response)
             }
         } catch let refused as PicPlaceTransfer.Refused {
-            throw Failed(caption: "Storage refused \(pending.item.name) (\(refused.status)) \(refused.detail)")
+            throw Failed(caption: "Storage refused \(pending.item.name) (\(refused.status)) \(refused.detail)", interrupted: true)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            throw Failed(caption: "Upload of \(pending.item.name) failed: \(error.localizedDescription)")
+            // URLSession answers a cancelled task with `URLError(.cancelled)`:
+            // that is the run being stopped, not the upload failing.
+            if Task.isCancelled { throw CancellationError() }
+            throw Failed(caption: "Upload of \(pending.item.name) failed: \(error.localizedDescription)",
+                         interrupted: PicPlaceTransfer.isTransient(error))
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         #if DEBUG
@@ -709,3 +801,22 @@ struct PicPlaceSyncRun {
 }
 
 
+
+/// A pause request a running upload reads between files: set from the main
+/// actor (a person's Pause, the network rule), read on the run's tasks.
+final class PicPlaceStopSignal: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requested = false
+
+    func request() {
+        lock.lock()
+        requested = true
+        lock.unlock()
+    }
+
+    var isRequested: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return requested
+    }
+}

@@ -113,6 +113,12 @@ extension PicPlaceController {
                 }
                 #endif
                 checkForChanges(reason: "launch")
+                // Uploads that were running when the app last stopped, or
+                // were interrupted, carry on where they got to.
+                resumeUploadJobs(reason: "launch")
+                #if DEBUG
+                runUploadHookOnce()
+                #endif
             }
             return
         }

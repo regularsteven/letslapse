@@ -46,7 +46,17 @@ the design index rows marked 🟡.
   `URLSession` tasks — they pause when the app is backgrounded and resume
   at the next foreground. A `URLSessionConfiguration.background` session
   with the per-file upload/download tasks is the next real piece of work
-  before phones are trusted with big originals.
+  before phones are trusted with big originals. **2026-09-24:** uploads are
+  now **jobs** (`PicPlaceUploadJobs.swift`, TODO "PicPlace uploads as
+  jobs"): confirmed eight files at a time as they finish, stopped between
+  files by Pause / *Only on Wi-Fi* on mobile data / iOS suspending the app,
+  resumed at launch, in front and on a network change, with a per-job
+  *Use mobile data* — a stop costs the files in flight, not the run. The
+  background engine itself is planned in
+  [picplace-background-uploads-plan.md](picplace-background-uploads-plan.md)
+  (Stage 1 `BGContinuedProcessingTask`, Stage 2 a background session with
+  a transfer table, Stage 3 the automatic queue at night; four server asks,
+  the 60-minute upload URL first).
 - **`updated_since`** is stored (`sync-state.json` → `meta.serverTime`)
   but deliberately unused: an incremental index misses a project only this
   device edited. Use it only alongside a local "moved since base" pass.

@@ -466,6 +466,93 @@ code when the session resumes (`resume(interruptionEnded)` is the natural
 place to check). Repro: open the capture screen, lock the phone or start a
 screen recording from Control Center, come back, browse with `remote_probe`.
 
+### PicPlace uploads as jobs — pause, wait for Wi-Fi, carry on; background uploads next
+
+**Raised:** 2026-09-24 (Steven, leaving the house mid-way through an 11.55 GB
+upload on the 18 Pro: *"Will the upload pause, stop, or keep trying when I
+leave? And if I stop it, does that mean I'll need to start the entire thing
+again?"*) · **Status:** (a)–(c) built the same day, code first,
+Mac-bench-verified, committed on `ios-app` 2026-09-24; (d) planned in
+[picplace-background-uploads-plan.md](picplace-background-uploads-plan.md) ·
+**Size:** medium (done) + the plan's stages
+
+**What was wrong.** An originals upload confirmed every file with PicPlace
+only at the very end of its run, so any stop — Cancel, a dropped connection,
+iOS suspending a backgrounded app, a relaunch — threw the whole run away and
+the next Upload sent everything again. A person's Upload ignored *Only on
+Wi-Fi* (it was "their press"), so leaving the house moved it onto mobile data.
+
+**Steven's asks:** (a) pause at any time without starting again — a few
+files redone is fine, not the project; (b) pause on its own when the phone
+moves to mobile data and *Only on Wi-Fi* is on; (c) let a person override
+that **for one job only**, never as a setting; (d) a plan for uploads while
+the phone is locked or the app is not in front.
+
+**What was built (2026-09-24):**
+
+1. **The run confirms as it goes and stops between files**
+   (`PicPlaceSyncRun`): finished files are confirmed eight at a time
+   (`confirmEvery`); a `PicPlaceStopSignal` is watched every 0.3 s; on a stop
+   the files in flight are cancelled, what finished is confirmed, the claim
+   is released and the run throws `Paused` (not a failure). On an error the
+   finished files are confirmed first too. A transient failure (lost
+   connection, `429`/`5xx`) is marked `interrupted`. One new log line per
+   run: *uploading N of M file(s), size; K already on PicPlace*.
+2. **Upload jobs** (`App/PicPlace/PicPlaceUploadJobs.swift`,
+   `PicPlaceUploadJob` in `meta.uploadJobs` of `PicPlace/sync-state.json`):
+   the card's Upload makes one; holds `paused` · `waitingForWiFi` ·
+   `interrupted` · `failed`; progress kept for the card. Resumes at launch,
+   in front again, on a network change, and after an interruption on a
+   backoff (10 s, 30 s, 2 min, 10 min). Pause for all sending (the drawer)
+   pauses every job; its Resume resumes them.
+3. **The Wi-Fi rule** now holds a person's upload: on mobile data with *Only
+   on Wi-Fi* on, a running upload stops between files and waits; Wi-Fi back →
+   it carries on by itself. **Use mobile data** (card and drawer) sets
+   `allowsMobileData` on that job alone. Settings' *Upload* (the originals
+   walk) obeys the rule too and carries on when Wi-Fi is back; the automatic
+   queue's project mid-upload now stops between files as well (before, only
+   the walk stopped and the project in flight kept going over mobile data).
+   The *Only on Wi-Fi* switch is no longer greyed out with auto-sync off.
+4. **iOS about to suspend the app** (the background task's expiry) stops the
+   run between files and holds the job `interrupted`; it resumes in front.
+5. **UI (code first, mirrors owed):** the card's header button reads
+   **Pause** while a job runs (Cancel for other syncs); a held job replaces
+   the Originals/Blends lines with one line — *Upload paused · 132 of 260
+   files · 5,8 GB of 11,55 GB* (Cancel · Resume), *Waiting for Wi-Fi · … ·
+   Only on Wi-Fi is on* (Cancel · Use mobile data), *Upload interrupted · …
+   goes again on its own*, *Upload stopped · reason* (Try again). The
+   Project Syncing drawer lists every job under the sending block (title,
+   project, bar, counts, buttons on their own line).
+
+**Verified (Mac Debug, picplace.test, throwaway 24-photo projects,
+`LL_PICPLACE_PUT_DELAY=2000`):** A pause at 5 s → *paused with 8 of 24* →
+Resume → *uploading 16 of 24; 8 already on PicPlace* → finished; server 24/24
+confirmed + verified, claim released. B Wi-Fi → mobile at 4 s → *pausing
+until Wi-Fi* at 4 of 24 → Wi-Fi at 16 s → *uploading 20 of 24; 4 already* →
+finished. C on mobile data from launch → *waits for Wi-Fi* → Use mobile data →
+24 sent; the setting untouched. D `kill -9` mid-upload (server: 16 confirmed,
+8 pending, claim held) → relaunch → the job resumed by itself → *uploading 8
+of 24; 16 already on PicPlace* → finished, job cleared. E Settings' Upload
+walk on mobile data at 5 s → *stopped with q02 part-way* → Wi-Fi → *carrying
+on*. Screenshots: the drawer with a paused and a waiting job, the card's
+paused line. iOS Simulator build compiles; **not yet run on a phone**.
+
+**Still owed:**
+
+- A look on the phones, including a real Wi-Fi → mobile walk and a lock
+  mid-upload (expect *interrupted*, resumed in front, a handful of files
+  redone).
+- SVG mirrors: the card's job lines (iOS INDEX "Project detail › PicPlace
+  card") and the drawer's upload rows ("Projects · sharing") — ⚠️ rows added.
+- (d) the background plan: Stage 1 `BGContinuedProcessingTask`, Stage 2 a
+  background `URLSession` with a transfer table, Stage 3 the automatic queue
+  at night; four server asks in §5 of the plan.
+- Downloads of originals still ignore *Only on Wi-Fi* (a person's press) and
+  still restart from what is on disk (they skip files already here, so a
+  stop costs little) — decide whether they become jobs too.
+
+---
+
 ### PicPlace: filing a library re-sends every poster, inside one silent check
 
 **Raised:** 2026-09-24 (Steven, on the 16 Pro: *Checking PicPlace…* greyed

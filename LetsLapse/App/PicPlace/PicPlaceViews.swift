@@ -106,17 +106,29 @@ struct PicPlaceStatusCard: View {
         enum Action {
             case upload, remove(PicPlaceController.RemovalScope), download(PicPlaceOriginalsCheck.Kind)
             case replace(PicPlaceOriginalsCheck.Kind, [String])
+            /// An upload job waiting (2026-09-24): Resume / Try again, *Use
+            /// mobile data* for this job alone, and Cancel beside either.
+            case resumeUpload(String), useMobileData, cancelUpload
         }
         var id: String { title }
         var title: String
         var detail: String
         var action: Action?
+        /// A second, quieter button after the first (an upload job's Cancel).
+        var secondary: Action?
         /// Copies here differ from PicPlace's and PicPlace's are not the
         /// recorded originals: nothing to offer, a sentence to say.
         var keptAsIs = false
     }
 
     private func heavyLines(for capture: AppModel.CaptureProject, state: PicPlaceController.ProjectState) -> [HeavyLine] {
+        // An upload job speaks for the originals and blends it is sending:
+        // its run's progress and Pause are the card's header; waiting, it is
+        // the one line, with what it needs.
+        if let job = picplace.uploadJobs[capture.id] {
+            if case .syncing = state { return [] }
+            return [uploadJobLine(job)]
+        }
         guard let status = picplace.originalsStatus(for: capture) else { return [] }
         var lines: [HeavyLine] = []
         func line(_ scope: PicPlaceController.RemovalScope, _ row: PicPlaceController.OriginalsStatus.Row) -> HeavyLine? {
@@ -152,25 +164,63 @@ struct PicPlaceStatusCard: View {
         return lines
     }
 
+    /// A waiting upload job's line: why it waits, where it got to, and the
+    /// button that moves it on.
+    private func uploadJobLine(_ job: PicPlaceUploadJob) -> HeavyLine {
+        let counts = job.counts
+        switch job.hold {
+        case .paused?:
+            return HeavyLine(title: "Upload paused", detail: counts ?? "Nothing sent yet",
+                             action: .resumeUpload("Resume"), secondary: .cancelUpload)
+        case .waitingForWiFi?:
+            return HeavyLine(title: "Waiting for Wi-Fi", detail: [counts, "Only on Wi-Fi is on"].compactMap { $0 }.joined(separator: " · "),
+                             action: .useMobileData, secondary: .cancelUpload)
+        case .interrupted?:
+            return HeavyLine(title: "Upload interrupted", detail: [counts, "goes again on its own"].compactMap { $0 }.joined(separator: " · "),
+                             action: .resumeUpload("Resume"), secondary: .cancelUpload)
+        case .failed?:
+            return HeavyLine(title: "Upload stopped", detail: [job.lastError ?? "Something went wrong", counts].compactMap { $0 }.joined(separator: " · "),
+                             action: .resumeUpload("Try again"), secondary: .cancelUpload)
+        case nil:
+            return HeavyLine(title: "Upload waiting", detail: counts ?? "Starts once PicPlace is connected",
+                             action: .resumeUpload("Resume"), secondary: .cancelUpload)
+        }
+    }
+
     private func heavyAction(_ line: HeavyLine, capture: AppModel.CaptureProject, size: CGFloat) -> some View {
-        Group {
-            switch line.action {
-            case .upload:
-                Button("Upload") { picplace.uploadOriginals(capture) }
-            case .remove(let scope):
-                Button("Remove…") { pendingRemoval = scope }
-                    .disabled(picplace.freeUp.run != nil)
-            case .download(let kind):
-                Button("Download") { picplace.downloadOriginals(capture, kinds: [kind]) }
-            case .replace(let kind, let names):
-                Button("Replace…") { pendingReplace = PendingReplace(kind: kind, names: names) }
-            case nil:
-                EmptyView()
+        HStack(spacing: size * 0.9) {
+            if let secondary = line.secondary {
+                heavyButton(secondary, capture: capture)
+                    .foregroundStyle(.secondary)
             }
+            heavyButton(line.action, capture: capture)
+                .foregroundStyle(LL.accent)
         }
         .buttonStyle(.plain)
         .font(.system(size: size * 0.8, weight: .semibold))
-        .foregroundStyle(LL.accent)
+    }
+
+    @ViewBuilder
+    private func heavyButton(_ action: HeavyLine.Action?, capture: AppModel.CaptureProject) -> some View {
+        switch action {
+        case .upload:
+            Button("Upload") { picplace.uploadOriginals(capture) }
+        case .remove(let scope):
+            Button("Remove…") { pendingRemoval = scope }
+                .disabled(picplace.freeUp.run != nil)
+        case .download(let kind):
+            Button("Download") { picplace.downloadOriginals(capture, kinds: [kind]) }
+        case .replace(let kind, let names):
+            Button("Replace…") { pendingReplace = PendingReplace(kind: kind, names: names) }
+        case .resumeUpload(let label):
+            Button(label) { picplace.resumeUpload(capture.id) }
+        case .useMobileData:
+            Button("Use mobile data") { picplace.allowMobileData(forUpload: capture.id) }
+        case .cancelUpload:
+            Button("Cancel") { picplace.cancelUpload(capture.id) }
+        case nil:
+            EmptyView()
+        }
     }
 
     private func offersRemove(_ lines: [HeavyLine]) -> Bool {
@@ -509,7 +559,7 @@ struct PicPlaceStatusCard: View {
             case .notConnected: return (picplace.libraryLink == .mismatch ? "Settings" : "Connect…", false)
             case .notSynced: return ("Sync to PicPlace", false)
             case .changes: return ("Sync now", false)
-            case .syncing: return ("Cancel", true)
+            case .syncing: return (picplace.uploadJobs[capture.id] != nil ? "Pause" : "Cancel", true)
             case .synced: return ("Sync again", false)
             case .failed: return ("Try again", false)
             }
@@ -520,7 +570,10 @@ struct PicPlaceStatusCard: View {
             case .previewOnly: picplace.downloadOriginals(capture, kinds: [.source])
             case .signedOut: picplace.signIn()
             case .notConnected: if picplace.libraryLink == .unbound || picplace.libraryLink == .needsLibrary { picplace.offerConnect() } else { model.requestedTab = .settings }
-            case .syncing: picplace.cancelSync(capture.id)
+            case .syncing:
+                // An upload job pauses — what reached PicPlace stays, Resume
+                // sends the rest; any other sync cancels.
+                if picplace.uploadJobs[capture.id] != nil { picplace.pauseUpload(capture.id) } else { picplace.cancelSync(capture.id) }
             default: picplace.sync(capture)
             }
         } label: {
@@ -814,8 +867,8 @@ struct PicPlaceSettingsCard: View {
                 Toggle("", isOn: $picplace.autoSyncEnabled).labelsHidden()
             }
             LLRow(title: "Only on Wi-Fi",
-                  subtitle: "Auto-sync waits for Wi-Fi or Ethernet — a personal hotspot counts as mobile data. Syncing a project yourself works on any connection.") {
-                Toggle("", isOn: $picplace.wifiOnly).labelsHidden().disabled(!picplace.autoSyncEnabled)
+                  subtitle: "Auto-sync and uploads of originals wait for Wi-Fi or Ethernet — a personal hotspot counts as mobile data. An upload can use mobile data if you say so on its card, for that upload only. Syncing a project's changes yourself works on any connection.") {
+                Toggle("", isOn: $picplace.wifiOnly).labelsHidden()
             }
             LLRow(title: "Upload originals automatically",
                   subtitle: "Source photos, videos and blends of every project, one project at a time. Nothing is ever removed from this device on its own.") {
@@ -880,16 +933,18 @@ struct PicPlaceSettingsCard: View {
                 }
                 if let estimate = state.estimate, estimate.notUpProjects > 0 {
                     LLRow(title: "\(estimate.notUpProjects) project\(estimate.notUpProjects == 1 ? "'s" : "s'") originals aren't on PicPlace yet",
-                          subtitle: "\(LLFormat.bytes(estimate.notUpBytes)) · upload them, and they can be removed here too") {
+                          subtitle: "\(LLFormat.bytes(estimate.notUpBytes)) · upload them, and they can be removed here too"
+                            + (picplace.manualOriginalsWaiting ? " · waiting for Wi-Fi" : "")) {
                         Button {
                             picplace.uploadRemainingOriginals()
                         } label: {
-                            Text(picplace.autoStatus?.hasPrefix("Uploading originals") == true ? "Uploading…" : "Upload")
+                            Text(picplace.autoStatus?.hasPrefix("Uploading originals") == true ? "Uploading…"
+                                 : picplace.manualOriginalsWaiting ? "Waiting…" : "Upload")
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(LL.accent)
                         }
                         .buttonStyle(.plain)
-                        .disabled(picplace.autoStatus?.hasPrefix("Uploading originals") == true)
+                        .disabled(picplace.autoStatus?.hasPrefix("Uploading originals") == true || picplace.manualOriginalsWaiting)
                     }
                 }
             }

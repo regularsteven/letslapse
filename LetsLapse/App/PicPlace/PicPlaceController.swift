@@ -250,6 +250,29 @@ final class PicPlaceController: ObservableObject {
     /// library's sync state, so it outlives a relaunch. Pulls, removals and
     /// a person's own per-project Sync, Upload or Download are not held.
     @Published internal(set) var sendsPaused = false
+    /// A person's originals uploads, by project (2026-09-24,
+    /// `PicPlaceUploadJobs.swift`) — running, paused, waiting for Wi-Fi or
+    /// for the connection. Kept in the library's sync state.
+    @Published internal(set) var uploadJobs: [UUID: PicPlaceUploadJob] = [:]
+    /// The stop signal of every originals run in flight, by project — a
+    /// job's and the originals queue's: Pause, the Wi-Fi rule and iOS's
+    /// suspension stop them between files.
+    var uploadStops: [UUID: PicPlaceStopSignal] = [:]
+    /// Jobs a person cancelled while their run was stopping.
+    var cancelledUploads: Set<UUID> = []
+    /// An interrupted job's next try, and how many in a row got nowhere.
+    var uploadRetryTasks: [UUID: Task<Void, Never>] = [:]
+    var uploadRetryCounts: [UUID: Int] = [:]
+    /// The originals queue running is a person's (Settings' Upload), and
+    /// whether the Wi-Fi rule stopped it — it carries on when Wi-Fi is back.
+    var originalsQueueManual = false
+    /// The originals queue's last run was stopped between files (Pause, the
+    /// Wi-Fi rule, iOS suspending the app): the walk stops too, rather than
+    /// start the next project into the same stop.
+    var originalsRunPaused = false
+    @Published internal(set) var manualOriginalsWaiting = false
+    /// Whether any network is up at all — an interrupted upload waits for it.
+    var isNetworkUp = true
     /// Pushes and a check that were due while the network rule — or a
     /// pause — held them.
     var heldPushes: Set<UUID> = []
@@ -313,6 +336,7 @@ final class PicPlaceController: ObservableObject {
         records = loaded.records
         syncMeta = loaded.meta
         sendsPaused = loaded.meta.sendsPaused ?? false
+        uploadJobs = Self.loadUploadJobs(loaded.meta)
         migrateLegacyRecords()
         Self.migrateLegacyTokens()
 
@@ -1439,6 +1463,9 @@ final class PicPlaceController: ObservableObject {
         pendingPushes.removeAll()
         for task in syncTasks.values { task.cancel() }
         syncTasks.removeAll()
+        for task in uploadRetryTasks.values { task.cancel() }
+        uploadRetryTasks.removeAll()
+        uploadStops.removeAll()
         for task in summaryTasks.values { task.cancel() }
         summaryTasks.removeAll()
         pushQueue.removeAll()
@@ -1591,14 +1618,22 @@ final class PicPlaceController: ObservableObject {
         sync(capture, policy: override, retriedLibrary: false)
     }
 
-    private func sync(_ capture: AppModel.CaptureProject, policy override: PicPlaceSyncPolicy?, retriedLibrary: Bool) {
+    /// An upload job's run: the originals, stopped between files by the
+    /// job's Pause and the Wi-Fi rule. False when it could not start.
+    func syncUploadJob(_ capture: AppModel.CaptureProject) -> Bool {
+        sync(capture, policy: .originals, retriedLibrary: false, job: true)
+    }
+
+    @discardableResult
+    private func sync(_ capture: AppModel.CaptureProject, policy override: PicPlaceSyncPolicy?, retriedLibrary: Bool, job: Bool = false) -> Bool {
         // Filed in another library of the account on PicPlace (stage C):
         // this library neither pushes nor pulls it. The card says where it is.
         if let other = records[model.originID(of: capture)]?.elsewhereLibrary {
             LLog("picplace: not syncing \(capture.displayTitle) — it is in library \(other) on PicPlace, not this one")
-            return
+            if job { noteUploadRunEnded(capture.id, outcome: .failed("PicPlace files this project in another library")) }
+            return true
         }
-        guard canSync, syncTasks[capture.id] == nil, !removingProjects.contains(capture.id) else { return }
+        guard canSync, syncTasks[capture.id] == nil, !removingProjects.contains(capture.id) else { return false }
         let key = model.originID(of: capture)
         let policy = override ?? self.policy
         let folder = model.projectFolderURL(for: capture)
@@ -1615,9 +1650,14 @@ final class PicPlaceController: ObservableObject {
             manifestMaxBytes: manifestMaxBytes,
             tier: tier,
             library: serverHasLibraries ? scope : nil)
-        let run = PicPlaceSyncRun(client: client, project: project, thisDeviceID: profile?.deviceID, assetStore: model.assetStore) { [weak self] progress in
+        // Every originals run can be stopped between files (2026-09-24): a
+        // job's Pause, Pause for all sending, the Wi-Fi rule, iOS about to
+        // suspend the app. What finished is confirmed first.
+        let stop = policy.sendsHeavy ? PicPlaceStopSignal() : nil
+        let run = PicPlaceSyncRun(client: client, project: project, thisDeviceID: profile?.deviceID, assetStore: model.assetStore, stop: stop) { [weak self] progress in
             self?.progress[capture.id] = progress
         }
+        uploadStops[capture.id] = stop
         progress[capture.id] = PicPlaceSyncProgress()
         summaries[capture.id] = nil
         let server = profile?.server ?? serverString
@@ -1630,7 +1670,17 @@ final class PicPlaceController: ObservableObject {
         let posterKind = model.mediaKind(for: capture)
         let lastPosterToken = records[key]?.posterToken
         syncTasks[capture.id] = Task {
-            let activity = PicPlaceBackgroundActivity("PicPlace sync of \(capture.displayTitle)")
+            let activity = PicPlaceBackgroundActivity("PicPlace sync of \(capture.displayTitle)") { [weak self] in
+                // iOS suspends the app in a moment: an upload stops between
+                // files now, keeping what reached PicPlace, and a job goes
+                // again when the app is in front (background transfers: TODO).
+                guard let self, let stop else { return }
+                if job, self.uploadJobs[capture.id] != nil, self.uploadJobs[capture.id]?.hold == nil {
+                    self.uploadJobs[capture.id]?.hold = .interrupted
+                    self.uploadJobs[capture.id]?.lastError = "The app went to the background"
+                }
+                stop.request()
+            }
             defer { activity.end() }
             do {
                 // A preview-only project's "source" IS its poster: nothing to
@@ -1671,8 +1721,16 @@ final class PicPlaceController: ObservableObject {
                     refreshHeavyListing(for: capture)
                 }
                 records[key] = record
+                if job { noteUploadRunEnded(capture.id, outcome: .done) }
+            } catch is PicPlaceSyncRun.Paused {
+                // Stopped between files on request: what finished is on
+                // PicPlace, the rest waits. Not a failure.
+                if job { noteUploadRunEnded(capture.id, outcome: .paused) } else { originalsRunPaused = true }
             } catch is CancellationError {
                 // Cancelled by the user: the card goes back to what it was.
+                // A job's run is only cancelled from outside (a library
+                // switch): it carries on next time.
+                if job { noteUploadRunEnded(capture.id, outcome: .interrupted(nil)) }
             } catch let error as PicPlaceAPIError where error.code == "library_unknown" && !retriedLibrary {
                 // The server no longer has this library (deleted or purged
                 // elsewhere): put it back by its uuid and name, then push
@@ -1680,9 +1738,11 @@ final class PicPlaceController: ObservableObject {
                 LLog("picplace: the server does not know library \(scope?.uuidString ?? "?") — re-creating it and retrying \(capture.displayTitle)")
                 progress[capture.id] = nil
                 syncTasks[capture.id] = nil
+                uploadStops[capture.id] = nil
                 if await ensureServerLibrary() {
-                    sync(capture, policy: override, retriedLibrary: true)
+                    sync(capture, policy: override, retriedLibrary: true, job: job)
                 } else {
+                    if job { noteUploadRunEnded(capture.id, outcome: .failed("PicPlace no longer has this library, and it could not be re-created.")) }
                     var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: policy.rawValue)
                     record.noteFailure("PicPlace no longer has this library, and it could not be re-created.", policy: policy)
                     records[key] = record
@@ -1693,8 +1753,10 @@ final class PicPlaceController: ObservableObject {
                 // Another account holds this origin id: the project is re-minted
                 // as a fork of it here and pushed under its own id (§4.4).
                 LLog("picplace: \(key) is taken by another account — re-minting \(capture.displayTitle) as a fork")
+                if job { noteUploadRunEnded(capture.id, outcome: .failed("This project's id belongs to another account")) }
                 progress[capture.id] = nil
                 syncTasks[capture.id] = nil
+                uploadStops[capture.id] = nil
                 if let forkID = try? model.forkProjectForKeepBoth(capture.id), let fork = model.capture(id: forkID) {
                     sync(fork)
                 } else {
@@ -1707,17 +1769,27 @@ final class PicPlaceController: ObservableObject {
             } catch {
                 LLog("picplace: sync of \(capture.displayTitle) (\(key.uuidString.prefix(8)), \(policy.rawValue)) failed: \(error)")
                 lastSyncFailedOffline = error is PicPlaceOfflineError
-                var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: policy.rawValue)
-                record.noteFailure((error as? PicPlaceAPIError)?.cardCaption
+                let caption = (error as? PicPlaceAPIError)?.cardCaption
                     ?? (error as? LocalizedError)?.errorDescription
-                    ?? error.localizedDescription, policy: policy)
-                records[key] = record
+                    ?? error.localizedDescription
+                if job {
+                    // The job carries it — its line on the card, its retry —
+                    // and the project's records stay as they were.
+                    noteUploadRunEnded(capture.id, outcome: Self.isUploadInterruption(error) ? .interrupted(caption) : .failed(caption))
+                } else {
+                    var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: policy.rawValue)
+                    record.noteFailure(caption, policy: policy)
+                    records[key] = record
+                }
             }
             saveSyncState()
             progress[capture.id] = nil
             syncTasks[capture.id] = nil
+            uploadStops[capture.id] = nil
             scheduleUsageRefresh()
+            if job { followUpUploadJob(capture.id) }
         }
+        return true
     }
 
     /// The failed pushes of projects this library still holds live.
@@ -1740,10 +1812,8 @@ final class PicPlaceController: ObservableObject {
     // `originalsStatus(for:)` (PicPlaceFreeUp.swift, 2026-09-23): per file,
     // never a count or a timestamp.
 
-    /// The `source/` media and `blends/` up, by hash (`SyncPolicy.originals`).
-    func uploadOriginals(_ capture: AppModel.CaptureProject) {
-        sync(capture, policy: .originals)
-    }
+    // The card's Upload is a job that can pause and wait for Wi-Fi:
+    // `uploadOriginals(_:)` in PicPlaceUploadJobs.swift (2026-09-24).
 
     /// The `source/` media and/or `blends/` down, in pages of presigned
     /// URLs; the project stops being preview-only when the last listed

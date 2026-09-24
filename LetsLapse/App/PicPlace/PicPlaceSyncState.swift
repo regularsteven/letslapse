@@ -23,6 +23,10 @@ enum PicPlaceSyncState {
         /// (2026-09-24); nil when not. Kept here so a pause outlives a
         /// relaunch — it is this library's, on this device.
         var sendsPaused: Bool?
+        /// A person's originals uploads that have not finished, by project
+        /// id (2026-09-24, `PicPlaceUploadJob`): paused, waiting for Wi-Fi,
+        /// interrupted — or running when the app last stopped.
+        var uploadJobs: [String: PicPlaceUploadJob]?
     }
 
     private struct File: Codable {
