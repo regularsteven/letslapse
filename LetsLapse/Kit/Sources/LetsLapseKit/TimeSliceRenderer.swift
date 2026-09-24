@@ -50,8 +50,10 @@ public final class AssetFrameProvider: OrderedFrameProvider {
         guard let track = try await asset.loadTracks(withMediaType: .video).first else {
             throw LapseError.noVideoTrack(url)
         }
-        let (preferredTransform, fps) = try await track.load(.preferredTransform, .nominalFrameRate)
-        transform = preferredTransform
+        let (preferredTransform, fps, naturalSize) = try await track.load(.preferredTransform, .nominalFrameRate, .naturalSize)
+        // The project's quarter turns on top (2026-09-24): a blend from before
+        // a later turn slices the way it is shown.
+        transform = ProjectOrientation.shared.transform(for: url, preferred: preferredTransform, naturalSize: naturalSize)
         nominalFPS = fps > 0 ? Double(fps) : 30
 
         // Counting pass: nil output settings deliver the compressed samples,

@@ -48,12 +48,14 @@ enum VideoGrader {
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: maxDimension, height: maxDimension)
-        guard let frame = try? generator.copyCGImage(
+        guard let grabbed = try? generator.copyCGImage(
             at: CMTime(seconds: seconds, preferredTimescale: 600), actualTime: nil) else {
             MediaWorkQueue.note(
                 "grade frame grab failed for \(url.lastPathComponent)", isError: true)
             return nil
         }
+        // The project's quarter turns on top of the file's own (2026-09-24).
+        let frame = TurnedMedia.turned(grabbed, from: url)
         guard !grade.isIdentity else { return frame }
         // Levelled first, cropped second, graded third — the same order
         // `composition` bakes in, so the vignette sits on the frame that
@@ -173,7 +175,9 @@ enum VideoGrader {
         outputFPS: Double? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
-        let asset = AVURLAsset(url: sourceURL)
+        // A project's clip with its quarter turns on (2026-09-24) — the file
+        // itself for a render pass's temporary input, which has none.
+        let asset = await TurnedMedia.asset(for: sourceURL)
         // Only a keyframed grade needs the clip's length, and only that read is
         // worth the probe.
         let duration = grade.isKeyframed

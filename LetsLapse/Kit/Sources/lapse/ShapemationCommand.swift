@@ -90,7 +90,8 @@ func orientedPixelSize(of url: URL) -> CGSize? {
           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
           let width = properties[kCGImagePropertyPixelWidth] as? Int,
           let height = properties[kCGImagePropertyPixelHeight] as? Int, width > 0, height > 0 else { return nil }
-    switch OrientedDecode.orientation(of: source) {
+    // The project's quarter turns on top (2026-09-24), as the decode reads it.
+    switch OrientedDecode.orientation(of: source, url: url) {
     case .leftMirrored, .right, .rightMirrored, .left: return CGSize(width: height, height: width)
     default: return CGSize(width: width, height: height)
     }

@@ -142,6 +142,7 @@ final class PresetThumbnailCache: ObservableObject {
 
     static func key(frame: PresetPreviewFrame, grade: PhotoGrade, maxDimension: CGFloat) -> String {
         "\(frame.url.path)|\(grade.preset.rawValue)|\(grade.adjustments.cacheToken)|\(Int(maxDimension))"
+            + ProjectOrientation.shared.keySuffix(for: frame.url)
     }
 }
 

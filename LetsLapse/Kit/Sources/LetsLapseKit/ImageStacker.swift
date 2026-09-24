@@ -689,7 +689,7 @@ public final class ImageStacker {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else {
             throw LapseError.imageLoadFailed(url)
         }
-        let stored = OrientedDecode.stored(source: source, maxPixelSize: 20000)
+        let stored = OrientedDecode.stored(source: source, maxPixelSize: 20000, url: url)
 
         var primaryLongSide = 0
         if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] {
@@ -703,7 +703,7 @@ public final class ImageStacker {
         if let full = CGImageSourceCreateImageAtIndex(source, 0, [
             kCGImageSourceShouldCacheImmediately: true,
         ] as CFDictionary) {
-            return OrientedDecode.oriented(full, OrientedDecode.orientation(of: source))
+            return OrientedDecode.oriented(full, OrientedDecode.orientation(of: source, url: url))
         }
         if let stored {
             return OrientedDecode.oriented(stored.image, stored.orientation)

@@ -31,12 +31,17 @@ enum CustomMaskLoader {
     /// The mask at `url`, or nil when the file is missing or unreadable —
     /// a deleted mask file degrades to "no occlusion", the same thing a
     /// missing segmentation model does.
-    static func mask(at url: URL) -> SceneMask? {
+    ///
+    /// `turnedBy` turns the grid clockwise that many quarters — a project
+    /// turned since the mask was drawn (`AppModel.customMaskTurns`).
+    static func mask(at url: URL, turnedBy turns: Int = 0) -> SceneMask? {
         let stamp = (try? FileManager.default.attributesOfItem(atPath: url.path))
             .flatMap { ($0[.modificationDate] as? Date)?.timeIntervalSince1970 } ?? 0
-        let key = "\(url.path)|\(stamp)" as NSString
+        let quarter = ((turns % 4) + 4) % 4
+        let key = "\(url.path)|\(stamp)|\(quarter)" as NSString
         if let box = cache.object(forKey: key) { return box.mask }
-        guard let mask = load(url) else { return nil }
+        guard var mask = load(url) else { return nil }
+        for _ in 0 ..< quarter { mask = mask.turnedClockwise() }
         cache.setObject(CacheBox(mask), forKey: key)
         return mask
     }

@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import LetsLapseKit
 
 /// Small previews of a project's custom mask files, for the Masks tab's
 /// rows. Separate from `CustomMaskLoader` because the two want different
@@ -21,8 +22,11 @@ enum CustomMaskThumbnails {
         init(_ image: CGImage) { self.image = image }
     }
 
-    static func thumbnail(at url: URL) -> CGImage? {
-        let key = url.path as NSString
+    /// `turnedBy`: the quarter turns the project made since the mask was
+    /// drawn (`AppModel.customMaskTurns`), so the row shows it as it lies.
+    static func thumbnail(at url: URL, turnedBy turns: Int = 0) -> CGImage? {
+        let quarter = QuarterTurns.normalized(turns)
+        let key = "\(url.path)|\(quarter)" as NSString
         if let box = cache.object(forKey: key) { return box.image }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
@@ -30,7 +34,8 @@ enum CustomMaskThumbnails {
                 kCGImageSourceThumbnailMaxPixelSize: maxPixel,
               ] as CFDictionary)
         else { return nil }
-        cache.setObject(CacheBox(image), forKey: key)
-        return image
+        let shown = QuarterTurns.turned(image, by: quarter)
+        cache.setObject(CacheBox(shown), forKey: key)
+        return shown
     }
 }

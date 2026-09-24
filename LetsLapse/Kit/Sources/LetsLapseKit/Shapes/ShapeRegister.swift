@@ -578,3 +578,58 @@ public struct ShapeRegister: Codable, Equatable, Sendable {
         try encoder.encode(self).write(to: url, options: .atomic)
     }
 }
+
+// MARK: - Rotate 90° (a record, 2026-09-24)
+
+extension DetectedShape {
+    /// This shape a quarter turn clockwise later: its project was turned with
+    /// Rotate 90°, which is a record, so the representative picture is shown
+    /// turned and the shape follows the scene on it. `frame` is the
+    /// representative's size before the turn.
+    ///
+    /// The centre maps (x, y) → (1 − y, x); the axes are fractions of the
+    /// frame's width, so they are re-expressed against the turned frame's
+    /// width — the old height; the angle gains a quarter. A quad's corners
+    /// turn and keep their clockwise-from-top-left order, and the quad is
+    /// re-measured from them; the rectangle's aspect is top edge over side,
+    /// and its top edge is now the old side.
+    public func turnedQuarter(frame: CGSize) -> DetectedShape {
+        let W = Double(frame.width), H = Double(frame.height)
+        guard W > 0, H > 0 else { return self }
+        func turned(_ p: CGPoint) -> CGPoint { CGPoint(x: 1 - p.y, y: p.x) }
+        var s = self
+        s.centre = turned(centre)
+        s.majorAxis = majorAxis * W / H
+        s.minorAxis = minorAxis * W / H
+        s.rotation = Self.wrapped(rotation + .pi / 2)
+        guard kind == .quad else { return s }
+        s.wide = !wide
+        s.rectifiedAspect = rectifiedAspect.map { $0 > 0 ? 1 / $0 : $0 }
+        if let c = corners, c.count == 4 {
+            s.corners = [turned(c[3]), turned(c[0]), turned(c[1]), turned(c[2])]
+            s = s.remeasured(frame: CGSize(width: frame.height, height: frame.width))
+        }
+        return s
+    }
+}
+
+extension ShapeRegister {
+    /// The register a quarter turn clockwise later — Rotate 90° on its
+    /// project. The representative is the same file shown turned, so the
+    /// frame's sides swap and the lens's horizontal field of view becomes
+    /// the old vertical one; every known shape turns with the picture.
+    /// Foreign shapes a newer build wrote ride along untouched, as `read`
+    /// leaves them.
+    public func turnedQuarter() -> ShapeRegister {
+        var r = self
+        let frame = frameSize
+        r.shapes = shapes.map { $0.turnedQuarter(frame: frame) }
+        r.representative.width = representative.height
+        r.representative.height = representative.width
+        if let fov = representative.horizontalFieldOfView, fov > 0, frame.width > 0 {
+            let half = tan(fov * .pi / 360) * Double(frame.height / frame.width)
+            r.representative.horizontalFieldOfView = 2 * atan(half) * 180 / .pi
+        }
+        return r
+    }
+}

@@ -1,4 +1,5 @@
 import AVFoundation
+import LetsLapseKit
 import AVKit
 import SwiftUI
 
@@ -260,7 +261,8 @@ struct FullscreenMediaSheet: View {
             Spacer(minLength: 0)
 
             if let url = current?.shareURL {
-                ShareLink(item: url) {
+                // With the project's turn in the copy that leaves (2026-09-24).
+                ShareLink(item: TurnedShareFile(url: url), preview: SharePreview(url.lastPathComponent)) {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
@@ -467,7 +469,10 @@ private struct FullscreenVideoPage: View {
     /// one unreadable piece shouldn't cost the rest of the recording.
     nonisolated private static func playbackAsset(for urls: [URL]) async -> AVAsset? {
         guard let first = urls.first else { return nil }
-        guard urls.count > 1 else { return AVURLAsset(url: first) }
+        // The project's quarter turns ride the asset (Rotate 90° as a
+        // record, 2026-09-24) — one file through `TurnedMedia`, a stitched
+        // take by turning its video track below.
+        guard urls.count > 1 else { return await TurnedMedia.asset(for: first) }
 
         let composition = AVMutableComposition()
         var cursor = CMTime.zero
@@ -495,7 +500,14 @@ private struct FullscreenVideoPage: View {
         }
         // Every segment failed — fall back to the first file on its own rather
         // than handing the player an empty timeline.
-        guard cursor > .zero else { return AVURLAsset(url: first) }
+        guard cursor > .zero else { return await TurnedMedia.asset(for: first) }
+        let turns = ProjectOrientation.shared.turns(for: first)
+        if turns != 0 {
+            for track in composition.tracks(withMediaType: .video) {
+                track.preferredTransform = QuarterTurns.transform(
+                    track.preferredTransform, naturalSize: track.naturalSize, turnedBy: turns)
+            }
+        }
         return composition
     }
 

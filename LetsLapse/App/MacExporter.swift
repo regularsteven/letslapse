@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import LetsLapseKit
 import UniformTypeIdentifiers
 
 /// The macOS end of a single-asset export: where iOS hands a file to Photos,
@@ -24,6 +25,17 @@ enum MacExporter {
             try FileManager.default.removeItem(at: destination)
         }
         try FileManager.default.copyItem(at: source, to: destination)
+        // The project's quarter turns go with the copy, written the way its
+        // format carries one (2026-09-24); the original stays as it is. A
+        // format that can't carry a turn is saved as it is.
+        let turns = ProjectOrientation.shared.turns(for: source)
+        if turns != 0 {
+            do {
+                try await MediaRotator.rotate(at: destination, quarterTurns: turns)
+            } catch {
+                LLog("export: the turn could not be written into \(destination.lastPathComponent) (\(error.localizedDescription))")
+            }
+        }
         return true
     }
 }

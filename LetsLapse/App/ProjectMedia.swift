@@ -79,7 +79,9 @@ struct ProjectThumbnailView: View {
             // side of it, which is how a click "between" two Gallery tiles
             // opened one of them (2026-09-13). The shape is the tile.
             .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .task(id: "\(url?.path ?? "-")|\(cache.generation)|\(effectiveGrade?.cacheToken ?? "-")") {
+            // The project's quarter turns in the id too (2026-09-24): a turn
+            // leaves the file, its path and its date as they were.
+            .task(id: "\(url?.path ?? "-")|\(cache.generation)|\(effectiveGrade?.cacheToken ?? "-")\(url.map(ProjectThumbnailCache.turnSuffix) ?? "")") {
                 // Only blank for a *different* asset. Re-requesting the same one
                 // (cache invalidated, or the row was rebuilt) used to clear here
                 // first, which turned any cache purge into a wall of gray tiles
@@ -149,9 +151,13 @@ struct ProjectMediaPreviewSheet: View {
         .onAppear {
             if item.kind == .video {
                 PlaybackAudioSession.configureAmbient()
-                let player = AVPlayer(url: item.url)
+                let player = AVPlayer()
                 self.player = player
-                player.play()
+                // The project's quarter turns ride the item (2026-09-24).
+                Task { @MainActor in
+                    player.replaceCurrentItem(with: await TurnedMedia.playerItem(for: item.url))
+                    player.play()
+                }
             }
         }
         .onDisappear {
@@ -195,7 +201,7 @@ struct ProjectPreviewImage: View {
                 ProgressView()
             }
         }
-        .task(id: "\(url.path)|\(grade?.cacheToken ?? "-")") {
+        .task(id: "\(url.path)|\(grade?.cacheToken ?? "-")\(ProjectThumbnailCache.turnSuffix(url))") {
             image = nil
             failed = false
             if let grade, !grade.isIdentity {
@@ -257,10 +263,10 @@ enum ProjectThumbnailGenerator {
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 640, height: 640)
-        return try? generator.copyCGImage(
+        return (try? generator.copyCGImage(
             at: CMTime(seconds: 0.2, preferredTimescale: 600),
             actualTime: nil
-        )
+        )).map { TurnedMedia.turned($0, from: url) }
     }
 
     /// A bounded, orientation-corrected still decode. Internal rather than

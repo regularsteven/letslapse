@@ -19,10 +19,24 @@ struct ReframeTrack: Codable, Equatable {
         /// tightest crop the track allows.
         var z: Double
         /// Crop centre in source pixels, display-oriented — the same space as
-        /// `AppModel.sourceDisplaySize()`, so a metadata rotation needs no
-        /// fixups.
+        /// `AppModel.sourceDisplaySize()`. A Rotate 90° turns the keys with
+        /// the picture (`turnedQuarter`), since that space turns too.
         var cx: Double
         var cy: Double
+    }
+
+    /// The track a quarter turn clockwise later (Rotate 90° as a record,
+    /// 2026-09-24): each centre follows the scene — (x, y) on a picture
+    /// `size` big lands at (height − y, x) on the turned one. Punch and
+    /// timing belong to the scene, not the frame, and stay.
+    func turnedQuarter(displaySize size: CGSize) -> ReframeTrack {
+        var copy = self
+        copy.keys = keys.map { key in
+            var key = key
+            (key.cx, key.cy) = (Double(size.height) - key.cy, key.cx)
+            return key
+        }
+        return copy
     }
 
     /// How the move between two neighbouring keys plays out. Durations are

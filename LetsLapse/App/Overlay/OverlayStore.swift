@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import LetsLapseKit
 import UniformTypeIdentifiers
 
 /// Per-project overlay persistence: `overlays.json` beside the project's
@@ -211,7 +212,16 @@ extension AppModel {
         }
         return CustomMask(
             id: id, name: name, invertedName: "",
-            replacesSkyAndLand: false, fileName: fileName)
+            replacesSkyAndLand: false, fileName: fileName,
+            quarterTurns: self.capture(id: capture.id)?.quarterTurns ?? capture.quarterTurns)
+    }
+
+    /// How far a custom mask's grid turns to sit on the picture as the
+    /// project shows it now: the project's quarter turns less the ones it
+    /// was drawn at (2026-09-24).
+    func customMaskTurns(_ mask: CustomMask, for capture: CaptureProject) -> Int {
+        let now = self.capture(id: capture.id)?.quarterTurns ?? capture.quarterTurns ?? 0
+        return QuarterTurns.normalized(now - (mask.quarterTurns ?? 0))
     }
 
     /// Deletes a custom mask's backing file. The caller drops it from the

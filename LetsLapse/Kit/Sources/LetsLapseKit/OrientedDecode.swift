@@ -43,8 +43,13 @@ public enum OrientedDecode {
     /// `maxPixelSize` bounds the longer stored edge (the same bound
     /// `kCGImageSourceThumbnailMaxPixelSize` applies); pass something past
     /// any camera's output for the whole picture.
+    /// `url` is the file the source was opened from, when it is a project
+    /// file: the project's quarter turns (Rotate 90° as a record,
+    /// 2026-09-24, `ProjectOrientation`) are composed after the file's own
+    /// orientation. nil — a tile from the cache, bytes in memory — reads the
+    /// file's orientation alone.
     public static func stored(
-        source: CGImageSource, maxPixelSize: Int, cacheImmediately: Bool = true
+        source: CGImageSource, maxPixelSize: Int, cacheImmediately: Bool = true, url: URL? = nil
     ) -> (image: CGImage, orientation: CGImagePropertyOrientation)? {
         var options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -54,33 +59,41 @@ public enum OrientedDecode {
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
             return nil
         }
-        return (image, orientation(of: source))
+        return (image, orientation(of: source, url: url))
+    }
+
+    /// The orientation a file reads with in its library: its own EXIF tag,
+    /// then the project's quarter turns when `url` is a project file.
+    public static func orientation(of source: CGImageSource, url: URL?) -> CGImagePropertyOrientation {
+        let own = orientation(of: source)
+        guard let url else { return own }
+        return ProjectOrientation.shared.orientation(for: url, fileOrientation: own)
     }
 
     /// The picture as it reads, for Core Image: the stored decode wrapped and
     /// oriented in the graph, its extent at the origin.
-    public static func ciImage(source: CGImageSource, maxPixelSize: Int) -> CIImage? {
-        guard let stored = stored(source: source, maxPixelSize: maxPixelSize) else { return nil }
+    public static func ciImage(source: CGImageSource, maxPixelSize: Int, url: URL? = nil) -> CIImage? {
+        guard let stored = stored(source: source, maxPixelSize: maxPixelSize, url: url) else { return nil }
         return CIImage(cgImage: stored.image).oriented(stored.orientation)
     }
 
     public static func ciImage(url: URL, maxPixelSize: Int) -> CIImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        return ciImage(source: source, maxPixelSize: maxPixelSize)
+        return ciImage(source: source, maxPixelSize: maxPixelSize, url: url)
     }
 
     /// The picture as it reads, as a plain bitmap: the stored decode itself
     /// when the file is upright, a CoreGraphics redraw into the same colour
     /// space and depth otherwise.
-    public static func cgImage(source: CGImageSource, maxPixelSize: Int, cacheImmediately: Bool = true) -> CGImage? {
+    public static func cgImage(source: CGImageSource, maxPixelSize: Int, cacheImmediately: Bool = true, url: URL? = nil) -> CGImage? {
         guard let stored = stored(
-            source: source, maxPixelSize: maxPixelSize, cacheImmediately: cacheImmediately) else { return nil }
+            source: source, maxPixelSize: maxPixelSize, cacheImmediately: cacheImmediately, url: url) else { return nil }
         return oriented(stored.image, stored.orientation)
     }
 
     public static func cgImage(url: URL, maxPixelSize: Int, cacheImmediately: Bool = true) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        return cgImage(source: source, maxPixelSize: maxPixelSize, cacheImmediately: cacheImmediately)
+        return cgImage(source: source, maxPixelSize: maxPixelSize, cacheImmediately: cacheImmediately, url: url)
     }
 
     /// `image` redrawn the way `orientation` says it reads. The input comes

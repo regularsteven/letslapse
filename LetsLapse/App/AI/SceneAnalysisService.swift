@@ -318,7 +318,8 @@ enum SceneFrameSampler {
         for index in 0..<count {
             let fraction = count == 1 ? 0.5 : 0.1 + 0.8 * Double(index) / Double(count - 1)
             let time = CMTime(seconds: seconds * fraction, preferredTimescale: 600)
-            guard let image = try? await generator.image(at: time).image else { continue }
+            guard let grabbed = try? await generator.image(at: time).image else { continue }
+            let image = TurnedMedia.turned(grabbed, from: url)
             if let written = write(image, index: index, into: directory) {
                 frames.append(written)
             }
@@ -338,8 +339,8 @@ enum SceneFrameSampler {
         let duration = try await asset.load(.duration).seconds
         guard duration.isFinite, duration > 0 else { throw SamplingError.noFrames }
         let time = CMTime(seconds: min(max(0, seconds), duration), preferredTimescale: 600)
-        guard let image = try? await generator.image(at: time).image else { return nil }
-        return write(image, index: 0, into: directory)
+        guard let grabbed = try? await generator.image(at: time).image else { return nil }
+        return write(TurnedMedia.turned(grabbed, from: url), index: 0, into: directory)
     }
 
     private static func write(_ image: CGImage, index: Int, into directory: URL) -> URL? {

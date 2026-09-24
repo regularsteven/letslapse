@@ -84,7 +84,7 @@ final class ProjectThumbnailCache: ObservableObject {
         guard let grade, !grade.isIdentity else {
             return await thumbnail(for: url, kind: kind)
         }
-        let key = "\(url.path)|\(grade.cacheToken)" as NSString
+        let key = "\(url.path)|\(grade.cacheToken)\(Self.turnSuffix(url))" as NSString
         if let cached = gradedCache.object(forKey: key) {
             return Image(decorative: cached, scale: 1)
         }
@@ -111,7 +111,7 @@ final class ProjectThumbnailCache: ObservableObject {
     /// decode failed, so callers must not treat nil as "show the placeholder"
     /// if they already have an image on screen.
     func thumbnail(for url: URL, kind: AppModel.MediaKind) async -> Image? {
-        if let cached = cache.object(forKey: url as NSURL) {
+        if let cached = cache.object(forKey: Self.memoryKey(url)) {
             return Image(decorative: cached, scale: 1)
         }
         // One trip off the main actor for the whole load. Splitting identity,
@@ -147,8 +147,22 @@ final class ProjectThumbnailCache: ObservableObject {
             }
             return nil
         }
-        remember(image, forKey: url as NSURL)
+        remember(image, forKey: Self.memoryKey(url))
         return Image(decorative: image, scale: 1)
+    }
+
+    /// Rotate 90° is a record now (2026-09-24): the file does not change, so
+    /// neither does its path or its modification date — the project's quarter
+    /// turns are part of every key instead, and a turned tile is a different
+    /// tile. Empty for a file with no turn, so no existing key moves.
+    nonisolated static func turnSuffix(_ url: URL) -> String {
+        ProjectOrientation.shared.keySuffix(for: url)
+    }
+
+    nonisolated private static func memoryKey(_ url: URL) -> NSURL {
+        let suffix = turnSuffix(url)
+        guard !suffix.isEmpty, let keyed = URL(string: url.absoluteString + "#" + suffix.dropFirst()) else { return url as NSURL }
+        return keyed as NSURL
     }
 
     /// One thumbnail load's result: the disk-cache identity it resolved to, the
@@ -164,7 +178,7 @@ final class ProjectThumbnailCache: ObservableObject {
     private func remember(_ image: CGImage, forKey key: NSURL) {
         cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
         if image.height > 0 {
-            aspects[(key as URL).path] = Double(image.width) / Double(image.height)
+            aspects[Self.aspectKey(key as URL)] = Double(image.width) / Double(image.height)
         }
     }
 
@@ -173,14 +187,19 @@ final class ProjectThumbnailCache: ObservableObject {
     /// paint instead of resizing when a probe lands.
     func aspect(for url: URL?) -> Double? {
         guard let url else { return nil }
-        return aspects[url.path]
+        return aspects[Self.aspectKey(url)]
+    }
+
+    /// The shape store's key: the path, and the turn it was seen at.
+    nonisolated private static func aspectKey(_ url: URL) -> String {
+        url.fragment.map { url.path + "|" + $0 } ?? (url.path + turnSuffix(url))
     }
 
     /// Record a shape learned somewhere else (a metadata probe, or a size the
     /// project already stored), so the next screen to ask gets it for free.
     func recordAspect(_ aspect: Double, for url: URL) {
         guard aspect.isFinite, aspect > 0 else { return }
-        aspects[url.path] = aspect
+        aspects[Self.aspectKey(url)] = aspect
     }
 
     /// Drop in-memory thumbnails for files rewritten in place. The disk tier
@@ -188,12 +207,19 @@ final class ProjectThumbnailCache: ObservableObject {
     /// and correctness beats re-paying a few doomed decodes.
     func invalidate(urls: [URL]) {
         for url in urls {
-            cache.removeObject(forKey: url as NSURL)
+            cache.removeObject(forKey: Self.memoryKey(url))
             // A rotate swaps the asset's width and height, so the remembered
             // shape is as stale as the picture.
-            aspects.removeValue(forKey: url.path)
+            aspects.removeValue(forKey: Self.aspectKey(url))
         }
         failedKeys.removeAll()
+        generation += 1
+    }
+
+    /// A project was turned (Rotate 90°, 2026-09-24). Every key already
+    /// carries the turn, so nothing cached is wrong — the views are nudged to
+    /// ask again, for the picture and for its shape.
+    func noteTurned() {
         generation += 1
     }
 
@@ -317,7 +343,7 @@ enum DiskThumbnailStore {
         } else {
             path = url.path
         }
-        return "v\(generatorVersion)|\(path)|\(modified.map { String($0) } ?? "missing")"
+        return "v\(generatorVersion)|\(path)|\(modified.map { String($0) } ?? "missing")\(ProjectThumbnailCache.turnSuffix(url))"
     }
 
     static func read(_ key: String) -> CGImage? {

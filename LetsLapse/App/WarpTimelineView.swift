@@ -59,8 +59,9 @@ final class WarpPreviewLoader: ObservableObject {
             try? await Task.sleep(nanoseconds: debounceNanos)
             guard !Task.isCancelled else { return }
             let time = CMTime(seconds: max(0, seconds), preferredTimescale: 600)
-            let image = try? await generator.image(at: time).image
-            guard !Task.isCancelled, let image else { return }
+            let grabbed = try? await generator.image(at: time).image
+            guard !Task.isCancelled, let grabbed else { return }
+            let image = TurnedMedia.turned(grabbed, from: url)
             // Levelled like the render will be — the crop is composed on
             // the levelled picture.
             self?.image = AdjustPreviewLevel.apply(image)

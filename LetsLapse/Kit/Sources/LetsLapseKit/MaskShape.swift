@@ -430,6 +430,13 @@ public struct MaskShape: Codable, Equatable, Sendable {
         return copy
     }
 
+    /// This shape a quarter turn clockwise later — a project turned with
+    /// Rotate 90° (2026-09-24), its shapes following the scene. The same map
+    /// as a sensor frame shown at EXIF orientation 6.
+    public func turnedQuarter() -> MaskShape {
+        fromSensorFrame(exifOrientation: 6)
+    }
+
     /// A one-line description of the shape's size, for the create HUD and the
     /// detail card's footnote.
     public func sizeCaption(in size: CGSize) -> String {

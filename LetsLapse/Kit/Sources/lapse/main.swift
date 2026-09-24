@@ -770,7 +770,10 @@ do {
                 fail("no video track in \(input.lastPathComponent)")
             }
             let (size, transform) = try await track.load(.naturalSize, .preferredTransform)
-            let display = size.applying(transform)
+            // Its project's quarter turns too, as the frame provider reads it.
+            let display = QuarterTurns.displaySize(
+                naturalSize: size,
+                transform: ProjectOrientation.shared.transform(for: input, preferred: transform, naturalSize: size))
             let counter = try await AssetFrameProvider(url: input)
             recipes = TimeSliceVariationGenerator.variations(
                 plan: TimeSliceVariationPlan(count: variationCount, mode: variationMode, seed: seed),

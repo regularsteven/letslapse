@@ -30,8 +30,9 @@ final class ExactFrameLoader: ObservableObject {
         }()
         task = Task { [weak self] in
             let time = CMTime(seconds: max(0, seconds), preferredTimescale: 600)
-            let image = try? await generator.image(at: time).image
-            guard !Task.isCancelled, let image else { return }
+            let grabbed = try? await generator.image(at: time).image
+            guard !Task.isCancelled, let grabbed else { return }
+            let image = TurnedMedia.turned(grabbed, from: url)
             // Levelled like the render will be: a punch is aimed at the
             // levelled picture, since that is what gets cropped.
             self?.image = AdjustPreviewLevel.apply(image)

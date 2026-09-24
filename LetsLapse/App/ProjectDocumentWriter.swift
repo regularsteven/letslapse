@@ -56,6 +56,9 @@ final class ProjectDocumentWriter {
     func write(_ document: ProjectDocument, to url: URL) throws -> Data {
         let data = try ProjectDocumentFormat.makeEncoder().encode(document)
         try data.write(to: url, options: .atomic)
+        // Every document write — a Rotate, a pull, an import — can move the
+        // project's quarter turns; the next read of its media asks again.
+        ProjectOrientation.shared.forget(folder: url.deletingLastPathComponent())
         return data
     }
 

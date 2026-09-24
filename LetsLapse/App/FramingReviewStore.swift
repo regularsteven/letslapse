@@ -119,7 +119,8 @@ final class FramingReviewStore: ObservableObject {
                     }()
                     let review = FramingReview.make(
                         width: size.width, height: size.height, measurementScale: 0.5,
-                        offsets: offsets, captureSpanSeconds: span)
+                        offsets: offsets, captureSpanSeconds: span,
+                        quarterTurns: ProjectOrientation.shared.turns(for: urls[0]))
                     try review.write(inSourceFolder: sourceFolder)
                     return .success(review)
                 } catch {

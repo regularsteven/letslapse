@@ -93,6 +93,48 @@ final class MediaRotatorTests: XCTestCase {
         XCTAssertEqual(grayValues(of: try rawDecode(url)), before)
     }
 
+    // MARK: - A copy leaving the app (Rotate 90° as a record, 2026-09-24)
+
+    func testACopyTakesSeveralTurnsInOneWrite() async throws {
+        let url = tempURL("jpg")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try writeSourceJPEG(to: url)
+        let before = grayValues(of: try rawDecode(url))
+        try await MediaRotator.rotate(at: url, quarterTurns: 3)
+        XCTAssertEqual(try orientationTag(of: url), 8, "three clockwise quarters is one anticlockwise")
+        XCTAssertEqual(grayValues(of: try rawDecode(url)), before, "the tag only")
+        try await MediaRotator.rotate(at: url, quarterTurns: 0)
+        XCTAssertEqual(try orientationTag(of: url), 8, "no turn, no write")
+    }
+
+    func testAnotherMakersRawIsEditedOnlyInPlace() async throws {
+        // A TIFF-built raw stands in as a TIFF named .arw: ImageIO writes
+        // Orientation inline, so the tag is overwritten where it stands.
+        let url = tempURL("arw")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(
+            url as CFURL, UTType.tiff.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(
+            destination, makeGrayImage(width: 3, height: 2, values: [10, 20, 30, 40, 50, 60]),
+            [kCGImagePropertyOrientation: 1] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let size = try Data(contentsOf: url).count
+        try await MediaRotator.rotate(at: url, quarterTurns: 1)
+        let data = try Data(contentsOf: url)
+        XCTAssertEqual(data.count, size, "overwritten in place, nothing appended")
+        XCTAssertEqual(DNGAuthor.dngOrientation(in: data), 6)
+
+        // A format with no way to carry a turn is refused, not guessed at.
+        let cr3 = tempURL("cr3")
+        defer { try? FileManager.default.removeItem(at: cr3) }
+        try Data([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]).write(to: cr3)
+        do {
+            try await MediaRotator.rotate(at: cr3, quarterTurns: 1)
+            XCTFail("a CR3 has no TIFF orientation to set")
+        } catch MediaRotator.RotateError.unsupported {
+        }
+    }
+
     // MARK: - PNG
 
     func testRotatePNGRotatesPixelsLosslessly() throws {

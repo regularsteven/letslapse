@@ -3224,7 +3224,8 @@ struct PhotoViewerView: View {
             thumbnail: { mask in
                 guard let capture else { return nil }
                 return CustomMaskThumbnails.thumbnail(
-                    at: model.customMaskURL(mask, for: capture))
+                    at: model.customMaskURL(mask, for: capture),
+                    turnedBy: model.customMaskTurns(mask, for: capture))
             },
             onEdited: overlayEdited,
             onImportMask: importCustomMask,
@@ -3573,7 +3574,8 @@ struct PhotoViewerView: View {
                       let mask = overlayDocument.customMasks.first(where: { $0.id == id })
                 else { return nil }
                 return CustomMaskThumbnails.thumbnail(
-                    at: model.customMaskURL(mask, for: capture))
+                    at: model.customMaskURL(mask, for: capture),
+                    turnedBy: model.customMaskTurns(mask, for: capture))
             })
     }
 
@@ -4427,7 +4429,8 @@ struct PhotoViewerView: View {
         if let id = inspectedRegion?.customMaskID, showMask { wanted.insert(id) }
         for mask in overlayDocument.customMasks where wanted.contains(mask.id) {
             masks.custom[mask.id] = CustomMaskLoader.mask(
-                at: model.customMaskURL(mask, for: capture))
+                at: model.customMaskURL(mask, for: capture),
+                turnedBy: model.customMaskTurns(mask, for: capture))
         }
         return masks
     }

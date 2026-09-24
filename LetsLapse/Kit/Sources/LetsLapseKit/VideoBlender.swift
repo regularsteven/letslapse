@@ -113,7 +113,11 @@ public final class VideoBlender: @unchecked Sendable {
         guard let track = try await asset.loadTracks(withMediaType: .video).first else {
             throw LapseError.noVideoTrack(input)
         }
-        let (nominalFPS, transform) = try await track.load(.nominalFrameRate, .preferredTransform)
+        let (nominalFPS, ownTransform, naturalSize) = try await track.load(.nominalFrameRate, .preferredTransform, .naturalSize)
+        // The project's quarter turns on top of the file's own (Rotate 90° as
+        // a record, 2026-09-24): the output carries the turned transform, so
+        // the stitch and the tail passes — which orient by it — turn it too.
+        let transform = ProjectOrientation.shared.transform(for: input, preferred: ownTransform, naturalSize: naturalSize)
         let duration = try await asset.load(.duration)
         let sourceFPS = nominalFPS > 0 ? Double(nominalFPS) : 30
         let trim = max(0, options.trimHeadTailSeconds)

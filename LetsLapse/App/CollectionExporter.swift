@@ -1,4 +1,5 @@
 import AVFoundation
+import LetsLapseKit
 import Foundation
 
 /// Renders a collection to one video: each entry trimmed to its in/out points,
@@ -172,8 +173,11 @@ final class CollectionExportController: ObservableObject {
 
             try track.insertTimeRange(range, of: assetTrack, at: cursor)
 
-            let preferred = try await assetTrack.load(.preferredTransform)
             let natural = try await assetTrack.load(.naturalSize)
+            // A blend from before a later project turn shows turned by the
+            // difference (Rotate 90° as a record, 2026-09-24).
+            let preferred = ProjectOrientation.shared.transform(
+                for: url, preferred: try await assetTrack.load(.preferredTransform), naturalSize: natural)
             let orientedRect = CGRect(origin: .zero, size: natural).applying(preferred)
             let orientedSize = CGSize(width: abs(orientedRect.width), height: abs(orientedRect.height))
             // Land the oriented picture at the origin before crop/scale math.
@@ -286,8 +290,11 @@ final class CollectionExportController: ObservableObject {
             }
             guard outputSeconds > 0.01 else { continue }
 
-            let preferred = try await assetTrack.load(.preferredTransform)
             let natural = try await assetTrack.load(.naturalSize)
+            // A blend from before a later project turn shows turned by the
+            // difference (Rotate 90° as a record, 2026-09-24).
+            let preferred = ProjectOrientation.shared.transform(
+                for: url, preferred: try await assetTrack.load(.preferredTransform), naturalSize: natural)
             let orientedRect = CGRect(origin: .zero, size: natural).applying(preferred)
             let orientedSize = CGSize(width: abs(orientedRect.width), height: abs(orientedRect.height))
             let oriented = preferred.concatenating(

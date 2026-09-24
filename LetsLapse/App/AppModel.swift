@@ -119,6 +119,14 @@ final class AppModel: ObservableObject {
         var sourceDurationSeconds: Double?
         var sourceWidth: Int?
         var sourceHeight: Int?
+        /// Rotate 90° as a record (2026-09-24): clockwise quarter turns, 0…3,
+        /// applied to every asset of the project when it is read — after each
+        /// file's own orientation, before the grade's fine rotation — and
+        /// never written into a file (`QuarterTurns`). `sourceWidth` /
+        /// `sourceHeight` above are the turned (displayed) size. Nil is 0:
+        /// every project from before, including those whose files an older
+        /// build rotated in place — their turn is already in the files.
+        var quarterTurns: Int?
         /// Whether `name` was typed by a person (a rename) rather than
         /// accepted from an on-device suggestion as it came (Auto rename &
         /// tag, 2026-09-16). Nil for every project named before the flag
@@ -487,6 +495,11 @@ final class AppModel: ObservableObject {
         var trimHeadTailSeconds: Double?
         var width: Int?
         var height: Int?
+        /// The project's quarter turns when this blend was rendered — the
+        /// turn is in its pixels. A project turned since shows the blend
+        /// turned by the difference (`AppModel.displayQuarterTurns(for:)`);
+        /// `width`/`height` stay the file's own. Nil is 0.
+        var renderedQuarterTurns: Int?
         var inputFrames: Int?
         var outputFrames: Int?
         /// The source codec this version was blended from, when the user picked
@@ -2530,12 +2543,24 @@ final class AppModel: ObservableObject {
 
     /// The clip's display-oriented pixel size: the probed value once a probe
     /// has landed, else the recorded output stats.
+    ///
+    /// Turned by the difference the project moved since the blend was
+    /// rendered (Rotate 90° as a record, 2026-09-24): the file's own size is
+    /// what is probed and recorded.
     func blendDisplaySize(for blend: BlendProject) -> CGSize? {
-        if let probed = probedBlendSizes[blend.id] { return probed }
+        let turns = displayQuarterTurns(for: blend)
+        if let probed = probedBlendSizes[blend.id] { return QuarterTurns.size(probed, turnedBy: turns) }
         guard let width = blend.width, let height = blend.height, width > 0, height > 0 else {
             return nil
         }
-        return CGSize(width: width, height: height)
+        return QuarterTurns.size(CGSize(width: width, height: height), turnedBy: turns)
+    }
+
+    /// The quarter turns a blend is shown at: its project's now, less the
+    /// ones in its pixels.
+    func displayQuarterTurns(for blend: BlendProject) -> Int {
+        let project = capture(id: blend.captureID)?.quarterTurns ?? 0
+        return QuarterTurns.normalized(project - (blend.renderedQuarterTurns ?? 0))
     }
 
     /// The clip's picture aspect as displayed.
@@ -2707,6 +2732,8 @@ final class AppModel: ObservableObject {
             let oriented = CGRect(origin: .zero, size: natural).applying(transform)
             let size = CGSize(width: abs(oriented.width), height: abs(oriented.height))
             if size.width > 0, size.height > 0 {
+                // The file's own shape; `blendDisplaySize` turns it by the
+                // difference the blend is shown at (2026-09-24).
                 probedBlendSizes[blend.id] = size
             }
         }
@@ -2739,6 +2766,12 @@ final class AppModel: ObservableObject {
             let crop = resolvedCropOffset(entry: entry, in: collection)
                 .map { String(format: "%.4f", $0) } ?? "fit"
             var part = "\(entry.blendID.uuidString):\(String(format: "%.4f", entry.inPoint))-\(String(format: "%.4f", entry.outPoint))@\(crop)"
+            // A clip shown turned (its project was turned after the render,
+            // 2026-09-24) renders differently; unturned clips add nothing, so
+            // kept renders from before stay valid.
+            if let blend = blend(id: entry.blendID), case let turns = displayQuarterTurns(for: blend), turns != 0 {
+                part += "q\(turns)"
+            }
             if kenBurnsOn {
                 let move = kenBurnsResolvedMove(entry: entry, in: collection)
                 part += String(
@@ -4816,7 +4849,8 @@ final class AppModel: ObservableObject {
         let display = size.applying(transform)
         let width = abs(display.width), height = abs(display.height)
         guard width >= 1, height >= 1 else { return nil }
-        return CGSize(width: width, height: height)
+        // A blend shown turned by the difference its project moved since (2026-09-24).
+        return QuarterTurns.size(CGSize(width: width, height: height), turnedBy: ProjectOrientation.shared.turns(for: url))
     }
 
     nonisolated static func directorySize(_ url: URL) -> Int64 {
@@ -7334,7 +7368,7 @@ final class AppModel: ObservableObject {
     }
 
     private func currentBlendParameters() -> BlendProject {
-        BlendProject(
+        var parameters = BlendProject(
             id: UUID(),
             captureID: currentCaptureID ?? UUID(),
             kind: source?.isVideo == true ? .video : .image,
@@ -7368,6 +7402,11 @@ final class AppModel: ObservableObject {
             // clip a sliced run keeps never re-slices on re-render.
             timeSlice: nil
         )
+        // The project's turn is in this render's pixels (2026-09-24): a later
+        // turn shows it turned by the difference.
+        let turns = currentCaptureID.flatMap { capture(id: $0)?.quarterTurns } ?? 0
+        parameters.renderedQuarterTurns = turns == 0 ? nil : turns
+        return parameters
     }
 
     private func apply(_ output: ProcessingOutput, from blend: BlendProject) {
@@ -8358,6 +8397,11 @@ final class AppModel: ObservableObject {
             clone.sourceFileNames = inputs.map { "source/\($0.deletingPathExtension().lastPathComponent).dng" }
             clone.clipEncodings = nil
             clone.importedFromID = nil
+            // The archive was decoded the way the parent shows — its quarter
+            // turns included (`LossyLinearDNG.rawFilter`) — and written
+            // upright, so the turn is in the clone's pixels, not on its
+            // record (2026-09-24). The edits already sit on that picture.
+            clone.quarterTurns = nil
             // A new shoot in its own right, derived from the parent: its own
             // origin, minted here, and the parent's origin as the link that
             // survives where `dng-archive.json` does not.
@@ -9300,8 +9344,13 @@ final class AppModel: ObservableObject {
                     .merging(segmentSize) { _, probed in probed }
             }
             if let width, let height {
-                capture.sourceWidth = width
-                capture.sourceHeight = height
+                // The file's own shape, turned the way the project shows it —
+                // Rotate 90° is a record, never in the file (2026-09-24).
+                // The per-segment sizes above stay what each file holds.
+                let shown = QuarterTurns.dimensions(
+                    width: width, height: height, turnedBy: capture.quarterTurns ?? 0)
+                capture.sourceWidth = shown.width
+                capture.sourceHeight = shown.height
             }
         }
     }
@@ -9519,101 +9568,95 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// One-tap storage reclaim: convert every ProRes clip in a capture to H.264
-    /// and delete the ProRes originals. Skips clips already free of ProRes.
-    enum RotateScope {
-        /// Sources plus every already-rendered blend and encoding, so all
-        /// thumbnails, versions and exports stay coherent.
-        case wholeProject
-        /// Originals only; existing rendered outputs keep their orientation.
-        case sourcesOnly
-    }
-
-    /// Every file that must rotate together for one project, grouped by
-    /// rotation mechanism.
-    private struct RotatableMedia {
-        var stills: [URL] = []
-        var dngs: [URL] = []
-        var videos: [URL] = []
-        var all: [URL] { stills + dngs + videos }
-    }
-
-    private func rotatableMedia(for capture: CaptureProject, scope: RotateScope) -> RotatableMedia {
-        var media = RotatableMedia()
-        func classify(_ url: URL) {
-            guard FileManager.default.fileExists(atPath: url.path) else { return }
-            switch url.pathExtension.lowercased() {
-            case "dng": media.dngs.append(url)
-            case "jpg", "jpeg", "heic", "heif", "png": media.stills.append(url)
-            case "mov", "qt", "mp4", "m4v": media.videos.append(url)
-            default: break
-            }
-        }
-
-        let root = captureFolderURL(for: capture.id)
-        switch capture.kind {
-        case .photos:
-            for name in capture.sourceFileNames where !name.hasSuffix(".json") {
-                classify(root.appendingPathComponent(name))
-            }
-        case .video:
-            // Every surviving encoding of every clip, so ProRes originals and
-            // H.264/HEVC conversions stay in step.
-            for clipName in sourceClipNames(for: capture) {
-                for encoding in encodings(for: capture, clip: clipName) {
-                    classify(encodingURL(for: capture, encoding))
-                }
-            }
-        }
-        if scope == .wholeProject {
-            for blend in blends(for: capture) {
-                classify(mediaURL(for: blend))
-            }
-        }
-        return media
-    }
-
-    /// Rotates every media file of a project 90° clockwise, metadata-only:
-    /// EXIF/TIFF orientation for stills and DNGs, `preferredTransform` for
-    /// video — nothing is re-encoded (PNG blends rotate losslessly). Stops at
-    /// the first failure; files already processed stay rotated, and because
-    /// the walk order is deterministic, tapping Rotate again after fixing the
-    /// problem completes the same pass.
-    func rotateProjectMedia(_ capture: CaptureProject, scope: RotateScope = .wholeProject) async throws {
-        let media = rotatableMedia(for: capture, scope: scope)
-        // Even a partial rotate changed files — refresh thumbnails regardless.
-        defer { ProjectThumbnailCache.shared.invalidate(urls: media.all) }
-        try await Task.detached(priority: .userInitiated) {
-            for url in media.stills { try MediaRotator.rotateStill90CW(at: url) }
-            for url in media.dngs { try MediaRotator.rotateDNG90CW(at: url) }
-            for url in media.videos { try await MediaRotator.rotateVideo90CW(at: url) }
-        }.value
-
-        // Swap the persisted dimensions so format badges match immediately —
-        // the project's and every blend's, in the one document.
+    /// Rotate 90° as a record (2026-09-24): one clockwise quarter turn on the
+    /// project's document — no file is touched. Every read composes the turn
+    /// after the file's own orientation (`ProjectOrientation`,
+    /// `QuarterTurns`): the same for DNG, ARW, CR2, JPEG, HEIC, PNG and every
+    /// movie, and for a blend rendered before the turn, which shows turned by
+    /// the difference. Until this date the turn was written into every source
+    /// file and blend (`MediaRotator`), which changed the originals' bytes,
+    /// could leave a shoot half rotated, and skipped every raw format but DNG.
+    ///
+    /// The displayed size swaps here so badges and slots lay out right before
+    /// anything decodes; the edits drawn on the picture turn with it, so they
+    /// keep framing the same part of the scene: the crop
+    /// (`turnEditGeometry`), every blend's punch-in keys, the drawn mask
+    /// shapes and the shape register. Those are numbers in the project's own
+    /// records; a mask drawn as a file, and the framing review, keep the turn
+    /// they were made at instead (`CustomMask.quarterTurns`,
+    /// `FramingReview.quarterTurns`). Text layers stay where they are on the
+    /// frame, upright.
+    func rotateProject(_ capture: CaptureProject) throws {
+        var shownBefore: CGSize?
         try store.update(capture.id) { document in
+            let turns = QuarterTurns.normalized((document.capture.quarterTurns ?? 0) + 1)
+            document.capture.quarterTurns = turns == 0 ? nil : turns
             if let width = document.capture.sourceWidth, let height = document.capture.sourceHeight {
+                shownBefore = CGSize(width: width, height: height)
                 document.capture.sourceWidth = height
                 document.capture.sourceHeight = width
             }
-            for i in document.blends.indices {
-                if let width = document.blends[i].width, let height = document.blends[i].height {
-                    document.blends[i].width = height
-                    document.blends[i].height = width
+            Self.turnEditGeometry(of: &document.capture)
+            // A blend's punch-in keys come back when it is reopened for
+            // editing, onto the picture as it is shown then.
+            if let shownBefore {
+                for index in document.blends.indices {
+                    document.blends[index].reframe = document.blends[index].reframe?
+                        .turnedQuarter(displaySize: shownBefore)
                 }
             }
             // A person changed this project — see CaptureProject.modifiedAt.
             document.capture.modifiedAt = Date()
             document.capture.modifiedBy = DeviceIdentity.id
         }
-        noteFilesChanged(for: capture.id)
-        if capture.kind == .video {
-            // Belt and braces: re-derive video dimensions from the transforms
-            // actually on disk (also persists).
-            await refreshVideoMetadata(for: capture.id)
+        if currentCaptureID == capture.id, let shownBefore {
+            reframe = reframe?.turnedQuarter(displaySize: shownBefore)
         }
+        // The drawn mask shapes live beside the document, in the overlays.
+        var overlays = overlayDocument(for: capture)
+        if !overlays.shapeMasks.isEmpty {
+            for index in overlays.shapeMasks.indices {
+                overlays.shapeMasks[index].shape = overlays.shapeMasks[index].shape.turnedQuarter()
+            }
+            setOverlayDocument(overlays, for: capture)
+        }
+        // And the shapes found or drawn on the representative picture — a
+        // register a newer build wrote, or one that can't be read, is left as
+        // it is (`ShapeRegister.save` refuses it anyway).
+        let folder = projectFolderURL(for: capture)
+        if let register = ShapeRegister.read(inProjectFolder: folder).register {
+            do {
+                try register.turnedQuarter().save(inProjectFolder: folder)
+                shapeRegisterDidChange(for: capture)
+            } catch {
+                LLog("rotate: shapes.json of \(capture.id.uuidString.prefix(8)) not turned — \(error.localizedDescription)")
+            }
+        }
+        noteFilesChanged(for: capture.id)
+        noteIndexChanged()
+        ProjectThumbnailCache.shared.noteTurned()
     }
 
+    /// The edits drawn on the picture, turned a quarter with it: the crop, on
+    /// the grade and — carried whole — on every keyframe
+    /// (`GradeTimeline.carryCrop`), so it keeps framing the same part of the
+    /// scene. The fine rotation needs nothing: an angle about the centre is
+    /// the same angle on the turned picture.
+    static func turnEditGeometry(of capture: inout CaptureProject) {
+        guard let crop = capture.adjustments?.crop else { return }
+        let turned = crop.turned(by: 1)
+        var baseline = capture.adjustments ?? .neutral
+        if var timeline = capture.gradeTimeline {
+            timeline.carryCrop(turned, baseline: &baseline)
+            capture.gradeTimeline = timeline
+        } else {
+            baseline.crop = turned
+        }
+        capture.adjustments = baseline
+    }
+
+    /// One-tap storage reclaim: convert every ProRes clip in a capture to H.264
+    /// and delete the ProRes originals. Skips clips already free of ProRes.
     func convertAllProResToH264Purging(for capture: CaptureProject) async throws {
         for clipName in sourceClipNames(for: capture) {
             let originalURL = captureFolderURL(for: capture.id).appendingPathComponent(clipName)
@@ -11004,13 +11047,17 @@ final class AppModel: ObservableObject {
         let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
         var location = location
         if location == nil { location = await Self.photosLocation(for: url) }
+        // A turned project's file goes as a copy carrying the turn
+        // (2026-09-24) — the file itself when there is none.
+        let handed = await TurnedMedia.shareableCopy(of: url)
+        defer { TurnedMedia.discard(handed, for: url) }
         do {
             try await PHPhotoLibrary.shared().performChanges {
                 if isImage {
-                    let request = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+                    let request = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: handed)
                     request?.location = location
                 } else {
-                    let request = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                    let request = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: handed)
                     request?.location = location
                 }
             }
@@ -11091,9 +11138,18 @@ final class AppModel: ObservableObject {
                 return CLLocation.fromEXIF(of: url)
             }
         }.value
+        // Byte for byte — but a turned project's files go as copies carrying
+        // the turn, the way its format does (2026-09-24); the originals are
+        // never rewritten, so the copies are made here and dropped after.
+        let handed: [URL] = await Task.detached(priority: .userInitiated) {
+            var copies: [URL] = []
+            for url in urls { copies.append(await TurnedMedia.shareableCopy(of: url)) }
+            return copies
+        }.value
+        defer { for (copy, url) in zip(handed, urls) { TurnedMedia.discard(copy, for: url) } }
         do {
             try await PHPhotoLibrary.shared().performChanges {
-                for (url, location) in zip(urls, locations) {
+                for (url, location) in zip(handed, locations) {
                     let isImage = UTType(filenameExtension: url.pathExtension)?
                         .conforms(to: .image) ?? false
                     if isImage {
@@ -11133,15 +11189,21 @@ final class AppModel: ObservableObject {
                 location = await Self.photosLocation(for: videoURL)
                 if location == nil { location = await currentCaptureLocation() }
             }
+            // A version opened after its project was turned shows turned by
+            // the difference; the copy that goes carries it (2026-09-24).
+            let chosen = videoURL ?? imageURL
+            var handed: URL?
+            if let chosen { handed = await TurnedMedia.shareableCopy(of: chosen) }
+            defer { if let handed, let chosen { TurnedMedia.discard(handed, for: chosen) } }
             do {
                 try await PHPhotoLibrary.shared().performChanges {
-                    if let videoURL {
+                    if videoURL != nil, let handed {
                         let request = PHAssetChangeRequest
-                            .creationRequestForAssetFromVideo(atFileURL: videoURL)
+                            .creationRequestForAssetFromVideo(atFileURL: handed)
                         request?.location = location
-                    } else if let imageURL {
+                    } else if let handed {
                         let request = PHAssetChangeRequest
-                            .creationRequestForAssetFromImage(atFileURL: imageURL)
+                            .creationRequestForAssetFromImage(atFileURL: handed)
                         request?.location = location
                     }
                 }

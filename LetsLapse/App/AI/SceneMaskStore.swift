@@ -2,6 +2,7 @@ import CoreGraphics
 import CryptoKit
 import Foundation
 import ImageIO
+import LetsLapseKit
 import UniformTypeIdentifiers
 
 /// The disk half of `SceneMaskService`: one small grayscale PNG per raw model
@@ -20,13 +21,17 @@ enum SceneMaskStore {
     }
 
     /// A frame's cache identity: sandbox-relative path + mtime — the same
-    /// shape (and the same container-UUID lesson) as the thumbnail store's.
+    /// shape (and the same container-UUID lesson) as the thumbnail store's —
+    /// and the project's quarter turns, which Rotate 90° records without
+    /// touching the file (2026-09-24): a grid inferred on the upright picture
+    /// is not the grid of the turned one.
     static func frameIdentity(_ url: URL) -> String {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970
         let home = NSHomeDirectory()
         let path = url.path.hasPrefix(home) ? String(url.path.dropFirst(home.count)) : url.path
         return "\(path)|\(modified.map { String($0) } ?? "missing")"
+            + ProjectOrientation.shared.keySuffix(for: url)
     }
 
     static func read(_ key: String) -> SceneMask? {

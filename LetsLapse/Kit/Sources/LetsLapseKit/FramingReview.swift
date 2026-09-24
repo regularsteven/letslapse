@@ -115,6 +115,13 @@ public struct FramingReview: Codable, Equatable, Sendable {
     public var summary: String
     public var plan: Plan
     public var stabilisation: Stabilisation?
+    /// The project's quarter turns when the photos were measured — the
+    /// frame `width`, `height`, the offsets and the plan are in (Rotate 90°
+    /// is a record, 2026-09-24; the decoders hand back the turned picture).
+    /// A lock loaded after a later turn turns them by the difference
+    /// (`FramingLock.load`). nil is none, which every review written before
+    /// the record existed is.
+    public var quarterTurns: Int?
 
     // MARK: - Analysis thresholds
 
@@ -171,6 +178,7 @@ public struct FramingReview: Codable, Equatable, Sendable {
         measurementScale: Double,
         offsets: [Offset],
         captureSpanSeconds: Double? = nil,
+        quarterTurns: Int = 0,
         reviewedAt: Date = Date()
     ) -> FramingReview {
         let n = offsets.count
@@ -271,7 +279,8 @@ public struct FramingReview: Codable, Equatable, Sendable {
             version: currentVersion, reviewedAt: reviewedAt, width: width, height: height,
             measurementScale: measurementScale, captureSpanSeconds: captureSpanSeconds,
             frames: offsets, events: events, driftX: driftX, driftY: driftY,
-            verdict: verdict, summary: summary, plan: plan, stabilisation: nil)
+            verdict: verdict, summary: summary, plan: plan, stabilisation: nil,
+            quarterTurns: QuarterTurns.normalized(quarterTurns) == 0 ? nil : QuarterTurns.normalized(quarterTurns))
     }
 
     // MARK: - Maths

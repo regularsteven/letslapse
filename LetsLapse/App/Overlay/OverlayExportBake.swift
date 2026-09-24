@@ -127,7 +127,8 @@ extension AppModel {
         // Custom masks first — cheap, and they may be all the project needs.
         for mask in document.customMasks
         where named.contains(where: { $0.customMaskID == mask.id }) {
-            if let loaded = CustomMaskLoader.mask(at: customMaskURL(mask, for: capture)) {
+            if let loaded = CustomMaskLoader.mask(
+                at: customMaskURL(mask, for: capture), turnedBy: customMaskTurns(mask, for: capture)) {
                 masks.custom[mask.id] = loaded
             } else {
                 LLog("overlay bake: custom mask \(mask.displayName) unreadable — baking that layer without occlusion")

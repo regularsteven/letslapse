@@ -570,8 +570,10 @@ enum PhotoGrader {
               let height = properties[kCGImagePropertyPixelHeight] as? CGFloat
         else { return nil }
         let orientation = (properties[kCGImagePropertyOrientation] as? UInt32) ?? 1
-        // 5…8 are the quarter turns, which transpose the decoded frame.
-        return orientation >= 5 ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+        // 5…8 are the quarter turns, which transpose the decoded frame — and
+        // the project's own turns on top, as every decode applies them.
+        let oriented = orientation >= 5 ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+        return QuarterTurns.size(oriented, turnedBy: ProjectOrientation.shared.turns(for: url))
     }
 
     private static func renderDetailFlat(
@@ -680,6 +682,7 @@ enum PhotoGrader {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970 ?? 0
         let key = "\(url.path)|\(modified)|\(decodeToken(path: path, recipe: recipe))"
+            + ProjectOrientation.shared.keySuffix(for: url)
         // The decode happens under the lock, not around it: the loupe and the
         // zoomed picture ask at the same moment, and two full-sensor decodes
         // racing each other is 200 MB of the same pixels.
@@ -703,7 +706,8 @@ enum PhotoGrader {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970 ?? 0
         let key = "\(url.path)|\(modified)|\(String(format: "%.3f", scale))"
-            + "|\(decodeToken(path: path, recipe: recipe))" as NSString
+            + "|\(decodeToken(path: path, recipe: recipe))"
+            + ProjectOrientation.shared.keySuffix(for: url) as NSString
         if let boxed = decodedCache.object(forKey: key) { return boxed.frame }
         let frame = try decoder.decode(url: url, scale: scale, path: path, recipe: recipe)
         decodedCache.setObject(
@@ -1063,7 +1067,10 @@ enum PhotoGrader {
         // off, so every key an uncropped project made before is the key it
         // makes now.
         let cut = cropped && adjustments.hasCrop ? "|cut" : ""
-        return "e\(GradeRecipe.engineVersion)|\(RawDecodePath.current.rawValue)|\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)\(whiteBalance.cacheToken)|\(size)\(cut)" as NSString
+        // The project's quarter turns (2026-09-24): the file is untouched by
+        // Rotate 90°, so its path and date can't tell a turned picture apart.
+        let turn = ProjectOrientation.shared.keySuffix(for: url)
+        return "e\(GradeRecipe.engineVersion)|\(RawDecodePath.current.rawValue)|\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)\(whiteBalance.cacheToken)|\(size)\(cut)\(turn)" as NSString
     }
 }
 

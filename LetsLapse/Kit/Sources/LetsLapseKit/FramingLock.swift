@@ -30,25 +30,38 @@ public struct FramingLock: Equatable, Sendable {
         var dy: Double
     }
 
-    public init?(review: FramingReview) {
+    /// `turnedBy`: quarter turns clockwise the picture has made since the
+    /// review measured it (Rotate 90° as a record, 2026-09-24). A shift
+    /// follows the scene — right becomes down, down becomes left — and the
+    /// margins swap axes.
+    public init?(review: FramingReview, turnedBy turns: Int = 0) {
         guard let stabilisation = review.stabilisation else { return nil }
-        referenceX = stabilisation.referenceX
-        referenceY = stabilisation.referenceY
-        insetX = stabilisation.insetX
-        insetY = stabilisation.insetY
+        let quarter = QuarterTurns.normalized(turns)
+        func turned(_ x: Double, _ y: Double) -> (Double, Double) {
+            var point = (x, y)
+            for _ in 0 ..< quarter { point = (-point.1, point.0) }
+            return point
+        }
+        (referenceX, referenceY) = turned(stabilisation.referenceX, stabilisation.referenceY)
+        (insetX, insetY) = quarter % 2 == 1
+            ? (stabilisation.insetY, stabilisation.insetX) : (stabilisation.insetX, stabilisation.insetY)
         cropFraction = stabilisation.cropFraction
         var table: [String: Shift] = [:]
         table.reserveCapacity(review.frames.count)
         for frame in review.frames {
-            table[frame.name] = Shift(dx: frame.dx, dy: frame.dy)
+            let (dx, dy) = turned(frame.dx, frame.dy)
+            table[frame.name] = Shift(dx: dx, dy: dy)
         }
         offsets = table
     }
 
     /// The lock beside `sourceFolder`'s frames, if the review there has been
-    /// committed.
+    /// committed — turned by however far its project has turned since the
+    /// photos were measured.
     public static func load(inSourceFolder folder: URL) -> FramingLock? {
-        FramingReview.load(inSourceFolder: folder).flatMap(FramingLock.init(review:))
+        guard let review = FramingReview.load(inSourceFolder: folder) else { return nil }
+        let now = ProjectOrientation.shared.turns(for: folder.appendingPathComponent(FramingReview.fileName))
+        return FramingLock(review: review, turnedBy: now - (review.quarterTurns ?? 0))
     }
 
     public var inset: CGSize { CGSize(width: insetX, height: insetY) }

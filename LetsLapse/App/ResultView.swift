@@ -29,7 +29,8 @@ struct ResultView: View {
                         #endif
 
                         if let shareURL = model.resultVideoURL ?? model.resultImageURL {
-                            ShareLink(item: shareURL) {
+                            // A version shown turned carries the turn (2026-09-24).
+                            ShareLink(item: TurnedShareFile(url: shareURL), preview: SharePreview(shareURL.lastPathComponent)) {
                                 Text("Share")
                                     .font(.system(size: 15.5, weight: .bold))
                                     .foregroundStyle(LL.accent)
@@ -245,7 +246,11 @@ struct ResultView: View {
     private func updatePlayer() {
         if let url = model.resultVideoURL {
             PlaybackAudioSession.configureAmbient()
-            player = AVPlayer(url: url)
+            // A blend from before a later turn shows turned by the difference
+            // (2026-09-24); a fresh render carries its turn in its pixels.
+            let player = AVPlayer()
+            self.player = player
+            Task { @MainActor in player.replaceCurrentItem(with: await TurnedMedia.playerItem(for: url)) }
         } else {
             player = nil
         }

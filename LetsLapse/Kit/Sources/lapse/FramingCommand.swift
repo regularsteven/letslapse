@@ -101,7 +101,8 @@ func runFraming(
     }()
     var review = FramingReview.make(
         width: size.width, height: size.height, measurementScale: scale,
-        offsets: offsets, captureSpanSeconds: span)
+        offsets: offsets, captureSpanSeconds: span,
+        quarterTurns: ProjectOrientation.shared.turns(for: urls[0]))
     if apply { review = review.applyingPlan() }
     printErr(String(format: "measured in %.1fs", Date().timeIntervalSince(started)))
     printFramingReport(review)

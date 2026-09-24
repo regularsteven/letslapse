@@ -724,7 +724,8 @@ struct ProjectDetailView: View {
                 #endif
 
                 if let url = model.heroImageURL(for: capture) {
-                    ShareLink(item: url) {
+                    // With the project's turn in the copy that leaves (2026-09-24).
+                    ShareLink(item: TurnedShareFile(url: url), preview: SharePreview(url.lastPathComponent)) {
                         Text("Share")
                             .font(.system(size: 15.5, weight: .bold))
                             .foregroundStyle(LL.accent)
@@ -1465,14 +1466,11 @@ struct ProjectDetailView: View {
 
     private func rotateProject() {
         guard let capture else { return }
-        isRotating = true
-        Task {
-            do {
-                try await model.rotateProjectMedia(capture)
-            } catch {
-                rotateFailure = error.localizedDescription
-            }
-            isRotating = false
+        // A record now (2026-09-24): instant, no file is touched.
+        do {
+            try model.rotateProject(capture)
+        } catch {
+            rotateFailure = error.localizedDescription
         }
     }
 
@@ -1540,10 +1538,11 @@ struct ProjectDetailView: View {
 /// growing.
 private struct ProjectHeroPane: View {
     @EnvironmentObject var model: AppModel
-    /// Re-renders after a rotate rewrites the original in place (same URL, so
-    /// the path/preset id alone can't retrigger; PhotoGrader's own cache is
-    /// mtime-keyed and self-heals). Also republishes the learned aspect, which
-    /// a rotate invalidates.
+    /// Re-renders after a Rotate 90° (a record since 2026-09-24: the file,
+    /// its URL and its date stay the same, so the path/preset id alone can't
+    /// retrigger — `ProjectThumbnailCache.noteTurned` bumps the generation
+    /// and every cache key carries the turn). Also republishes the learned
+    /// aspect, which a turn changes.
     @ObservedObject private var thumbnailCache = ProjectThumbnailCache.shared
     let captureID: UUID
     /// The largest the picture may be drawn: its column's width by the tallest

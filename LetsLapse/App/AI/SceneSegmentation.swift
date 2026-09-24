@@ -44,6 +44,21 @@ struct SceneMask: Sendable {
     /// debug readout.
     let provenance: String
 
+    /// The grid a quarter turn clockwise — for a hand-drawn mask whose
+    /// project was turned after it was drawn (2026-09-24). The cell at
+    /// (x, y) lands at (height − 1 − y, x).
+    func turnedClockwise() -> SceneMask {
+        var turned = [UInt8](repeating: 0, count: pixels.count)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                turned[x * height + (height - 1 - y)] = pixels[y * width + x]
+            }
+        }
+        return SceneMask(
+            region: region, width: height, height: width, pixels: turned,
+            geometry: geometry, provenance: provenance)
+    }
+
     /// How many distinct values the grid actually holds. An argmax model
     /// returns 2 for a single frame — a hard yes/no per cell — and a
     /// threshold applied to that can only ever be a no-op. A vote across N

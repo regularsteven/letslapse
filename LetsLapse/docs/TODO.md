@@ -11,6 +11,150 @@ live inline.
 
 ## Open
 
+### Rotate 90° as a project record — originals are never rewritten
+
+**Raised:** 2026-09-24 (Steven, on the free-up sweep's finding: "a rotation should
+be a simple metadata update, not a full file (or set of files) rewrite") ·
+**Status:** built and bench-verified 2026-09-24, **uncommitted** — what is left is
+at the end of this entry · **Size:** large (about 30 files read orientation)
+
+Today `AppModel.rotateProjectMedia` and the Kit's `MediaRotator` write the turn
+**into** every source file and blend: the EXIF tag, the DNG IFD0 tag, the
+QuickTime transform, or PNG pixels. That causes four problems:
+
+- The originals' bytes change, so a sync re-uploads the whole shoot and
+  PicPlace can't treat originals as write-once.
+- A failure part way leaves a half-rotated shoot.
+- The blends are rewritten too.
+- Every raw format except DNG is silently skipped: on an ARW, CR2 or NEF shoot
+  the frames don't turn while the saved sizes and the blends do.
+
+**Decision (Steven, 2026-09-24):** there are two rotations, both stored as
+records, and no file is touched by either.
+
+1. **Rotate project**: `capture.quarterTurns` (0–3, clockwise) turns the
+   project and, as far as the person sees, every asset in it.
+2. **Edit ▸ Rotation**: the fine rotation in the grade
+   (`PhotoAdjustments.rotationDegrees`), set once or keyframed over time.
+   Verified on 2026-09-24 as already a record: `GradeTimeline` keys it, and
+   the tail pass levels each frame at its own moment.
+
+The same holds for any imported format — DNG, the other 22 raw types, JPEG,
+HEIC, PNG, TIFF, WebP — whether the camera tagged the orientation or baked it
+into the pixels.
+
+Every path applies one chain:
+
+1. the file's own orientation
+2. the project's quarter turns
+3. the fine rotation, keyframed
+4. the crop
+5. the canvas or reframe
+6. the overlays
+
+The rules that go with it:
+
+- **Edit geometry** stays stored against the picture as it is shown — what
+  every editor already draws on — and a turn turns the records with the
+  picture: the crop (grade and keyframes), every blend's punch-in keys, the
+  drawn mask shapes (`overlays.json`) and the shape register
+  (`shapes.json`). Those are numbers in small JSON files, never media. (This
+  entry first said the opposite — geometry stored before the turn — which
+  would have meant un-turning at every editor and renderer; changed while
+  building.) Two things that are files or measurements keep the turn they
+  were made at instead and are turned at read: a hand-supplied mask image
+  (`CustomMask.quarterTurns`) and the framing review
+  (`FramingReview.quarterTurns`).
+- **Old blends:** a blend records the turn it was rendered at
+  (`renderedQuarterTurns`), and one made before a turn shows turned by the
+  difference.
+- **Exports:** Save to Photos, Share and the Mac's Export hand over a copy
+  with the turn written the way its format carries one (`MediaRotator.rotate`
+  on a temporary file: the EXIF/DNG/TIFF tag, a movie's track transform, a
+  PNG's pixels); the original is never touched.
+- **Already-rotated projects** keep their files and start at 0.
+
+**Paths that must honour the turn:**
+
+- the editor and its preview, thumbnails and tiles, the pager
+- the player
+- interval and video blends, and the tail passes
+- time-slice, Collections and Ken Burns, Shape-mation, text overlays
+- Save to Photos, Share, `.lapse`, the PicPlace poster
+- shape detection and AI analysis
+
+**With it (so originals are write-once for PicPlace):**
+
+- A conversion never overwrites an existing encoding.
+- A scan re-correction writes a new file.
+- The visible `source/frames.timestamps.rewrite/` temp folder is hidden from
+  a sync.
+- A conversion or correction writing to its final path mid-sync can't be
+  picked up half-written.
+
+**PicPlace:** round 2 of
+[picplace-free-up-space-server-asks.md](picplace-free-up-space-server-asks.md).
+The server refuses to replace confirmed originals once Steven's devices run
+this build, and it applies `quarterTurns` from the manifest to anything it
+renders.
+
+**What was built (2026-09-24).** Kit: `QuarterTurns` (the EXIF composition,
+sizes, the track transform), `ProjectOrientation` (a file's turns by its path
+inside `Projects/<uuid>/` — the project's for `source/`, the difference for
+`blends/` and `posters/`, none for anything else; cached per folder, dropped
+on every document write and on a library switch), and the funnels that
+compose it: `OrientedDecode`'s URL paths, `LossyLinearDNG.rawFilter(for:)`,
+`VideoBlender`, `TimeSliceRenderer`, `FramingMeasurement.fullSize`,
+`MediaRotator.rotate(at:quarterTurns:)` for copies. App: `rotateProject` (the
+record, the swapped size, the geometry above), `TurnedMedia` (players and
+frame grabs through a composition whose track carries the turned transform;
+`shareableCopy`; `TurnedShareFile` for the three project Share buttons),
+`MacVideoJobRunner`, `CollectionExporter`, `VideoGrader.bakedCopy`, the
+thumbnail, grader, preset-tile, sky-mask and PicPlace-poster cache keys
+(`ProjectOrientation.keySuffix`), `refreshVideoMetadata` (turns the size it
+probes), the DNG archive clone (`quarterTurns = nil` — its pixels carry it),
+`LL_ROTATE=latest|<uuid>[:<turns>]`. Tests: `QuarterTurnsTests`,
+`ProjectOrientationTests`, `TurnedProjectDecodeTests` (a PNG, a DNG and a MOV
+inside a turned project decode turned and hash the same; a video blend's
+output carries the turn), `ShapeRegisterTurnTests`, `FramingLockTurnTests`,
+two `MediaRotatorTests` for copies.
+
+**Bench (Mac, scratch library, 2026-09-24):** an interval shoot of three
+asymmetric JPEGs and a registered MOV. After `LL_ROTATE` only `project.json`
+changed (every JPEG, MOV, sidecar, `assets.ndjson` and `metadata.json`
+hashed identical); the Gallery tile, the editor and the player show the turn;
+a stills blend rendered at the turn has it in its pixels, a video blend (the
+Mac's external runner) in its track transform; after a second turn the first
+blend shows turned by the difference and its file is untouched; the PicPlace
+dry run's manifest (`project.json`) carries `quarterTurns` and
+`renderedQuarterTurns`, and `poster.jpg` is rendered turned.
+
+**Still owed:**
+
+1. **Steven's call — text layers** stay where they are on the frame, upright,
+   through a turn (a landscape title does not become a vertical one). The
+   alternative is to follow the scene and reflow.
+2. **Collections** — a member clip's crops and Ken Burns framings are unit
+   rectangles of the clip as shown; when its project turns after it joined a
+   collection they are not turned (the old file-rewriting Rotate had the same
+   gap). The render itself shows the clip turned (`CollectionExporter`), and
+   the kept render's recipe carries the turn.
+3. **Shape-mation records** hold member shapes from many projects; a member
+   project turned later is not re-snapshotted.
+4. **Not exercised on a device:** Save to Photos (one frame, the originals
+   row, a source clip) and the Share sheet with a turned project — the copy
+   is `TurnedMedia.shareableCopy` → `MediaRotator.rotate`, unit-tested, but
+   no photo has reached Photos from a turned project yet. A raw other than
+   DNG carries the turn only where its IFD0 tag can be overwritten in place;
+   CR3, RAF, ORF and RW2 go as captured.
+5. The info panel's *Size* is the file's stored size (`600 × 400` for a turned
+   landscape) — as it always was for a portrait-tagged photo.
+6. The write-once companions listed above (conversions, scan re-corrections,
+   the `.rewrite` folder).
+7. No SVG mirror applies — no control, copy or layout changed.
+
+---
+
 ### Gallery → editor on iOS: the pager, top-anchored picture, clear preview — what is owed
 
 **Raised:** 2026-09-21 · **Code built and simulator-verified the same day, UNCOMMITTED** ·

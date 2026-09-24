@@ -1564,8 +1564,8 @@ final class PicPlaceController: ObservableObject {
         // walk finds it (v2 plan §3.5); the grade token says whether the one
         // on disk is current.
         let grade = model.photoGrade(for: capture)
-        let posterToken = grade.cacheToken
         let posterSource = model.thumbnailURL(for: capture)
+        let posterToken = currentPosterToken(for: capture)
         let posterKind = model.mediaKind(for: capture)
         let lastPosterToken = records[key]?.posterToken
         syncTasks[capture.id] = Task {
@@ -1735,6 +1735,17 @@ final class PicPlaceController: ObservableObject {
 
     /// A sync the caller waits for — the first connection pushes one
     /// project at a time.
+    /// What a project's poster on disk is rendered from: its grade, and the
+    /// picture's quarter turns — Rotate 90° is a record, so the poster is
+    /// the one thing a turn has to re-render (2026-09-24). The string a push
+    /// stamps on the record, and the one a check adopts when PicPlace
+    /// already holds the poster (`settlePosters`).
+    func currentPosterToken(for capture: AppModel.CaptureProject) -> String {
+        let source = model.thumbnailURL(for: capture)
+        return model.photoGrade(for: capture).cacheToken
+            + (source.map { ProjectOrientation.shared.keySuffix(for: $0) } ?? "")
+    }
+
     func syncAndWait(_ capture: AppModel.CaptureProject, policy: PicPlaceSyncPolicy? = nil) async {
         sync(capture, policy: policy)
         await syncTasks[capture.id]?.value

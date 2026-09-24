@@ -245,6 +245,10 @@ public enum LossyLinearDNG {
     /// that no surface — editor, blend, thumbnail grid, framing measurement,
     /// CLI — can show these files through the broken path by accident.
     public static func rawFilter(for url: URL) -> CIRAWFilter? {
+        turned(decoder(for: url), url: url)
+    }
+
+    private static func decoder(for url: URL) -> CIRAWFilter? {
         if isApplicable(url) {
             do {
                 let repacked = try repack(url: url)
@@ -258,6 +262,19 @@ public enum LossyLinearDNG {
             }
         }
         return CIRAWFilter(imageURL: url)
+    }
+
+    /// The project's quarter turns (Rotate 90° as a record, 2026-09-24)
+    /// composed after the camera's own orientation, which the filter read
+    /// from the file: every raw read of a project file — DNG, ARW, CR2, NEF
+    /// and the rest — comes through here, so every one shows the turn.
+    private static func turned(_ filter: CIRAWFilter?, url: URL) -> CIRAWFilter? {
+        guard let filter else { return nil }
+        let turns = ProjectOrientation.shared.turns(for: url)
+        if turns != 0 {
+            filter.orientation = QuarterTurns.orientation(filter.orientation, turnedBy: turns)
+        }
+        return filter
     }
 
     /// Why the last applicable file fell through to Apple's own decode of the

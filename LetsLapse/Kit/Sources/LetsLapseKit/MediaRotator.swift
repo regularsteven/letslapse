@@ -10,6 +10,12 @@ import UniformTypeIdentifiers
 /// untouched wherever the container allows it (JPEG/HEIC/DNG/MOV/MP4); the
 /// one exception is PNG, which has no honoured orientation tag in practice,
 /// so its pixels are rotated losslessly instead.
+///
+/// Since 2026-09-24 the app's Rotate 90° does not come here: a project's
+/// turn is a record (`QuarterTurns`) and its files are never rewritten. What
+/// uses this now is a COPY leaving the app — `rotate(at:quarterTurns:)` on a
+/// temporary file, so a Save to Photos or a Share shows the way the project
+/// does.
 public enum MediaRotator {
 
     /// EXIF orientation after a further 90° clockwise display rotation,
@@ -51,9 +57,9 @@ public enum MediaRotator {
         }
         switch format {
         case .png:
-            try rotatePNGPixels90CW(at: url)
+            try rotatePNGPixels(at: url, turns: 1)
         case .jpeg, .heic:
-            try rotateEncodedStill90CW(at: url)
+            try rotateEncodedStill(at: url, turns: 1)
         }
     }
 
@@ -72,11 +78,11 @@ public enum MediaRotator {
         try output.write(to: url, options: .atomic)
     }
 
-    private static func rotateEncodedStill90CW(at url: URL) throws {
+    private static func rotateEncodedStill(at url: URL, turns: Int) throws {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let sourceType = CGImageSourceGetType(source)
         else { throw RotateError.unreadable(url) }
-        let next = exifRotated90CW[Int(currentOrientation(of: source))]
+        let next = turned(currentOrientation(of: source), by: turns)
 
         // Preferred: ImageIO's lossless metadata-editing copy. No decode, no
         // recompression — the API built for exactly this edit.
@@ -112,16 +118,84 @@ public enum MediaRotator {
         try replace(url, with: remuxed)
     }
 
-    private static func rotatePNGPixels90CW(at url: URL) throws {
+    private static func rotatePNGPixels(at url: URL, turns: Int) throws {
         // loadImage bakes any existing tag first, so the rotate composes
         // correctly even for imported PNGs that do carry one.
         let upright = try ImageStacker.loadImage(at: url)
-        let rotated = ImageStacker.oriented(upright, exifOrientation: 6)
+        let rotated = ImageStacker.oriented(upright, exifOrientation: Int(turned(1, by: turns)))
         let temp = tempSibling(for: url)
         try ImageExporter.write(
             rotated, to: temp, format: .png,
             metadata: ImageExporter.carryoverMetadata(from: url))
         try replace(url, with: temp)
+    }
+
+    // MARK: - A copy leaving the app
+
+    /// Raw formats built on TIFF, whose IFD0 carries the Orientation tag the
+    /// DNG editor overwrites — Sony, Canon CR2, Nikon, Pentax, Samsung,
+    /// Epson, Hasselblad, Kodak, Leaf, Phase One, Mamiya — and TIFF itself.
+    /// CR3, RAF, ORF and RW2 are not TIFF files and are not listed.
+    static let tiffExtensions: Set<String> = [
+        "arw", "sr2", "srf", "cr2", "nef", "nrw", "pef", "srw", "erf",
+        "3fr", "fff", "dcr", "kdc", "mos", "iiq", "mef", "tif", "tiff",
+    ]
+
+    /// Writes `quarterTurns` clockwise quarter turns into the file at `url`,
+    /// the way its format carries a turn — for a COPY leaving the app (Save
+    /// to Photos, Share, Export). A project's turn is a record
+    /// (`QuarterTurns`, 2026-09-24); its originals are never rewritten, so a
+    /// copy that goes somewhere the record can't follow has to carry it.
+    ///
+    /// JPEG, HEIC, DNG and the TIFF-built raws change their orientation tag
+    /// only — a raw other than DNG only when the tag can be overwritten where
+    /// it stands, since rebuilding another maker's IFD0 is not a move its own
+    /// readers are known to follow. PNG turns its pixels, losslessly; a movie
+    /// its track transform, samples untouched. Anything else throws
+    /// `.unsupported`, and the caller sends the file as it is.
+    public static func rotate(at url: URL, quarterTurns: Int) async throws {
+        let turns = QuarterTurns.normalized(quarterTurns)
+        guard turns != 0 else { return }
+        let ext = url.pathExtension.lowercased()
+        if ext == "dng" || tiffExtensions.contains(ext) {
+            let data: Data
+            do {
+                data = try Data(contentsOf: url)
+            } catch {
+                throw RotateError.unreadable(url)
+            }
+            let next = turned(normalizedOrientation(DNGAuthor.dngOrientation(in: data)), by: turns)
+            let output = try DNGAuthor.dngBySettingOrientation(data, to: next)
+            guard ext == "dng" || output.count == data.count else { throw RotateError.unsupported(url) }
+            try output.write(to: url, options: .atomic)
+            return
+        }
+        if ["mov", "qt", "mp4", "m4v"].contains(ext) {
+            let asset = AVURLAsset(url: url)
+            guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+                throw RotateError.noVideoTrack(url)
+            }
+            let naturalSize = try await track.load(.naturalSize)
+            let current = try await track.load(.preferredTransform)
+            let transform = QuarterTurns.transform(current, naturalSize: naturalSize, turnedBy: turns)
+            if ["mov", "qt"].contains(ext) {
+                try await rotateQuickTimeHeader(at: url, to: transform)
+            } else {
+                try await rewriteViaPassthrough(at: url, transform: transform)
+            }
+            return
+        }
+        guard let format = ImageFormat.infer(from: url) else { throw RotateError.unsupported(url) }
+        switch format {
+        case .png: try rotatePNGPixels(at: url, turns: turns)
+        case .jpeg, .heic: try rotateEncodedStill(at: url, turns: turns)
+        }
+    }
+
+    /// An EXIF orientation value turned `turns` further quarter turns.
+    private static func turned(_ orientation: UInt16, by turns: Int) -> UInt16 {
+        let base = CGImagePropertyOrientation(rawValue: UInt32(normalizedOrientation(orientation))) ?? .up
+        return UInt16(QuarterTurns.orientation(base, turnedBy: turns).rawValue)
     }
 
     // MARK: - Video

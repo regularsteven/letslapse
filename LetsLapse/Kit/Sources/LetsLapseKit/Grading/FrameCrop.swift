@@ -43,6 +43,17 @@ public struct FrameCrop: Codable, Equatable, Hashable, Sendable {
             }
         }
 
+        /// The aspect of the same crop turned a quarter: the ratio inverts;
+        /// one no chip offers (5:4) keeps its rectangle as `custom`.
+        public var turnedQuarter: Aspect {
+            switch self {
+            case .sixteenNine: return .nineSixteen
+            case .nineSixteen: return .sixteenNine
+            case .fourFive: return .custom
+            case .original, .square, .custom: return self
+            }
+        }
+
         /// The chip's caption.
         public var label: String {
             switch self {
@@ -77,6 +88,22 @@ public struct FrameCrop: Codable, Equatable, Hashable, Sendable {
     /// The crop as a rect in the same normalized, top-left space.
     public var rect: CGRect {
         CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// This crop on the picture turned `turns` quarter turns clockwise
+    /// (Rotate 90° as a record, 2026-09-24): the same region of the scene,
+    /// in the turned frame's unit square. A clockwise turn maps the
+    /// top-left-origin point (x, y) to (1 − y, x), so a rectangle's
+    /// top-left becomes (1 − y − height, x) and its sides swap. A ratio lock
+    /// turns with it — 16:9 is 9:16 on its side; 4:5 has no 5:4 chip, so it
+    /// keeps its drawn rectangle as a custom crop.
+    public func turned(by turns: Int) -> FrameCrop {
+        var crop = self
+        for _ in 0 ..< ((turns % 4) + 4) % 4 {
+            crop = FrameCrop(x: 1 - crop.y - crop.height, y: crop.x, width: crop.height, height: crop.width,
+                             aspect: crop.aspect.turnedQuarter)
+        }
+        return crop
     }
 
     /// The smallest a crop may be on either side, as a fraction of the frame.

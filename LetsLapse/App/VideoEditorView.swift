@@ -61,7 +61,7 @@ struct VideoEditorView: View {
     @State private var loaded = false
 
     @State private var player = AVPlayer()
-    @State private var asset: AVURLAsset?
+    @State private var asset: AVAsset?
 
     // MARK: Keyframes
     //
@@ -286,7 +286,10 @@ struct VideoEditorView: View {
                 aspect = Double(width) / Double(height)
             }
             timeline = model.gradeTimeline(for: capture)
-            let asset = AVURLAsset(url: url)
+            // The project's quarter turns ride the asset (Rotate 90° as a
+            // record, 2026-09-24): the grade's composition and the size probe
+            // below both read the turned track transform.
+            let asset = await TurnedMedia.asset(for: url)
             self.asset = asset
             // The clip's length, before the first composition: a keyframed
             // grade has no position to render at without it.

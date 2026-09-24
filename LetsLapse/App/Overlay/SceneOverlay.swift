@@ -376,10 +376,15 @@ struct CustomMask: Identifiable, Codable, Equatable, Sendable {
     var replacesSkyAndLand: Bool = false
     /// File name inside the project's `masks/` folder.
     var fileName: String
+    /// The project's quarter turns when the file was brought in — the
+    /// picture it was drawn for (Rotate 90° as a record, 2026-09-24). A turn
+    /// made since shows the grid turned by the difference; the file is never
+    /// rewritten. nil is none.
+    var quarterTurns: Int?
 
     private enum CodingKeys: String, CodingKey {
         case id, name = "n", invertedName = "in",
-             replacesSkyAndLand = "r", fileName = "f"
+             replacesSkyAndLand = "r", fileName = "f", quarterTurns = "q"
     }
 
     var displayName: String { name.isEmpty ? "Untitled" : name }

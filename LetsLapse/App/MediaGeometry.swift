@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreGraphics
 import ImageIO
+import LetsLapseKit
 
 /// How big a piece of media *displays*, as opposed to how it is stored.
 ///
@@ -24,13 +25,18 @@ import ImageIO
 enum MediaGeometry {
     /// A movie's oriented display size — `naturalSize` put through
     /// `preferredTransform` — or nil if the file has no video track.
+    ///
+    /// A project file shows its project's quarter turns on top (Rotate 90° as
+    /// a record, 2026-09-24): an odd turn swaps the answer.
     static func videoDisplaySize(asset: AVAsset) async -> CGSize? {
         guard let track = try? await asset.loadTracks(withMediaType: .video).first,
               let natural = try? await track.load(.naturalSize),
               let transform = try? await track.load(.preferredTransform) else { return nil }
         let oriented = CGRect(origin: .zero, size: natural).applying(transform).standardized
         let size = CGSize(width: abs(oriented.width), height: abs(oriented.height))
-        return (size.width > 0 && size.height > 0) ? size : nil
+        guard size.width > 0, size.height > 0 else { return nil }
+        let turns = (asset as? AVURLAsset).map { ProjectOrientation.shared.turns(for: $0.url) } ?? 0
+        return QuarterTurns.size(size, turnedBy: turns)
     }
 
     /// A still's oriented display size, from metadata alone — no pixel decode,
@@ -49,8 +55,10 @@ enum MediaGeometry {
         // still the app decodes.
         let orientation = (properties[kCGImagePropertyOrientation] as? Int) ?? 1
         let quarterTurned = (5...8).contains(orientation)
-        return quarterTurned
+        let oriented = quarterTurned
             ? CGSize(width: height, height: width)
             : CGSize(width: width, height: height)
+        // …and a project file's quarter turns on top (2026-09-24).
+        return QuarterTurns.size(oriented, turnedBy: ProjectOrientation.shared.turns(for: url))
     }
 }

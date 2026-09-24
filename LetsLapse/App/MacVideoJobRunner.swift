@@ -89,7 +89,10 @@ enum MacVideoJobRunner {
         }
         let fps = try await track.load(.nominalFrameRate)
         let duration = try await asset.load(.duration)
-        let transform = try await track.load(.preferredTransform)
+        // The project's quarter turns on top of the file's own (2026-09-24).
+        let transform = ProjectOrientation.shared.transform(
+            for: inputURL, preferred: try await track.load(.preferredTransform),
+            naturalSize: try await track.load(.naturalSize))
         let formatDescriptions = (try? await track.load(.formatDescriptions)) ?? []
         let sourceIs10Bit = formatDescriptions.contains(where: describes10BitVideo)
         let sourceFPS = fps > 0 ? Double(fps) : options.outputFPS

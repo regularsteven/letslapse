@@ -210,11 +210,11 @@ public enum FramingMeasurement {
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0 else { return nil }
         // Orientation 5–8 swap the stored axes; the offsets live in the
-        // displayed frame, the same space the decoders hand back.
-        if let orientation = properties[kCGImagePropertyOrientation] as? UInt32, orientation >= 5 {
-            return FrameSize(width: height, height: width)
-        }
-        return FrameSize(width: width, height: height)
+        // displayed frame, the same space the decoders hand back — the
+        // project's quarter turns included (2026-09-24).
+        var swapped = (properties[kCGImagePropertyOrientation] as? UInt32).map { $0 >= 5 } ?? false
+        if ProjectOrientation.shared.turns(for: url) % 2 == 1 { swapped.toggle() }
+        return swapped ? FrameSize(width: height, height: width) : FrameSize(width: width, height: height)
     }
 
     /// Log-compresses a linear plane in place: `log1p(v × gain)`, negatives
@@ -317,7 +317,7 @@ public final class FramingLumaDecoder: @unchecked Sendable {
             longSide = Int((Double(max(width, height)) * scale).rounded())
         }
         // Oriented in the graph, not by ImageIO — see `OrientedDecode`.
-        guard let image = OrientedDecode.ciImage(source: source, maxPixelSize: max(16, longSide)) else {
+        guard let image = OrientedDecode.ciImage(source: source, maxPixelSize: max(16, longSide), url: url) else {
             throw LapseError.imageLoadFailed(url)
         }
         return image

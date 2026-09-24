@@ -39,7 +39,8 @@ enum RepresentativeLoader {
             generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
             let duration = asset.duration
             let t = CMTimeMultiplyByFloat64(duration, multiplier: rep.frameFraction ?? 0.5)
-            return try? generator.copyCGImage(at: t, actualTime: nil)
+            // The project's quarter turns on top of the file's own (2026-09-24).
+            return (try? generator.copyCGImage(at: t, actualTime: nil)).map { TurnedMedia.turned($0, from: rep.url) }
         }
     }
 
@@ -69,7 +70,8 @@ enum RepresentativeLoader {
             let asset = AVURLAsset(url: rep.url)
             guard let track = asset.tracks(withMediaType: .video).first else { return nil }
             let r = CGRect(origin: .zero, size: track.naturalSize).applying(track.preferredTransform)
-            return CGSize(width: abs(r.width).rounded(), height: abs(r.height).rounded())
+            return QuarterTurns.size(CGSize(width: abs(r.width).rounded(), height: abs(r.height).rounded()),
+                                     turnedBy: ProjectOrientation.shared.turns(for: rep.url))
         case .blendImage, .sourceFrame:
             if ProjectThumbnailGenerator.isRAW(rep.url) {
                 guard let raw = LossyLinearDNG.rawFilter(for: rep.url), let out = raw.outputImage else { return nil }
@@ -79,7 +81,8 @@ enum RepresentativeLoader {
                   let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
                   let w = props[kCGImagePropertyPixelWidth] as? Int, let h = props[kCGImagePropertyPixelHeight] as? Int else { return nil }
             let o = props[kCGImagePropertyOrientation] as? UInt32 ?? 1
-            return o >= 5 ? CGSize(width: h, height: w) : CGSize(width: w, height: h)
+            return QuarterTurns.size(o >= 5 ? CGSize(width: h, height: w) : CGSize(width: w, height: h),
+                                     turnedBy: ProjectOrientation.shared.turns(for: rep.url))
         }
     }
 }
