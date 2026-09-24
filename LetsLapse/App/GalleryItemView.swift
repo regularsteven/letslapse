@@ -29,6 +29,8 @@ struct GalleryItemEditor: View {
     var focus: GalleryFocus
     var exitRequest: EditorExitRequest?
     var onExit: () -> Void
+    /// The iOS pager's context; nil in the Mac's item view.
+    var paging: EditorPagingContext? = nil
 
     var body: some View {
         Group {
@@ -36,11 +38,11 @@ struct GalleryItemEditor: View {
             case .still(let url):
                 PhotoViewerView(
                     captureID: focus.captureID, url: url,
-                    exitRequest: exitRequest, onExit: onExit)
+                    exitRequest: exitRequest, onExit: onExit, paging: paging)
             case .movie(let url):
                 VideoEditorView(
                     captureID: focus.captureID, url: url,
-                    exitRequest: exitRequest, onExit: onExit)
+                    exitRequest: exitRequest, onExit: onExit, paging: paging)
             }
         }
         .id(focus.captureID)

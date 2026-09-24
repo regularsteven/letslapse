@@ -48,6 +48,11 @@ struct PhotoViewerView: View {
     /// where the editor then goes, in place of `dismiss`.
     var exitRequest: EditorExitRequest? = nil
     var onExit: (() -> Void)? = nil
+    /// Set by the iOS pager (`EditorPager`): the editor is one page of a
+    /// swipe through the library. It carries the clear-preview state across
+    /// pages and the ⓘ door to the project's panel; the pager reads what
+    /// this editor allows through `EditorPagingStateKey`.
+    var paging: EditorPagingContext? = nil
 
     /// Live edit state. Seeded from the project on appear and written back —
     /// debounced — as the controls move, so the detail screen and the export
@@ -452,8 +457,19 @@ struct PhotoViewerView: View {
     /// `maskGestureActive` gives a mask's handles.
     @State private var cropEditing = false
     /// The phone's bottom stack — timeline card plus buttons or sheet — as
-    /// measured, so the picture's own corner chrome can sit above it.
+    /// measured, so the picture's room ends where the stack begins.
     @State private var phoneFootHeight: CGFloat = 0
+    /// True once the foot has reported a height, so the room's moves
+    /// animate from then on and not from zero on the first pass.
+    @State private var phoneFootMeasured = false
+    /// Clear preview (2026-09-21): a tap on the picture with nothing open
+    /// hides every piece of chrome — the back button, the tab pill, the
+    /// foot — and gives the picture the whole screen; a second tap brings
+    /// them back. nil until the first tap, so a pager that carries the
+    /// state in from the previous page (`paging.startsClear`) is honoured
+    /// until this editor decides for itself.
+    @State private var clearPreviewState: Bool?
+    private var isClearPreview: Bool { clearPreviewState ?? paging?.startsClear ?? false }
     /// The Presets panel's tile renders. Owned here so they survive the
     /// phone sheet being torn down between opens.
     @StateObject private var presetThumbnails = PresetThumbnailCache()
@@ -1045,8 +1061,12 @@ struct PhotoViewerView: View {
                 if effectiveRailTab == .editor {
                     switch editorLayout(for: proxy.size) {
                     case .phone: phoneEditorBody(in: proxy.size)
-                    case .floating: floatingEditorBody(in: proxy.size)
-                    case .rail: railBody(in: proxy.size)
+                    // Clear preview on the wider touch layouts: the pane
+                    // alone, in the whole container. The phone folds it
+                    // into its own layout so the picture slides, rather
+                    // than the screen being rebuilt around it.
+                    case .floating: if isClearPreview { clearPreviewBody } else { floatingEditorBody(in: proxy.size) }
+                    case .rail: if isClearPreview { clearPreviewBody } else { railBody(in: proxy.size) }
                     }
                 } else if proxy.size.width >= wideLayoutThreshold {
                     railBody(in: proxy.size)
@@ -1060,6 +1080,8 @@ struct PhotoViewerView: View {
         .background(editorBackground)
         #if os(iOS)
         .preferredColorScheme(.dark)
+        .statusBarHidden(isClearPreview)
+        .onChange(of: isClearPreview) { _, clear in paging?.onClearPreviewChanged(clear) }
         // The run toolbar as the keyboard's accessory, laid over the whole
         // editor and lifted by the keyboard's own frame — this cover keeps
         // its layout under the keyboard, so a safe-area inset would not.
@@ -1384,6 +1406,7 @@ struct PhotoViewerView: View {
             HStack {
                 backButton
                 Spacer(minLength: 0)
+                infoButton
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -1396,15 +1419,72 @@ struct PhotoViewerView: View {
 
     /// The 36 pt disc the fullscreen player uses too.
     private var backButton: some View {
-        Button { requestExit() } label: {
-            Image(systemName: "chevron.left")
+        chromeDisc(systemImage: "chevron.left", label: "Back") { requestExit() }
+    }
+
+    /// ⓘ — the project's panel (tags, presets, info, metadata, what came of
+    /// it) as a sheet over the picture: the phone's seat for what the Mac
+    /// keeps in the inspector column beside the editor. Only a pager hosts
+    /// the sheet, so only a paged editor draws the button.
+    @ViewBuilder private var infoButton: some View {
+        if let onInfo = paging?.onInfo {
+            chromeDisc(systemImage: "info.circle", label: "Project info", action: onInfo)
+        }
+    }
+
+    private func chromeDisc(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
                 .background(.black.opacity(0.4), in: Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Back")
+        .accessibilityLabel(label)
+    }
+
+    /// Clear preview on the floating and rail layouts: the picture alone,
+    /// centred in the whole container, every control gone until the next
+    /// tap. The phone layout does not come through here — it keeps its own
+    /// tree so the picture slides up rather than being rebuilt.
+    private var clearPreviewBody: some View {
+        imagePane(chromeless: true)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The Editor page's chrome row and foot are gone while a group panel
+    /// (or the masks card) has the foot — the panel's ✓/✕ is the way out,
+    /// and the room they took goes to the picture — and in clear preview.
+    private var showsPhoneChrome: Bool {
+        !isClearPreview && openGroup == nil && expandedGradeID == nil
+    }
+
+    /// Where the picture rests in its pane: pressed to the head on the
+    /// phone's Editor page (against the chrome row, or the top of the screen
+    /// once the chrome is gone), centred everywhere else — including while
+    /// Crop is open, whose fitted-with-margins seat is the handles'.
+    private var pictureAnchor: PhotoZoomGeometry.Anchor {
+        #if os(iOS)
+        guard effectiveRailTab == .editor, openGroup != .crop,
+              editorLayout(for: containerSize) == .phone else { return .center }
+        return .top
+        #else
+        return .center
+        #endif
+    }
+
+    /// A single tap on the picture: clear preview on, or off again. Only on
+    /// the Editor page with nothing open — the Text and Masks pages read
+    /// taps as selection, and an open panel's ✓/✕ are its own way out.
+    private func pictureTapped() {
+        #if os(iOS)
+        guard effectiveRailTab == .editor, openGroup == nil, expandedGradeID == nil,
+              !isTypingCopy, !isOfferingPresetSave else { return }
+        withAnimation(.easeInOut(duration: 0.22)) {
+            clearPreviewState = !isClearPreview
+        }
+        #endif
     }
 
     // MARK: - Editor page layouts
@@ -1422,6 +1502,7 @@ struct PhotoViewerView: View {
     private func touchChrome(showsBadge: Bool) -> some View {
         HStack(spacing: 8) {
             if showsBackButton { backButton }
+            infoButton
             if showsBadge {
                 marqueeBadge
                 if !zoom.isFitted { zoomPill }
@@ -1501,44 +1582,76 @@ struct PhotoViewerView: View {
 
     // MARK: Phone (2a / 6a)
 
-    /// The picture fills the safe area and everything else floats over it.
-    /// Its foot carries the timeline card and then EITHER the six main
-    /// buttons or the open group's sheet — one or the other, because on a
-    /// phone the sheet needs the buttons' room. The foot's height is measured
-    /// so the picture's own corner chrome (1:1, the toast) can sit above it
-    /// rather than under it.
+    /// The picture is fitted into the room between the chrome row and the
+    /// foot and pressed against the chrome (2026-09-21, Steven: controls
+    /// were covering the picture being edited, the scrubber above all). The
+    /// foot carries the timeline card and then EITHER the six main buttons
+    /// or the open group's sheet — one or the other, because on a phone the
+    /// sheet needs the buttons' room. Its height is measured so the room
+    /// ends where it begins: a landscape frame sits at the top with every
+    /// control clear of it, a tall one re-fits as panels open and close
+    /// rather than running under them.
+    ///
+    /// While a panel (or the masks card) has the foot the chrome row goes
+    /// too — the panel's ✓/✕ is the way out — and the picture takes the
+    /// head of the screen. Clear preview takes the foot as well.
     private func phoneEditorBody(in container: CGSize) -> some View {
-        // While the Crop panel is open the picture is fitted into the room
-        // BELOW the chrome row and ABOVE the foot rather than centred behind
-        // both: a tall picture's bottom handles would otherwise lie under
-        // the sheet's material, where the sheet takes the touch, and its top
-        // handles under the back button and the tab pill, which take it
-        // first. The pane is the picture's fitted room, so a corner handle's
-        // 36 pt reach (18 pt past the corner) needs the margins to be wider
-        // than that: `cropMargin` at the sides and under the chrome, and the
-        // same again above the foot. The zoom controls then need no lift of
-        // their own — the pane already ends at the foot.
+        // Crop keeps its own seat: the picture centred inside a margin all
+        // round, so a corner handle's 36 pt reach (18 pt past the corner)
+        // stays clear of the sheet, which takes the touch, and of the
+        // screen's edges. `phoneCropMargin` is wider than that reach.
         let cropping = openGroup == .crop
-        let cropRoom = cropping ? phoneFootHeight + Self.phoneCropMargin : 0
-        let cropTop = cropping ? Self.touchChromeHeight + Self.phoneCropMargin : 0
-        let cropSide = cropping ? Self.phoneCropMargin : 0
+        let chromeShown = showsPhoneChrome
+        let clear = isClearPreview
+        // Inside the fullscreen sheet the chrome row sits under the
+        // sheet's own bar (`touchChrome` drops it 48 pt), so the room
+        // starts under both.
+        let chromeReach = Self.touchChromeHeight + (showsBackButton ? 0 : 48)
+        let room = PhoneRoom(
+            top: (chromeShown ? chromeReach : 0) + (cropping ? Self.phoneCropMargin : 0),
+            bottom: (clear ? 0 : phoneFootHeight) + (cropping ? Self.phoneCropMargin : 0),
+            side: cropping ? Self.phoneCropMargin : 0)
         return ZStack(alignment: .bottom) {
-            imagePane(footInset: cropping ? 0 : phoneFootHeight, topInset: Self.touchChromeHeight)
-                .padding(.top, cropTop)
-                .padding(.horizontal, cropSide)
-                .padding(.bottom, cropRoom)
+            // The pane IS the room, so nothing stacks over it: its corner
+            // chrome needs no lift.
+            imagePane(chromeless: clear)
+                .padding(.top, room.top)
+                .padding(.horizontal, room.side)
+                .padding(.bottom, room.bottom)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(alignment: .top) { touchChrome(showsBadge: false) }
-            overlayToastView
-                .padding(.bottom, phoneFootHeight)
-            phoneFoot(in: container)
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(key: EditorFootHeightKey.self, value: proxy.size.height)
+                // Not on the first pass: the foot reports its height a
+                // frame after it appears, and animating that first
+                // measurement would open every editor with a shrink.
+                .animation(phoneFootMeasured ? .easeInOut(duration: 0.22) : nil, value: room)
+            if chromeShown {
+                touchChrome(showsBadge: false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .transition(.opacity)
+            }
+            if !clear {
+                overlayToastView
+                    .padding(.bottom, phoneFootHeight)
+                phoneFoot(in: container)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: EditorFootHeightKey.self, value: proxy.size.height)
+                        }
                     }
-                }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .onPreferenceChange(EditorFootHeightKey.self) { phoneFootHeight = $0 }
+        .onPreferenceChange(EditorFootHeightKey.self) { height in
+            phoneFootHeight = height
+            if height > 0 { phoneFootMeasured = true }
+        }
+    }
+
+    /// The phone picture's room, as the paddings that carve it out of the
+    /// screen — one value so a change to any edge animates as one move.
+    private struct PhoneRoom: Equatable {
+        var top: CGFloat
+        var bottom: CGFloat
+        var side: CGFloat
     }
 
     @ViewBuilder private func phoneFoot(in container: CGSize) -> some View {
@@ -1882,7 +1995,7 @@ struct PhotoViewerView: View {
     /// picture's foot; `topInset` drops the top chrome (the spinner, the
     /// loupe) below whatever it overlays on the head — the touch layouts'
     /// tab pill sits exactly where the loupe would otherwise appear.
-    private func imagePane(footInset: CGFloat = 0, topInset: CGFloat = 0) -> some View {
+    private func imagePane(footInset: CGFloat = 0, topInset: CGFloat = 0, chromeless: Bool = false) -> some View {
         GeometryReader { proxy in
             let geometry = zoomGeometry(in: proxy.size)
             ZStack {
@@ -1891,7 +2004,7 @@ struct PhotoViewerView: View {
                 // The spinner steps aside for the loupe rather than sitting
                 // under it — they share the corner and the loupe carries a
                 // progress view of its own.
-                let showsLoupe = loupeField != nil && geometry.hasPixelsToReveal
+                let showsLoupe = loupeField != nil && geometry.hasPixelsToReveal && !chromeless
                 if isRendering, !showsLoupe {
                     ProgressView()
                         .controlSize(.small)
@@ -1913,9 +2026,12 @@ struct PhotoViewerView: View {
                         .transition(.opacity)
                 }
                 // The foot inset lifts the corner chrome above whatever the
-                // phone layout stacks over the picture's foot.
-                zoomControls(in: geometry)
-                    .padding(.bottom, footInset)
+                // floating layout stacks over the picture's foot. Clear
+                // preview draws none of it: the picture alone.
+                if !chromeless {
+                    zoomControls(in: geometry)
+                        .padding(.bottom, footInset)
+                }
                 if let maskHUD {
                     MaskHUDPill(text: maskHUD)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -1930,7 +2046,20 @@ struct PhotoViewerView: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
             .contentShape(Rectangle())
-            .onTapGesture(count: 2) { toggleActualPixels(in: geometry) }
+            // Two taps for 1:1, one for clear preview — exclusive, so the
+            // single waits out the double rather than firing on its way.
+            .gesture(
+                TapGesture(count: 2).onEnded { toggleActualPixels(in: geometry) }
+                    .exclusively(before: TapGesture().onEnded { pictureTapped() }))
+            // What a pager may do with this pane right now, and where the
+            // pane is — the neighbours' posters are fitted into it.
+            .preference(
+                key: EditorPagingStateKey.self,
+                value: EditorPagingState(
+                    canPage: allowsPaging,
+                    paneFrame: proxy.frame(in: .named(EditorPagingState.hostSpace)),
+                    anchor: geometry.anchor,
+                    hasPicture: rendered != nil))
             // The crop frame's own pinch scales the crop, not the picture:
             // the whole time the Crop panel is open (it fitted the picture
             // on opening, and a pinch there is for the frame), not only once
@@ -1974,6 +2103,7 @@ struct PhotoViewerView: View {
     /// its drawn size makes SwiftUI resample from the source instead.
     @ViewBuilder private func picture(in geometry: PhotoZoomGeometry) -> some View {
         let drawn = geometry.drawnSize(scale: zoom.scale)
+        let shift = geometry.anchorShift(scale: zoom.scale)
         ZStack(alignment: .topLeading) {
             if let rendered {
                 Image(decorative: rendered, scale: 1)
@@ -2073,7 +2203,11 @@ struct PhotoViewerView: View {
         // The found-shape hover, from the mouse over the whole picture — see
         // `FoundShapesOverlay` for why the outlines cannot track it themselves.
         .onContinuousHover(coordinateSpace: .local) { phase in updateFoundHover(phase, drawn: drawn) }
-        .offset(zoom.offset)
+        // Laid out centred in the pane, then moved onto the anchor's seat
+        // and by the pan — the same origin `pictureOrigin` reports.
+        .offset(
+            x: zoom.offset.width + shift.width,
+            y: zoom.offset.height + shift.height)
     }
 
     // MARK: Mask gestures
@@ -2860,7 +2994,19 @@ struct PhotoViewerView: View {
 
     private func zoomGeometry(in container: CGSize) -> PhotoZoomGeometry {
         PhotoZoomGeometry(
-            container: container, source: sourcePixelSize, displayScale: displayScale)
+            container: container, source: sourcePixelSize, displayScale: displayScale,
+            anchor: pictureAnchor)
+    }
+
+    /// True while a swipe across the picture may page to the next project:
+    /// the Editor page at fit scale with nothing open, armed or being typed.
+    /// Everything else — a pan of a zoomed picture, a mask being drawn, a
+    /// crop handle, the keyboard — owns the finger.
+    private var allowsPaging: Bool {
+        paging != nil && effectiveRailTab == .editor && openGroup == nil && expandedGradeID == nil
+            && zoom.isFitted && !cropEditing && !maskGestureActive
+            && maskTool == nil && shapeTool == nil && armedMaskField == nil
+            && !isTypingCopy && !isOfferingPresetSave && !isNamingPreset
     }
 
     /// 280pt where there is room for it, and never more than the picture it is

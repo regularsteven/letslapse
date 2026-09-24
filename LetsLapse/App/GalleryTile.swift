@@ -9,9 +9,10 @@ import SwiftUI
 /// - Top-right: amber "N clips" badge — only when the project has ≥ 2 blended clips
 ///
 /// Interaction:
-/// - Single tap → `onTap` (selection → preview panel; in selection mode the
-///   caller toggles instead)
-/// - Double tap → `onOpen` (navigate to Hero / ProjectDetailView)
+/// - Single tap → `onTap` (selection → preview panel on the wide layouts;
+///   selection AND the editor on the compact ones, `tapOpens`; in selection
+///   mode the caller toggles instead)
+/// - Double tap → `onOpen` (the Mac's item view, the iOS pager)
 /// - Right-click → context menu (wired by the caller)
 ///
 /// Selection (2026-09-13): the accent border marks a selected tile as it

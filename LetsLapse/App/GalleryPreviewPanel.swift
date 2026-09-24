@@ -5,7 +5,10 @@ import SwiftUI
 /// The 330pt right-hand panel that slides in when a tile is selected — and,
 /// in its `.inspector` dress, the left column of the Gallery's item view on
 /// the Mac (2026-09-13), where the editor beside it does the tuning and this
-/// column keeps to management and what comes after.
+/// column keeps to management and what comes after. On the phone the
+/// inspector dress is the editor's ⓘ sheet (2026-09-21, `EditorPager`): a
+/// tap on a tile opens the editor, so the panel comes to the picture rather
+/// than standing between the grid and it.
 ///
 /// Contains (`.pane`):
 /// - Thumbnail (150pt height)

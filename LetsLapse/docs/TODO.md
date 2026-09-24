@@ -11,6 +11,60 @@ live inline.
 
 ## Open
 
+### Gallery → editor on iOS: the pager, top-anchored picture, clear preview — what is owed
+
+**Raised:** 2026-09-21 · **Code built and simulator-verified the same day, UNCOMMITTED** ·
+**Size:** what is left is sign-off, mirrors and three decisions. Seams:
+`App/EditorPager.swift` (new: `EditorPagerRequest`, `EditorPager`, the posters, the ⓘ sheet, `LL_PAGE`),
+`App/PlayerLayerView.swift` (new: the touch video surface), `App/EditorLaunch.swift` (`EditorPagingContext`,
+`EditorPagingState` + key), `App/PhotoDetailZoom.swift` (`PhotoZoomGeometry.Anchor`), `PhotoViewerView` /
+`VideoEditorView` (`phoneEditorBody`, `showsPhoneChrome`, `pictureTapped`, `clearPreviewBody`, `infoButton`,
+`allowsPaging`, the paging preference), `GalleryView` (`pagerRequest`, `openPager`, the doors), `GalleryGridContent`
+(`tapOpens`, `onDetails`), `CaptureView` (`openRecent`, the overlay in `body`).
+
+Steven's brief (2026-09-21): getting to the Edit screen on iOS was too hard, the controls covered the picture (the
+scrubber above all), and the editor needed a photo app's manners. Decisions taken in the same conversation: ⓘ in the
+editor's top row for the project's panel; the camera's tile opens the editor over the camera and Back is a true back;
+the swipe walks the list the person came from and Back lands on the project the swipe ended on; the Projects tab is
+left alone (to be retired); the iPad gets swiping but no filmstrip; swipe down leaves clear preview; no keyboard, no
+haptics, the Mac untouched.
+
+What the code does now — see the 2026-09-21 entry in `docs/design/iOS/INDEX.md` for the full account: a tap on a
+Gallery tile opens the editor as one page of a swipe through the grid's current result set (posters for the
+neighbours, one editor at a time, the old one leaving through `finishExit` with no preset offer); the phone editor
+fits the picture into the room above the foot, pressed against the chrome row, hides the chrome while a panel has the
+foot, and a tap on the picture opens clear preview; the touch video editor draws a bare `AVPlayerLayer`.
+
+**Owed / open:**
+
+- **Steven's look on a device** — every check so far is on simulators (iPhone 16 Pro / iOS 18.6, "LetsLapse Fresh"
+  / iOS 27, iPad Pro 11-inch). The interactive swipe's feel (thresholds: 30 % of the width or a 240 pt/s fling;
+  rubber-band at the ends) and the page-turn's hand-over (poster → picture) are the things to feel.
+- **Rule A vs rule B** for a tall picture while a panel is open: A (built — fit into the room above the panel, so it
+  shrinks and grows as panels open and close) vs B (one size, the panel floats over its foot). One-liner in
+  `phoneEditorBody` (`room.bottom`). Crop keeps its own seat either way.
+- **Design mirrors** after sign-off: the whole `iOS/project-photo.viewer.*.portrait.svg` family (chrome row with ⓘ,
+  the picture pressed to it, the hidden chrome while a panel is open, a new clear-preview state), a video editor phone
+  screen (never drawn), `iOS/gallery.preview.portrait.svg` → the ⓘ sheet, and the iPadOS landscape family's chrome.
+  `LL_ITEM=latest`, `LL_CLEAR=1`, `LL_PAGE=next@1` and the usual `LL_SECTIONS` stage them.
+- **Video pinch-to-zoom** — none today (the movie has no zoom state; the photo editor's is `PhotoZoom`). Steven asked
+  for pinch on "a project"; the still editors have it, the movie does not.
+- **Clear preview's seat** — the picture stays on the layout's anchor (top on the phone, centred on the rail): no
+  jump when the chrome goes, at the cost of a landscape frame sitting high on a phone. Photos centres. A design call.
+- **iPad portrait with the pane up** overflows the width (sidebar 200 + grid + pane 330 > 834; the three columns are
+  centred and both sides are clipped) — pre-existing, seen while verifying; the sidebar should collapse or the pane
+  should be a sheet at that width.
+- **The camera overlay hosts the pager inside the capture screen's hierarchy**, so a sheet from the ⓘ sheet (Share
+  project) presents from the camera's cover; fine on the simulator, worth one look on a device. The tile stays
+  tappable mid-run as before (it used to stop the camera and leave; now the editor opens over a running shoot).
+- **`GalleryPreviewPanel`'s `.pane` dress on the phone** is unreachable now (only the iPad's regular width shows the
+  pane); the Edit / Text / Shapes cover fallback in the panel and in `GalleryGridContent` is dead code on the Gallery's
+  paths and kept only because `ProjectDetailView`'s hero still opens a plain cover.
+- **The Projects tab** still opens the project screen and its hero Edit a plain cover (no paging, no ⓘ) — by decision,
+  pending its retirement.
+
+---
+
 ### iOS 27 exposure follow-ups — the video segment's lost connection, aperture priority, an f-stop control
 
 **Raised:** 2026-09-21 · **Size:** S + M + M · **Status:** owed; the crash they came from is fixed (`docs/fieldtests/2026-09-21-ios27-virtual-device-custom-exposure.md`)

@@ -30,11 +30,19 @@ struct GalleryGridContent: View {
     /// editor (the Gallery's item view on the Mac); nil opens the editor the
     /// way the menu always did — a window on the Mac, a cover on iOS.
     var onEdit: ((UUID) -> Void)? = nil
+    /// The tile menu's Project details — the project screen, on iOS, where
+    /// a tap no longer leads there (2026-09-21). nil draws no row.
+    var onDetails: ((UUID) -> Void)? = nil
     /// A deliberate pull on either grid (touch only; nil draws no control):
     /// the Gallery hands it "Check PicPlace now". Set on the scroll views
     /// themselves, never on this view — the month rail and the editor cover
     /// must not inherit a refresh they have no meaning for.
     var onRefresh: (() async -> Void)? = nil
+    /// True on the compact layouts (2026-09-21): a plain tap selects the
+    /// tile AND opens it, the way a photo app's grid does — there is no
+    /// pane beside the grid for a selection to show in. Selection mode's
+    /// taps toggle, as ever.
+    var tapOpens: Bool = false
 
     // Shared zoom-level key — pinch on either grid keeps them in sync.
     @AppStorage("gallery.columnCount") private var storedColumnCount = 3
@@ -160,6 +168,7 @@ struct GalleryGridContent: View {
             selection.toggle(capture.id)
         } else {
             selection.select(only: capture.id)
+            if tapOpens { onOpen(capture.id) }
         }
     }
 
@@ -189,6 +198,14 @@ struct GalleryGridContent: View {
             onOpen(capture.id)
         } label: {
             Label("Open", systemImage: "arrow.up.forward.square")
+        }
+
+        if let onDetails {
+            Button {
+                onDetails(capture.id)
+            } label: {
+                Label("Project details", systemImage: "info.circle")
+            }
         }
 
         if !capture.isPhotoCapture {

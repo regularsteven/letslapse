@@ -357,6 +357,10 @@ struct CaptureView: View {
     /// Lower-left recent-capture tile: the newest project's hero asset and the
     /// URL it was resolved from (also the "is there anything to show" flag).
     @State private var recentThumbnail: Image?
+    #if os(iOS)
+    /// The recent tile's editor pager, laid over the camera (see `body`).
+    @State private var recentPager: EditorPagerRequest?
+    #endif
     @State private var recentHeroURL: URL?
     private let tick = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
@@ -816,6 +820,34 @@ struct CaptureView: View {
 
     /// Orientation and the Watch-link mirrors — iOS only, bar the one shared recording hook.
     var body: some View {
+        captureScreen
+        #if os(iOS)
+        // The recent-capture tile's editor (2026-09-21): the pager laid over
+        // the camera rather than presented over it. A full-screen cover
+        // would take the presenting view out of the window and run
+        // `cleanUpOnDisappear` under the reviewer's feet — the session log
+        // ended, the location updates stopped — for a screen that is still
+        // there; an overlay keeps the camera exactly as it was, and Back is
+        // a true back to the viewfinder.
+        .overlay {
+            if let request = recentPager {
+                EditorPager(request: request, onClose: { outcome in
+                    withAnimation(.easeInOut(duration: 0.2)) { recentPager = nil }
+                    if case .newClip(let id) = outcome, let capture = model.capture(id: id) {
+                        // The flow rises over the tabs, under this cover:
+                        // the camera goes first.
+                        closeCapture()
+                        model.openCapture(capture)
+                    }
+                }, dismissesItself: false)
+                .environmentObject(model)
+                .transition(.opacity)
+            }
+        }
+        #endif
+    }
+
+    private var captureScreen: some View {
         scheduling
         .modifier(ShootDimming(
             dimmer: shootDimmer,
@@ -4323,7 +4355,7 @@ struct CaptureView: View {
     /// carries no state of its own: `refreshRecentCapture` keeps it in step with
     /// the library, and it's invisible until there is something to show.
     private var recentCaptureButton: some View {
-        Button(action: openGallery) {
+        Button(action: openRecent) {
             Rectangle()
                 .fill(Color.white.opacity(0.12))
                 .overlay {
@@ -4362,6 +4394,25 @@ struct CaptureView: View {
             guard recentHeroURL == hero.url else { return }
             recentThumbnail = image
         }
+    }
+
+    /// The tile: the newest project's editor over the camera (2026-09-21),
+    /// with the library behind it in the Gallery's own order, so a swipe
+    /// walks back through what was shot. Back returns to the viewfinder. On
+    /// the Mac — and for a project with nothing to open — the Gallery.
+    private func openRecent() {
+        #if os(iOS)
+        let ids = model.liveProjectIDs(ProjectListQuery(
+            sort: .capture, ascending: false, filter: .all, query: .empty, listsScans: false).indexQuery)
+        if let first = ids.first, let capture = model.capture(id: first),
+           model.editorAsset(for: capture) != nil {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                recentPager = EditorPagerRequest(ids: ids, current: first)
+            }
+            return
+        }
+        #endif
+        openGallery()
     }
 
     /// Leave the camera for the Gallery. The camera is presented over the tabs,

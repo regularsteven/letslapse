@@ -41,11 +41,26 @@ struct PhotoZoom: Equatable {
 /// would suggest, and it is the only definition under which what you are
 /// judging is what the file holds.
 struct PhotoZoomGeometry {
+    /// Where the picture rests in a pane taller than it is.
+    ///
+    /// `center` is every editor's original seat — a letterboxed picture
+    /// starts half the slack in. `top` is the phone's Editor page
+    /// (2026-09-21): the picture pressed against the chrome row, so the
+    /// controls stacked over the pane's foot cover black rather than
+    /// pixels, and zooming in grows it down into the room below rather
+    /// than out from the middle. Horizontally the picture is always
+    /// centred — a pane wider than the picture is a letterbox, not a seat.
+    enum Anchor: Equatable {
+        case center
+        case top
+    }
+
     /// The pane the picture is drawn into, in points.
     let container: CGSize
     /// The source's pixel dimensions, oriented as displayed.
     let source: CGSize
     let displayScale: CGFloat
+    var anchor: Anchor = .center
 
     /// The picture at fit-to-pane, in points.
     var fit: CGSize {
@@ -86,28 +101,60 @@ struct PhotoZoomGeometry {
     }
 
     /// Keeps the picture's edges from being dragged inside the pane: pan is
-    /// only ever over what is off screen.
+    /// only ever over what is off screen. A picture shorter than the pane
+    /// has nothing to pan vertically and stays on its anchor's seat.
     func clamped(offset: CGSize, scale: CGFloat) -> CGSize {
         let drawn = drawnSize(scale: scale)
         let limitX = max(0, (drawn.width - container.width) / 2)
-        let limitY = max(0, (drawn.height - container.height) / 2)
+        let rest = restingOrigin(drawn: drawn)
+        let minY: CGFloat
+        let maxY: CGFloat
+        if drawn.height > container.height {
+            // The origin may run from "bottom edge on the pane's foot" to
+            // "top edge on the pane's head"; the offset is measured from
+            // the resting seat.
+            minY = (container.height - drawn.height) - rest.y
+            maxY = -rest.y
+        } else {
+            minY = 0
+            maxY = 0
+        }
         return CGSize(
             width: min(max(offset.width, -limitX), limitX),
-            height: min(max(offset.height, -limitY), limitY))
+            height: min(max(offset.height, minY), maxY))
     }
 
     func drawnSize(scale: CGFloat) -> CGSize {
         CGSize(width: fit.width * scale, height: fit.height * scale)
     }
 
-    /// Where the picture's top-left corner sits in the pane, in the pane's
-    /// points: centred (so a letterboxed picture starts half the slack in),
-    /// then moved by the pan. This is the one place that relation lives —
-    /// the visible region and the drawing gestures both go through it.
-    func pictureOrigin(scale: CGFloat, offset: CGSize) -> CGPoint {
+    /// Where the picture's top-left corner rests before any pan: centred
+    /// horizontally, and on the anchor's seat vertically.
+    func restingOrigin(drawn: CGSize) -> CGPoint {
+        let y: CGFloat
+        switch anchor {
+        case .center: y = (container.height - drawn.height) / 2
+        case .top: y = 0
+        }
+        return CGPoint(x: (container.width - drawn.width) / 2, y: y)
+    }
+
+    /// How far the picture's drawn frame sits from the pane's centre at
+    /// rest — what a view laid out centred in the pane offsets itself by to
+    /// land on the anchor's seat. Zero for the centred anchor.
+    func anchorShift(scale: CGFloat) -> CGSize {
         let drawn = drawnSize(scale: scale)
-        return CGPoint(x: (container.width - drawn.width) / 2 + offset.width,
-                       y: (container.height - drawn.height) / 2 + offset.height)
+        let rest = restingOrigin(drawn: drawn)
+        return CGSize(width: 0, height: rest.y - (container.height - drawn.height) / 2)
+    }
+
+    /// Where the picture's top-left corner sits in the pane, in the pane's
+    /// points: on the anchor's seat (centred, or pressed to the head), then
+    /// moved by the pan. This is the one place that relation lives — the
+    /// visible region and the drawing gestures both go through it.
+    func pictureOrigin(scale: CGFloat, offset: CGSize) -> CGPoint {
+        let rest = restingOrigin(drawn: drawnSize(scale: scale))
+        return CGPoint(x: rest.x + offset.width, y: rest.y + offset.height)
     }
 
     /// A point in the pane's own coordinates as a point in the picture's —
@@ -138,10 +185,13 @@ struct PhotoZoomGeometry {
     /// The offset that centres `point` (normalised) in the pane at `scale`.
     func offsetCentring(_ point: CGPoint, scale: CGFloat) -> CGSize {
         let drawn = drawnSize(scale: scale)
+        let rest = restingOrigin(drawn: drawn)
+        // The picture point lands at rest + offset + point × drawn; solve
+        // for the offset that puts it on the pane's centre.
         return clamped(
             offset: CGSize(
-                width: (0.5 - point.x) * drawn.width,
-                height: (0.5 - point.y) * drawn.height),
+                width: container.width / 2 - point.x * drawn.width - rest.x,
+                height: container.height / 2 - point.y * drawn.height - rest.y),
             scale: scale)
     }
 }

@@ -59,6 +59,51 @@ struct EditorExitRequest: Equatable {
     var offersPresetSave: Bool
 }
 
+// MARK: - Paging (iOS, 2026-09-21)
+//
+// On the phone and the iPad the editor is one page of a swipe through the
+// library (`EditorPager`): a drag across the picture at fit scale slides to
+// the neighbouring project, the way a photo app walks a camera roll. The
+// pager owns the drag and the neighbours' posters; each editor says what it
+// allows and where its picture is through a preference, and takes the
+// state that has to outlive it — clear preview — from the context below.
+
+/// What a pager hands the editor it mounts.
+struct EditorPagingContext {
+    /// Clear preview carried over from the previous page, so a swipe made
+    /// with the chrome hidden lands with it hidden.
+    var startsClear: Bool
+    var onClearPreviewChanged: (Bool) -> Void
+    /// The chrome's ⓘ: the pager presents the project's panel as a sheet.
+    var onInfo: () -> Void
+}
+
+/// What the editor on the page allows and where its picture is — published
+/// every layout pass through `EditorPagingStateKey`.
+struct EditorPagingState: Equatable {
+    /// The named coordinate space the pager registers on its container, so
+    /// `paneFrame` is measured against the same origin the pager offsets in.
+    static let hostSpace = "EditorPagerHost"
+
+    /// True while a horizontal drag over the editor is the pager's to take:
+    /// the Editor page at fit scale with nothing open or armed.
+    var canPage: Bool
+    /// The picture pane's frame in the host's space — the neighbours'
+    /// posters are fitted into it, so a page turn hands over in place.
+    var paneFrame: CGRect
+    var anchor: PhotoZoomGeometry.Anchor
+    /// True once the editor has drawn its own picture, so the settled
+    /// poster over it can go.
+    var hasPicture: Bool
+}
+
+struct EditorPagingStateKey: PreferenceKey {
+    static let defaultValue: EditorPagingState? = nil
+    static func reduce(value: inout EditorPagingState?, nextValue: () -> EditorPagingState?) {
+        if let next = nextValue() { value = next }
+    }
+}
+
 extension AppModel {
     /// The asset the editor opens on: a video project's movie, a Photo
     /// capture's hero image, an interval shoot's poster frame. nil when the

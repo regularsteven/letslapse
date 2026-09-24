@@ -47,6 +47,8 @@ struct VideoEditorView: View {
     /// The embedding host's exit — see `PhotoViewerView.exitRequest`.
     var exitRequest: EditorExitRequest? = nil
     var onExit: (() -> Void)? = nil
+    /// The iOS pager's context — see `PhotoViewerView.paging`.
+    var paging: EditorPagingContext? = nil
 
     /// Live edit state. Seeded from the project on appear and written back —
     /// debounced — as the controls move, exactly like the photo editor.
@@ -105,6 +107,12 @@ struct VideoEditorView: View {
 
     /// Which rail page is showing — see `RailTabBar`.
     @State private var railTab: RailTab = .editor
+    /// Clear preview — see `PhotoViewerView.clearPreviewState`.
+    @State private var clearPreviewState: Bool?
+    private var isClearPreview: Bool { clearPreviewState ?? paging?.startsClear ?? false }
+    /// True once the touch surface has a frame on screen (`PlayerLayerView`),
+    /// for the pager's settled poster.
+    @State private var surfaceReady = false
 
     // MARK: Editor groups
     //
@@ -132,6 +140,10 @@ struct VideoEditorView: View {
     @State private var floatingPanelSize: CGSize = .zero
     /// The editor's container, for clamping the card once a drag ends.
     @State private var containerSize: CGSize = .zero
+    /// The phone's bottom stack — timeline card plus buttons or sheet — as
+    /// measured, so the movie's room ends where the stack begins.
+    @State private var phoneFootHeight: CGFloat = 0
+    @State private var phoneFootMeasured = false
     /// The Presets panel's tile renders. Owned here so they survive the
     /// phone sheet being torn down between opens.
     @StateObject private var presetThumbnails = PresetThumbnailCache()
@@ -240,8 +252,10 @@ struct VideoEditorView: View {
                 if railTab == .editor {
                     switch editorLayout(for: proxy.size) {
                     case .phone: phoneEditorBody(in: proxy.size)
-                    case .floating: floatingEditorBody(in: proxy.size)
-                    case .rail: railBody(in: proxy.size)
+                    // Clear preview on the wider touch layouts — see the
+                    // photo editor's `clearPreviewBody`.
+                    case .floating: if isClearPreview { clearPreviewBody } else { floatingEditorBody(in: proxy.size) }
+                    case .rail: if isClearPreview { clearPreviewBody } else { railBody(in: proxy.size) }
                     }
                 } else if proxy.size.width >= wideLayoutThreshold {
                     railBody(in: proxy.size)
@@ -255,6 +269,8 @@ struct VideoEditorView: View {
         .background(editorBackground)
         #if os(iOS)
         .preferredColorScheme(.dark)
+        .statusBarHidden(isClearPreview)
+        .onChange(of: isClearPreview) { _, clear in paging?.onClearPreviewChanged(clear) }
         #endif
         .task {
             // Seed once from the project, then let this view own the values.
@@ -416,6 +432,7 @@ struct VideoEditorView: View {
         HStack {
             backButton
             Spacer(minLength: 0)
+            infoButton
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -427,15 +444,27 @@ struct VideoEditorView: View {
 
     /// The 36 pt disc the fullscreen player uses too.
     private var backButton: some View {
-        Button { requestExit() } label: {
-            Image(systemName: "chevron.left")
+        chromeDisc(systemImage: "chevron.left", label: "Back") { requestExit() }
+    }
+
+    /// ⓘ — the project's panel as a sheet, when a pager hosts one (see
+    /// `PhotoViewerView.infoButton`).
+    @ViewBuilder private var infoButton: some View {
+        if let onInfo = paging?.onInfo {
+            chromeDisc(systemImage: "info.circle", label: "Project info", action: onInfo)
+        }
+    }
+
+    private func chromeDisc(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
                 .background(.black.opacity(0.4), in: Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Back")
+        .accessibilityLabel(label)
     }
 
     /// The touch editors' top row over the player: the back button leading,
@@ -444,12 +473,49 @@ struct VideoEditorView: View {
     private func touchChrome(showsBadge: Bool) -> some View {
         HStack(spacing: 8) {
             backButton
+            infoButton
             if showsBadge { marqueeBadge }
             Spacer(minLength: 8)
             EditorTabPill(selection: $railTab, tabs: availableRailTabs, accent: accentColor)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    /// Clear preview on the floating and rail layouts: the movie alone, at
+    /// its aspect in the whole container. The phone layout keeps its own
+    /// tree so the picture slides rather than being rebuilt.
+    private var clearPreviewBody: some View {
+        GeometryReader { proxy in
+            let size = Self.fit(aspect: pictureAspect, in: proxy.size)
+            playerPane
+                .frame(width: size.width, height: size.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// The chrome row and the foot are gone while a group panel has the
+    /// foot, and in clear preview — see `PhotoViewerView.showsPhoneChrome`.
+    private var showsPhoneChrome: Bool {
+        !isClearPreview && openGroup == nil
+    }
+
+    /// A single tap on the movie: clear preview on, or off again — on the
+    /// Editor page with no panel open. A movie has no zoom to double-tap.
+    private func pictureTapped() {
+        #if os(iOS)
+        guard railTab == .editor, openGroup == nil, !isOfferingPresetSave else { return }
+        withAnimation(.easeInOut(duration: 0.22)) {
+            clearPreviewState = !isClearPreview
+        }
+        #endif
+    }
+
+    /// True while a swipe across the movie may page to the next project —
+    /// see `PhotoViewerView.allowsPaging`.
+    private var allowsPaging: Bool {
+        paging != nil && railTab == .editor && openGroup == nil
+            && !isOfferingPresetSave && !isNamingPreset
     }
 
     /// `VIDEO · 1 min 7 s` — what the strip is measuring. A movie has a
@@ -473,8 +539,29 @@ struct VideoEditorView: View {
     /// screen (the phone layout) it letterboxes on black, which is the same
     /// black the editor paints behind the safe areas.
     private var playerPane: some View {
+        #if os(iOS)
+        // A bare layer: the editor's strip plays, pauses and scrubs, and
+        // every touch on the picture is the editor's — a tap for clear
+        // preview, a swipe for the pager (2026-09-21). AVKit's transport
+        // took both.
+        PlayerLayerView(player: player, onReadyForDisplay: { surfaceReady = $0 })
+            .background(Color.black)
+            .contentShape(Rectangle())
+            .onTapGesture { pictureTapped() }
+        #else
         VideoPlayer(player: player)
             .background(Color.black)
+        #endif
+    }
+
+    /// The paging preference, off the surface the pager's posters are fitted
+    /// into — the movie's own frame, not the pane around it.
+    private func pagingState(in proxy: GeometryProxy, anchor: PhotoZoomGeometry.Anchor) -> EditorPagingState {
+        EditorPagingState(
+            canPage: allowsPaging,
+            paneFrame: proxy.frame(in: .named(EditorPagingState.hostSpace)),
+            anchor: anchor,
+            hasPicture: surfaceReady)
     }
 
     // MARK: - Editor page layouts
@@ -517,20 +604,71 @@ struct VideoEditorView: View {
 
     // MARK: Phone (2a / 6a)
 
-    /// The player fills the safe area and everything else floats over it.
-    /// Its foot carries the timeline card and then EITHER the six main
-    /// buttons or the open group's sheet — one or the other, because on a
-    /// phone the sheet needs the buttons' room. A landscape movie letterboxes
-    /// in the middle of the screen, clear of the foot; a portrait one runs
-    /// under it, as a tall photo does in the photo editor.
+    /// The movie is fitted into the room between the chrome row and the
+    /// foot and pressed against the chrome — the photo editor's phone rule
+    /// (2026-09-21), so the scrubber and the panels never cover the picture
+    /// being graded. The foot carries the timeline card and then EITHER the
+    /// six main buttons or the open group's sheet; its height is measured so
+    /// the room ends where it begins. While a panel has the foot the chrome
+    /// row goes too, and the movie takes the head of the screen; clear
+    /// preview takes the foot as well.
     private func phoneEditorBody(in container: CGSize) -> some View {
-        ZStack(alignment: .bottom) {
-            playerPane
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(alignment: .top) { touchChrome(showsBadge: false) }
-            phoneFoot
+        let chromeShown = showsPhoneChrome
+        let clear = isClearPreview
+        let room = PhoneRoom(
+            top: chromeShown ? Self.touchChromeHeight : 0,
+            bottom: clear ? 0 : phoneFootHeight)
+        return ZStack(alignment: .bottom) {
+            GeometryReader { proxy in
+                // The movie at its aspect, as wide as the room allows, at
+                // the room's head.
+                let size = Self.fit(aspect: pictureAspect, in: proxy.size)
+                playerPane
+                    .frame(width: size.width, height: size.height)
+                    .background {
+                        GeometryReader { surface in
+                            Color.clear.preference(
+                                key: EditorPagingStateKey.self,
+                                value: pagingState(in: surface, anchor: .top))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+            .padding(.top, room.top)
+            .padding(.bottom, room.bottom)
+            // Not on the first pass — see the photo editor.
+            .animation(phoneFootMeasured ? .easeInOut(duration: 0.22) : nil, value: room)
+            if chromeShown {
+                touchChrome(showsBadge: false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .transition(.opacity)
+            }
+            if !clear {
+                phoneFoot
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: VideoEditorFootHeightKey.self, value: proxy.size.height)
+                        }
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onPreferenceChange(VideoEditorFootHeightKey.self) { height in
+            phoneFootHeight = height
+            if height > 0 { phoneFootMeasured = true }
         }
     }
+
+    /// The phone movie's room, as the paddings that carve it out of the
+    /// screen — one value so a change to either edge animates as one move.
+    private struct PhoneRoom: Equatable {
+        var top: CGFloat
+        var bottom: CGFloat
+    }
+
+    /// The touch chrome row's reach: 12 pt of padding, the 36 pt discs and
+    /// the tab pill, 12 pt more — the photo editor's constant.
+    private static let touchChromeHeight: CGFloat = 60
 
     @ViewBuilder private var phoneFoot: some View {
         VStack(spacing: 0) {
@@ -583,6 +721,13 @@ struct VideoEditorView: View {
             Color.black
             playerPane
                 .frame(width: frame.width, height: frame.height)
+                .background {
+                    GeometryReader { surface in
+                        Color.clear.preference(
+                            key: EditorPagingStateKey.self,
+                            value: pagingState(in: surface, anchor: .center))
+                    }
+                }
                 .offset(x: frame.minX, y: frame.minY)
             touchChrome(showsBadge: true)
                 .frame(maxWidth: .infinity)
@@ -702,6 +847,13 @@ struct VideoEditorView: View {
             VStack(spacing: 0) {
                 playerPane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background {
+                        GeometryReader { surface in
+                            Color.clear.preference(
+                                key: EditorPagingStateKey.self,
+                                value: pagingState(in: surface, anchor: .center))
+                        }
+                    }
                     .overlay(alignment: .top) { chrome }
                     .overlay(alignment: .topLeading) { railMediaBadge }
                 // The scrubber belongs to the media, so it takes the player
@@ -1455,6 +1607,16 @@ struct VideoEditorView: View {
         guard let asset, let item = player.currentItem else { return }
         item.videoComposition = VideoGrader.composition(
             for: asset, grade: liveGrade, durationSeconds: duration)
+    }
+}
+
+/// The phone foot's height, measured so the movie's room ends where the
+/// foot begins.
+private struct VideoEditorFootHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let next = nextValue()
+        if next > 0 { value = next }
     }
 }
 

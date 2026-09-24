@@ -10,8 +10,8 @@ import LetsLapseKit
 /// Layout strategy
 /// ───────────────
 /// macOS and wide iPad (regular width):   sidebar | grid | preview panel  (HStack)
-/// iPhone and narrow iPad (compact width): just the grid; sidebar and preview
-///   are sheets.
+/// iPhone and narrow iPad (compact width): just the grid; the sidebar is a
+///   sheet, and a tap on a tile opens the project's editor outright.
 ///
 /// The item view (macOS, 2026-09-13 — see GalleryItemView.swift): with a
 /// project in `focus` the same three columns change mode instead of pushing a
@@ -19,6 +19,13 @@ import LetsLapseKit
 /// rail in the middle and right — and a filmstrip runs under them. Open, Edit,
 /// Text and Shapes all lead here; the Mac's editor windows are no longer the
 /// Gallery's door to the editor.
+///
+/// The pager (iOS, 2026-09-21 — see EditorPager.swift): the same doors on
+/// the phone and the iPad open the editor as a cover that swipes through
+/// the grid's current result set, and Back lands the grid on the project
+/// the swipe ended on. The project's panel rides along as the editor's ⓘ
+/// sheet; the project screen keeps one door, the tile menu's Project
+/// details.
 struct GalleryView: View {
     @EnvironmentObject var model: AppModel
     /// Owned by ContentView so the tab bar can pop to the list.
@@ -44,8 +51,17 @@ struct GalleryView: View {
     /// One tile → the preview panel; more → batch mode (GallerySelection).
     @State private var selection = GallerySelection()
     @State private var showSidebarSheet  = false  // iPhone/compact only
-    @State private var showPreviewSheet  = false  // iPhone/compact only
     @State private var showBatchSheet    = false  // iPhone/compact only
+    #if DEBUG
+    @State private var itemHookConsumed = false
+    #endif
+    #if os(iOS)
+    /// The editor pager (2026-09-21): a tap on a tile, the pane's Open /
+    /// Edit / Text / Shapes, the tile menu's Edit — every door to the
+    /// editor on iOS opens it as one page of a swipe through the grid's
+    /// current result set. Presented as a cover over the tab.
+    @State private var pagerRequest: EditorPagerRequest?
+    #endif
     @State private var deleteFailure: String?
     /// A tile the keyboard moved the selection to, for the grid to scroll to.
     @State private var scrollTarget: UUID?
@@ -251,27 +267,38 @@ struct GalleryView: View {
                     }
             }
         }
-        // iPhone/compact: preview sheet
-        .sheet(isPresented: $showPreviewSheet) {
-            if let id = selection.single,
-               let capture = model.capture(id: id) {
-                NavigationStack {
-                    GalleryPreviewPanel(
-                        capture: capture,
-                        onOpen:    { path.append(capture.id); showPreviewSheet = false },
-                        // The flow rises over the tabs, not over this sheet —
-                        // left up, the sheet would hide it.
-                        onNewClip: { model.openCapture(capture); showPreviewSheet = false },
-                        onDelete:  { delete(capture); showPreviewSheet = false }
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Close") { showPreviewSheet = false }
+        #if os(iOS)
+        // The editor pager. On its way out the grid lands on the project
+        // the swipe ended on — selected and scrolled to — so Back reads as
+        // a true back from wherever the person got to.
+        .fullScreenCover(item: $pagerRequest) { request in
+            EditorPager(
+                request: request,
+                onMove: { id in
+                    selection.select(only: id)
+                    scrollTarget = id
+                },
+                onClose: { outcome in
+                    switch outcome {
+                    case .back(let landing):
+                        if let landing {
+                            selection.select(only: landing)
+                            scrollTarget = landing
+                        } else {
+                            selection.deselectAll()
+                        }
+                    case .newClip(let id):
+                        // The flow rises over the tabs once the cover is
+                        // down — left up, the cover would hide it.
+                        if let capture = model.capture(id: id) {
+                            selection.select(only: id)
+                            model.openCapture(capture)
                         }
                     }
-                }
-            }
+                })
+                .environmentObject(model)
         }
+        #endif
     }
 
     // MARK: Layout
@@ -291,26 +318,22 @@ struct GalleryView: View {
                     Divider()
                     AutoRenameReviewPanel(session: review, asBar: true)
                 } else {
+                    // A plain tap opens the project's editor (the pager);
+                    // in selection mode taps toggle, as ever. The project
+                    // screen keeps one door: the tile menu's Project details.
                     GalleryGridContent(
                         rows:         sortedRows,
                         columnCount:  columnCount,
                         timelineMode: timelineMode,
                         selection:    $selection,
                         scrollTarget: $scrollTarget,
-                        onOpen: { path.append($0) },
-                        onRefresh: refreshAction
+                        onOpen: { open($0) },
+                        onEdit: gridEditHandler,
+                        onDetails: { path.append($0) },
+                        onRefresh: refreshAction,
+                        tapOpens: true
                     )
                 }
-            }
-            // On compact devices a plain tap opens the preview sheet; in
-            // selection mode taps toggle and the sheet stays down. Closing
-            // the sheet clears the selection, so the same tile can be tapped
-            // straight back open.
-            .onChange(of: selection) { _, next in
-                if !next.isSelecting, !next.isBatch, next.single != nil { showPreviewSheet = true }
-            }
-            .onChange(of: showPreviewSheet) { _, shown in
-                if !shown, !selection.isSelecting, !selection.isBatch { selection.deselectAll() }
             }
         }
     }
@@ -421,6 +444,7 @@ struct GalleryView: View {
                     scrollTarget: $scrollTarget,
                     onOpen: { open($0) },
                     onEdit: gridEditHandler,
+                    onDetails: detailsHandler,
                     onRefresh: refreshAction
                 )
                 .transition(.opacity)
@@ -428,26 +452,37 @@ struct GalleryView: View {
         }
     }
 
-    /// The item view is the Mac's (2026-09-13). Elsewhere the panel and the
-    /// tile menu keep their own doors to the editor — the iPad's cover has
-    /// chrome of its own that a column of the Gallery cannot host yet.
+    /// The tile menu's Edit: the item view on the Mac (2026-09-13), the
+    /// pager on iOS (2026-09-21).
     private var gridEditHandler: ((UUID) -> Void)? {
-        #if os(macOS)
         return { id in
-            if let capture = model.capture(id: id) {
-                enterItem(capture, page: .editor)
-            }
+            guard let capture = model.capture(id: id) else { return }
+            #if os(macOS)
+            enterItem(capture, page: .editor)
+            #else
+            openPager(capture, page: .editor)
+            #endif
         }
-        #else
+    }
+
+    /// The tile menu's Project details — the project screen, which on iOS
+    /// no longer opens from a tap (2026-09-21) and keeps this one door from
+    /// the Gallery. The Mac reaches it from the Projects tab.
+    private var detailsHandler: ((UUID) -> Void)? {
+        #if os(macOS)
         return nil
+        #else
+        return { path.append($0) }
         #endif
     }
 
+    /// The pane's Edit / Text / Shapes (and, on iOS, its Open): the item
+    /// view on the Mac, the pager on the iPad.
     private func paneEditHandler(for capture: AppModel.CaptureProject) -> ((RailTab) -> Void)? {
         #if os(macOS)
         return { page in enterItem(capture, page: page) }
         #else
-        return nil
+        return { page in openPager(capture, page: page) }
         #endif
     }
 
@@ -872,18 +907,37 @@ struct GalleryView: View {
         }
     }
 
-    /// Open — a double-click, the panel's Open, ⏎, the tile menu: the item
-    /// view on the Mac, the project screen elsewhere (and on the Mac when the
-    /// project has nothing the editor can open).
+    /// Open — a double-click, the panel's Open, ⏎, the tile menu, and on
+    /// iOS a plain tap: the item view on the Mac, the pager on iOS, and the
+    /// project screen when the project has nothing the editor can open (a
+    /// preview-only project, files gone missing).
     private func open(_ id: UUID) {
+        guard let capture = model.capture(id: id) else { return }
         #if os(macOS)
-        if let capture = model.capture(id: id),
-           enterItem(capture, page: .editor) {
-            return
-        }
+        if enterItem(capture, page: .editor) { return }
+        #else
+        if openPager(capture, page: .editor) { return }
         #endif
         path.append(id)
     }
+
+    #if os(iOS)
+    /// Opens the pager on `capture`, over the grid's current result set.
+    /// False when the project has no asset to open on.
+    @discardableResult
+    private func openPager(_ capture: AppModel.CaptureProject, page: RailTab) -> Bool {
+        guard model.editorAsset(for: capture) != nil else { return false }
+        selection.select(only: capture.id)
+        scrollTarget = capture.id
+        var startsClear = false
+        #if DEBUG
+        startsClear = ProcessInfo.processInfo.environment["LL_CLEAR"] == "1"
+        #endif
+        pagerRequest = EditorPagerRequest(
+            ids: sortedIDs, current: capture.id, page: page, startsClear: startsClear)
+        return true
+    }
+    #endif
 
     // MARK: Auto rename & tag
 
@@ -987,12 +1041,21 @@ struct GalleryView: View {
     }
 
     /// `LL_ITEM=latest|<capture-uuid>[:editor|text|frames|masks]` — the item
-    /// view open from launch, for screenshots. `latest` is the first tile in
-    /// the current sort. Pair with `LL_TAB=gallery`.
+    /// view (Mac) or the pager (iOS) open from launch, for screenshots.
+    /// `latest` is the first tile in the current sort. Pair with
+    /// `LL_TAB=gallery`; on iOS `LL_CLEAR=1` opens it in clear preview and
+    /// `LL_PAGE=next|previous[@<seconds>]` turns one page without a finger.
     private func consumeItemHook() {
-        #if DEBUG && os(macOS)
-        guard focus == nil,
-              let raw = ProcessInfo.processInfo.environment["LL_ITEM"] else { return }
+        #if DEBUG
+        // Once: on iOS a cover's dismissal re-appears the grid, and the
+        // hook would open the pager again after every Back.
+        guard !itemHookConsumed, let raw = ProcessInfo.processInfo.environment["LL_ITEM"] else { return }
+        itemHookConsumed = true
+        #if os(macOS)
+        guard focus == nil else { return }
+        #else
+        guard pagerRequest == nil else { return }
+        #endif
         let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
         let page = parts.count > 1 ? (RailTab(rawValue: parts[1].capitalized) ?? .editor) : .editor
         let capture: AppModel.CaptureProject?
@@ -1001,7 +1064,16 @@ struct GalleryView: View {
         } else {
             capture = UUID(uuidString: parts[0]).flatMap { id in sortedIDs.contains(id) ? model.capture(id: id) : nil }
         }
-        if let capture { enterItem(capture, page: page) }
+        guard let capture else { return }
+        #if os(macOS)
+        enterItem(capture, page: page)
+        #else
+        // A cover raised in the same pass as the tab's appearance is
+        // dropped on iOS (see `LL_SYNC_PANEL`); give the screen the turn.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            openPager(capture, page: page)
+        }
+        #endif
         #endif
     }
 
