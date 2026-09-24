@@ -187,6 +187,29 @@ struct PicPlaceStatusCard: View {
         }
     }
 
+    /// An upload job's line — two buttons: beside the text where the detail
+    /// fits on one line (the Mac, a wide card — the design as signed off),
+    /// on a line of their own under it where it would not. On a phone,
+    /// *Use mobile data* broke over two lines beside a detail wrapped
+    /// mid-number (2026-09-24, found drawing the mirrors).
+    private func jobLineRow<Texts: View>(_ line: HeavyLine, capture: AppModel.CaptureProject, actionSize: CGFloat,
+                                         @ViewBuilder texts: @escaping (Int) -> Texts) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 8) {
+                texts(1)
+                Spacer(minLength: 8)
+                heavyAction(line, capture: capture, size: actionSize)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                texts(3)
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    heavyAction(line, capture: capture, size: actionSize)
+                }
+            }
+        }
+    }
+
     private func heavyAction(_ line: HeavyLine, capture: AppModel.CaptureProject, size: CGFloat) -> some View {
         HStack(spacing: size * 0.9) {
             if let secondary = line.secondary {
@@ -289,16 +312,30 @@ struct PicPlaceStatusCard: View {
             let lines = heavyLines(for: capture, state: state)
             ForEach(lines) { line in
                 Divider().padding(.leading, 16)
-                HStack(alignment: .center, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(line.title).font(.system(size: 16))
-                        Text(line.detail)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                Group {
+                    if line.secondary != nil {
+                        jobLineRow(line, capture: capture, actionSize: 16) { limit in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(line.title).font(.system(size: 16))
+                                Text(line.detail)
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(limit)
+                            }
+                        }
+                    } else {
+                        HStack(alignment: .center, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(line.title).font(.system(size: 16))
+                                Text(line.detail)
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 8)
+                            heavyAction(line, capture: capture, size: 16)
+                        }
                     }
-                    Spacer(minLength: 8)
-                    heavyAction(line, capture: capture, size: 16)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -355,13 +392,24 @@ struct PicPlaceStatusCard: View {
                 .padding(.leading, 24)
             let lines = heavyLines(for: capture, state: state)
             ForEach(lines) { line in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(line.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
-                        Text(line.detail).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
+                Group {
+                    if line.secondary != nil {
+                        jobLineRow(line, capture: capture, actionSize: 13) { limit in
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(line.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                                Text(line.detail).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(limit)
+                            }
+                        }
+                    } else {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(line.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                                Text(line.detail).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                            Spacer(minLength: 8)
+                            heavyAction(line, capture: capture, size: 13)
+                        }
                     }
-                    Spacer(minLength: 8)
-                    heavyAction(line, capture: capture, size: 13)
                 }
                 .padding(.leading, 24)
                 .padding(.top, 6)

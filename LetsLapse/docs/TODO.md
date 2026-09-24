@@ -542,8 +542,14 @@ paused line. iOS Simulator build compiles; **not yet run on a phone**.
 - A look on the phones, including a real Wi-Fi → mobile walk and a lock
   mid-upload (expect *interrupted*, resumed in front, a handful of files
   redone).
-- SVG mirrors: the card's job lines (iOS INDEX "Project detail › PicPlace
-  card") and the drawer's upload rows ("Projects · sharing") — ⚠️ rows added.
+- ~~SVG mirrors~~ drawn 2026-09-24 after Steven's sign-off: the card's
+  five upload states (`components/picplace-status.{uploading,upload-*}.phone.svg`)
+  and the drawer's uploads block (`iOS/projects.sharing.uploads.portrait.svg`),
+  measured from the iPhone 16 Pro simulator. Drawing them found the phone
+  layout breaking *Use mobile data* over two lines beside a wrapped detail:
+  a job line's buttons now drop to a line of their own when the detail
+  would not fit on one (`jobLineRow`, `ViewThatFits`). Still owed: the Mac
+  inspector's narrow width (macOS INDEX ⚠️) and the sending block's mirror.
 - (d) the background plan: Stage 1 `BGContinuedProcessingTask`, Stage 2 a
   background `URLSession` with a transfer table, Stage 3 the automatic queue
   at night; four server asks in §5 of the plan.

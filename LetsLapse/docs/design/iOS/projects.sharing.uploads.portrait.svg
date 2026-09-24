@@ -1,0 +1,535 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Projects · sync panel (Project Syncing) · uploads · portrait</title>
+  <desc>Mirrors App/ProjectSharingChip.swift (ProjectSharingSheet → uploadsBlock, uploadButton, uploadTitle, uploadDetail) over App/PicPlace/PicPlaceUploadJobs.swift (PicPlaceController.uploadJobRows). A VARIANT of projects.sharing.portrait.svg — the same sheet, drawn 2026-09-24 from the Mac Debug build Steven signed off the same day (code first). A person's uploads of originals are JOBS: each one the drawer holds gets a row in one white rx12 card between the status line and Check PicPlace now (under the sending block when a push run shows one — not drawn: no run here). ROW: the state as the title (15pt medium) — Uploading originals · Upload paused · Waiting for Wi-Fi · Upload interrupted · Upload stopped · Upload waiting — the project name under it (caption, secondary), a linear bar (accent while the run goes, secondary grey while held; bytes done of total), one caption line of counts and why (… · what reached PicPlace stays — Resume sends the rest / … · Only on Wi-Fi is on — it goes when Wi-Fi is back / the reason · goes again on its own / the error; running: counts, and · mobile data allowed when overridden), then the buttons on a line of their own, trailing: Pause while it runs; held, Cancel (bordered, secondary) beside Resume · Use mobile data (this upload only, never the setting) · Try again (bordered, accent). The buttons moved off the title line after the first Mac screenshot cut Waiting for W… and Use mobi…. Drawn here: two jobs held with auto-sync waiting for Wi-Fi — the state of the signed-off screenshot (LL_SYNC_PANEL=1 LL_PICPLACE_NETWORK=cellular -letslapse.picplace.wifiOnly YES over jobs staged in the root's PicPlace/sync-state.json). Everything under the card is the base file's, 280pt lower; the sheet scrolls, so the code and QR run off the bottom. Bordered buttons are drawn as capsules (iOS 26+); the Mac draws them as rounded rects.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- header row: title + search + shared filter bar + tag chips in ONE
+           list row, so no row inset can open a gap between them (the title and
+           filter rhythm still matches gallery.portrait.svg) -->
+      <text x="20" y="106" font-size="34" class="b" fill="#000">Projects</text>
+
+      <!-- SHARING PILL — opposite the title, and ALWAYS drawn: green while this
+           device is serving its library, RED while it is not. It replaced a
+           full-width row that appeared only while sharing was on and could only
+           ever say one thing; everything that row carried (the switch, the
+           code, the QR, what is being sent) is one tap away in the sheet —
+           projects.sharing.portrait.svg. Amber + exclamationmark.triangle.fill
+           is the third state, desc-only here: sharing on and the server could
+           not start, almost always a refused Local Network prompt. -->
+      <g id="sharing-pill" data-symbol="antenna.radiowaves.left.and.right">
+        <circle cx="357" cy="100" r="16" fill="#34C759" fill-opacity="0.12"/>
+        <circle cx="357" cy="100" r="15.5" fill="none" stroke="#34C759" stroke-opacity="0.35"/>
+        <g stroke="#34C759" stroke-width="1.6" fill="none" stroke-linecap="round">
+          <path d="M350.5 95.5 a5 5 0 0 0 0 9 M363.5 95.5 a5 5 0 0 1 0 9"/>
+          <path d="M353.5 98.5 a2 2 0 0 0 0 3 M360.5 98.5 a2 2 0 0 1 0 3"/>
+          <path d="M357 101 v4.5"/>
+        </g>
+      </g>
+
+      <!-- scene search — SceneSearchField. Hand-built rather than .searchable:
+           Projects hides its navigation bar on iOS, the only place the system
+           field can live. Clears with a trailing xmark.circle.fill once typed. -->
+      <g id="search">
+        <rect x="16" y="122" width="232" height="34" rx="17" fill="#000" fill-opacity="0.06"/>
+        <g transform="translate(29,132)" stroke="#8A8A90" stroke-width="1.6" fill="none" data-symbol="magnifyingglass">
+          <circle cx="6" cy="6" r="5"/><path d="M9.8 9.8 L14 14" stroke-linecap="round"/>
+        </g>
+        <text x="54" y="145" font-size="15" fill="#8A8A90">Search projects</text>
+      </g>
+
+      <!-- SORT — the search row's trailing half: which projects, then in what
+           order. The menu carries its OWN capsule rather than taking a
+           borderless button style, because AppKit drops the capsule behind a
+           Menu with a custom label and the Mac row would otherwise read as two
+           bare words beside a filled field. Capture · Added · Edit · Size; the triangle
+           flips the direction, and its accessibility label comes from the axis
+           ("Oldest capture first" / "Smallest first"), the gesture being the
+           same but the sentence not. Both remembered between launches. -->
+      <g id="sort">
+        <g id="sort-menu">
+          <rect x="256" y="122.5" width="87" height="33" rx="16.5" fill="#000" fill-opacity="0.06"/>
+          <text x="266" y="145" font-size="14" class="sb" fill="#C36A00">Capture</text>
+          <path d="M325 139 l4.5 4.5 l4.5 -4.5" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+        </g>
+        <g id="sort-direction">
+          <rect x="347" y="123" width="30" height="32" rx="16" fill="#000" fill-opacity="0.06"/>
+          <path d="M356 135.5 h12 l-6 8 z" fill="#C36A00" data-symbol="arrowtriangle.down.fill"/>
+        </g>
+      </g>
+
+      <!-- segmented filter — shared CaptureFilterBar, same geometry as Gallery -->
+      <g id="filter">
+        <rect x="16" y="164" width="361" height="32" rx="9" fill="#E3E3E8"/>
+        <rect x="18" y="166" width="87" height="28" rx="7" fill="#FFF" filter="url(#soft)"/>
+        <text x="61" y="184" font-size="13" class="sb" fill="#000" text-anchor="middle">All</text>
+        <text x="151" y="184" font-size="13" fill="#000" text-anchor="middle">Photos</text>
+        <text x="241" y="184" font-size="13" fill="#000" text-anchor="middle">Interval</text>
+        <text x="331" y="184" font-size="13" fill="#000" text-anchor="middle">Video</text>
+      </g>
+
+      <!-- subject-tag chips — SceneTagChips. Drawn only from tags present in
+           the library, in taxonomy order so the row never reshuffles as
+           projects are analysed; scrolls horizontally and bleeds past the
+           trailing inset. Selected chip is filled accent, white semibold.
+           Multiple selections AND together (each tap narrows). -->
+      <g id="tag-chips">
+        <rect x="16" y="204" width="66" height="26" rx="13" fill="#000" fill-opacity="0.07"/>
+        <text x="49" y="221" font-size="13" fill="#000" fill-opacity="0.75" text-anchor="middle">Water</text>
+        <rect x="89" y="204" width="110" height="26" rx="13" fill="#000" fill-opacity="0.07"/>
+        <text x="144" y="221" font-size="13" fill="#000" fill-opacity="0.75" text-anchor="middle">Sky &amp; weather</text>
+        <rect x="206" y="204" width="62" height="26" rx="13" fill="#C36A00"/>
+        <text x="237" y="221" font-size="13" class="sb" fill="#FFF" text-anchor="middle">Urban</text>
+        <rect x="275" y="204" width="68" height="26" rx="13" fill="#000" fill-opacity="0.07"/>
+        <text x="309" y="221" font-size="13" fill="#000" fill-opacity="0.75" text-anchor="middle">Nature</text>
+        <rect x="350" y="204" width="68" height="26" rx="13" fill="#000" fill-opacity="0.07"/>
+        <text x="384" y="221" font-size="13" fill="#000" fill-opacity="0.75" text-anchor="middle">Landmark</text>
+      </g>
+
+      <!-- card 1: video project with 2 blended clips — first card at 238, 8pt
+           below the chip row. An analysed project: the tag line under the size
+           line adds 14pt, and the video-only source line under the format line
+           adds another 16pt — so this card stands at 198pt where the original
+           unanalysed geometry was 164 (the format pill's taller size row is the
+           last 4). The source line reads count + bursts:
+           "4 source clips · 2 bursts at 120 fps"; a burstless shoot shows just
+           "N source clips", an import "1 source clip". -->
+        <!-- No blended-clip strip since 2026-09-06. The card carried one
+             (a horizontal scroller of clip thumbnails) until Steven called it
+             what it was: a row costing every blended project ~78pt of list for
+             a jump you can make from the project itself. Its removal also takes
+             the macOS scroll bug with it — an inner NSScrollView swallowed the
+             vertical wheel events a nested horizontal scroller has no use for,
+             so the list stuck whenever the pointer crossed the strip. The count
+             line ("2 blended clips · 1.4 GB") still says they exist, and the
+             project's own screen lists them. -->
+      <g id="card-video-project">
+        <rect x="16" y="238" width="361" height="120" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="250" width="86" height="64" rx="8" fill="#3D4A5C"/>
+        <circle cx="56" cy="270" r="9" fill="#FFB340" opacity="0.85"/>
+        <polygon points="30,298 60,282 92,296 116,286 116,314 30,314" fill="#232B36"/>
+        <rect x="62" y="296" width="50" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="87" y="307" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">0:36</text>
+        <text x="128" y="267" font-size="16" class="b" fill="#000">Sunset over harbour</text>
+        <text x="128" y="284" font-size="12" fill="#6D6D72">Video · 1080p · 30 fps · 2 days ago</text>
+        <text x="128" y="300" font-size="12" fill="#6D6D72" id="source-line-1" data-note="video-kind only">4 source clips · 2 bursts at 120 fps</text>
+        <text x="128" y="318" font-size="12" class="sb" fill="#C36A00">2 blended clips · 1.4 GB</text>
+        <!-- source-format pill — SourceFormatPill, 7pt after the size line and
+             sharing its row: what this project's SOURCE is. Icon = stills or
+             footage, text = the file type the frames were written in, FLAT =
+             the shoot was captured flat (video: Apple Log engaged — this
+             shoot wasn't, so no FLAT; card 2 carries that state). 18pt tall,
+             so the row it sits in is 18 rather than the text's 14.3 — worth 4pt
+             to any card whose text column is taller than its thumbnail. -->
+        <g id="format-pill-1" data-component="SourceFormatPill">
+          <rect x="282" y="305" width="53" height="18" rx="9" fill="#000" fill-opacity="0.06" stroke="#000" stroke-opacity="0.08"/>
+          <g stroke="#6D6D72" stroke-width="1.1" fill="none" data-symbol="video">
+            <rect x="288" y="309.5" width="8" height="7" rx="2"/>
+            <path d="M296.5 311.5 l2.6 -1.5 v5 l-2.6 -1.5 z"/>
+          </g>
+          <text x="303.5" y="317.5" font-size="10" class="b" fill="#6D6D72">MOV</text>
+        </g>
+        <g id="tag-line-1" data-component="SceneTagLine">
+          <rect x="128" y="328" width="44" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="150" y="340" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Water</text>
+          <rect x="177" y="328" width="87" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="220" y="340" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Sky &amp; weather</text>
+          <rect x="269" y="328" width="60" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="299" y="340" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Landmark</text>
+          <text x="336" y="340" font-size="10.5" class="sb" fill="#8A8A90">+1</text>
+        </g>
+      </g>
+
+      <!-- card 2: interval project with 1 blended clip — 14pt below card 1.
+           NO source line: its count already lives in the format line
+           ("Interval · 184 photos", matching the thumbnail badge), and interval
+           shoots cannot carry bursts. -->
+      <g id="card-interval-project" transform="translate(0,-78)">
+        <rect x="16" y="450" width="361" height="104" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="462" width="86" height="64" rx="8" fill="#4A3B2E"/>
+        <circle cx="60" cy="484" r="8" fill="#FFD9A0" opacity="0.8"/>
+        <polygon points="30,510 62,494 94,508 116,500 116,526 30,526" fill="#2E2419"/>
+        <rect x="48" y="508" width="64" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="80" y="519" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">184 photos</text>
+        <text x="128" y="479" font-size="16" class="b" fill="#000">Interval — harbour dusk</text>
+        <text x="128" y="496" font-size="12" fill="#6D6D72">Interval · 184 photos · yesterday</text>
+        <text x="128" y="514" font-size="12" class="sb" fill="#C36A00">1 blended clip · 3.1 GB</text>
+        <!-- stills shot with Capture Flat on: the low-contrast grade is baked
+             into the JPEGs, so the pill ends FLAT in accent. This is the case
+             the flag exists for — Capture Flat is a JPEG grade and never
+             applies to the DNG path, where the sidecar records nil (reads the
+             same as off, as on a plain "DNG" pill). -->
+        <g id="format-pill-2" data-component="SourceFormatPill">
+          <rect x="275" y="501" width="80" height="18" rx="9" fill="#000" fill-opacity="0.06" stroke="#000" stroke-opacity="0.08"/>
+          <g stroke="#6D6D72" stroke-width="1.1" fill="none" data-symbol="photo">
+            <rect x="281" y="505.5" width="9.5" height="7.5" rx="2"/>
+            <path d="M282.5 511.5 l2.4 -2.6 1.9 2 1.4 -1.5 2 2.1"/>
+          </g>
+          <text x="295.5" y="513.5" font-size="10" class="b" fill="#6D6D72">JPG</text>
+          <text x="321" y="513.5" font-size="10" class="b" fill="#C36A00">FLAT</text>
+        </g>
+        <g id="tag-line-2" data-component="SceneTagLine">
+          <rect x="128" y="524" width="44" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="150" y="536" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Water</text>
+          <rect x="177" y="524" width="42" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="198" y="536" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Urban</text>
+          <!-- tagged automatically: this project's tags came from the silent Apple
+               Vision pass at capture time, not from a run the user confirmed.
+               10pt sparkles, accent at 70%, 6pt after the last chip, inside the
+               tag line — so it costs the card no height. Comes off the moment an
+               Auto rename & tag proposal is applied. -->
+          <g data-symbol="sparkles" opacity="0.7" fill="#C36A00">
+            <path d="M229 526 l1.6 3.6 3.6 1.6 -3.6 1.6 -1.6 3.6 -1.6 -3.6 -3.6 -1.6 3.6 -1.6 z"/>
+            <path d="M236 532.5 l0.9 2 2 0.9 -2 0.9 -0.9 2 -0.9 -2 -2 -0.9 2 -0.9 z"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- card 3: photo project (single asset), never analysed, so
+           no tag line and the original 88pt height — 14pt below card 2. Its
+           height survives the format pill because the 64pt thumbnail, not the
+           text column, is what sets it. Stays
+           ONE asset: no source count, no burst-frame count (that material is
+           owned by project detail's "Frames behind this photo"). -->
+      <g id="card-photo-project" transform="translate(0,-156)">
+        <rect x="16" y="646" width="361" height="88" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="658" width="86" height="64" rx="8" fill="#26303C"/>
+        <ellipse cx="73" cy="684" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
+        <rect x="60" y="704" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="86" y="715" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
+        <text x="128" y="675" font-size="16" class="b" fill="#000">Long exposure — falls</text>
+        <text x="128" y="692" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
+        <text x="128" y="710" font-size="12" class="sb" fill="#6D6D72">48 MB</text>
+        <!-- the pill is on every card, photo captures included — one asset is
+             still an asset, and its file type is the one thing the lines above
+             don't say. This card's height doesn't move: its text column is
+             shorter than the 64pt thumbnail, so the thumbnail still sets it. -->
+        <g id="format-pill-3" data-component="SourceFormatPill">
+          <rect x="166" y="697" width="50" height="18" rx="9" fill="#000" fill-opacity="0.06" stroke="#000" stroke-opacity="0.08"/>
+          <g stroke="#6D6D72" stroke-width="1.1" fill="none" data-symbol="photo">
+            <rect x="172" y="701.5" width="9.5" height="7.5" rx="2"/>
+            <path d="M173.5 707.5 l2.4 -2.6 1.9 2 1.4 -1.5 2 2.1"/>
+          </g>
+          <text x="186.5" y="709.5" font-size="10" class="b" fill="#6D6D72">JPG</text>
+        </g>
+      </g>
+
+      <!-- floating tab bar (Projects selected) -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <g transform="translate(56.5 776) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g id="tab-gallery" fill="none" stroke="#8E8E93">
+          <g transform="translate(126.5 776) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <rect x="163.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-projects" fill="none" stroke="#C36A00">
+          <g transform="translate(196.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <g transform="translate(266.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <g id="tab-settings" fill="none" stroke="#8E8E93">
+          <g transform="translate(336.5 776) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- ===== THE SHEET (ProjectSharingSheet) — what the pill opens =====
+           A medium detent on the phone; a fixed 360×520 panel on the Mac. Four
+           things and no more: the switch, the code, the code as a QR, and what
+           the server is doing. The switch is the SAME UserDefaults key
+           (`transfer.sharingEnabled`) Settings ▸ Advanced writes, bound through
+           from the list — one state, not two that agree by convention. -->
+      <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.30"/>
+      <!-- ===== PROJECT SYNCING (ProjectSyncSheet, 2026-09-15) — the sheet at its
+           LARGE detent so the whole of it is on one screen (a medium detent shows
+           the PicPlace block and the switch; the code and the QR are a scroll
+           below). PICPLACE first: the account and what the server holds of it, one
+           status line (decisions waiting > what auto-sync is doing > the first
+           connection > the last problem > "Edits go to PicPlace as you make them"),
+           the *Check PicPlace now* button (bordered, accent) with the last check's
+           line under it, and "All PicPlace settings ›" — which selects the Settings
+           tab and scrolls its list to the PICPLACE card. Signed out, the block is
+           one prominent button, "Sign in with PicPlace" (or "Sign in as @user" on a
+           bound library), over "Keep a copy of your projects on picplace.co"; signed
+           in on a library that is not this account's, "Connect this library" (or
+           whose it is). Nothing about the server's address is here — that is
+           Settings' alone. Then NEARBY DEVICES, exactly the block this sheet always
+           had. The same sheet opens from the Gallery header's pill
+           (gallery.portrait.svg). -->
+      <g id="sharing-sheet">
+        <path d="M0 862 L0 70 a10 10 0 0 1 10 -10 L383 60 a10 10 0 0 1 10 10 L393 862 Z" fill="#F2F2F7"/>
+        <rect x="178.5" y="68" width="36" height="5" rx="2.5" fill="#000" fill-opacity="0.2"/>
+
+        <g id="sheet-header">
+          <text x="16" y="94" font-size="17" class="b" fill="#000">Project Syncing</text>
+          <g data-symbol="xmark.circle.fill" transform="translate(367,88)">
+            <circle cx="0" cy="0" r="10" fill="#8A8A8E" fill-opacity="0.45"/>
+            <path d="M-3.6 -3.6 L3.6 3.6 M3.6 -3.6 L-3.6 3.6" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          </g>
+          <line x1="0" y1="108" x2="393" y2="108" stroke="#000" stroke-opacity="0.10"/>
+        </g>
+
+        <!-- PICPLACE — signed in and connected (the Mac play-pen's state on
+             2026-09-15: 118 projects, auto-sync on, a check that brought 53) -->
+        <g id="sheet-picplace">
+          <text x="20" y="132" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PICPLACE</text>
+
+          <!-- checkmark.icloud.fill, green: the account line -->
+          <g data-symbol="checkmark.icloud.fill" transform="translate(16,150)">
+            <path d="M4 12 a4 4 0 0 1 0.6 -7.9 a5.5 5.5 0 0 1 10.4 -1.2 a4 4 0 0 1 1.5 9.1 Z" fill="#34C759"/>
+            <path d="M6.2 6.6 L8.4 8.8 L12.6 4.2" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <text x="40" y="162" font-size="15" class="sb" fill="#000">@regularsteven on picplace.test · 118 projects</text>
+
+          <!-- pause.circle: auto-sync held by Only on Wi-Fi (autoHold) -->
+          <g data-symbol="pause.circle" transform="translate(16,178)" fill="none" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round">
+            <circle cx="8.5" cy="8.5" r="7.5"/>
+            <path d="M6.3 5.6 v5.8 M10.7 5.6 v5.8"/>
+          </g>
+          <text x="40" y="190" font-size="13.5" fill="#6D6D72">Auto-sync waiting for Wi-Fi</text>
+
+          <!-- UPLOADS — uploadsBlock: one row per upload job, oldest first -->
+          <g id="sheet-uploads">
+            <rect x="16" y="204" width="361" height="270" rx="12" fill="#FFFFFF"/>
+
+            <g id="upload-row-paused">
+              <text x="28" y="230" font-size="15" font-weight="500" fill="#000">Upload paused</text>
+              <text x="28" y="246" font-size="12" fill="#6D6D72">Tram morning</text>
+              <rect x="28" y="256" width="337" height="4" rx="2" fill="#E9E9EB"/>
+              <rect x="28" y="256" width="169" height="4" rx="2" fill="#8E8E93"/>
+              <text x="28" y="278" font-size="12" fill="#6D6D72">132 of 260 files · 5.8 GB of 11.55 GB · what reached</text>
+              <text x="28" y="292" font-size="12" fill="#6D6D72">PicPlace stays — Resume sends the rest</text>
+              <g data-control="bordered" data-tint="secondary">
+                <rect x="194" y="301" width="71" height="32" rx="16" fill="#8E8E93" fill-opacity="0.15"/>
+                <text x="229.5" y="322" font-size="13.5" class="sb" fill="#6D6D72" text-anchor="middle">Cancel</text>
+              </g>
+              <g data-control="bordered" data-tint="accent">
+                <rect x="273" y="301" width="92" height="32" rx="16" fill="#C36A00" fill-opacity="0.15"/>
+                <path data-symbol="play.fill" d="M285 311.5 L294 317 L285 322.5 Z" fill="#C36A00"/>
+                <text x="299" y="322" font-size="13.5" class="sb" fill="#C36A00">Resume</text>
+              </g>
+            </g>
+
+            <g id="upload-row-waiting">
+              <text x="28" y="359" font-size="15" font-weight="500" fill="#000">Waiting for Wi-Fi</text>
+              <text x="28" y="375" font-size="12" fill="#6D6D72">Stack 23. 9. at 21:04</text>
+              <rect x="28" y="385" width="337" height="4" rx="2" fill="#E9E9EB"/>
+              <rect x="28" y="385" width="15" height="4" rx="2" fill="#8E8E93"/>
+              <text x="28" y="407" font-size="12" fill="#6D6D72">40 of 922 files · 501 MB of 11.55 GB · Only on Wi-Fi is on —</text>
+              <text x="28" y="421" font-size="12" fill="#6D6D72">it goes when Wi-Fi is back</text>
+              <g data-control="bordered" data-tint="secondary">
+                <rect x="136" y="430" width="71" height="32" rx="16" fill="#8E8E93" fill-opacity="0.15"/>
+                <text x="171.5" y="451" font-size="13.5" class="sb" fill="#6D6D72" text-anchor="middle">Cancel</text>
+              </g>
+              <g data-control="bordered" data-tint="accent">
+                <rect x="215" y="430" width="150" height="32" rx="16" fill="#C36A00" fill-opacity="0.15"/>
+                <g data-symbol="antenna.radiowaves.left.and.right" transform="translate(231,446)" fill="none" stroke="#C36A00" stroke-width="1.5" stroke-linecap="round">
+                  <circle cx="0" cy="0" r="1.6" fill="#C36A00" stroke="none"/>
+                  <path d="M-3.6 -3.4 a5 5 0 0 0 0 6.8 M3.6 -3.4 a5 5 0 0 1 0 6.8 M-6.2 -5.8 a8.4 8.4 0 0 0 0 11.6 M6.2 -5.8 a8.4 8.4 0 0 1 0 11.6"/>
+                </g>
+                <text x="244" y="451" font-size="13.5" class="sb" fill="#C36A00">Use mobile data</text>
+              </g>
+            </g>
+          </g>
+
+          <!-- Check PicPlace now — .bordered, tinted accent (280pt lower than the base file) -->
+          <g id="sheet-check">
+            <rect x="16" y="484" width="361" height="40" rx="10" fill="#C36A00" fill-opacity="0.15"/>
+            <g data-symbol="arrow.clockwise.icloud" transform="translate(126,504)" fill="none" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M-7 4 a4 4 0 0 1 0.6 -7.9 a5.5 5.5 0 0 1 10.4 -1.2 a4 4 0 0 1 1.5 9.1 Z"/>
+              <path d="M-1.5 -1 a3 3 0 1 1 -0.8 2.2 M-2.8 -1.6 L-1.5 -1 L-1.2 -2.4"/>
+            </g>
+            <text x="146" y="509" font-size="15" class="sb" fill="#C36A00">Check PicPlace now</text>
+          </g>
+          <text x="16" y="542" font-size="13" fill="#6D6D72">Checked 2 minutes ago · 53 brought here</text>
+
+          <!-- the way to the full card: selects Settings, scrolls to PICPLACE -->
+          <text x="16" y="568" font-size="13.5" class="sb" fill="#C36A00">All PicPlace settings</text>
+          <path d="M158 562 L162 566 L158 570" fill="none" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+
+        <text x="20" y="598" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">NEARBY DEVICES</text>
+
+        <!-- the block this sheet always had, 99pt higher than before the PicPlace
+             block took the top of the sheet -->
+        <g transform="translate(0,181)">
+        <!-- the Settings switch, in the place the code is read -->
+        <g id="sheet-toggle">
+          <text x="16" y="451" font-size="15" class="sb" fill="#000">Share with nearby devices</text>
+          <rect x="326" y="429" width="51" height="31" rx="15.5" fill="#34C759"/>
+          <circle cx="361.5" cy="444.5" r="13.5" fill="#FFF"/>
+          <text x="16" y="478" font-size="13" fill="#6D6D72">The same switch as Settings ▸ Advanced. Anyone with the</text>
+          <text x="16" y="494" font-size="13" fill="#6D6D72">code can copy every project on this device, not just one.</text>
+        </g>
+
+        <!-- the code, 3+3, so it can be read off a phone on the desk and typed
+             on the Mac without losing your place -->
+        <text x="16" y="530" font-size="30" class="b mono" fill="#C36A00">379 783</text>
+
+        <!-- THE QR — PairingQR.image(code:), the payload LLXFER1:379783 at
+             correction M (version 1, 21 modules, 8.57pt each inside 180pt).
+             Drawn white-on-plate because it is photographed off this screen by
+             another phone's camera, and drawn from the LIVE code, so it rotates
+             with it and is simply absent while there is nothing to pair with.
+             The payload carries the code ALONE: the device's identity is
+             derivable from it (CaptureRemotePairing.pairingID is the same hash
+             the TXT record advertises), so the scanning end can check the code
+             against the device it already picked before a byte moves. -->
+        <g id="sheet-qr">
+          <rect x="96.5" y="535" width="200" height="200" rx="10" fill="#FFFFFF"/>
+            <rect x="106.50" y="545.00" width="60.00" height="8.57" fill="#000"/>
+            <rect x="183.64" y="545.00" width="8.57" height="8.57" fill="#000"/>
+            <rect x="226.50" y="545.00" width="60.00" height="8.57" fill="#000"/>
+            <rect x="106.50" y="553.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="157.93" y="553.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="192.21" y="553.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="209.36" y="553.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="226.50" y="553.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="277.93" y="553.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="562.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="123.64" y="562.14" width="25.71" height="8.57" fill="#000"/>
+            <rect x="157.93" y="562.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="209.36" y="562.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="226.50" y="562.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="243.64" y="562.14" width="25.71" height="8.57" fill="#000"/>
+            <rect x="277.93" y="562.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="570.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="123.64" y="570.71" width="25.71" height="8.57" fill="#000"/>
+            <rect x="157.93" y="570.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="183.64" y="570.71" width="17.14" height="8.57" fill="#000"/>
+            <rect x="209.36" y="570.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="226.50" y="570.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="243.64" y="570.71" width="25.71" height="8.57" fill="#000"/>
+            <rect x="277.93" y="570.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="579.29" width="8.57" height="8.57" fill="#000"/>
+            <rect x="123.64" y="579.29" width="25.71" height="8.57" fill="#000"/>
+            <rect x="157.93" y="579.29" width="8.57" height="8.57" fill="#000"/>
+            <rect x="200.79" y="579.29" width="17.14" height="8.57" fill="#000"/>
+            <rect x="226.50" y="579.29" width="8.57" height="8.57" fill="#000"/>
+            <rect x="243.64" y="579.29" width="25.71" height="8.57" fill="#000"/>
+            <rect x="277.93" y="579.29" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="587.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="157.93" y="587.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="175.07" y="587.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="226.50" y="587.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="277.93" y="587.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="596.43" width="60.00" height="8.57" fill="#000"/>
+            <rect x="175.07" y="596.43" width="8.57" height="8.57" fill="#000"/>
+            <rect x="192.21" y="596.43" width="8.57" height="8.57" fill="#000"/>
+            <rect x="209.36" y="596.43" width="8.57" height="8.57" fill="#000"/>
+            <rect x="226.50" y="596.43" width="60.00" height="8.57" fill="#000"/>
+            <rect x="183.64" y="605.00" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="613.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="132.21" y="613.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="149.36" y="613.57" width="17.14" height="8.57" fill="#000"/>
+            <rect x="175.07" y="613.57" width="17.14" height="8.57" fill="#000"/>
+            <rect x="200.79" y="613.57" width="25.71" height="8.57" fill="#000"/>
+            <rect x="235.07" y="613.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="622.14" width="42.86" height="8.57" fill="#000"/>
+            <rect x="166.50" y="622.14" width="25.71" height="8.57" fill="#000"/>
+            <rect x="200.79" y="622.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="217.93" y="622.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="243.64" y="622.14" width="42.86" height="8.57" fill="#000"/>
+            <rect x="115.07" y="630.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="140.79" y="630.71" width="25.71" height="8.57" fill="#000"/>
+            <rect x="175.07" y="630.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="200.79" y="630.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="252.21" y="630.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="277.93" y="630.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="115.07" y="639.29" width="25.71" height="8.57" fill="#000"/>
+            <rect x="175.07" y="639.29" width="8.57" height="8.57" fill="#000"/>
+            <rect x="209.36" y="639.29" width="17.14" height="8.57" fill="#000"/>
+            <rect x="235.07" y="639.29" width="17.14" height="8.57" fill="#000"/>
+            <rect x="260.79" y="639.29" width="25.71" height="8.57" fill="#000"/>
+            <rect x="106.50" y="647.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="132.21" y="647.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="149.36" y="647.86" width="42.86" height="8.57" fill="#000"/>
+            <rect x="200.79" y="647.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="226.50" y="647.86" width="17.14" height="8.57" fill="#000"/>
+            <rect x="252.21" y="647.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="269.36" y="647.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="175.07" y="656.43" width="17.14" height="8.57" fill="#000"/>
+            <rect x="217.93" y="656.43" width="8.57" height="8.57" fill="#000"/>
+            <rect x="235.07" y="656.43" width="51.43" height="8.57" fill="#000"/>
+            <rect x="106.50" y="665.00" width="60.00" height="8.57" fill="#000"/>
+            <rect x="183.64" y="665.00" width="8.57" height="8.57" fill="#000"/>
+            <rect x="200.79" y="665.00" width="25.71" height="8.57" fill="#000"/>
+            <rect x="252.21" y="665.00" width="17.14" height="8.57" fill="#000"/>
+            <rect x="106.50" y="673.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="157.93" y="673.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="175.07" y="673.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="217.93" y="673.57" width="25.71" height="8.57" fill="#000"/>
+            <rect x="252.21" y="673.57" width="17.14" height="8.57" fill="#000"/>
+            <rect x="277.93" y="673.57" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="682.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="123.64" y="682.14" width="25.71" height="8.57" fill="#000"/>
+            <rect x="157.93" y="682.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="183.64" y="682.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="209.36" y="682.14" width="17.14" height="8.57" fill="#000"/>
+            <rect x="243.64" y="682.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="277.93" y="682.14" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="690.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="123.64" y="690.71" width="25.71" height="8.57" fill="#000"/>
+            <rect x="157.93" y="690.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="175.07" y="690.71" width="25.71" height="8.57" fill="#000"/>
+            <rect x="235.07" y="690.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="252.21" y="690.71" width="8.57" height="8.57" fill="#000"/>
+            <rect x="269.36" y="690.71" width="17.14" height="8.57" fill="#000"/>
+            <rect x="106.50" y="699.29" width="8.57" height="8.57" fill="#000"/>
+            <rect x="123.64" y="699.29" width="25.71" height="8.57" fill="#000"/>
+            <rect x="157.93" y="699.29" width="8.57" height="8.57" fill="#000"/>
+            <rect x="183.64" y="699.29" width="25.71" height="8.57" fill="#000"/>
+            <rect x="226.50" y="699.29" width="17.14" height="8.57" fill="#000"/>
+            <rect x="260.79" y="699.29" width="8.57" height="8.57" fill="#000"/>
+            <rect x="277.93" y="699.29" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="707.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="157.93" y="707.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="183.64" y="707.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="200.79" y="707.86" width="17.14" height="8.57" fill="#000"/>
+            <rect x="235.07" y="707.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="277.93" y="707.86" width="8.57" height="8.57" fill="#000"/>
+            <rect x="106.50" y="716.43" width="60.00" height="8.57" fill="#000"/>
+            <rect x="175.07" y="716.43" width="8.57" height="8.57" fill="#000"/>
+            <rect x="192.21" y="716.43" width="8.57" height="8.57" fill="#000"/>
+            <rect x="243.64" y="716.43" width="25.71" height="8.57" fill="#000"/>
+        </g>
+
+        <text x="16" y="758" font-size="13" fill="#6D6D72">On the other device: Create ▸ Import a LetsLapse project ▸</text>
+        <text x="16" y="774" font-size="13" fill="#6D6D72">From another device, pick this one, then point its camera</text>
+        <text x="16" y="790" font-size="13" fill="#6D6D72">here — or type the code.</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Projects · sync panel · uploads · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectSharingChip.swift (uploadsBlock) — two uploads held: paused · waiting for Wi-Fi</text>
+</svg>
