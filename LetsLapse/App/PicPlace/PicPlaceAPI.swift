@@ -142,6 +142,28 @@ struct PPAsset: Decodable {
     var bytes: Int64?
     var sha256: String?
     var status: String
+    /// PicPlace has read its stored copy back and found `sha256`
+    /// (2026-09-24). picplace.co's storage does not check a PUT's bytes, so
+    /// a new upload reads false for a minute or two after its confirm;
+    /// picplace.test's checks at the PUT and reads true at confirm. nil from
+    /// a server that does not say — treated as not verified. (`verified_at`
+    /// is not read: nothing here needs when, and a date that failed to parse
+    /// would fail the whole list.)
+    var verified: Bool?
+}
+
+/// `POST /projects/assets` — many projects' asset lists in one read (the
+/// server's answer to free-up ask 3, `features.asset_lists_batch`): results
+/// in request order, an unknown uuid as `{uuid, error}`, and `next` — the
+/// uuids the response's size cap left for another request.
+struct PPAssetLists: Decodable {
+    struct Entry: Decodable {
+        var uuid: String
+        var assets: [PPAsset]?
+        var error: String?
+    }
+    var projects: [Entry]
+    var next: [String]?
 }
 
 struct PPUpload: Decodable {
@@ -153,8 +175,20 @@ struct PPUpload: Decodable {
 }
 
 struct PPNegotiation: Decodable {
-    var asset: PPAsset
+    /// nil on a refused item (then `error` says why).
+    var asset: PPAsset?
     var upload: PPUpload?
+    /// A per-item refusal. `asset_immutable`: PicPlace holds a confirmed
+    /// original at this path with other bytes and keeps its own (the
+    /// free-up server asks, round 2 Q2) — `asset` is that copy when sent.
+    var error: String?
+    var message: String?
+
+    /// Whether `error` is PicPlace keeping its confirmed copy of an
+    /// original rather than a failure of the push.
+    static func isImmutableRefusal(_ error: String) -> Bool {
+        error == "asset_immutable"
+    }
 }
 
 /// `GET /projects[?updated_since=]` — the account's index. `server_time` is

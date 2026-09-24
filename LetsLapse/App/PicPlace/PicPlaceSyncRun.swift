@@ -4,7 +4,9 @@ import LetsLapseKit
 
 /// Where a sync is: the card's caption and bar come from this.
 struct PicPlaceSyncProgress: Equatable {
-    enum Phase: Equatable { case claiming, preparing, manifest, negotiating, uploading, confirming, finishing, downloading }
+    /// `verifying` and `removing` are free up space's (2026-09-23): the
+    /// file-by-file check with PicPlace, then the removal from this device.
+    enum Phase: Equatable { case claiming, preparing, manifest, negotiating, uploading, confirming, finishing, downloading, verifying, removing }
     var phase: Phase = .claiming
     var filesDone = 0
     var filesTotal = 0
@@ -68,6 +70,25 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     /// for it from this library; the card says where it is.
     var elsewhereLibrary: String?
     var elsewhereName: String?
+    /// Free up space (2026-09-23): the heavy set here — every source file
+    /// and blend, by path and size (`PicPlaceOriginalsCheck.digest`) — as it
+    /// was when this device last saw PicPlace hold all of it, file by file:
+    /// an originals push, or the check before a removal. A different set
+    /// here now means something was added or rewritten since, and is not
+    /// known to be on PicPlace. nil: never verified (a push from before).
+    var heavyDigest: String?
+    /// When this device last removed originals or blends PicPlace holds.
+    var removedAt: Date?
+    /// Heavy files here that PicPlace would not take because its confirmed
+    /// copy at that path differs (a server that keeps originals immutable,
+    /// free-up server asks round 2) — PicPlace keeps its own; the card says
+    /// so and, where PicPlace's copy is provably the recorded original,
+    /// offers to replace these with it. Set by the last originals push.
+    var divergentFiles: [String]?
+    /// Heavy files the last originals push found changed since
+    /// `assets.ndjson` recorded them: they went up as they are now, and the
+    /// card says so.
+    var changedFiles: [String]?
 
     /// Whether the records — bundle and poster — of a push by THIS device
     /// reached the server: a record that has only ever failed has none.
@@ -138,6 +159,16 @@ struct PicPlaceSyncRun {
         var url: URL
         var bytes: Int64
         var sha256: String
+        /// Hashed afresh and found different from what `assets.ndjson`
+        /// recorded: the file changed since it was recorded.
+        var changedSinceRecorded = false
+
+        /// The item as a heavy file (a source frame or a blend), else nil —
+        /// the heavy kinds are the check's own (`source`, `blend`).
+        var heavyFile: PicPlaceOriginalsCheck.LocalFile? {
+            guard let heavy = PicPlaceOriginalsCheck.Kind(rawValue: kind) else { return nil }
+            return .init(name: name, kind: heavy, bytes: bytes, sha256: sha256)
+        }
     }
 
     /// What the policy sends, and what it counted on the way.
@@ -154,9 +185,25 @@ struct PicPlaceSyncRun {
         var upload: PPUpload
     }
 
+    /// What one PUT ended as.
+    private struct Uploaded {
+        var name: String
+        var bytes: Int64
+        var assetID: String
+        var sha256: String
+        /// The file no longer matched the hash `assets.ndjson` held: it went
+        /// up under its fresh hash (storage refused the recorded one).
+        var changed = false
+        /// PicPlace refused it at the re-negotiation: its confirmed copy at
+        /// this path differs and it keeps its own. Not uploaded.
+        var divergent = false
+    }
+
     let client: PicPlaceClient
     let project: Project
     let thisDeviceID: String?
+    /// Where a file found changed since it was hashed gets its fresh record.
+    var assetStore: AssetRecordStore? = nil
     let progress: @MainActor (PicPlaceSyncProgress) -> Void
 
     private static let batchSize = 100
@@ -208,8 +255,17 @@ struct PicPlaceSyncRun {
             await report { $0.phase = .preparing }
             let inventory = try await Self.inventory(of: project.folder, policy: project.policy)
             bundleURL = inventory.bundleURL
-            let files = inventory.files
+            var files = inventory.files
             try Task.checkCancellation()
+
+            // Copies PicPlace refuses to replace (its write-once rule for
+            // confirmed originals — a per-server switch, off until every
+            // device runs a build whose originals never change) are named
+            // here. Rotate 90° no longer writes to a file (a record since
+            // 2026-09-24); a re-conversion and a scan re-correction still
+            // rewrite theirs in place (TODO "Rotate 90° as a project record",
+            // the write-once companions) and are what would be refused.
+            var divergent: [String] = []
             let totalBytes = files.reduce(Int64(0)) { $0 + $1.bytes }
             await report { $0.filesTotal = files.count; $0.bytesTotal = totalBytes }
 
@@ -217,9 +273,11 @@ struct PicPlaceSyncRun {
             // beside it — inline under the server's cap, as a `manifest`
             // asset over it (the server's own overflow shape).
             await report { $0.phase = .manifest }
-            let manifestURL = project.folder.appendingPathComponent(ProjectFileRegistry.projectDocumentName)
-            let manifestData = try Data(contentsOf: manifestURL)
-            let manifest = try JSONSerialization.jsonObject(with: manifestData)
+            let documentURL = project.folder.appendingPathComponent(ProjectFileRegistry.projectDocumentName)
+            let manifest = try Self.sharedManifest(Data(contentsOf: documentURL))
+            let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys, .withoutEscapingSlashes])
+            // The overflow asset is the sent document, written beside the bundle.
+            let manifestURL = project.folder.appendingPathComponent("tmp/\(ProjectFileRegistry.projectDocumentName)")
             var body: [String: Any] = [
                 "name": project.name,
                 "type": project.type,
@@ -238,25 +296,35 @@ struct PicPlaceSyncRun {
                 LLog("picplace: manifest of \(uuid) is \(compactBytes) bytes, over the \(project.manifestMaxBytes)-byte cap — sending it as an asset")
                 body["manifest"] = ["manifest_asset": NSNull()]
                 let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
+                try FileManager.default.createDirectory(at: manifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try manifestData.write(to: manifestURL, options: .atomic)
                 let item = FileItem(name: ProjectFileRegistry.projectDocumentName, kind: "manifest", url: manifestURL,
                                     bytes: Int64(manifestData.count), sha256: try Self.sha256(of: manifestURL))
                 let negotiated: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: ["assets": [Self.negotiateFields(item)]])
-                guard let result = negotiated["assets"]?.first else { throw Failed(caption: "PicPlace did not negotiate the manifest.") }
+                guard let result = negotiated["assets"]?.first, let manifestAsset = result.asset else {
+                    throw Failed(caption: negotiated["assets"]?.first?.message ?? "PicPlace did not negotiate the manifest.")
+                }
                 if let upload = result.upload {
-                    _ = try await self.upload(PendingUpload(item: item, assetID: result.asset.id, upload: upload))
-                    let confirmed: [String: [PPConfirmResult]] = try await client.post("projects/\(uuid)/assets/confirm", json: ["assets": [["id": result.asset.id, "sha256": item.sha256]]])
+                    let sent = try await self.upload(PendingUpload(item: item, assetID: manifestAsset.id, upload: upload))
+                    let confirmed: [String: [PPConfirmResult]] = try await client.post("projects/\(uuid)/assets/confirm", json: ["assets": [["id": sent.assetID, "sha256": sent.sha256]]])
                     if let failure = (confirmed["assets"] ?? []).first(where: { $0.error != nil }) {
                         throw Failed(caption: failure.message ?? failure.error!)
                     }
                 }
-                body["manifest"] = ["manifest_asset": result.asset.id]
+                body["manifest"] = ["manifest_asset": manifestAsset.id]
                 let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
             }
 
-            // 4. Negotiate in batches; unchanged files come back without an upload.
+            // 4. Negotiate in batches; unchanged files come back without an
+            //    upload. An original PicPlace will not replace — its confirmed
+            //    copy at that path differs (free-up server asks, round 2 Q2) —
+            //    is set aside and named on the record: not a failed push to
+            //    retry, a difference for the person to see.
             await report { $0.phase = .negotiating }
             var pending: [PendingUpload] = []
-            var assetIDs: [String: (id: String, sha256: String)] = [:]
+            // Heavy files whose PicPlace copy has not been read back yet
+            // (`verified`): the set's marker waits for them.
+            var unverifiedHeavy = Set<String>()
             for batch in files.chunked(Self.batchSize) {
                 try Task.checkCancellation()
                 lastClaim = try await reclaimIfStale(lastClaim)
@@ -264,10 +332,19 @@ struct PicPlaceSyncRun {
                 let response: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: request)
                 let results = response["assets"] ?? []
                 for (item, result) in zip(batch, results) {
-                    assetIDs[item.name] = (result.asset.id, item.sha256)
+                    if let error = result.error {
+                        if PPNegotiation.isImmutableRefusal(error), item.heavyFile != nil {
+                            divergent.append(item.name)
+                            await report { $0.filesDone += 1; $0.bytesDone += item.bytes }
+                            continue
+                        }
+                        throw Failed(caption: "\(item.name): \(result.message ?? error)")
+                    }
+                    guard let asset = result.asset else { throw Failed(caption: "PicPlace did not negotiate \(item.name).") }
                     if let upload = result.upload {
-                        pending.append(PendingUpload(item: item, assetID: result.asset.id, upload: upload))
+                        pending.append(PendingUpload(item: item, assetID: asset.id, upload: upload))
                     } else {
+                        if item.heavyFile != nil, asset.verified != true { unverifiedHeavy.insert(item.name) }
                         await report { $0.filesDone += 1; $0.bytesDone += item.bytes }
                     }
                 }
@@ -275,8 +352,8 @@ struct PicPlaceSyncRun {
 
             // 5. PUT straight to object storage, a few at a time, exactly the headers the server signed.
             await report { $0.phase = .uploading }
-            var confirmations: [(id: String, sha256: String)] = pending.map { ($0.assetID, $0.item.sha256) }
-            try await withThrowingTaskGroup(of: Int64.self) { group in
+            var uploaded: [Uploaded] = []
+            try await withThrowingTaskGroup(of: Uploaded.self) { group in
                 var iterator = pending.makeIterator()
                 var inFlight = 0
                 func enqueue() {
@@ -286,24 +363,61 @@ struct PicPlaceSyncRun {
                 }
                 for _ in 0 ..< Self.concurrentUploads { enqueue() }
                 while inFlight > 0 {
-                    let bytes = try await group.next()!
+                    let done = try await group.next()!
                     inFlight -= 1
-                    await report { $0.filesDone += 1; $0.bytesDone += bytes }
+                    uploaded.append(done)
+                    await report { $0.filesDone += 1; $0.bytesDone += done.bytes }
                     try Task.checkCancellation()
                     enqueue()
                 }
+            }
+            divergent += uploaded.filter(\.divergent).map(\.name)
+            // A file that had changed since it was recorded — seen before the
+            // upload (hashed afresh) or after storage refused its recorded
+            // hash — went up as it is now, unless PicPlace kept its own copy:
+            // its record follows, so the next look trusts it again.
+            let rehashed = Dictionary(uploaded.filter(\.changed).map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+            var changedHashes: [(name: String, bytes: Int64, sha256: String)] = []
+            for item in files where item.heavyFile != nil {
+                if let file = rehashed[item.name] {
+                    changedHashes.append((file.name, file.bytes, file.sha256))
+                } else if item.changedSinceRecorded {
+                    changedHashes.append((item.name, item.bytes, item.sha256))
+                }
+            }
+            // Not for a copy PicPlace kept its own of: that record is the
+            // capture-time witness the card's Replace is judged by.
+            let divergentNames = Set(divergent)
+            changedHashes.removeAll { divergentNames.contains($0.name) }
+            try? assetStore?.noteHashes(changedHashes, inProjectFolder: project.folder)
+            let changed = changedHashes.map(\.name)
+            if !changed.isEmpty {
+                LLog("picplace: \(project.name) — \(changed.count) file(s) had changed since they were recorded and went up as they are now: \(changed.prefix(5).joined(separator: ", "))")
+            }
+            if !divergent.isEmpty {
+                LLog("picplace: \(project.name) — \(divergent.count) original(s) here differ from PicPlace's confirmed copies; PicPlace keeps its own: \(divergent.prefix(5).joined(separator: ", "))\(divergent.count > 5 ? ", …" : "")")
             }
 
             // 6. Confirm in batches; the server checks each object's size and records it.
             await report { $0.phase = .confirming }
             var failures: [String] = []
+            var confirmations: [(id: String, sha256: String)] = uploaded.filter { !$0.divergent }.map { ($0.assetID, $0.sha256) }
+            let heavyNames = Set(files.filter { $0.heavyFile != nil }.map(\.name))
+            let heavyByAssetID = Dictionary(
+                uploaded.filter { !$0.divergent && heavyNames.contains($0.name) }.map { ($0.assetID, $0.name) },
+                uniquingKeysWith: { first, _ in first })
             for batch in confirmations.chunked(Self.batchSize) {
                 try Task.checkCancellation()
                 lastClaim = try await reclaimIfStale(lastClaim)
                 let request: [String: Any] = ["assets": batch.map { ["id": $0.id, "sha256": $0.sha256] }]
                 let response: [String: [PPConfirmResult]] = try await client.post("projects/\(uuid)/assets/confirm", json: request)
-                for result in response["assets"] ?? [] where result.error != nil {
-                    failures.append(result.message ?? result.error!)
+                for result in response["assets"] ?? [] {
+                    if let error = result.error {
+                        failures.append(result.message ?? error)
+                    } else if let name = heavyByAssetID[result.id], result.asset?.verified != true {
+                        // picplace.co reads it back within a minute or two.
+                        unverifiedHeavy.insert(name)
+                    }
                 }
             }
             confirmations.removeAll()
@@ -322,12 +436,27 @@ struct PicPlaceSyncRun {
             // not release expires on its own and this device may re-claim it.
             let _: [String: PPClaim?]? = try? await client.delete("projects/\(uuid)/claim")
 
-            return PicPlaceSyncRecord(syncedAt: Date(), revision: project.revision, files: files.count, bytes: totalBytes,
-                                      uploaded: pending.count, alsoOn: alsoOn,
-                                      server: (try? await client.currentTokens().server) ?? PicPlaceConfiguration.serverString, lastError: nil,
-                                      policy: project.policy.rawValue,
-                                      heavyFiles: project.policy.sendsHeavy ? 0 : inventory.summary.heavyFiles,
-                                      heavyBytes: project.policy.sendsHeavy ? 0 : inventory.summary.heavyBytes)
+            var record = PicPlaceSyncRecord(syncedAt: Date(), revision: project.revision, files: files.count, bytes: totalBytes,
+                                            uploaded: pending.count, alsoOn: alsoOn,
+                                            server: (try? await client.currentTokens().server) ?? PicPlaceConfiguration.serverString, lastError: nil,
+                                            policy: project.policy.rawValue,
+                                            heavyFiles: project.policy.sendsHeavy ? 0 : inventory.summary.heavyFiles,
+                                            heavyBytes: project.policy.sendsHeavy ? 0 : inventory.summary.heavyBytes)
+            // Every heavy file here was negotiated by hash and is confirmed
+            // (uploaded now, or already there): the set's marker — unless
+            // PicPlace kept its own copy of some, which then differ, or has
+            // yet to read some back (`verified`; the originals queue's next
+            // look writes it once PicPlace has).
+            if project.policy.sendsHeavy {
+                if !unverifiedHeavy.isEmpty {
+                    LLog("picplace: \(project.name) — \(unverifiedHeavy.count) original(s) confirmed, PicPlace still checking them")
+                }
+                record.heavyDigest = divergent.isEmpty && unverifiedHeavy.isEmpty
+                    ? PicPlaceOriginalsCheck.digest(files.compactMap(\.heavyFile)) : nil
+                record.divergentFiles = divergent.isEmpty ? nil : divergent
+                record.changedFiles = changed.isEmpty ? nil : changed
+            }
+            return record
         } catch {
             // Whatever happened, do not leave the project locked for the next device.
             let _: [String: PPClaim?]? = try? await client.delete("projects/\(uuid)/claim")
@@ -341,8 +470,15 @@ struct PicPlaceSyncRun {
         return Date()
     }
 
-    /// PUT one file to its presigned URL; a URL that expired mid-run is re-negotiated once.
-    private func upload(_ pending: PendingUpload, retrying: Bool = false) async throws -> Int64 {
+    /// PUT one file to its presigned URL. A URL that expired mid-run is
+    /// re-negotiated once. A `400` from storage — once PicPlace signs the
+    /// declared SHA-256 into the URL (free-up server asks, Ask 1), storage
+    /// refusing bytes that do not hash to what was declared — re-hashes the
+    /// file once: a file that changed since `assets.ndjson` recorded it is
+    /// negotiated again under its fresh hash and goes up as it is now
+    /// (`changed`, which the card reports); one that still matches was
+    /// refused for another reason, which is the failure.
+    private func upload(_ pending: PendingUpload, retrying: Bool = false, rehashed: Bool = false) async throws -> Uploaded {
         var request = URLRequest(url: URL(string: pending.upload.url)!)
         request.httpMethod = pending.upload.method
         for (name, value) in pending.upload.headers where name.lowercased() != "host" {
@@ -369,15 +505,47 @@ struct PicPlaceSyncRun {
             throw Failed(caption: "Upload of \(pending.item.name) failed: \(error.localizedDescription)")
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if (200 ..< 300).contains(status) { return pending.item.bytes }
+        #if DEBUG
+        let forced400 = PicPlaceTransfer.forcesBadDigest(pending.item.name, rehashed: rehashed)
+        #else
+        let forced400 = false
+        #endif
+        if (200 ..< 300).contains(status), !forced400 {
+            return Uploaded(name: pending.item.name, bytes: pending.item.bytes, assetID: pending.assetID,
+                            sha256: pending.item.sha256, changed: rehashed)
+        }
         if status == 403, !retrying, Date() >= pending.upload.expiresAt.addingTimeInterval(-60) {
             let fresh: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: ["assets": [Self.negotiateFields(pending.item)]])
             if let upload = fresh["assets"]?.first?.upload {
-                return try await self.upload(PendingUpload(item: pending.item, assetID: pending.assetID, upload: upload), retrying: true)
+                return try await self.upload(PendingUpload(item: pending.item, assetID: pending.assetID, upload: upload), retrying: true, rehashed: rehashed)
             }
         }
+        if status == 400 || forced400, !rehashed {
+            let url = pending.item.url
+            let fresh = try await Task.detached(priority: .utility) { try Self.sha256(of: url) }.value
+            if fresh != pending.item.sha256 {
+                LLog("picplace: storage refused \(pending.item.name) — it no longer matches its recorded hash (\(pending.item.sha256.prefix(8)) → \(fresh.prefix(8))); sending it as it is now")
+                var item = pending.item
+                item.sha256 = fresh
+                let negotiated: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: ["assets": [Self.negotiateFields(item)]])
+                guard let result = negotiated["assets"]?.first else { throw Failed(caption: "PicPlace did not negotiate \(item.name).") }
+                if let error = result.error {
+                    if PPNegotiation.isImmutableRefusal(error) {
+                        return Uploaded(name: item.name, bytes: item.bytes, assetID: pending.assetID, sha256: fresh, changed: true, divergent: true)
+                    }
+                    throw Failed(caption: "\(item.name): \(result.message ?? error)")
+                }
+                guard let asset = result.asset else { throw Failed(caption: "PicPlace did not negotiate \(item.name).") }
+                guard let upload = result.upload else {
+                    // PicPlace already holds these exact bytes.
+                    return Uploaded(name: item.name, bytes: item.bytes, assetID: asset.id, sha256: fresh, changed: true)
+                }
+                return try await self.upload(PendingUpload(item: item, assetID: asset.id, upload: upload), rehashed: true)
+            }
+            LLog("picplace: storage refused \(pending.item.name) (400) though it still matches its hash")
+        }
         let detail = String(data: data, encoding: .utf8).map { $0.prefix(120) } ?? ""
-        throw Failed(caption: "Storage refused \(pending.item.name) (\(status)) \(detail)")
+        throw Failed(caption: "Storage refused \(pending.item.name) (\(forced400 ? 400 : status)) \(detail)")
     }
 
     // MARK: The folder
@@ -404,13 +572,17 @@ struct PicPlaceSyncRun {
 
         func hashed(_ item: PicPlaceSyncItem, kind: String) async throws -> FileItem {
             let sha: String
-            if let record = records[item.relativePath], let hash = record.hash, hash.hasPrefix("sha256:"), record.bytes == item.bytes {
-                sha = String(hash.dropFirst("sha256:".count))
+            var changed = false
+            if let recorded = recordedHash(records[item.relativePath], url: item.url, bytes: item.bytes) {
+                sha = recorded
             } else {
                 let url = item.url
                 sha = try await Task.detached(priority: .utility) { try sha256(of: url) }.value
+                // A record that no longer describes the file: it changed
+                // after it was recorded, and the run says so.
+                if let old = PicPlaceOriginalsCheck.normalized(records[item.relativePath]?.hash), old != sha { changed = true }
             }
-            return FileItem(name: item.relativePath, kind: kind, url: item.url, bytes: item.bytes, sha256: sha)
+            return FileItem(name: item.relativePath, kind: kind, url: item.url, bytes: item.bytes, sha256: sha, changedSinceRecorded: changed)
         }
 
         var files: [FileItem] = []
@@ -467,6 +639,44 @@ struct PicPlaceSyncRun {
             entries.append(FolderEntry(name: relative, url: url, bytes: Int64(values.fileSize ?? 0)))
         }
         return entries
+    }
+
+    /// The hash `assets.ndjson` recorded for a file, while it still
+    /// describes the file: the same size, and not modified after it was
+    /// hashed (two seconds' grace). nil: hash the file now. The one rule the
+    /// push, the originals queue and the free-up check share — a file
+    /// rewritten in place at its old size would otherwise be declared under
+    /// a stale hash (refused by storage once PicPlace signs it) and pass a
+    /// removal's check.
+    /// The project document as it goes to PicPlace: this device's own
+    /// measurement of its folder (`capture.sizeBytes`, `sizeMeasuredAt` —
+    /// the Projects list's size sort) left out. It describes this device's
+    /// copy, not the project: a phone holding previews measures megabytes
+    /// where one holding the originals measures gigabytes, and shared it
+    /// would overwrite each device's number with another's (the PicPlace
+    /// developer's catch, 2026-09-24). A pull keeps this device's
+    /// (`AppModel.applyPulledUpdate`).
+    static let deviceOnlyCaptureKeys = ["sizeBytes", "sizeMeasuredAt"]
+
+    static func sharedManifest(_ data: Data) throws -> [String: Any] {
+        guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw Failed(caption: "The project document is not a JSON object.")
+        }
+        if var capture = object["capture"] as? [String: Any] {
+            for key in deviceOnlyCaptureKeys { capture[key] = nil }
+            object["capture"] = capture
+        }
+        return object
+    }
+
+    static func recordedHash(_ record: AssetRecord?, url: URL, bytes: Int64) -> String? {
+        guard let record, record.bytes == bytes, let hash = PicPlaceOriginalsCheck.normalized(record.hash) else { return nil }
+        if let hashedAt = record.hashedAt,
+           let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+           modified > hashedAt.addingTimeInterval(2) {
+            return nil
+        }
+        return hash
     }
 
     static func sha256(of url: URL) throws -> String {

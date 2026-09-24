@@ -58,6 +58,9 @@ struct ProjectsView: View {
     @Binding var path: [UUID]
     @State private var previewItem: MediaPreviewItem?
     @State private var deleteFailure: String?
+    /// A swipe-delete of a project whose files are only on PicPlace waits
+    /// for a yes: the delete reaches PicPlace, which purges them at once.
+    @State private var pendingPicPlaceDelete: AppModel.CaptureProject?
     @State private var filter: CaptureFilter = .all
     /// Settings ▸ Advanced ▸ Layout. With the Scans tab off, scanner runs have
     /// nowhere else to be listed, so this list takes them in behind its own
@@ -162,6 +165,16 @@ struct ProjectsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(deleteFailure ?? "")
+            }
+            .alert(
+                "Delete “\(pendingPicPlaceDelete?.displayTitle ?? "")”?",
+                isPresented: Binding(get: { pendingPicPlaceDelete != nil }, set: { if !$0 { pendingPicPlaceDelete = nil } }),
+                presenting: pendingPicPlaceDelete
+            ) { capture in
+                Button("Delete", role: .destructive) { delete(capture, confirmed: true) }
+                Button("Cancel", role: .cancel) {}
+            } message: { capture in
+                Text(model.picplace.deletionWarning(for: capture) ?? "")
             }
             #if os(iOS)
             .toolbar(.hidden, for: .navigationBar)
@@ -546,8 +559,14 @@ struct ProjectsView: View {
     }
 
     /// Deliberately unconfirmed: swiping is the confirmation. Failures
-    /// (e.g. the project is mid-processing) surface in an alert.
-    private func delete(_ capture: AppModel.CaptureProject) {
+    /// (e.g. the project is mid-processing) surface in an alert. The one
+    /// exception asks first: files that exist only on PicPlace (free up
+    /// space, a preview), which the delete destroys there too.
+    private func delete(_ capture: AppModel.CaptureProject, confirmed: Bool = false) {
+        if !confirmed, model.picplace.deletionWarning(for: capture) != nil {
+            pendingPicPlaceDelete = capture
+            return
+        }
         do {
             try withAnimation {
                 try model.deleteCapture(capture)

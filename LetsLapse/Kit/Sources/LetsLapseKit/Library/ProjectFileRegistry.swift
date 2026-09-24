@@ -118,6 +118,12 @@ public enum ProjectFileRegistry {
     /// truth a staged corpus project is scored against.
     public static let sceneManifestName = SceneManifest.fileName
 
+    /// `posters/` — one still per blend whose file left this device to free
+    /// space (`posters/<blend id>.jpg`, ~960 px JPEG), so its row keeps a
+    /// picture; a record, carried in the PicPlace records bundle, so a
+    /// fresh device's blend rows show one too.
+    public static let blendPostersFolder = "posters"
+
     public static let all: [ProjectFile] = [
         // Capture-time records, beside the media.
         ProjectFile("frames.timestamps", at: .source, class: .captureFact, travels: true, isHotPath: true),
@@ -172,6 +178,10 @@ public enum ProjectFileRegistry {
         ProjectFile("dng-archive.json", at: .root, class: .captureFact, travels: false),
         // Renders.
         ProjectFile("blends/", at: .root, class: .derived, isDirectory: true, travels: true),
+        // A still per blend removed from this device (free up space,
+        // 2026-09-23). Derived — any device holding the blend can make it
+        // again — and small; travels so the row has a picture everywhere.
+        ProjectFile("posters/", at: .root, class: .derived, isDirectory: true, travels: true),
         ProjectFile("source/", at: .root, class: .captureFact, isDirectory: true, travels: true),
     ]
 
@@ -196,7 +206,7 @@ public enum ProjectFileRegistry {
     /// The sidecars the audit reports presence for, per project — every
     /// registered file that is not a media folder and names one file.
     public static var auditedSidecars: [ProjectFile] {
-        all.filter { !($0.isDirectory && ["source/", "blends/", "masks/", "fonts/", "luts/"].contains($0.name)) && !$0.isPattern }
+        all.filter { !($0.isDirectory && ["source/", "blends/", "masks/", "fonts/", "luts/", "posters/"].contains($0.name)) && !$0.isPattern }
     }
 
     /// The entry that governs a file at `relativePath` inside a project

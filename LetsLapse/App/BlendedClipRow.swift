@@ -12,18 +12,35 @@ struct BlendedClipRow: View {
     var onOpen: () -> Void
 
     var body: some View {
+        // The blend's file may be on PicPlace, not here (free up space, or a
+        // project pulled as a preview): the row keeps its still, says where
+        // the clip is, and offers the download instead of a player that
+        // would open nothing (2026-09-23).
+        let missing = model.blendFileMissing(blend)
+        let poster = missing ? model.blendPosterURL(for: blend) : nil
         HStack(spacing: 12) {
             Button(action: onPlay) {
                 HStack(spacing: 12) {
                     ProjectThumbnailView(
-                        url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
+                        url: poster.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil } ?? (missing ? nil : model.mediaURL(for: blend)),
+                        kind: missing ? .image : model.mediaKind(for: blend))
                         .frame(width: 58, height: 42)
+                        .overlay(alignment: .bottomTrailing) {
+                            if missing {
+                                Image(systemName: "icloud")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(3)
+                                    .background(Color.black.opacity(0.5), in: Circle())
+                                    .padding(3)
+                            }
+                        }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title)
                             .font(.system(size: 14.5, weight: .semibold))
                             .lineLimit(1)
-                        Text(subtitle)
+                        Text(missing ? "On PicPlace · " + subtitle : subtitle)
                             .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -33,12 +50,24 @@ struct BlendedClipRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Play blended clip \(model.versionNumber(for: blend))")
+            // Nothing to play here — but not drawn disabled: the still and the
+            // "On PicPlace" line say where the clip is.
+            .allowsHitTesting(!missing)
+            .accessibilityLabel(missing ? "Blended clip \(model.versionNumber(for: blend)), on PicPlace" : "Play blended clip \(model.versionNumber(for: blend))")
 
-            Button("Open", action: onOpen)
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(LL.accent)
-                .buttonStyle(.plain)
+            if missing {
+                if let capture = model.capture(for: blend) {
+                    BlendDownloadButton(picplace: model.picplace, capture: capture)
+                }
+            } else {
+                Button("Open", action: onOpen)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+                    .buttonStyle(.plain)
+                    // Opening re-blends from the originals, which may be on
+                    // PicPlace only (the blend itself still plays).
+                    .disabled(model.capture(for: blend).map(model.sourcesMissing) ?? true)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -76,5 +105,25 @@ struct BlendedClipRow: View {
         }
         parts.append(blend.createdAt.formatted(.relative(presentation: .named)))
         return parts.joined(separator: " · ")
+    }
+}
+
+/// A blend row's Download (its file is on PicPlace, not here): the blends of
+/// the project, fetched together. Its own view so it follows the PicPlace
+/// session and the download's progress, which the row's model does not
+/// publish.
+private struct BlendDownloadButton: View {
+    @ObservedObject var picplace: PicPlaceController
+    let capture: AppModel.CaptureProject
+
+    var body: some View {
+        if picplace.canSync {
+            let busy = picplace.progress[capture.id] != nil
+            Button(busy ? "Downloading…" : "Download") { picplace.downloadOriginals(capture, kinds: [.blend]) }
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(LL.accent)
+                .buttonStyle(.plain)
+                .disabled(busy)
+        }
     }
 }

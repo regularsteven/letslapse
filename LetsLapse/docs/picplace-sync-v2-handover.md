@@ -66,7 +66,11 @@ the design index rows marked 🟡.
 3. **Eviction** — "free up space": the presence tier says which device
    holds originals; evict to preview only after the server confirmed the
    hash (Part 3 §10.6). Then **replace-local / replace-server** (plan D9)
-   become honest.
+   become honest. **Built 2026-09-23** (TODO "PicPlace free up space",
+   `App/PicPlace/PicPlaceFreeUp.swift`): per-file check under the project's
+   claim, Remove originals / Remove blends on the card, Settings' *Remove
+   originals already on PicPlace*; the server's part is
+   [picplace-free-up-space-server-asks.md](picplace-free-up-space-server-asks.md).
 4. **Per-blend posters** (66 projects on the volume have blends; a pulled
    blend row is a placeholder today) and blend playback refusal when the
    file is absent.

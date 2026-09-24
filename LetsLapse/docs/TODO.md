@@ -466,6 +466,275 @@ code when the session resumes (`resume(interruptionEnded)` is the natural
 place to check). Repro: open the capture screen, lock the phone or start a
 screen recording from Control Center, come back, browse with `remote_probe`.
 
+### PicPlace: filing a library re-sends every poster, inside one silent check
+
+**Raised:** 2026-09-24 (Steven, on the 16 Pro: *Checking PicPlace…* greyed
+out in the Gallery's Project Syncing sheet for many minutes) · **Status:**
+built the same day, uncommitted — 1 and 2 fixed, 3 built code first (Steven:
+"app code first", **Pause**, not Stop, inside the Project Syncing drawer);
+the SVG mirror is owed after his sign-off · **Size:** small (logic) + the
+drawer's sending block
+
+**What happened.** picplace.co gained server libraries on 2026-09-24 (the
+developer's stage B deploy, 07:15 UTC). An account-bound library then has to
+be filed into one, and both phones were: the 18 Pro at 12:35 and the 16 Pro at
+12:36, into “iPhone” (ba14d801). `PicPlaceController.connectLibrary` wipes
+the sync records when an existing binding picks a library (`records = [:]` —
+"the scoped first sync rebuilds them"). The merge that follows rebuilds each
+in-step project's record without a `posterToken`, and the check's in-step
+rule ("a project this device holds whole and has never pushed with a
+poster") then runs a whole push per project: poster render, records bundle,
+manifest — one after another, ~5 s each at the paced request rate. The 18 Pro
+did 191 in about 16 minutes; the 16 Pro holds far more projects whole and was
+~40 % through after 28 minutes. PicPlace already held every one of those
+posters (the first connection, 2026-09-18). Nothing is lost or wrong — posters
+and records are replaceable, originals untouched — and stopping the app is
+safe: projects done keep their note, the next check does the rest.
+
+**What to fix:**
+
+1. **Filing costs no re-send.** Keep a project's poster note through the
+   filing when it is in step and PicPlace already holds a confirmed poster
+   (the detail lists it), or rebuild the note from the server's list instead
+   of pushing. Filing a big library should take seconds.
+2. **A check stays short.** At most a small batch of catch-up pushes per
+   check (say 25); the rest wait for the next timer check, so another
+   device's changes and a person's own check are never stuck behind an hour
+   of posters.
+3. **Show the work.** The Project Syncing sheet (and Settings ▸ PicPlace)
+   says what a long pass is doing — *Sending posters · 312 of 877 · about
+   40 min* — with Stop. UI: ask design-first or code-first before building.
+
+**What was built (2026-09-24):**
+
+1. `settlePosters` (`PicPlaceChangeSync.swift`): in-step projects with no
+   poster note are asked of PicPlace a hundred at a time
+   (`POST /projects/assets`, kind `preview`); a confirmed `poster.jpg` there
+   means the note is taken (`currentPosterToken`) and nothing is sent. Only
+   the rest are queued; a server that can't be reached right now leaves them
+   for the next check. Bench: 31 notes wiped on a picplace.test scratch root →
+   *31 of 31 already on PicPlace, noted without sending*, 0 bundles sent.
+2. **The check pushes nothing inline.** Edits it finds, new projects,
+   retries and poster catch-ups all go to the existing push queue with a
+   reason (`PushReason`: edited · new · retry · poster; `pushIfNeeded`
+   re-checks it before sending) and a person's press rides along
+   (`pushQueueManual`: mobile data and auto-sync off, as the inline pushes
+   did). The check reads, pulls and decides, then returns.
+3. **The drawer's sending block** (`sendBlock`, `ProjectSharingChip.swift`):
+   title, progress bar, *17 of 28 · under a minute left · q22*, **Pause**;
+   paused, *Sending paused · 28 left · nothing is sent until you resume*,
+   **Resume**. `PicPlaceController.SendRun` carries the count through a pause;
+   `pauseSends` / `resumeSends` hold every send — the queue (what is mid-send
+   finishes), the check's catch-ups, the originals queue, a person's own
+   *Upload* run — and the pause is kept in `sync-state.json` (`meta.
+   sendsPaused`), so a relaunch stays paused and the next check's work waits
+   behind it. Resume is a person's press (any network) and re-runs the check
+   when nothing is held in memory. The Settings card's status line says
+   *paused — resume it in Project Syncing*. Bench (Mac, picplace.test, `LL_PICPLACE_NO_BATCH=1
+   LL_PICPLACE_RATE=30`): Pause at 2 of 31 → nothing sent for 20 s, flag
+   saved; relaunch → 28 queued and held, the drawer paused; Resume → *28 of
+   28 sent*, flag cleared, every note restored.
+
+**Still owed:** the SVG mirror of the sending block (iOS INDEX row ⚠️), a
+look on the phones, and a thought for the first connection's pulls (a new
+Mac joining a big library pulls hundreds of previews inside the initial
+sync — it has its own progress line, but no Pause).
+
+---
+
+### PicPlace: small edits that never push, then get pulled over
+
+**Raised:** 2026-09-24 (found by the sweep of everything that writes into
+`source/` after a shoot, answering Steven's "originals never change") ·
+**Status:** fixed the same day for the three sidecars (uncommitted; the phones
+installed at 11:50 do not have it yet) — the corrected pages wait for the
+write-once companions · **Size:** small · **Before:** the Mac and iPad join
+the phones' picplace.co library
+
+Four edits write a file the records bundle carries but never mark the project
+edited (`AppModel.markEdited`), so its revision does not move and auto-sync
+never pushes them:
+
+- `source/framing.json` — *Review photos*, *Stabilise photos*, *Undo*
+  (`FramingReviewStore.stabilise` / `withdraw` / `startReview`);
+- `source/documents.json` — renaming, flattening or moving pages between
+  scan documents (`ScanDocuments.write`);
+- `source/frames.whitebalance` — switching white balance to *Smoothed*;
+- `source/frame-NNNNN-corrected.heic` — every scan correction (a heavy file:
+  not pushed, and a later *Download* puts PicPlace's older page back).
+
+When another device then edits the same project, this device's check sees the
+server's revision moved and its own not, pulls, and unpacks the records bundle
+over the folder — which **overwrites** the local sidecar with the server's
+older copy (checked 2026-09-24 with `DirectoryArchive.extract`'s own flags).
+The edit is lost without a word. The shape editor already does it right
+(`PhotoViewerView` → `markEdited` after `shapes.json`), as does Rotate 90°.
+
+**Fix (built 2026-09-24):** each of those writes now marks the project
+edited, so the edit is pushed after the 20-second settle and a clash becomes
+a conflict (both sides moved) instead of a silent overwrite —
+`FramingReviewStore.onReviewWritten` (wired to `markEdited` in `AppModel`'s
+init; a review landing, Stabilise, Undo), the scan documents' one writer, and
+`measureWhiteBalance` once the series is on disk (the source switch was marked
+before the measure began, so its push could leave without the series).
+Checked on the Mac: *Review* and *Stabilise* each moved `modifiedAt`. The
+corrected pages still want the write-once treatment (a correction writes a
+new file — "Rotate 90° as a project record", the write-once companions):
+they are heavy, so a pull never touches them, but a *Download* puts
+PicPlace's older page back over a newer local one.
+
+---
+
+### PicPlace: re-check the stored originals now and then (a scrub)
+
+**Raised:** 2026-09-24 (Steven: fine to add later, but note it and why it
+matters) · **Status:** noted, not started · **Size:** small on the server,
+small in the app · **Depends on:** the PicPlace developer (server side)
+
+**Why it matters.** Once a phone removes its originals (*PicPlace free up
+space*, below), PicPlace holds the only copy, in one Hetzner location with no
+version history. Each object is read back exactly once, a minute or two after
+its upload (`letslapse:verify-assets` sets `verified`), and never looked at
+again. Anything that damages or loses an object later — the storage itself, an
+operator mistake, a future server job or migration with a bug — stays
+invisible until someone downloads that file, which may be years later, when no
+device has a copy any more. A re-read now and then turns "it was fine when it
+arrived" into "it is fine now", and finds a problem while it can still be
+fixed or at least known about. It matters most for exactly the files that
+exist only on PicPlace.
+
+**What it would look like:**
+
+- **Server:** `verify-assets` also re-reads old objects on a rolling budget,
+  the oldest `verified_at` first (e.g. every object once a month), preferring
+  those whose only copy is on PicPlace (no device reports presence tier
+  `original`). A mismatch or a missing object goes down the existing
+  `corrupt` path (not confirmed, logged, out of `used_bytes`), and someone is
+  told.
+- **App:** the removal check already refuses anything not confirmed. Owed: a
+  warning where a person looks — the project card and Settings ▸ PicPlace
+  (*N files on PicPlace failed a re-check*) — and, where this device still
+  has the file, a re-upload that heals it (a corrupt original is replaceable
+  under the write-once rule).
+
+**Related:** Steven's planned second copy ("one copy, one place" — a project
+of its own, soon); bucket versioning, recorded on the server side as
+[regularsteven/picplace#292](https://github.com/regularsteven/picplace/issues/292).
+
+---
+
+### PicPlace free up space — remove originals and blends that are already on PicPlace
+
+**Raised:** 2026-09-23 (Steven: the phone as a capture device — shoot,
+upload, then clear the originals off it knowing they are backed up) ·
+**Built:** 2026-09-23, code first (PicPlace D12), **uncommitted** ·
+**Size:** medium, with owed follow-ups
+
+What a person gets:
+
+- **The project card** (PICPLACE) gains an **Originals** line and a
+  **Blends** line: *Here and on PicPlace · N files · size — Remove…*,
+  *N of M not on PicPlace yet — Upload*, *On PicPlace · … — Download*, with
+  Steven's note under them (*You can download the originals and blends again
+  whenever you need them.*), a confirm per kind, the progress (*Checking every
+  file with PicPlace…* / *Removing n of N files*) and the outcome line. A
+  Photo capture has no Blends line (its blend is the photo).
+- **Settings ▸ PicPlace**, under *Upload originals automatically*: **Remove
+  originals already on PicPlace** — a button pressed now and then, never a
+  switch — with the estimate (*The originals of N projects are safely on
+  PicPlace — every file is checked before anything goes. Removing them from
+  this iPhone frees about X for more shoots.*), a confirm, the run with
+  **Stop**, the result (*Freed X · originals of N projects removed · M kept
+  theirs — reasons*), and *N projects' originals aren't on PicPlace yet —
+  **Upload*** (the owed "Upload all originals now": a person's press, any
+  network).
+
+The rules (`App/PicPlace/PicPlaceFreeUp.swift`; the test is the Kit's
+`PicPlaceOriginalsCheck`, 10 unit tests): one test for every door — per file,
+same path, **confirmed**, same bytes, same **SHA-256** (the capture-time hash
+where the file is as hashed, else computed), **verified** (2026-09-24, the
+developer's answer: picplace.co's storage does not check a PUT's bytes, so
+PicPlace reads every upload back and marks the asset `verified` a minute or
+two after its confirm — until then the card says *PicPlace is still checking
+N files it received — try again in a minute or two*; the set's marker
+`heavyDigest`, which a library's *Remove from this iPhone* trusts, is written
+only for verified sets, by the upload, the originals queue and a removal
+alike), against a fresh
+`GET /projects/{uuid}` read **while this device holds the project's write
+claim** (no other device can delete it on PicPlace in between); never a count
+or a timestamp. All or nothing per project and kind. Only heavy files go —
+`project.json`, the sidecars, `assets.ndjson` and `poster.jpg` stay, so no
+revision moves, nothing pushes, no tombstone; presence goes to `preview`;
+`serverConfirmedSeen` is noted so the check does not re-pull the copy. Blends
+a collection uses stay; a removed blend leaves `posters/<blend id>.jpg`
+(a new registry folder, carried in the records bundle) and its row shows the
+still, *On PicPlace* and **Download**. Downloads now take a kind
+(`downloadOriginals(_:kinds:)`).
+
+Fixed on the way — the old "Here and on PicPlace" was *count or "uploaded
+once"*: a blend rendered after the originals upload read as on PicPlace, the
+originals queue skipped it for good, and **Settings ▸ Libraries ▸ Remove from
+this iPhone** passed it. Now `PicPlaceSyncRecord.heavyDigest` — the heavy set
+last verified on PicPlace, by path and size — is what the label, the queue
+and the library's Remove read, and the queue verifies a changed or unmarked
+set with one read before it uploads. And for a project whose files are on
+PicPlace only: the editor could open on a missing frame, where a legacy
+grade's white migration persisted a D65 guess (which then synced) —
+`editorAsset` refuses missing sources and the migration refuses missing
+frames; `heroImageURL` skips a stacked image that is not here; `.lapse`
+export and nearby transfer refuse (the receiver dropped the blend rows whose
+files did not arrive); delete confirms say when the delete destroys files
+only PicPlace holds, and the Projects swipe asks in that one case; New
+blended clip / Guided clip dim; the empty SOURCE CLIP header goes; the card
+and Settings ask the server again once a cold launch's sign-in lands.
+
+**Verified 2026-09-23** — Mac bench (scratch root bound to `letslapse-two` on
+picplace.test, throwaway projects) and a throwaway iPhone 16 Pro Simulator:
+refused before the upload; refused on a tampered server hash (claim
+released); Remove originals (records byte-identical, presence `preview`, the
+next check silent); Remove blends (stills); the Settings run; Download back
+byte-exact; a blend added after the upload refused → *Upload* sent it → then
+removable; export refused; the phone card and Settings rows screenshotted in
+every state. Bench data wiped (`letslapse:wipe-account`), bench token
+revoked, bench Simulator deleted. Hooks: `LL_PICPLACE_REMOVE`,
+`LL_PICPLACE_FREEUP`, `LL_PICPLACE_UPLOAD_ALL`, `LL_PICPLACE_ASK_REMOVE`,
+`LL_SCROLL=picplace` on the project screen (CLAUDE.md).
+
+**Owed:**
+
+1. **The server asks** — for Steven to hand to the PicPlace developer:
+   [picplace-free-up-space-server-asks.md](picplace-free-up-space-server-asks.md)
+   (storage checks the SHA-256 on every PUT; a *Recently Deleted* window for
+   objects; batched asset lists if the run is slow). Until Ask 2 lands the
+   delete confirms say "for good". **Round 2 answered 2026-09-24** in the same
+   doc. **Round 3 (the server's answers, the same day):** all three asks are
+   built; the app now requires `verified` before letting a file go (built,
+   tests, picplace.test round trip). The server's refusal to replace
+   confirmed originals is a per-server switch, off, and goes on when Steven
+   says his devices run this build. Owed from it: the delete confirms can say
+   *can be restored until …* (`restorable_until`, `POST
+   /projects/{uuid}/restore`), and the Settings estimate can read every
+   project in one `POST /projects/assets`.
+2. **Steven's look on a real iPhone** against picplace.co (Release build),
+   then the **SVG mirrors**: `components/picplace-status.*` (the two lines,
+   the note, the confirm, the removing progress, preview-only with its Blends
+   line), `components/picplace-account.signed-in.phone.svg` (estimate,
+   running, result, not-yet + Upload), the Mac narrow group. INDEX rows 🟡.
+3. **The pager's two delete paths** (the uncommitted 2026-09-21 work, not
+   touched here): the Gallery tile menu's *Delete…* (`GalleryGridContent`,
+   no confirm at all) and `EditorPager`'s delete should both carry
+   `picplace.deletionWarning(for:)`, the tile menu asking when it is non-nil.
+4. **Big transfers on the phone** — removing is local and quick, but *Upload*
+   / *Download* of gigabytes still stop when iOS suspends the app: the
+   background `URLSession` (the first-connection entry's owed 1).
+5. A video preview's hero keeps its *ORIGINAL · 00:04* pill, and an interval
+   preview's Originals section still offers *View all photos* — pre-existing
+   for pulled previews, now common.
+6. Blend stills are made only when a blend is removed; one per blend at push
+   time would give pulled previews pictures everywhere (handover item 4).
+7. The Collections builder could offer a blend whose file is on PicPlace
+   (never at removal time — collection members stay — but one added later).
+
 ### PicPlace first connection — done with failures, Try again, transfer retries, a background assertion
 
 **Raised:** 2026-09-18 (Steven's first run against picplace.co with S3: 669 of
@@ -505,8 +774,9 @@ leftover.
 
 1. **A background `URLSession` for the originals** — the durable answer:
    hours of uploads must survive the phone locking. Libraries plan "later".
-2. **Upload all originals now** — a one-shot for every project regardless of
-   the switch; only honest once 1 exists.
+2. **Upload all originals now** — built 2026-09-23 as Settings' *Upload*
+   beside free up space (a person's press, any network; see the free up space
+   entry); still a foreground transfer until 1 exists.
 3. **The in-app LUT fold on iOS** — the phone's library still carries 212
    legacy cube copies (~199 MB); a script cannot reach it. See
    [lut-library-assets.md](lut-library-assets.md).

@@ -117,6 +117,12 @@ extension AppModel {
             if capture.isPhotoCapture {
                 return heroImageURL(for: capture).map(EditorAsset.still)
             }
+            // The frame's URL is built from its name, never stat'd: a shoot
+            // whose frames are on PicPlace, not here (a preview, or originals
+            // removed to free space), must not open an editor on nothing — a
+            // legacy grade's white migration would read D65 off the missing
+            // file and persist it, and the edit would sync (2026-09-23).
+            guard !sourcesMissing(capture) else { return nil }
             return thumbnailFrameURL(for: capture).map(EditorAsset.still)
         }
     }

@@ -30,6 +30,9 @@ public final class ProjectOrientation: @unchecked Sendable {
         var turns: Int
         /// `blends/<file>` → the turns the blend was rendered at.
         var rendered: [String: Int]
+        /// The same, by blend id — for `posters/<blend id>.jpg`, a removed
+        /// blend's still, made from the blend as its file shows it.
+        var renderedByID: [String: Int] = [:]
     }
 
     private let lock = NSLock()
@@ -38,19 +41,24 @@ public final class ProjectOrientation: @unchecked Sendable {
     public init() {}
 
     /// The turns `url` is shown with: the project's for a file under
-    /// `source/`; for a blend under `blends/` the difference from the turn it
-    /// was rendered at; 0 for everything else a project holds, `poster.jpg`
-    /// above all (it is rendered from the turned picture, so the turn is in
-    /// its pixels).
+    /// `source/`; for a blend under `blends/` — and its still under
+    /// `posters/` — the difference from the turn it was rendered at; 0 for
+    /// everything else a project holds, `poster.jpg` above all (it is
+    /// rendered from the turned picture, so the turn is in its pixels).
     public func turns(for url: URL) -> Int {
         guard let (folder, relative) = Self.projectFolder(of: url) else { return 0 }
         let isSource = relative.hasPrefix("source/")
         let isBlend = relative.hasPrefix("blends/")
-        guard isSource || isBlend else { return 0 }
+        let isBlendStill = relative.hasPrefix(ProjectFileRegistry.blendPostersFolder + "/")
+        guard isSource || isBlend || isBlendStill else { return 0 }
         let entry = self.entry(folder: folder)
         guard entry.turns != 0 || !entry.rendered.isEmpty else { return 0 }
         if isBlend {
             return QuarterTurns.normalized(entry.turns - (entry.rendered[relative] ?? 0))
+        }
+        if isBlendStill {
+            let id = ((relative as NSString).lastPathComponent as NSString).deletingPathExtension.uppercased()
+            return QuarterTurns.normalized(entry.turns - (entry.renderedByID[id] ?? 0))
         }
         return QuarterTurns.normalized(entry.turns)
     }
@@ -124,11 +132,12 @@ public final class ProjectOrientation: @unchecked Sendable {
         let capture = object["capture"] as? [String: Any]
         let turns = (capture?["quarterTurns"] as? NSNumber)?.intValue ?? 0
         var rendered: [String: Int] = [:]
+        var byID: [String: Int] = [:]
         for blend in object["blends"] as? [[String: Any]] ?? [] {
-            guard let value = (blend["renderedQuarterTurns"] as? NSNumber)?.intValue, value != 0,
-                  let name = blend["outputFileName"] as? String else { continue }
-            rendered[name] = value
+            guard let value = (blend["renderedQuarterTurns"] as? NSNumber)?.intValue, value != 0 else { continue }
+            if let name = blend["outputFileName"] as? String { rendered[name] = value }
+            if let id = blend["id"] as? String { byID[id.uppercased()] = value }
         }
-        return Entry(turns: turns, rendered: rendered)
+        return Entry(turns: turns, rendered: rendered, renderedByID: byID)
     }
 }

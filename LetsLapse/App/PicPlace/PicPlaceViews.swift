@@ -13,6 +13,17 @@ struct PicPlaceStatusCard: View {
     @ObservedObject var picplace: PicPlaceController
     let captureID: UUID
     var style: Style = .phone
+    /// The Remove the card is asking about (free up space, 2026-09-23).
+    @State private var pendingRemoval: PicPlaceController.RemovalScope?
+    /// The Replace the card is asking about: copies here that differ from
+    /// PicPlace's, which holds them as recorded at capture.
+    @State private var pendingReplace: PendingReplace?
+
+    private struct PendingReplace: Identifiable {
+        var kind: PicPlaceOriginalsCheck.Kind
+        var names: [String]
+        var id: String { kind.rawValue }
+    }
 
     private var capture: AppModel.CaptureProject? { model.capture(id: captureID) }
 
@@ -31,13 +42,162 @@ struct PicPlaceStatusCard: View {
                     narrowGroup(for: capture, state: state)
                 }
             }
+            // The server's view — Also on, and the per-file truth the
+            // Originals and Blends lines read — once the session is up: on a
+            // cold launch the card appears before the sign-in lands.
+            .task(id: picplace.canSync) { picplace.refreshProject(captureID) }
             .onAppear {
-                picplace.refreshProject(captureID)
                 if case .notSynced = state { _ = picplace.summary(for: capture) }
+                #if DEBUG
+                // `LL_PICPLACE_ASK_REMOVE=originals|blends` opens the card's
+                // Remove confirm once its lines are in — the dialog's
+                // screenshot without a finger (free up space, 2026-09-23).
+                if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_ASK_REMOVE"],
+                   let scope = PicPlaceController.RemovalScope(rawValue: raw) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { pendingRemoval = scope }
+                }
+                #endif
             }
             .picplaceConnectAlert(picplace)
             .picplaceConflictsSheet(picplace)
+            .confirmationDialog(removalTitle, isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+                                titleVisibility: .visible, presenting: pendingRemoval) { scope in
+                Button(scope == .originals ? "Remove Originals" : "Remove Blends", role: .destructive) {
+                    picplace.removeFromDevice(capture, scope: scope)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { scope in
+                Text(removalMessage(scope, capture: capture))
+            }
+            .confirmationDialog("Replace with PicPlace's copies?", isPresented: Binding(get: { pendingReplace != nil }, set: { if !$0 { pendingReplace = nil } }),
+                                titleVisibility: .visible, presenting: pendingReplace) { replace in
+                Button("Replace \(replace.names.count) File\(replace.names.count == 1 ? "" : "s")", role: .destructive) {
+                    picplace.downloadOriginals(capture, kinds: [replace.kind], replacing: Set(replace.names))
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { replace in
+                Text("\(replace.names.count == 1 ? "This file has" : "These \(replace.names.count) files have") changed on \(PicPlaceController.deviceWord) since \(replace.names.count == 1 ? "it was" : "they were") recorded. PicPlace's \(replace.names.count == 1 ? "copy matches" : "copies match") what was captured; \(replace.names.count == 1 ? "it replaces" : "they replace") the ones here.")
+            }
         }
+    }
+
+    // MARK: Free up space (2026-09-23)
+
+    private var removalTitle: String {
+        "Remove the \(pendingRemoval?.noun ?? "originals") from \(PicPlaceController.deviceWord)?"
+    }
+
+    private func removalMessage(_ scope: PicPlaceController.RemovalScope, capture: AppModel.CaptureProject) -> String {
+        let part = picplace.originalsStatus(for: capture)?.row(scope).here ?? .init()
+        let size = "\(part.files.formatted()) \(scope == .originals ? "file" : "blend")\(part.files == 1 ? "" : "s") · \(LLFormat.bytes(part.bytes))."
+        switch scope {
+        case .originals:
+            return "\(size) Every file is checked with PicPlace first; they stay there — download them again whenever you need them. Until then the project shows its preview, and editing and new blends wait for the download."
+        case .blends:
+            return "\(size) Every file is checked with PicPlace first; they stay there — download them again whenever you need them. Until then each blend shows a still. Blends a collection uses stay on \(PicPlaceController.deviceWord)."
+        }
+    }
+
+    /// One line per kind: Originals (the source media), Blends. What is here,
+    /// what PicPlace lacks, what only PicPlace has — and the one action that
+    /// fits: Upload, Remove…, Download. A preview-only project's Originals
+    /// line is the card's own main button; a photo's blend is the photo.
+    private struct HeavyLine: Identifiable {
+        enum Action {
+            case upload, remove(PicPlaceController.RemovalScope), download(PicPlaceOriginalsCheck.Kind)
+            case replace(PicPlaceOriginalsCheck.Kind, [String])
+        }
+        var id: String { title }
+        var title: String
+        var detail: String
+        var action: Action?
+        /// Copies here differ from PicPlace's and PicPlace's are not the
+        /// recorded originals: nothing to offer, a sentence to say.
+        var keptAsIs = false
+    }
+
+    private func heavyLines(for capture: AppModel.CaptureProject, state: PicPlaceController.ProjectState) -> [HeavyLine] {
+        guard let status = picplace.originalsStatus(for: capture) else { return [] }
+        var lines: [HeavyLine] = []
+        func line(_ scope: PicPlaceController.RemovalScope, _ row: PicPlaceController.OriginalsStatus.Row) -> HeavyLine? {
+            let noun = scope == .originals ? "file" : "blend"
+            func count(_ part: PicPlaceController.OriginalsStatus.Part) -> String {
+                "\(part.files.formatted()) \(noun)\(part.files == 1 ? "" : "s") · \(LLFormat.bytes(part.bytes))"
+            }
+            let title = scope == .originals ? "Originals" : "Blends"
+            // Copies that differ from PicPlace's come first: an Upload there
+            // would be refused (PicPlace keeps its confirmed originals).
+            if !row.divergent.isEmpty {
+                let detail = "\(count(row.divergent)) here differ\(row.divergent.files == 1 ? "s" : "") from PicPlace's"
+                return HeavyLine(title: title, detail: detail,
+                                 action: row.replaceable.isEmpty ? nil : .replace(scope.kind, row.replaceable),
+                                 keptAsIs: row.replaceable.isEmpty)
+            }
+            if !row.here.isEmpty {
+                if row.notUp.isEmpty {
+                    return HeavyLine(title: title, detail: "Here and on PicPlace · \(count(row.here))", action: .remove(scope))
+                }
+                let detail = row.notUp == row.here
+                    ? "\(count(row.here)) · only on this device"
+                    : "\(count(row.notUp)) of \(row.here.files.formatted()) not on PicPlace yet"
+                return HeavyLine(title: title, detail: detail, action: .upload)
+            }
+            if !row.onlyThere.isEmpty {
+                return HeavyLine(title: title, detail: "On PicPlace · \(count(row.onlyThere))", action: .download(scope.kind))
+            }
+            return nil
+        }
+        if !isPreviewOnly(state), let originals = line(.originals, status.originals) { lines.append(originals) }
+        if !capture.isPhotoCapture, let blends = line(.blends, status.blends) { lines.append(blends) }
+        return lines
+    }
+
+    private func heavyAction(_ line: HeavyLine, capture: AppModel.CaptureProject, size: CGFloat) -> some View {
+        Group {
+            switch line.action {
+            case .upload:
+                Button("Upload") { picplace.uploadOriginals(capture) }
+            case .remove(let scope):
+                Button("Remove…") { pendingRemoval = scope }
+                    .disabled(picplace.freeUp.run != nil)
+            case .download(let kind):
+                Button("Download") { picplace.downloadOriginals(capture, kinds: [kind]) }
+            case .replace(let kind, let names):
+                Button("Replace…") { pendingReplace = PendingReplace(kind: kind, names: names) }
+            case nil:
+                EmptyView()
+            }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: size * 0.8, weight: .semibold))
+        .foregroundStyle(LL.accent)
+    }
+
+    private func offersRemove(_ lines: [HeavyLine]) -> Bool {
+        lines.contains { if case .remove = $0.action { return true } else { return false } }
+    }
+
+    private static let removeNote = "You can download the originals and blends again whenever you need them."
+
+    /// The card's small print under the lines: what the last removal did,
+    /// else the reassurance beside a Remove, plus what the last originals
+    /// push found — files changed since they were recorded (they went up as
+    /// they are now), copies PicPlace kept its own of.
+    private func notes(for capture: AppModel.CaptureProject, lines: [HeavyLine]) -> [String] {
+        var notes: [String] = []
+        if let note = picplace.removalNotes[capture.id] {
+            notes.append(note)
+        } else if offersRemove(lines) {
+            notes.append(Self.removeNote)
+        }
+        let record = picplace.records[model.originID(of: capture)]
+        if let changed = record?.changedFiles, !changed.isEmpty {
+            notes.append("\(changed.count) file\(changed.count == 1 ? "" : "s") had changed since \(changed.count == 1 ? "it was" : "they were") recorded — PicPlace has \(changed.count == 1 ? "it" : "them") as \(changed.count == 1 ? "it is" : "they are") now.")
+        }
+        if lines.contains(where: \.keptAsIs) {
+            notes.append("PicPlace kept its own copies of these; nothing here is replaced.")
+        }
+        return notes
     }
 
     // MARK: Phone
@@ -76,11 +236,33 @@ struct PicPlaceStatusCard: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
-            if let action = picplace.originalsAction(for: capture), !isPreviewOnly(state) {
+            let lines = heavyLines(for: capture, state: state)
+            ForEach(lines) { line in
                 Divider().padding(.leading, 16)
-                originalsRow(for: capture, action: action, size: 16)
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(line.title).font(.system(size: 16))
+                        Text(line.detail)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    heavyAction(line, capture: capture, size: 16)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            let notes = notes(for: capture, lines: lines)
+            if !notes.isEmpty {
+                Text(notes.joined(separator: "\n"))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.bottom, 12)
+                    .padding(.top, lines.isEmpty ? 12 : 0)
             }
             if case .synced(let record) = state {
                 Divider().padding(.leading, 16)
@@ -121,10 +303,27 @@ struct PicPlaceStatusCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .padding(.leading, 24)
-            if let action = picplace.originalsAction(for: capture), !isPreviewOnly(state) {
-                originalsRow(for: capture, action: action, size: 12)
+            let lines = heavyLines(for: capture, state: state)
+            ForEach(lines) { line in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(line.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                        Text(line.detail).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    heavyAction(line, capture: capture, size: 13)
+                }
+                .padding(.leading, 24)
+                .padding(.top, 6)
+            }
+            let notes = notes(for: capture, lines: lines)
+            if !notes.isEmpty {
+                Text(notes.joined(separator: "\n"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 24)
-                    .padding(.top, 6)
+                    .padding(.top, 4)
             }
             if case .synced(let record) = state {
                 HStack(alignment: .top, spacing: 10) {
@@ -154,32 +353,6 @@ struct PicPlaceStatusCard: View {
     private func isPreviewOnly(_ state: PicPlaceController.ProjectState) -> Bool {
         if case .previewOnly = state { return true }
         return false
-    }
-
-    /// Stage 5: the originals' own line — upload them, or note they are on
-    /// both sides. (A preview-only project's main button is the download.)
-    private func originalsRow(for capture: AppModel.CaptureProject, action: PicPlaceController.OriginalsAction, size: CGFloat) -> some View {
-        HStack {
-            switch action {
-            case .upload(let files, let bytes):
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Originals").font(.system(size: size))
-                    Text("\(files.formatted()) file\(files == 1 ? "" : "s") · \(LLFormat.bytes(bytes)) · only on this device")
-                        .font(.system(size: size * 0.72)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Upload") { picplace.uploadOriginals(capture) }
-                    .buttonStyle(.plain)
-                    .font(.system(size: size * 0.8, weight: .semibold))
-                    .foregroundStyle(LL.accent)
-            case .onBothSides:
-                Text("Originals").font(.system(size: size))
-                Spacer()
-                Text("Here and on PicPlace").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
-            case .download:
-                EmptyView()
-            }
-        }
     }
 
     // MARK: Pieces
@@ -220,7 +393,12 @@ struct PicPlaceStatusCard: View {
         case .notConnected: return "Library not connected"
         case .notSynced: return "Not on PicPlace"
         case .changes: return "Changes to sync"
-        case .syncing(let progress): return progress.phase == .downloading ? "Downloading originals" : "Syncing to PicPlace"
+        case .syncing(let progress):
+            switch progress.phase {
+            case .downloading: return "Downloading from PicPlace"
+            case .verifying, .removing: return "Freeing up space"
+            default: return "Syncing to PicPlace"
+            }
         case .synced: return "On PicPlace"
         case .failed: return "Sync failed"
         }
@@ -242,12 +420,15 @@ struct PicPlaceStatusCard: View {
                 // the library connects again.
                 return "Connect this library again to download the originals"
             }
-            let files = record?.serverHeavyFiles ?? record?.heavyFiles ?? 0
-            let bytes = record?.serverHeavyBytes ?? record?.heavyBytes ?? 0
+            // The source media alone once the server's list is read (the
+            // blends have their own line); the record's count until then.
+            let part = picplace.originalsStatus(for: capture)?.originals.onlyThere
+            let files = part.map(\.files) ?? record?.serverHeavyFiles ?? record?.heavyFiles ?? 0
+            let bytes = part.map(\.bytes) ?? record?.serverHeavyBytes ?? record?.heavyBytes ?? 0
             if files > 0 {
-                return "The originals — \(files.formatted()) file\(files == 1 ? "" : "s") · \(LLFormat.bytes(bytes)) — are on PicPlace, not on this device"
+                return "The originals are on PicPlace · \(files.formatted()) file\(files == 1 ? "" : "s") · \(LLFormat.bytes(bytes))"
             }
-            return "The originals are on PicPlace, not on this device"
+            return "The originals are on PicPlace, not on \(PicPlaceController.deviceWord)"
         case .elsewhere:
             return "PicPlace files this project under another of your libraries, so this library leaves it alone — it is neither pushed nor pulled from here"
         case .signedOut:
@@ -280,10 +461,18 @@ struct PicPlaceStatusCard: View {
                 return progress.filesTotal == 0 ? "Listing the originals…"
                     : "Downloading \(progress.filesDone) of \(progress.filesTotal) files · \(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
             case .finishing: return "Finishing…"
+            case .verifying: return "Checking every file with PicPlace…"
+            case .removing:
+                return "Removing \(progress.filesDone.formatted()) of \(progress.filesTotal.formatted()) files · \(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
             }
         case .synced(let record):
-            return "Synced \(record.syncedAt.formatted(.relative(presentation: .named))) · "
-                + Self.objectsLine(files: record.files, bytes: record.bytes, heavyFiles: record.heavyFiles ?? 0, heavyBytes: record.heavyBytes ?? 0)
+            // With the Originals and Blends lines under it (free up space),
+            // the header speaks for the records alone — "N originals stay
+            // here" beside "Here and on PicPlace" read as a contradiction.
+            let objects = picplace.originalsStatus(for: capture) != nil
+                ? "records and preview · \(LLFormat.bytes(record.bytes))"
+                : Self.objectsLine(files: record.files, bytes: record.bytes, heavyFiles: record.heavyFiles ?? 0, heavyBytes: record.heavyBytes ?? 0)
+            return "Synced \(record.syncedAt.formatted(.relative(presentation: .named))) · " + objects
                 + (record.uploaded == 0 ? " · nothing needed uploading" : " · \(record.uploaded) uploaded")
         case .failed(let record):
             var line = record.lastError ?? "Something went wrong"
@@ -314,7 +503,7 @@ struct PicPlaceStatusCard: View {
         let (label, isCancel): (String, Bool) = {
             switch state {
             case .conflict: return ("Review…", false)
-            case .previewOnly: return (picplace.originalsAction(for: capture) == nil ? "Preview only" : "Download originals", false)
+            case .previewOnly: return (picplace.hasOriginalsToDownload(capture) ? "Download originals" : "Preview only", false)
             case .elsewhere: return ("Elsewhere", false)
             case .signedOut: return (picplace.isSigningIn ? "Signing in…" : "Sign in", false)
             case .notConnected: return (picplace.libraryLink == .mismatch ? "Settings" : "Connect…", false)
@@ -328,7 +517,7 @@ struct PicPlaceStatusCard: View {
         return Button {
             switch state {
             case .conflict: picplace.isReviewingConflicts = true
-            case .previewOnly: picplace.downloadOriginals(capture)
+            case .previewOnly: picplace.downloadOriginals(capture, kinds: [.source])
             case .signedOut: picplace.signIn()
             case .notConnected: if picplace.libraryLink == .unbound || picplace.libraryLink == .needsLibrary { picplace.offerConnect() } else { model.requestedTab = .settings }
             case .syncing: picplace.cancelSync(capture.id)
@@ -341,7 +530,7 @@ struct PicPlaceStatusCard: View {
         }
         .buttonStyle(.plain)
         .disabled((picplace.isSigningIn && !isCancel)
-                  || { if case .previewOnly = state { return picplace.originalsAction(for: capture) == nil } else { return false } }()
+                  || { if case .previewOnly = state { return !picplace.hasOriginalsToDownload(capture) } else { return false } }()
                   || { if case .elsewhere = state { return true } else { return false } }())
     }
 
@@ -372,6 +561,7 @@ struct PicPlaceSettingsCard: View {
     @State private var isConfirmingSignOut = false
     @State private var isConfirmingDisconnect = false
     @State private var serverRejected = false
+    @State private var isConfirmingFreeUp = false
     var body: some View {
         VStack(spacing: 0) {
             if let profile = picplace.profile {
@@ -398,6 +588,7 @@ struct PicPlaceSettingsCard: View {
                 libraryRow
                 initialSyncRow
                 autoSyncRows
+                freeUpRows
                 checkRow
                 if PicPlaceConfiguration.showsServerSetting {
                     LLRow(title: "Server") {
@@ -474,6 +665,15 @@ struct PicPlaceSettingsCard: View {
         }
         .llCard()
         .onAppear { picplace.refreshUsage() }
+        // Free up space's estimate, once the session is up (a cold launch
+        // draws the card before the sign-in lands) and again on each return.
+        .task(id: picplace.canSync) { picplace.refreshFreeUpEstimate() }
+        .confirmationDialog(freeUpConfirmTitle, isPresented: $isConfirmingFreeUp, titleVisibility: .visible) {
+            Button("Remove Originals", role: .destructive) { picplace.freeUpSpace() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("About \(LLFormat.bytes(picplace.freeUp.estimate?.bytes ?? 0)). Each project is checked with PicPlace file by file first — one that isn't fully there keeps its originals. They stay on PicPlace: download a project's originals again whenever you need them. Blends stay on \(PicPlaceController.deviceWord).")
+        }
         .picplaceConnectAlert(picplace)
         .picplaceConflictsSheet(picplace)
         .alert("PicPlace server", isPresented: $isEditingServer) {
@@ -618,7 +818,7 @@ struct PicPlaceSettingsCard: View {
                 Toggle("", isOn: $picplace.wifiOnly).labelsHidden().disabled(!picplace.autoSyncEnabled)
             }
             LLRow(title: "Upload originals automatically",
-                  subtitle: "Source photos, videos and blends of every project, one project at a time. Nothing is ever removed from this device.") {
+                  subtitle: "Source photos, videos and blends of every project, one project at a time. Nothing is ever removed from this device on its own.") {
                 Toggle("", isOn: $picplace.autoOriginalsEnabled).labelsHidden().disabled(!picplace.autoSyncEnabled)
             }
             if let status = picplace.autoStatus ?? picplace.autoHold ?? picplace.originalsHold.map { "Originals: \($0)" } {
@@ -632,6 +832,81 @@ struct PicPlaceSettingsCard: View {
                 }
             }
         }
+    }
+
+    /// Free up space (2026-09-23): *Remove originals already on PicPlace* —
+    /// a button pressed now and then, never a switch — with how much space
+    /// it frees; the run's progress with Stop; what the last run did; and the
+    /// originals not on PicPlace yet, with Upload.
+    @ViewBuilder
+    private var freeUpRows: some View {
+        if picplace.binding?.initialSync.state == .done, picplace.canSync {
+            let state = picplace.freeUp
+            if let run = state.run {
+                LLRow(title: "Removing originals already on PicPlace…",
+                      subtitle: "\(run.done) of \(run.total) project\(run.total == 1 ? "" : "s") checked · \(LLFormat.bytes(run.freedBytes)) freed\(run.current.map { " · \($0)" } ?? "")") {
+                    Button {
+                        picplace.stopFreeUp()
+                    } label: {
+                        Text("Stop")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(LL.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                if let result = state.result {
+                    LLRow(title: result.projects == 0 ? "Nothing was removed" : "Freed \(LLFormat.bytes(result.freedBytes))",
+                          subtitle: freeUpResultText(result)) {
+                        EmptyView()
+                    }
+                }
+                if let estimate = state.estimate, estimate.projects > 0 {
+                    Button {
+                        isConfirmingFreeUp = true
+                    } label: {
+                        LLRow(title: "Remove originals already on PicPlace",
+                              subtitle: "The originals of \(estimate.projects) project\(estimate.projects == 1 ? " are" : "s are") safely on PicPlace — every file is checked before anything goes. Removing them from \(PicPlaceController.deviceWord) frees about \(LLFormat.bytes(estimate.bytes)) for more shoots.",
+                              titleColor: LL.accent) {
+                            EmptyView()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else if state.isEstimating, state.estimate == nil {
+                    LLRow(title: "Remove originals already on PicPlace", subtitle: "Working out how much space it frees…") {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                if let estimate = state.estimate, estimate.notUpProjects > 0 {
+                    LLRow(title: "\(estimate.notUpProjects) project\(estimate.notUpProjects == 1 ? "'s" : "s'") originals aren't on PicPlace yet",
+                          subtitle: "\(LLFormat.bytes(estimate.notUpBytes)) · upload them, and they can be removed here too") {
+                        Button {
+                            picplace.uploadRemainingOriginals()
+                        } label: {
+                            Text(picplace.autoStatus?.hasPrefix("Uploading originals") == true ? "Uploading…" : "Upload")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(LL.accent)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(picplace.autoStatus?.hasPrefix("Uploading originals") == true)
+                    }
+                }
+            }
+        }
+    }
+
+    private var freeUpConfirmTitle: String {
+        let n = picplace.freeUp.estimate?.projects ?? 0
+        return "Remove the originals of \(n) project\(n == 1 ? "" : "s") from \(PicPlaceController.deviceWord)?"
+    }
+
+    private func freeUpResultText(_ result: PicPlaceController.FreeUpState.Result) -> String {
+        var parts: [String] = []
+        if result.projects > 0 { parts.append("originals of \(result.projects) project\(result.projects == 1 ? "" : "s") removed") }
+        if result.kept > 0 { parts.append("\(result.kept) kept \(result.kept == 1 ? "its" : "their") originals — \(result.reasons.joined(separator: "; "))") }
+        if let stopped = result.stopped { parts.append(stopped.lowercased() == "stopped" ? "stopped" : "stopped: \(stopped)") }
+        return parts.isEmpty ? "Every project here was checked" : parts.joined(separator: " · ")
     }
 
     /// Stage 4: a check on demand, what the last one did, and the review

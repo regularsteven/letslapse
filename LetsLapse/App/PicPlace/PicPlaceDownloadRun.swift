@@ -14,11 +14,22 @@ struct PicPlaceDownloadRun {
         var id: String
         var name: String
         var bytes: Int64
+        /// PicPlace's SHA-256 for the asset: a landed file must hash to it.
+        var sha256: String?
     }
 
     let client: PicPlaceClient
     let projectUUID: String
     let folder: URL
+    /// Which of the heavy set to bring: the source media, the blends, or
+    /// both (free up space removes them separately, 2026-09-23).
+    var kinds: Set<PicPlaceOriginalsCheck.Kind> = Set(PicPlaceOriginalsCheck.Kind.allCases)
+    /// Files fetched even when one of the listed size is here — copies that
+    /// differ from PicPlace's, being replaced by them (the card's Replace).
+    var replacing: Set<String> = []
+    /// Where each landed file's hash is recorded (`assets.ndjson`), so the
+    /// next push or free-up check trusts it without reading it again.
+    var assetStore: AssetRecordStore? = nil
     let progress: @MainActor (PicPlaceSyncProgress) -> Void
 
     private static let pageSize = 100
@@ -46,21 +57,39 @@ struct PicPlaceDownloadRun {
         // By the registry's role, not the server's kind: a v1 push kinded
         // the sidecars under source/ as `source`, and they are not originals.
         let wanted = (detail.assets ?? [])
-            .filter { $0.status == "confirmed" && PicPlaceSyncInventory.isHeavy($0.name) }
-            .map { Item(id: $0.id, name: $0.name, bytes: $0.bytes ?? 0) }
-        guard !wanted.isEmpty else { throw PicPlaceSyncRun.Failed(caption: "PicPlace holds no originals for this project.") }
+            .filter { $0.status == "confirmed" && PicPlaceSyncInventory.heavyKind($0.name).map(kinds.contains) == true }
+            .map { Item(id: $0.id, name: $0.name, bytes: $0.bytes ?? 0, sha256: $0.sha256) }
+        guard !wanted.isEmpty else {
+            throw PicPlaceSyncRun.Failed(caption: kinds == [.blend] ? "PicPlace holds no blends for this project." : "PicPlace holds no originals for this project.")
+        }
 
-        // What is already here at the right size stays.
+        // What is already here at the right size stays — and so does a file
+        // here that differs from PicPlace's copy: a scan page corrected again
+        // on this device, an original PicPlace refused to replace. A download
+        // brings back what is missing; it never puts PicPlace's version over
+        // a different one here unless the person chose Replace (`replacing`).
+        // With PicPlace's write-once rule on, such a difference is the
+        // expected state of a newer local file (2026-09-24).
         let fileManager = FileManager.default
         var pending: [Item] = []
         var have: Int64 = 0
+        var keptDifferent: [String] = []
         for item in wanted {
             let url = folder.appendingPathComponent(item.name)
-            if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, Int64(size) == item.bytes {
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map(Int64.init)
+            if replacing.contains(item.name) {
+                pending.append(item)
+            } else if size == item.bytes {
+                have += item.bytes
+            } else if size != nil {
+                keptDifferent.append(item.name)
                 have += item.bytes
             } else {
                 pending.append(item)
             }
+        }
+        if !keptDifferent.isEmpty {
+            LLog("picplace: download of \(projectUUID.prefix(8)) — kept \(keptDifferent.count) file(s) here that differ from PicPlace's copies: \(keptDifferent.prefix(5).joined(separator: ", "))\(keptDifferent.count > 5 ? ", …" : "")")
         }
         let total = wanted.reduce(Int64(0)) { $0 + $1.bytes }
         await report { $0.filesTotal = wanted.count; $0.bytesTotal = total; $0.filesDone = wanted.count - pending.count; $0.bytesDone = have }
@@ -69,11 +98,13 @@ struct PicPlaceDownloadRun {
 
         var downloaded = 0
         var downloadedBytes: Int64 = 0
+        var landed: [(name: String, bytes: Int64, sha256: String)] = []
+        defer { try? assetStore?.noteHashes(landed, inProjectFolder: folder) }
         for page in pending.chunked(Self.pageSize) {
             try Task.checkCancellation()
             let minted: [String: [PPDownloadURL]] = try await client.post("projects/\(projectUUID)/assets/urls", json: ["assets": page.map(\.id)])
             let urls = Dictionary(uniqueKeysWithValues: (minted["assets"] ?? []).compactMap { item in item.id.map { ($0, item) } })
-            try await withThrowingTaskGroup(of: Int64.self) { group in
+            try await withThrowingTaskGroup(of: (name: String, bytes: Int64, sha256: String?).self) { group in
                 var iterator = page.makeIterator()
                 var inFlight = 0
                 func enqueue() {
@@ -83,10 +114,12 @@ struct PicPlaceDownloadRun {
                 }
                 for _ in 0 ..< Self.concurrentDownloads { enqueue() }
                 while inFlight > 0 {
-                    let bytes = try await group.next()!
+                    let got = try await group.next()!
                     inFlight -= 1
                     downloaded += 1
-                    downloadedBytes += bytes
+                    downloadedBytes += got.bytes
+                    if let sha = got.sha256 { landed.append((got.name, got.bytes, sha)) }
+                    let bytes = got.bytes
                     await report { $0.filesDone += 1; $0.bytesDone += bytes }
                     try Task.checkCancellation()
                     enqueue()
@@ -96,7 +129,10 @@ struct PicPlaceDownloadRun {
         return (downloaded, downloadedBytes)
     }
 
-    private func fetch(_ item: Item, _ minted: PPDownloadURL?) async throws -> Int64 {
+    /// One file, from its presigned URL to its place in the folder — only
+    /// once it hashes to PicPlace's SHA-256 for it (a file that arrives
+    /// otherwise is left out and the run fails, to be tried again).
+    private func fetch(_ item: Item, _ minted: PPDownloadURL?) async throws -> (name: String, bytes: Int64, sha256: String?) {
         guard let minted else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted no URL for \(item.name).") }
         if let error = minted.error { throw PicPlaceSyncRun.Failed(caption: "\(item.name): \(minted.message ?? error)") }
         guard let string = minted.url, let url = URL(string: string) else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted an unusable URL for \(item.name).") }
@@ -116,11 +152,26 @@ struct PicPlaceDownloadRun {
         } catch let refused as PicPlaceTransfer.Refused {
             throw PicPlaceSyncRun.Failed(caption: "Storage refused \(item.name) (\(refused.status)).")
         }
+        // Into the project's own tmp/ before anything is awaited — the
+        // session's temporary file is not ours to keep — then checked, then
+        // put in place.
+        let staging = folder.appendingPathComponent("tmp", isDirectory: true)
+            .appendingPathComponent("picplace-download-\(UUID().uuidString)", isDirectory: false)
+        try FileManager.default.createDirectory(at: staging.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: temporary, to: staging)
+        let expected = PicPlaceOriginalsCheck.normalized(item.sha256)
+        if let expected {
+            let got = try await Task.detached(priority: .utility) { PicPlaceOriginalsCheck.normalized(try AssetHash.sha256(of: staging)) }.value
+            guard got == expected else {
+                try? FileManager.default.removeItem(at: staging)
+                throw PicPlaceSyncRun.Failed(caption: "\(item.name) arrived damaged — it doesn't match PicPlace's fingerprint. Try again.")
+            }
+        }
         let destination = folder.appendingPathComponent(item.name)
         try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
-        try FileManager.default.moveItem(at: temporary, to: destination)
-        return item.bytes
+        try FileManager.default.moveItem(at: staging, to: destination)
+        return (item.name, item.bytes, expected)
     }
 }
 

@@ -35,6 +35,14 @@ final class FramingReviewStore: ObservableObject {
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var cancelFlags: [UUID: CancelFlag] = [:]
 
+    /// Called with the project's id once `source/framing.json` is written —
+    /// a review landing, a stabilisation committed or withdrawn. Each is a
+    /// person's edit: the app marks it (`AppModel.markEdited`) so auto-sync
+    /// pushes the file, and another device's later pull can't unpack an
+    /// older review over it without a word (2026-09-24; it could, because
+    /// nothing moved the project's revision).
+    var onReviewWritten: ((UUID) -> Void)?
+
     private final class CancelFlag: @unchecked Sendable {
         private let lock = NSLock()
         private var value = false
@@ -135,6 +143,7 @@ final class FramingReviewStore: ObservableObject {
             case .success(let review):
                 self.reviews[id] = review
                 self.loadedIDs.insert(id)
+                self.onReviewWritten?(id)
             case .failure(let error):
                 if !(error is CancellationError) {
                     self.failures[id] = error.localizedDescription
@@ -167,6 +176,7 @@ final class FramingReviewStore: ObservableObject {
         Task.detached(priority: .utility) {
             do {
                 try review.write(inSourceFolder: sourceFolder)
+                await MainActor.run { FramingReviewStore.shared.onReviewWritten?(id) }
             } catch {
                 await MainActor.run {
                     FramingReviewStore.shared.failures[id] = error.localizedDescription

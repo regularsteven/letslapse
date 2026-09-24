@@ -1871,7 +1871,7 @@ private struct LargeOriginalsView: View {
         .alert(item: $pendingDelete) { capture in
             Alert(
                 title: Text("Delete “\(capture.displayTitle)”?"),
-                message: Text("This permanently deletes the original and all its blended clips."),
+                message: Text("This permanently deletes the original and all its blended clips." + (model.picplace.deletionWarning(for: capture).map { " " + $0 } ?? "")),
                 primaryButton: .destructive(Text("Delete")) {
                     do {
                         try model.deleteCapture(capture)
@@ -3033,7 +3033,7 @@ extension SettingsView {
                     phoneRemoving = folder
                 } else {
                     let names = check.onlyHere.prefix(5).map { "“\($0)”" }.joined(separator: ", ")
-                    phoneLibraryMessage = "\(check.onlyHere.count) project\(check.onlyHere.count == 1 ? "" : "s") in “\(folder.name)” exist\(check.onlyHere.count == 1 ? "s" : "") only on \(PicPlaceController.deviceWord): \(names)\(check.onlyHere.count > 5 ? ", …" : ""). Upload the originals first, or keep the library."
+                    phoneLibraryMessage = "The originals of \(check.onlyHere.count) project\(check.onlyHere.count == 1 ? "" : "s") in “\(folder.name)” \(check.onlyHere.count == 1 ? "isn't" : "aren't") confirmed on PicPlace, so they may exist only on \(PicPlaceController.deviceWord): \(names)\(check.onlyHere.count > 5 ? ", …" : ""). Open that library and, in Settings ▸ PicPlace, upload their originals or remove the ones already on PicPlace — both check every file with PicPlace — or keep the library."
                     LLog("storage: remove of \(folder.id) refused — \(check.onlyHere.count) project(s) exist only here")
                 }
             }
@@ -3105,6 +3105,12 @@ enum LibraryRemoval {
         var bound = false
     }
 
+    /// A project counts as on PicPlace only when its heavy set here — every
+    /// source file and blend, by path and size — is the one this device
+    /// last saw PicPlace hold, file by file (`heavyDigest`, written by an
+    /// originals upload, the originals queue's check, or a free-up
+    /// removal). Until 2026-09-23 this was a count or "uploaded once", which
+    /// passed a blend rendered after the upload that existed only here.
     static func check(for root: URL) -> Check {
         var check = Check()
         check.bound = PicPlaceBindingRecord.read(inRoot: root)?.library != nil
@@ -3115,20 +3121,26 @@ enum LibraryRemoval {
             guard !name.hasPrefix("."), let id = UUID(uuidString: name) else { continue }
             check.projects += 1
             let folder = projects.appendingPathComponent(name, isDirectory: true)
-            let entries = (try? PicPlaceSyncRun.listFiles(in: folder)) ?? []
-            let summary = PicPlaceSyncInventory.summary(of: PicPlaceSyncInventory.classify(entries), policy: .minimal)
-            guard summary.heavyFiles > 0 else { continue }
+            let heavy = PicPlaceController.heavyFiles(in: folder)
+            guard !heavy.isEmpty else { continue }
             check.originalsHere += 1
-            let onServer = records[id].map { ($0.serverHeavyFiles ?? 0) >= summary.heavyFiles || $0.originalsMovedAt != nil } ?? false
-            if !onServer { check.onlyHere.append(projectName(in: folder) ?? String(name.prefix(8))) }
+            let document = projectDocument(in: folder)
+            // Records are keyed by origin id, which is the folder's id only
+            // for a project that began here.
+            let origin = document.origin ?? id
+            let onServer = records[origin]?.heavyDigest.map { $0 == PicPlaceOriginalsCheck.digest(heavy) } ?? false
+            if !onServer { check.onlyHere.append(document.name ?? String(name.prefix(8))) }
         }
         return check
     }
 
-    private static func projectName(in folder: URL) -> String? {
+    private static func projectDocument(in folder: URL) -> (name: String?, origin: UUID?) {
         guard let data = try? Data(contentsOf: folder.appendingPathComponent(ProjectFileRegistry.projectDocumentName)),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return ((object["capture"] as? [String: Any])?["name"] as? String) ?? (object["name"] as? String)
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return (nil, nil) }
+        let capture = object["capture"] as? [String: Any]
+        let name = (capture?["name"] as? String) ?? (object["name"] as? String)
+        let origin = ((capture?["originID"] as? String) ?? (capture?["importedFromID"] as? String)).flatMap(UUID.init(uuidString:))
+        return (name, origin)
     }
 }
 

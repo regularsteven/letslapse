@@ -49,6 +49,9 @@ final class ProjectFileRegistryTests: XCTestCase {
         XCTAssertFalse(ProjectFileRegistry.travellingSubfolders.contains("luts"), "the installer folds an arriving luts/ into the store; it never moves it")
         XCTAssertTrue(ProjectFileRegistry.travellingSubfolders.contains("source"))
         XCTAssertTrue(ProjectFileRegistry.travellingSubfolders.contains("blends"))
+        XCTAssertTrue(ProjectFileRegistry.travellingSubfolders.contains(ProjectFileRegistry.blendPostersFolder))
+        XCTAssertFalse(ProjectFileRegistry.auditedSidecars.contains { $0.name == "posters/" }, "a folder most projects never have")
+        XCTAssertEqual(ProjectFileRegistry.entry(forRelativePath: "posters/\(UUID().uuidString).jpg")?.name, "posters/")
     }
 }
 

@@ -136,8 +136,29 @@ final class PicPlaceController: ObservableObject {
     @Published private(set) var usage: Usage?
     @Published private(set) var tally: LibraryTally?
     @Published internal(set) var records: [UUID: PicPlaceSyncRecord] = [:]
-    @Published private(set) var progress: [UUID: PicPlaceSyncProgress] = [:]
-    @Published private(set) var summaries: [UUID: FolderSummary] = [:]
+    @Published internal(set) var progress: [UUID: PicPlaceSyncProgress] = [:]
+    @Published internal(set) var summaries: [UUID: FolderSummary] = [:]
+    // Free up space (2026-09-23, `PicPlaceFreeUp.swift`).
+    /// The server's heavy assets per project from the last fresh read this
+    /// session, keyed by origin id — the card's per-file truth.
+    @Published internal(set) var serverHeavy: [UUID: [PicPlaceOriginalsCheck.RemoteAsset]] = [:]
+    /// This device's heavy files per project (paths and sizes, no hashes)
+    /// from the last folder walk, keyed by capture id.
+    @Published internal(set) var heavyListings: [UUID: [PicPlaceOriginalsCheck.LocalFile]] = [:]
+    var heavyListingTasks: [UUID: Task<Void, Never>] = [:]
+    /// Projects whose files are being checked or removed right now: every
+    /// other transfer of them waits (a push walking a folder mid-removal
+    /// would hash files as they vanish).
+    @Published internal(set) var removingProjects: Set<UUID> = []
+    /// What the last removal on a project did or why it did not, for the card.
+    @Published internal(set) var removalNotes: [UUID: String] = [:]
+    /// Settings' *Remove originals already on PicPlace*: the estimate, the
+    /// run and its result.
+    @Published internal(set) var freeUp = FreeUpState()
+    var freeUpTask: Task<Void, Never>?
+    var freeUpEstimateTask: Task<Void, Never>?
+    /// A person's removal from the card, per project (Cancel stops it).
+    var removalTasks: [UUID: Task<Void, Never>] = [:]
     @Published private(set) var isSigningIn = false
     @Published private(set) var isConnecting = false
     @Published private(set) var lastSignInError: String?
@@ -158,6 +179,8 @@ final class PicPlaceController: ObservableObject {
     /// What the last `/status` said about the account's libraries (stage C).
     @Published private(set) var serverHasLibraries = false
     @Published private(set) var serverLibraries: [PPLibrary] = []
+    /// Whether the server answers `POST /projects/assets` (2026-09-24).
+    private(set) var serverListsAssetsInBatches = false
     /// The first connection's progress while it runs (§4.1 step 4).
     @Published internal(set) var initialSyncProgress: InitialSyncProgress?
     var initialSyncTask: Task<Void, Never>?
@@ -209,11 +232,26 @@ final class PicPlaceController: ObservableObject {
     /// sent together they were refused together).
     var pushQueue: [UUID] = []
     var pushQueueTask: Task<Void, Never>?
-    /// The queue's progress for the status line: how many this run of the
-    /// queue has sent, of how many it took on.
-    @Published internal(set) var pushQueueDone = 0
-    @Published internal(set) var pushQueueTotal = 0
-    /// Pushes and a check that were due while the network rule held them.
+    /// Why each queued or held project is in the queue — `pushIfNeeded`
+    /// reads it before sending (see `PushReason`).
+    var pushReasons: [UUID: PushReason] = [:]
+    /// A person's press put work in the queue (their check, Resume): it runs
+    /// on mobile data and with auto-sync off, as the check itself did.
+    var pushQueueManual = false
+    /// The run of sending the Project Syncing drawer shows, from the first
+    /// project queued to the queue running dry — kept through a pause.
+    @Published internal(set) var sendRun: SendRun?
+    /// The projects the current run has counted, so one held and released
+    /// again is not counted twice.
+    var sendRunIDs: Set<UUID> = []
+    /// A person paused sending in the Project Syncing drawer (2026-09-24):
+    /// nothing this device sends to PicPlace moves — the queued pushes, the
+    /// check's catch-ups, the originals queue — until Resume. Kept in the
+    /// library's sync state, so it outlives a relaunch. Pulls, removals and
+    /// a person's own per-project Sync, Upload or Download are not held.
+    @Published internal(set) var sendsPaused = false
+    /// Pushes and a check that were due while the network rule — or a
+    /// pause — held them.
     var heldPushes: Set<UUID> = []
     var heldCheck = false
     var forcedNetwork = false
@@ -274,6 +312,7 @@ final class PicPlaceController: ObservableObject {
         let loaded = PicPlaceSyncState.load(root: root)
         records = loaded.records
         syncMeta = loaded.meta
+        sendsPaused = loaded.meta.sendsPaused ?? false
         migrateLegacyRecords()
         Self.migrateLegacyTokens()
 
@@ -678,6 +717,16 @@ final class PicPlaceController: ObservableObject {
     func noteLibraries(_ status: PPStatus) {
         serverHasLibraries = status.hasLibraries
         serverLibraries = status.libraries ?? []
+        // Not a library matter, but read off the same answer: many
+        // projects' asset lists in one request — what the check asks when a
+        // filing (or a pull) left posters unnoted (`settlePosters`).
+        serverListsAssetsInBatches = status.features["asset_lists_batch"] == true
+        #if DEBUG
+        // `LL_PICPLACE_NO_BATCH=1`: behave as a server without the batched
+        // read — every unnoted poster goes through the push queue (how the
+        // queue's progress and Pause are exercised on the bench).
+        if ProcessInfo.processInfo.environment["LL_PICPLACE_NO_BATCH"] != nil { serverListsAssetsInBatches = false }
+        #endif
     }
 
     private func noteLimits(_ status: PPStatus) {
@@ -1394,6 +1443,10 @@ final class PicPlaceController: ObservableObject {
         summaryTasks.removeAll()
         pushQueue.removeAll()
         heldPushes.removeAll()
+        pushReasons.removeAll()
+        pushQueueManual = false
+        sendRun = nil
+        sendRunIDs.removeAll()
         progress.removeAll()
         saveSyncState()
         LLog("picplace: stood down for a library switch")
@@ -1443,6 +1496,9 @@ final class PicPlaceController: ObservableObject {
         if let stagedState { return stagedState }
         #endif
         if let conflict = conflicts.first(where: { $0.originID == model.originID(of: capture) }) { return .conflict(conflict.kind) }
+        // A removal shows as its progress to the end, even once the sources
+        // it is removing have started to go.
+        if removingProjects.contains(capture.id), let progress = progress[capture.id] { return .syncing(progress) }
         if isPreviewOnly(capture) { return .previewOnly(records[model.originID(of: capture)]) }
         guard isSignedIn else { return .signedOut }
         guard canSync else { return .notConnected }
@@ -1477,6 +1533,9 @@ final class PicPlaceController: ObservableObject {
     /// Re-read the server's view of a project the card is showing: the
     /// devices that hold a copy (Also on), and whether it is still there at all.
     func refreshProject(_ captureID: UUID) {
+        // What is here is walked again whatever the session: a blend
+        // rendered since the card last looked is a file PicPlace lacks.
+        if progress[captureID] == nil, let capture = model.capture(id: captureID) { refreshHeavyListing(for: capture) }
         guard canSync, let capture = model.capture(id: captureID), progress[captureID] == nil else { return }
         let key = model.originID(of: capture)
         guard records[key] != nil else { return }
@@ -1491,6 +1550,8 @@ final class PicPlaceController: ObservableObject {
                 record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }
                 records[key] = record
                 saveSyncState()
+                // The per-file truth the Originals and Blends rows read.
+                serverHeavy[key] = Self.remoteHeavy(detail.assets)
             } catch let error as PicPlaceAPIError where error.status == 404 {
                 // Deleted on the server: this device's record no longer describes anything.
                 records[key] = nil
@@ -1537,7 +1598,7 @@ final class PicPlaceController: ObservableObject {
             LLog("picplace: not syncing \(capture.displayTitle) — it is in library \(other) on PicPlace, not this one")
             return
         }
-        guard canSync, syncTasks[capture.id] == nil else { return }
+        guard canSync, syncTasks[capture.id] == nil, !removingProjects.contains(capture.id) else { return }
         let key = model.originID(of: capture)
         let policy = override ?? self.policy
         let folder = model.projectFolderURL(for: capture)
@@ -1554,7 +1615,7 @@ final class PicPlaceController: ObservableObject {
             manifestMaxBytes: manifestMaxBytes,
             tier: tier,
             library: serverHasLibraries ? scope : nil)
-        let run = PicPlaceSyncRun(client: client, project: project, thisDeviceID: profile?.deviceID) { [weak self] progress in
+        let run = PicPlaceSyncRun(client: client, project: project, thisDeviceID: profile?.deviceID, assetStore: model.assetStore) { [weak self] progress in
             self?.progress[capture.id] = progress
         }
         progress[capture.id] = PicPlaceSyncProgress()
@@ -1579,6 +1640,9 @@ final class PicPlaceController: ObservableObject {
                                                     lastToken: lastPosterToken, in: folder)
                 }
                 var record = try await run.run()
+                let verifiedDigest = record.heavyDigest
+                let divergent = record.divergentFiles
+                let changed = record.changedFiles
                 record.posterToken = posterToken
                 if let previous = records[key] {
                     // A push of one policy keeps what the other recorded.
@@ -1586,6 +1650,10 @@ final class PicPlaceController: ObservableObject {
                     record.serverHeavyBytes = previous.serverHeavyBytes
                     record.originalsMovedAt = previous.originalsMovedAt
                     record.serverConfirmedSeen = previous.serverConfirmedSeen
+                    record.heavyDigest = previous.heavyDigest
+                    record.removedAt = previous.removedAt
+                    record.divergentFiles = previous.divergentFiles
+                    record.changedFiles = previous.changedFiles
                     if policy == .minimal { record.posterToken = posterToken }
                 }
                 record.clearFailure()
@@ -1595,6 +1663,12 @@ final class PicPlaceController: ObservableObject {
                     record.serverHeavyBytes = record.bytes
                     record.heavyFiles = 0
                     record.heavyBytes = 0
+                    record.heavyDigest = verifiedDigest
+                    record.divergentFiles = divergent
+                    record.changedFiles = changed
+                    // The server's list moved: the card reads it again.
+                    serverHeavy[key] = nil
+                    refreshHeavyListing(for: capture)
                 }
                 records[key] = record
             } catch is CancellationError {
@@ -1657,50 +1731,34 @@ final class PicPlaceController: ObservableObject {
 
     func cancelSync(_ id: UUID) {
         syncTasks[id]?.cancel()
+        removalTasks[id]?.cancel()
     }
 
     // MARK: Originals (stage 5, §4.5)
 
-    /// What the card offers for a project's originals.
-    enum OriginalsAction: Equatable {
-        /// This device holds them; PicPlace does not (or not all of them).
-        case upload(files: Int, bytes: Int64)
-        /// PicPlace holds them; this device does not.
-        case download(files: Int, bytes: Int64)
-        /// Both hold them.
-        case onBothSides
-    }
-
-    func originalsAction(for capture: AppModel.CaptureProject) -> OriginalsAction? {
-        guard canSync, progress[capture.id] == nil else { return nil }
-        let record = records[model.originID(of: capture)]
-        if isPreviewOnly(capture) {
-            let files = record?.serverHeavyFiles ?? record?.heavyFiles ?? 0
-            let bytes = record?.serverHeavyBytes ?? record?.heavyBytes ?? 0
-            return files > 0 ? .download(files: files, bytes: bytes) : nil
-        }
-        guard let record, record.lastError == nil else { return nil }
-        // What this device holds comes from the folder walk (cached per
-        // project); the record only knows what a push left behind.
-        guard let local = summary(for: capture), local.heavyFiles > 0 else { return nil }
-        if let onServer = record.serverHeavyFiles, onServer >= local.heavyFiles { return .onBothSides }
-        if record.originalsMovedAt != nil { return .onBothSides }
-        return .upload(files: local.heavyFiles, bytes: local.heavyBytes)
-    }
+    // What the card offers for a project's originals and blends is
+    // `originalsStatus(for:)` (PicPlaceFreeUp.swift, 2026-09-23): per file,
+    // never a count or a timestamp.
 
     /// The `source/` media and `blends/` up, by hash (`SyncPolicy.originals`).
     func uploadOriginals(_ capture: AppModel.CaptureProject) {
         sync(capture, policy: .originals)
     }
 
-    /// The `source/` media and `blends/` down, in pages of presigned URLs;
-    /// the project stops being preview-only when the last listed frame is
-    /// on disk. Cancel keeps what landed; a second run skips it.
-    func downloadOriginals(_ capture: AppModel.CaptureProject) {
-        guard canSync, syncTasks[capture.id] == nil else { return }
+    /// The `source/` media and/or `blends/` down, in pages of presigned
+    /// URLs; the project stops being preview-only when the last listed
+    /// frame is on disk. Cancel keeps what landed; a second run skips it.
+    /// The card's *Download originals* brings the source media and its
+    /// Blends row the blends (free up space removes them separately).
+    func downloadOriginals(_ capture: AppModel.CaptureProject,
+                           kinds: Set<PicPlaceOriginalsCheck.Kind> = Set(PicPlaceOriginalsCheck.Kind.allCases),
+                           replacing: Set<String> = []) {
+        guard canSync, syncTasks[capture.id] == nil, !removingProjects.contains(capture.id) else { return }
         let key = model.originID(of: capture)
         let folder = model.projectFolderURL(for: capture)
-        let run = PicPlaceDownloadRun(client: client, projectUUID: key.uuidString.lowercased(), folder: folder) { [weak self] progress in
+        removalNotes[capture.id] = nil
+        let run = PicPlaceDownloadRun(client: client, projectUUID: key.uuidString.lowercased(), folder: folder, kinds: kinds,
+                                      replacing: replacing, assetStore: model.assetStore) { [weak self] progress in
             self?.progress[capture.id] = progress
         }
         progress[capture.id] = PicPlaceSyncProgress(phase: .downloading)
@@ -1713,11 +1771,20 @@ final class PicPlaceController: ObservableObject {
                 var record = records[key] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: revision(of: capture), files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: "pull")
                 record.clearFailure()
                 record.originalsMovedAt = Date()
+                // The copies that differed are PicPlace's now.
+                if !replacing.isEmpty, let divergent = record.divergentFiles {
+                    let left = divergent.filter { !replacing.contains($0) }
+                    record.divergentFiles = left.isEmpty ? nil : left
+                }
                 records[key] = record
                 summaries[capture.id] = nil
                 model.noteOriginalsArrived(for: capture.id)
-                let _: [String: [PPPresence]]? = try? await client.post("projects/\(key.uuidString.lowercased())/presence", json: ["revision": record.revision, "tier": "original"])
-                LLog("picplace: downloaded the originals of \(capture.displayTitle): \(got.files) file(s), \(got.bytes) bytes")
+                refreshHeavyListing(for: capture)
+                // Blends alone leave the sources where they were: the tier
+                // says what this device holds of the originals.
+                let tier = model.sourcesMissing(capture) ? "preview" : "original"
+                let _: [String: [PPPresence]]? = try? await client.post("projects/\(key.uuidString.lowercased())/presence", json: ["revision": record.revision, "tier": tier])
+                LLog("picplace: downloaded the \(kinds == [.blend] ? "blends" : kinds == [.source] ? "originals" : "originals and blends") of \(capture.displayTitle): \(got.files) file(s), \(got.bytes) bytes")
             } catch is CancellationError {
                 model.noteOriginalsArrived(for: capture.id)
             } catch {
@@ -1851,11 +1918,48 @@ final class PicPlaceController: ObservableObject {
         }
     }
 
+    /// "0.1.0 (1) 2026-09-24 14:33" — the marketing version and build
+    /// number never move between Steven's builds, so the executable's own
+    /// build time says which one a device runs (the PicPlace developer could
+    /// not tell, 2026-09-24).
     static var appVersion: String {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "\(version) (\(build))"
+        var line = "\(version) (\(build))"
+        if let executable = Bundle.main.executableURL,
+           let built = (try? executable.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            formatter.dateFormat = "yyyy-MM-dd HH:mm"
+            line += " \(formatter.string(from: built)) UTC"
+        }
+        return line
+    }
+
+    /// Tells PicPlace which build this device runs when that changed since
+    /// it last said — the registration is an upsert by device key, sent at
+    /// sign-in only until now.
+    func reportAppVersionIfChanged() async {
+        guard let key = profile?.accountKey else { return }
+        let defaultsKey = "letslapse.picplace.reportedVersion.\(key)"
+        let version = Self.appVersion
+        guard UserDefaults.standard.string(forKey: defaultsKey) != version else { return }
+        do {
+            let _: [String: PPDevice] = try await client.post("device", json: [
+                "device_key": DeviceIdentity.id.uuidString.lowercased(),
+                "name": Self.deviceName,
+                "platform": Self.platform,
+                "model": Self.hardwareModel,
+                "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
+                "app_version": version,
+            ])
+            UserDefaults.standard.set(version, forKey: defaultsKey)
+            LLog("picplace: told PicPlace this device runs \(version)")
+        } catch {
+            LLog("picplace: could not report the app version: \(Self.describe(error))")
+        }
     }
 
     #if DEBUG

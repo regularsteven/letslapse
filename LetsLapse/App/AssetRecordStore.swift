@@ -116,6 +116,33 @@ final class AssetRecordStore: @unchecked Sendable {
         reindex(projectFolder: folder)
     }
 
+    /// The hashes of files just written whole — a PicPlace download, which
+    /// checked each against PicPlace's fingerprint — as one append per file
+    /// and one index pass: the next push or free-up check trusts them
+    /// without reading them again.
+    func noteHashes(_ hashes: [(name: String, bytes: Int64, sha256: String)], inProjectFolder folder: URL) throws {
+        guard !hashes.isEmpty else { return }
+        var records = self.records(inProjectFolder: folder)
+        var lines: [AssetRecord] = []
+        let now = Date()
+        for entry in hashes {
+            var record = records[entry.name] ?? AssetRecord(name: entry.name)
+            record.bytes = entry.bytes
+            record.hash = AssetHash.prefix + entry.sha256
+            record.hashedAt = now
+            records.put(record)
+            lines.append(record)
+        }
+        try writeQueue.sync {
+            let url = AssetRecords.url(inProjectFolder: folder)
+            for line in lines { try AssetRecords.append(line, to: url) }
+        }
+        lock.lock()
+        recordCache[folder.path] = records
+        lock.unlock()
+        reindex(projectFolder: folder)
+    }
+
     /// Changes the project-level record and rewrites `metadata.json`
     /// atomically. Synchronous, as `update` is.
     func updateProject(inProjectFolder folder: URL, _ mutate: (inout ProjectMetadata) -> Void) throws {

@@ -500,6 +500,13 @@ final class ProjectTransferServer: ObservableObject {
             send(PTError.notFound(), on: incoming)
             return
         }
+        // Originals or blends on PicPlace, not here (free up space): the
+        // far side would install records without their files and drop the
+        // blend rows — refuse with the reason instead.
+        if let capture = model.capture(id: captureID), model.heavyFilesMissing(capture) {
+            send(PTError.busy("Some of that project's originals or blends aren't on that device — download them from PicPlace there first."), on: incoming)
+            return
+        }
         // The cubes the grade names travel with the project — from the
         // library store, for the trip. A cube this library lacks refuses
         // with the export's own sentence rather than sending a silent gap.

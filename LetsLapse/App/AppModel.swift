@@ -286,8 +286,12 @@ final class AppModel: ObservableObject {
         /// one-frame tagging at capture all mutate a project and are none of
         /// them edits. It is stamped at the paths a person drives — rename,
         /// grade, rotate, nominate a bad frame, add or delete a blend or an
-        /// encoding, delete a scan page — and nowhere else, which is why it is
-        /// a curated list rather than a hook on the array.
+        /// encoding, delete a scan page, review or stabilise the photos, edit
+        /// a scan's documents, measure a smoothed white balance — and nowhere
+        /// else, which is why it is a curated list rather than a hook on the
+        /// array. It is also the project's revision on PicPlace, so a person's
+        /// edit to a file the records bundle carries has to stamp it, or the
+        /// file never syncs and a pull can put an older one back.
         ///
         /// Nil for everything captured before this existed; read it through
         /// `AppModel.lastEdited(_:)`, which falls back to the newest blend and
@@ -1385,6 +1389,9 @@ final class AppModel: ObservableObject {
             // activity brackets keep current.
             return self?.libraryBusyForBackfill ?? false
         }
+        // A framing review written to `source/framing.json` is an edit, so
+        // it syncs (see `FramingReviewStore.onReviewWritten`).
+        FramingReviewStore.shared.onReviewWritten = { [weak self] id in self?.markEdited(id) }
         sweepGPSBackups()
         scheduleAssetBackfill()
         // The Adjust and Guided previews level their source frames the way
@@ -1416,7 +1423,13 @@ final class AppModel: ObservableObject {
     /// (Blend Off keeps the frame; a blended shot's photo is the stack).
     func heroImageURL(for capture: CaptureProject) -> URL? {
         guard capture.kind == .photos else { return nil }
-        if let blend = blends(for: capture).first(where: { $0.kind == .image }) {
+        // Only a stacked image that is ON this device: a pulled preview's
+        // (or one whose blend went to PicPlace to free space) is a record
+        // without a file, and handing it out drew a broken tile where the
+        // poster should stand in (`thumbnailURL`) and opened the editor on
+        // nothing. One stat.
+        if let blend = blends(for: capture).first(where: { $0.kind == .image }),
+           FileManager.default.fileExists(atPath: mediaURL(for: blend).path) {
             return mediaURL(for: blend)
         }
         return mediaURL(for: capture)
@@ -1815,6 +1828,10 @@ final class AppModel: ObservableObject {
     private func write(_ documents: [ScanDocument], for sessionID: UUID) {
         try? ScanDocumentStore.save(documents, to: scanSourceFolder(for: sessionID))
         scanDocumentsToken &+= 1
+        // A person's edit to the scan: marked, so it syncs and a pull from
+        // another device's change can't put an older `documents.json` back
+        // over it (2026-09-24).
+        markEdited(sessionID)
     }
 
     /// The photograph a pose was shot as — never the rectified page.
@@ -9880,9 +9897,16 @@ final class AppModel: ObservableObject {
         /// the folder is missing or unwritable, and an archive without its
         /// manifest would not install anywhere.
         case noProjectDocument
+        /// Some of the project's originals or blends are on PicPlace, not
+        /// here (free up space, or a pulled preview): the archive would carry
+        /// records without files, and the installer drops the blend rows
+        /// whose files did not arrive.
+        case filesNotHere
 
         var errorDescription: String? {
             switch self {
+            case .filesNotHere:
+                return "Some of this project's originals or blends aren't on this device — download them from PicPlace first, then export it."
             case .insufficientStorage(let available, let needed):
                 return """
                 Not enough storage to export this project. It needs \
@@ -9933,6 +9957,7 @@ final class AppModel: ObservableObject {
         guard FileManager.default.fileExists(atPath: documentURL.path) else {
             throw ExportError.noProjectDocument
         }
+        guard !heavyFilesMissing(capture) else { throw ExportError.filesNotHere }
         // The cubes the grade names travel with the archive — from the
         // library store, into `luts/` for the trip only, gone again when the
         // archive is written (docs/lut-library-assets.md §2.3). A cube this
@@ -10306,6 +10331,10 @@ final class AppModel: ObservableObject {
         capture.originID = originID
         capture.sourceFileNames.removeAll { $0.hasSuffix(".json") }
         capture.addedAt = Date()
+        // Measured here when the size sort asks — a manifest from before
+        // 2026-09-24 still carries another device's number.
+        capture.sizeBytes = nil
+        capture.sizeMeasuredAt = nil
         let blends = arrivedBlends.map { blend -> BlendProject in
             var blend = blend
             blend.captureID = originID
@@ -10330,6 +10359,10 @@ final class AppModel: ObservableObject {
             capture.id = originID
             capture.originID = originID
             capture.addedAt = document.capture.addedAt
+            // This device's measurement of its own folder, never another's
+            // (`PicPlaceSyncRun.deviceOnlyCaptureKeys`).
+            capture.sizeBytes = document.capture.sizeBytes
+            capture.sizeMeasuredAt = document.capture.sizeMeasuredAt
             capture.sourceFileNames.removeAll { $0.hasSuffix(".json") }
             var blends = arrivedBlends.map { blend -> BlendProject in
                 var blend = blend
@@ -10837,7 +10870,11 @@ final class AppModel: ObservableObject {
             return WhiteBalanceSeries(samples: samples)
         }.value
         guard !series.isEmpty else { return nil }
-        try? series.write(to: folder)
+        // The source switched to smoothed was marked edited before this
+        // measure started, and the push that edit cued may already have
+        // gone without the series: marked again once it is on disk, so
+        // `frames.whitebalance` travels too (2026-09-24).
+        if (try? series.write(to: folder)) != nil { markEdited(capture.id) }
         Self.forgetWhiteBalanceTrack(capture.id)
         return series
     }

@@ -42,6 +42,19 @@ final class ProjectOrientationTests: XCTestCase {
         XCTAssertEqual(lookup.turns(for: folder.appendingPathComponent("masks/sky.png")), 0)
     }
 
+    func testABlendsStillTakesTheBlendsDifference() throws {
+        let root = try library()
+        let id = UUID().uuidString
+        let folder = root.appendingPathComponent("Projects/\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let document: [String: Any] = ["capture": ["quarterTurns": 2],
+                                       "blends": [["id": id, "outputFileName": "blends/\(id).mp4", "renderedQuarterTurns": 1]]]
+        try JSONSerialization.data(withJSONObject: document).write(to: folder.appendingPathComponent("project.json"))
+        let lookup = ProjectOrientation()
+        XCTAssertEqual(lookup.turns(for: folder.appendingPathComponent("posters/\(id).jpg")), 1)
+        XCTAssertEqual(lookup.turns(for: folder.appendingPathComponent("posters/\(UUID().uuidString).jpg")), 2)
+    }
+
     func testOutsideAProjectAndWithoutADocumentIsUpright() throws {
         let root = try library()
         let lookup = ProjectOrientation()

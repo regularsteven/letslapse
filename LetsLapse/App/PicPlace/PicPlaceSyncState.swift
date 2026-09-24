@@ -19,6 +19,10 @@ enum PicPlaceSyncState {
     struct Meta: Codable, Equatable {
         var serverTime: String?
         var checkedAt: Date?
+        /// A person paused sending in the Project Syncing drawer
+        /// (2026-09-24); nil when not. Kept here so a pause outlives a
+        /// relaunch — it is this library's, on this device.
+        var sendsPaused: Bool?
     }
 
     private struct File: Codable {

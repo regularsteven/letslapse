@@ -63,6 +63,13 @@ enum PicPlaceSyncInventory {
         return false
     }
 
+    /// Which half of the heavy set a path is — source media or a blend —
+    /// nil for everything else (free up space's two rows).
+    static func heavyKind(_ relativePath: String) -> PicPlaceOriginalsCheck.Kind? {
+        if case .heavy(let kind) = role(for: relativePath) { return PicPlaceOriginalsCheck.Kind(rawValue: kind) }
+        return nil
+    }
+
     static func role(for relativePath: String) -> PicPlaceSyncItem.Role {
         if relativePath == ProjectFileRegistry.projectDocumentName { return .manifest }
         guard let entry = ProjectFileRegistry.entry(forRelativePath: relativePath) else {

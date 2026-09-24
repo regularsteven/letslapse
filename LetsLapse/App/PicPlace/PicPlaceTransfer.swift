@@ -88,6 +88,17 @@ enum PicPlaceTransfer {
     /// first transfer is not the launch. The controller calls this as it
     /// makes the client.
     static func armHooks() { _ = outage }
+
+    /// `LL_PICPLACE_BAD_DIGEST=<name>[,<name>…]` — the first PUT of each
+    /// named file (a path within the project, `source/f005.jpg`) is taken as
+    /// storage's `400` for a body that does not hash to the declared SHA-256:
+    /// what storage answers once PicPlace signs the hash (free-up server
+    /// asks, Ask 1), on a bench whose server does not sign it yet. The
+    /// re-hash-once path runs from there.
+    static func forcesBadDigest(_ name: String, rehashed: Bool) -> Bool {
+        guard !rehashed, let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_BAD_DIGEST"] else { return false }
+        return raw.split(separator: ",").contains { String($0) == name }
+    }
     #endif
 }
 

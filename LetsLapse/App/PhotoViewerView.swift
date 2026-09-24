@@ -645,6 +645,10 @@ struct PhotoViewerView: View {
             ? [(nil, timeline.baselineAnchor ?? 0)]
             : timeline.keyframes.map { ($0.id, $0.position) }
         let frameURLs = moments.map { hasTimeline ? frames[frameIndex(at: $0.position)] : url }
+        // A frame that is not on this device (on PicPlace only) would read as
+        // D65 and the guess would be persisted — and synced. Leave the grade
+        // as it is until the frames are here.
+        guard frameURLs.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else { return }
         let asShots = await Task.detached(priority: .utility) {
             frameURLs.map { PhotoGrader.asShotNeutral(url: $0) }
         }.value

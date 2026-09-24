@@ -67,6 +67,12 @@ extension PicPlaceController {
         var elsewhere = 0
         /// Previews of other libraries' projects removed from this one (L23).
         var evicted = 0
+        /// Handed to the push queue — edits, new projects, retries, poster
+        /// catch-ups — which sends them one at a time after the check.
+        var queued = 0
+        /// In step with no poster noted here, and PicPlace holds one: noted,
+        /// nothing sent (`settlePosters`).
+        var postersKnown = 0
         var failures: [String] = []
         var checkedAt = Date()
     }
@@ -131,6 +137,9 @@ extension PicPlaceController {
         if check.updated > 0 { parts.append("\(check.updated) updated from PicPlace") }
         if check.pushed > 0 { parts.append("\(check.pushed) sent") }
         if check.retried > 0 { parts.append("\(check.retried) sent on a retry") }
+        // While the sending block shows the run, its count is there.
+        if check.queued > 0, sendRun == nil, !sendsPaused { parts.append("\(check.queued) to send") }
+        if check.postersKnown > 0 { parts.append("\(check.postersKnown) poster\(check.postersKnown == 1 ? "" : "s") already on PicPlace") }
         if check.waiting > 0 { parts.append("\(check.waiting) waiting to retry") }
         if check.deletedThere > 0 { parts.append("\(check.deletedThere) deleted on PicPlace") }
         if check.deletedHere > 0 { parts.append("\(check.deletedHere) removed here (deleted elsewhere; in the trash)") }
@@ -139,6 +148,8 @@ extension PicPlaceController {
         if check.conflicts > 0 { parts.append("\(check.conflicts) to decide") }
         if !check.failures.isEmpty { parts.append(check.failures.joined(separator: "; ")) }
         let when = check.checkedAt.formatted(.relative(presentation: .named))
+        // Work the sending block is showing is not "nothing changed".
+        if parts.isEmpty, check.queued > 0 { return "Checked \(when)" }
         return parts.isEmpty ? "Checked \(when) · nothing changed" : "Checked \(when) · " + parts.joined(separator: " · ")
     }
 
@@ -148,6 +159,14 @@ extension PicPlaceController {
         isChecking = true
         defer { isChecking = false }
         var outcome = CheckOutcome()
+        // What the check finds to send goes to the push queue, which sends
+        // it after the check — one project at a time, paced, pausable, with
+        // its progress in the Project Syncing drawer. The check itself only
+        // reads, pulls and decides, so it stays short (2026-09-24: an inline
+        // pass of 877 poster pushes held *Checking PicPlace…* for an hour).
+        // A person's press lets the queue run as the press itself would.
+        let manual = reason == "manual"
+        var posterCandidates: [(origin: UUID, id: UUID)] = []
         // A person's press retries every failed push now; the automatic
         // checks wait for each one's backoff.
         let now = Date()
@@ -157,6 +176,7 @@ extension PicPlaceController {
             return (record.retryDueAt ?? .distantPast) <= now
         }
         do {
+            await reportAppVersionIfChanged()
             // Stage C: a binding whose server library is missing is put
             // right before the pass reads everything as filed elsewhere.
             if serverHasLibraries, let status: PPStatus = try? await client.get("status") {
@@ -281,9 +301,8 @@ extension PicPlaceController {
                         // retried the same way (L24: managing a library
                         // never needs the originals here).
                         if retryDue(record) {
-                            await syncAndWait(capture)
-                            if records[origin]?.lastError == nil { outcome.retried += 1; LLog("picplace: \(capture.displayTitle) — push retried, done") }
-                            else { outcome.failures.append("\(capture.displayTitle): \(records[origin]?.lastError ?? "push failed")") }
+                            enqueuePush(capture.id, reason: .retry, manual: manual)
+                            outcome.queued += 1
                         } else {
                             outcome.waiting += 1
                         }
@@ -298,8 +317,9 @@ extension PicPlaceController {
                     // that arrived), else asks for a poster it lacks once
                     // per change there.
                     if !model.sourcesMissing(capture), record?.posterToken == nil, syncTasks[capture.id] == nil {
-                        await syncAndWait(capture)
-                        if records[origin]?.lastError == nil { outcome.pushed += 1; LLog("picplace: \(capture.displayTitle) — in step, poster sent") }
+                        // Asked of PicPlace in one batch after the pass:
+                        // most already have their poster there.
+                        posterCandidates.append((origin, capture.id))
                     } else if model.sourcesMissing(capture), record?.policy == "pull" || record?.serverConfirmedSeen != nil,
                               record?.serverConfirmedSeen != row.assets.confirmed {
                         do {
@@ -325,9 +345,8 @@ extension PicPlaceController {
                 case (true, true, false):
                     if records[origin]?.lastError != nil, !retryDue(records[origin]) { outcome.waiting += 1; continue }
                     let wasFailed = records[origin]?.lastError != nil
-                    await syncAndWait(capture)
-                    if records[origin]?.lastError == nil { if wasFailed { outcome.retried += 1 } else { outcome.pushed += 1 } }
-                    else { outcome.failures.append("\(capture.displayTitle): \(records[origin]?.lastError ?? "push failed")") }
+                    enqueuePush(capture.id, reason: wasFailed ? .retry : .edited, manual: manual)
+                    outcome.queued += 1
                 case (true, false, true):
                     do { try await pullUpdate(row, into: capture); outcome.updated += 1 }
                     catch { outcome.failures.append("\(row.name): \(Self.describe(error))") }
@@ -338,6 +357,8 @@ extension PicPlaceController {
                                               serverDevice: row.updatedBy?.name, serverRevision: row.revision, localRevision: localRevision))
                 }
             }
+
+            await settlePosters(posterCandidates, manual: manual, outcome: &outcome)
 
             // New here since the last check: up they go (records and a poster).
             // A record whose every push failed is not a push: the project
@@ -352,9 +373,8 @@ extension PicPlaceController {
                     if !retryDue(record) { outcome.waiting += 1; continue }
                 }
                 let wasFailed = records[origin]?.lastError != nil
-                await syncAndWait(capture)
-                if records[origin]?.lastError == nil { if wasFailed { outcome.retried += 1 } else { outcome.pushed += 1 } }
-                else { outcome.failures.append("\(capture.displayTitle): \(records[origin]?.lastError ?? "push failed")") }
+                enqueuePush(capture.id, reason: wasFailed ? .retry : .new, manual: manual)
+                outcome.queued += 1
             }
 
             outcome.conflicts = conflicts.count
@@ -364,7 +384,7 @@ extension PicPlaceController {
             saveSyncState()
             lastCheck = outcome
             updateAutoError()
-            LLog("picplace: check (\(reason)) — \(outcome.pulled) pulled, \(outcome.updated) updated, \(outcome.pushed) pushed, \(outcome.retried) retried, \(outcome.waiting) waiting to retry, \(outcome.deletedThere) deleted there, \(outcome.deletedHere) removed here, \(outcome.elsewhere) filed elsewhere, \(outcome.evicted) other libraries' previews removed, \(conflicts.count) conflict(s)\(outcome.failures.isEmpty ? "" : ", failures (\(outcome.failures.count)): \(outcome.failures.prefix(5).joined(separator: "; "))\(outcome.failures.count > 5 ? "; …" : "")")")
+            LLog("picplace: check (\(reason)) — \(outcome.pulled) pulled, \(outcome.updated) updated, \(outcome.queued) queued to send, \(outcome.postersKnown) poster(s) already on PicPlace noted, \(outcome.retried) retried, \(outcome.waiting) waiting to retry, \(outcome.deletedThere) deleted there, \(outcome.deletedHere) removed here, \(outcome.elsewhere) filed elsewhere, \(outcome.evicted) other libraries' previews removed, \(conflicts.count) conflict(s)\(outcome.failures.isEmpty ? "" : ", failures (\(outcome.failures.count)): \(outcome.failures.prefix(5).joined(separator: "; "))\(outcome.failures.count > 5 ? "; …" : "")")")
             for conflict in conflicts {
                 LLog("picplace: conflict — \(conflict.name) (\(conflict.originID.uuidString.prefix(8))) \(conflict.kind): local \(conflict.localRevision.map(String.init) ?? "-") vs server \(conflict.serverRevision)\(conflict.serverDevice.map { " from \($0)" } ?? "")")
             }
@@ -379,6 +399,39 @@ extension PicPlaceController {
             }
             if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_UPLOAD"], let id = UUID(uuidString: raw), let capture = model.capture(id: id) {
                 uploadOriginals(capture)
+            }
+            // Free up space, once per process: `LL_PICPLACE_REMOVE=<uuid>[:originals|blends]`
+            // presses the card's Remove (after its confirm) on that project;
+            // `LL_PICPLACE_FREEUP=1` presses Settings' Remove originals already
+            // on PicPlace; `LL_PICPLACE_UPLOAD_ALL=1` its Upload beside it.
+            if !Self.freeUpHooksRan {
+                Self.freeUpHooksRan = true
+                let environment = ProcessInfo.processInfo.environment
+                if let raw = environment["LL_PICPLACE_REMOVE"] {
+                    let parts = raw.split(separator: ":").map(String.init)
+                    if let id = UUID(uuidString: parts[0]), let capture = model.capture(id: id) {
+                        let scope: RemovalScope = parts.count > 1 && parts[1] == "blends" ? .blends : .originals
+                        LLog("picplace hook: remove the \(scope.noun) of \(capture.displayTitle)")
+                        removeFromDevice(capture, scope: scope)
+                    } else {
+                        LLog("picplace hook: LL_PICPLACE_REMOVE — no project \(parts.first ?? "")")
+                    }
+                }
+                // `LL_PICPLACE_REPLACE=<uuid>` presses the card's Replace: the
+                // copies that differ from PicPlace's, fetched over them.
+                if let raw = environment["LL_PICPLACE_REPLACE"], let id = UUID(uuidString: raw), let capture = model.capture(id: id) {
+                    let names = records[model.originID(of: capture)]?.divergentFiles ?? []
+                    LLog("picplace hook: replace \(names.count) file(s) of \(capture.displayTitle) with PicPlace's copies")
+                    downloadOriginals(capture, kinds: Set(PicPlaceOriginalsCheck.Kind.allCases), replacing: Set(names))
+                }
+                if environment["LL_PICPLACE_UPLOAD_ALL"] != nil {
+                    LLog("picplace hook: upload the originals not on PicPlace yet")
+                    uploadRemainingOriginals()
+                }
+                if environment["LL_PICPLACE_FREEUP"] != nil {
+                    LLog("picplace hook: remove originals already on PicPlace")
+                    freeUpSpace()
+                }
             }
             // `LL_PICPLACE_REVIEW=1` opens the conflicts sheet after the check.
             if ProcessInfo.processInfo.environment["LL_PICPLACE_REVIEW"] != nil, !conflicts.isEmpty { isReviewingConflicts = true }
@@ -402,8 +455,74 @@ extension PicPlaceController {
         }
     }
 
+    #if DEBUG
+    /// The free-up hooks run after the first check of a process, not every one.
+    static var freeUpHooksRan = false
+    #endif
+
     static func describe(_ error: Error) -> String {
         (error as? PicPlaceAPIError)?.cardCaption ?? (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
+    // MARK: Posters
+
+    /// Projects in step whose record notes no poster — a library's filing
+    /// wiped the notes (`connectLibrary`), a pull cleared one, a v1 push
+    /// never had one — asked of PicPlace a hundred at a time
+    /// (`POST /projects/assets`, the preview kind). Where PicPlace holds a
+    /// confirmed poster the note is taken as it stands and nothing is sent:
+    /// on 2026-09-24 a filing re-rendered and re-sent 877 posters PicPlace
+    /// already had, one push each. The rest join the push queue. A server
+    /// without the batched read sends them all through the queue; one that
+    /// cannot be reached right now leaves them for the next check.
+    func settlePosters(_ candidates: [(origin: UUID, id: UUID)], manual: Bool, outcome: inout CheckOutcome) async {
+        guard !candidates.isEmpty else { return }
+        var held = Set<UUID>()
+        var unanswered = Set(candidates.map(\.origin))
+        // Everything goes through the queue unless PicPlace answered for it.
+        var queueUnanswered = !serverListsAssetsInBatches
+        if serverListsAssetsInBatches {
+            var pending = candidates.map { $0.origin.uuidString.lowercased() }
+            while !pending.isEmpty {
+                let chunk = Array(pending.prefix(100))
+                let answer: PPAssetLists
+                do {
+                    answer = try await client.post("projects/assets", json: ["uuids": chunk, "kinds": [PicPlaceSyncInventory.posterKind]])
+                } catch {
+                    let transient = (error as? PicPlaceAPIError)?.isTransient ?? true
+                    LLog("picplace: poster check — \(Self.describe(error))\(transient ? "; the rest wait for the next check" : "; the rest go through the queue")")
+                    if transient { return }
+                    queueUnanswered = true
+                    break
+                }
+                for entry in answer.projects where entry.error == nil {
+                    guard let origin = UUID(uuidString: entry.uuid) else { continue }
+                    unanswered.remove(origin)
+                    let hasPoster = (entry.assets ?? []).contains {
+                        $0.name == ProjectFileRegistry.posterName && $0.status == "confirmed"
+                    }
+                    if hasPoster { held.insert(origin) }
+                }
+                // `next` is what the size cap left of this chunk; a cap that
+                // answered nothing of it would ask forever — move on.
+                let next = (answer.next ?? []).map { $0.lowercased() }
+                let progressed = next.count < chunk.count
+                pending = (progressed ? next : []) + Array(pending.dropFirst(chunk.count))
+            }
+        }
+        for candidate in candidates {
+            guard let capture = model.capture(id: candidate.id) else { continue }
+            if held.contains(candidate.origin) {
+                records[candidate.origin]?.posterToken = currentPosterToken(for: capture)
+                outcome.postersKnown += 1
+            } else if queueUnanswered || !unanswered.contains(candidate.origin) {
+                enqueuePush(candidate.id, reason: .poster, manual: manual)
+                outcome.queued += 1
+            }
+        }
+        if outcome.postersKnown > 0 {
+            LLog("picplace: poster check — \(outcome.postersKnown) of \(candidates.count) already on PicPlace, noted without sending")
+        }
     }
 
     // MARK: Rows with a base

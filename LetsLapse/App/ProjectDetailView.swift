@@ -365,6 +365,7 @@ struct ProjectDetailView: View {
     private func content(for capture: AppModel.CaptureProject) -> some View {
         GeometryReader { proxy in
             let layout = DetailLayout(container: proxy.size)
+            ScrollViewReader { scroller in
             ScrollView {
                 VStack(spacing: 14) {
                     // A Scanner shoot is a set of frames for export, not
@@ -401,6 +402,18 @@ struct ProjectDetailView: View {
             // then holds still for the length of it rather than racing it for
             // the same pixels.
             .scrollDisabled(isResizingHero)
+            #if DEBUG
+            // `LL_SCROLL=picplace` lands the screen on its PICPLACE card, below
+            // the fold on a phone — how a headless screenshot reaches the free
+            // up space rows (2026-09-23) without a finger.
+            .onAppear {
+                guard ProcessInfo.processInfo.environment["LL_SCROLL"] == "picplace" else { return }
+                for delay in [0.8, 3.0] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { scroller.scrollTo(Self.picplaceAnchor, anchor: .center) }
+                }
+            }
+            #endif
+            }
         }
         .background(LL.screenBackground)
         .navigationTitle(capture.displayTitle)
@@ -494,8 +507,12 @@ struct ProjectDetailView: View {
         // The project's copy on PicPlace: after the material, before the
         // management of it (picplace-sync-v1.md §3.7).
         PicPlaceStatusCard(picplace: model.picplace, captureID: capture.id)
+            .id(Self.picplaceAnchor)
         managementCard(for: capture)
     }
+
+    /// The PICPLACE card's scroll id (`LL_SCROLL=picplace`).
+    static let picplaceAnchor = "picplace-card"
 
     /// Two columns, twice: the picture beside what is made from it, then the
     /// material beside the management of it.
@@ -606,6 +623,11 @@ struct ProjectDetailView: View {
                 Label("New blended clip", systemImage: "plus")
             }
             .buttonStyle(LLPrimaryButtonStyle())
+            // A new clip blends from the originals: on PicPlace only, the
+            // button waits for the download rather than failing on open (the
+            // style draws no disabled state of its own).
+            .disabled(model.sourcesMissing(capture))
+            .opacity(model.sourcesMissing(capture) ? 0.4 : 1)
 
             // A side-step into the SAME flow: a survey that authors the warp +
             // reframe as states and transitions instead of a timeline. It must
@@ -618,6 +640,8 @@ struct ProjectDetailView: View {
                     Label("Guided clip", systemImage: "wand.and.stars")
                 }
                 .buttonStyle(LLSecondaryButtonStyle())
+                .disabled(model.sourcesMissing(capture))
+                .opacity(model.sourcesMissing(capture) ? 0.4 : 1)
             }
         }
     }
@@ -645,7 +669,9 @@ struct ProjectDetailView: View {
             }
         } else if capture.kind == .video {
             let clipNames = model.sourceClipNames(for: capture)
-            if !clipNames.isEmpty {
+            // Clips on PicPlace, not here: their rows would draw nothing
+            // under the header; the PICPLACE card says where they are.
+            if !clipNames.isEmpty, !model.sourcesMissing(capture) {
                 sourceClipsSection(for: capture, clipNames: clipNames)
             }
         } else {
@@ -1261,12 +1287,15 @@ struct ProjectDetailView: View {
 
     private var deleteProjectMessage: String {
         guard let capture else { return "" }
+        // Files that are only on PicPlace (free up space, a preview): the
+        // delete reaches PicPlace, and PicPlace purges them at once.
+        let picplaceOnly = model.picplace.deletionWarning(for: capture).map { " " + $0 } ?? ""
         if capture.isPhotoCapture {
-            return "This permanently deletes the photo. There's no undo."
+            return "This permanently deletes the photo. There's no undo." + picplaceOnly
         }
         let count = model.blends(for: capture).count
         let versionText = count == 1 ? "1 blended clip" : "\(count) blended clips"
-        return "This permanently deletes the original and \(versionText). There's no undo."
+        return "This permanently deletes the original and \(versionText). There's no undo." + picplaceOnly
     }
 
     // MARK: - Actions

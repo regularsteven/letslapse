@@ -327,10 +327,92 @@ struct ProjectSyncSheet: View {
                         .minimumScaleFactor(0.8)
                 }
                 statusLine
+                sendBlock
                 checkButton
                 settingsLink
             }
         }
+    }
+
+    // MARK: Sending (2026-09-24)
+
+    /// The push queue's run: what is going to PicPlace, how far it has got,
+    /// and the person's Pause and Resume — here, beside the check, because a
+    /// long run of sends is what made the check look stuck. A pause holds
+    /// every send (edits, catch-ups, the originals queue), survives a
+    /// relaunch, and lets what is mid-send finish first.
+    @ViewBuilder
+    private var sendBlock: some View {
+        if let run = picplace.sendRun, run.total > 0 {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
+                    Text(sendTitle(run))
+                        .font(.system(size: 15, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Spacer(minLength: 8)
+                    pauseResumeButton
+                }
+                ProgressView(value: Double(min(run.done, run.total)), total: Double(max(run.total, 1)))
+                    .tint(picplace.sendsPaused ? Color.secondary : LL.accent)
+                Text(sendDetail(run))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else if picplace.sendsPaused {
+            HStack(spacing: 8) {
+                Label("Sending to PicPlace is paused", systemImage: "pause.circle")
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                pauseResumeButton
+            }
+        }
+    }
+
+    private var pauseResumeButton: some View {
+        Button {
+            if picplace.sendsPaused { picplace.resumeSends() } else { picplace.pauseSends() }
+        } label: {
+            Label(picplace.sendsPaused ? "Resume" : "Pause",
+                  systemImage: picplace.sendsPaused ? "play.fill" : "pause.fill")
+                .font(.system(size: 13.5, weight: .semibold))
+        }
+        .buttonStyle(.bordered)
+        .tint(LL.accent)
+    }
+
+    private func sendTitle(_ run: PicPlaceController.SendRun) -> String {
+        if picplace.sendsPaused { return "Sending paused" }
+        if run.posters == run.total { return run.total == 1 ? "Sending a poster to PicPlace" : "Sending posters to PicPlace" }
+        if run.posters == 0 { return run.total == 1 ? "Sending a project to PicPlace" : "Sending projects to PicPlace" }
+        return "Sending to PicPlace"
+    }
+
+    private func sendDetail(_ run: PicPlaceController.SendRun) -> String {
+        var parts = ["\(run.done.formatted()) of \(run.total.formatted())"]
+        if picplace.sendsPaused {
+            parts.append("\(run.left.formatted()) left · nothing is sent until you resume")
+        } else if !picplace.pushQueueManual, let hold = picplace.autoHold {
+            parts.append(hold)
+        } else if let seconds = run.secondsLeft {
+            parts.append(Self.timeLeft(seconds))
+        }
+        if run.failed > 0 { parts.append("\(run.failed) failed · the next check tries again") }
+        if let current = run.current, !picplace.sendsPaused { parts.append(current) }
+        return parts.joined(separator: " · ")
+    }
+
+    /// "about 40 min left", "about 1 h 10 min left", "under a minute left".
+    static func timeLeft(_ seconds: Double) -> String {
+        let minutes = Int((seconds / 60).rounded())
+        if minutes < 1 { return "under a minute left" }
+        if minutes < 60 { return "about \(minutes) min left" }
+        let hours = minutes / 60, rest = minutes % 60
+        return rest == 0 ? "about \(hours) h left" : "about \(hours) h \(rest) min left"
     }
 
     private var signInTitle: String {
@@ -371,7 +453,8 @@ struct ProjectSyncSheet: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-        } else if let status = picplace.autoStatus {
+        } else if let status = picplace.autoStatus, !(picplace.sendRun != nil && status.hasPrefix("Syncing")) {
+            // The push queue's own line is the sending block below.
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text(status)
@@ -387,6 +470,9 @@ struct ProjectSyncSheet: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
+        } else if picplace.sendsPaused {
+            // The sending block below says it, with Resume.
+            EmptyView()
         } else if let error = picplace.autoError {
             Label(error, systemImage: "exclamationmark.triangle")
                 .font(.system(size: 13.5))
