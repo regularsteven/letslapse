@@ -466,6 +466,41 @@ code when the session resumes (`resume(interruptionEnded)` is the natural
 place to check). Repro: open the capture screen, lock the phone or start a
 screen recording from Control Center, come back, browse with `remote_probe`.
 
+### PicPlace transfer speed — one upload at a time, faster first pulls, two small faults
+
+**Raised:** 2026-09-25 (Steven, three devices syncing at once: the 18 Pro
+"each image can take 30 seconds", the iPad pulling 972 projects at ~0.8 s
+each) · **Status:** measured, parked by Steven ("fine for now") · **Size:**
+small each
+
+**What the logs showed (06:27–06:51):** no retries, no refusals. The home
+upload line tops out at ~5.5 MB/s (each phone alone: the 18 Pro 5.35 MB/s
+on 2026-09-24, the 16 Pro 5.6 MB/s that night); three upload jobs shared it
+— the 16 Pro's (547 files, 5.83 GB) and TWO on the 18 Pro started 19 s
+apart (261 files 5.26 GB, 114 files 2.22 GB) — so 12 PUTs in flight, and
+the 18 Pro's ~20 MB files took 30–45 s each. The iPad's first pull is held
+by its own request budget (255/min, "pacing"): four paced requests per
+project — the detail GET, one `assets/urls` POST for the records bundle,
+another for the poster, the presence POST — so ~64 projects a minute.
+
+1. **One upload job at a time per device** (the rest *Queued*): the total
+   is the line's, but each project lands on PicPlace — safe — sooner.
+2. **Faster first pulls:** ask `assets/urls` for the bundle and the poster
+   in one call (4 → 3 requests a project, ~⅓ faster, no server change);
+   ask the PicPlace developer for a batched read across projects so a
+   thousand-project library pulls in minutes.
+3. **A re-fetch while another device uploads:** the 16 Pro re-fetched the
+   records of the 18 Pro's project every check ("records fetched again —
+   the server holds 34 confirmed asset(s), this device had seen 18")
+   because the confirmed count grows as originals confirm. Only a change
+   to records/poster assets should trigger it.
+4. **A Blends Download PicPlace cannot serve:** 18 Pro 06:30:46, *download
+   of Stack 23. 9. at 20:00's originals failed: PicPlace holds no blends
+   for this project* — the card offered it; find out why (a blend record
+   synced without its file? a pending asset?).
+
+---
+
 ### PicPlace uploads as jobs — pause, wait for Wi-Fi, carry on; background uploads next
 
 **Raised:** 2026-09-24 (Steven, leaving the house mid-way through an 11.55 GB
