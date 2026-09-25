@@ -10348,16 +10348,24 @@ final class AppModel: ObservableObject {
 
     /// The server's newer records applied to a project this library already
     /// holds (v2 plan §4.4, "at base / moved past base" → pull): the capture
-    /// record becomes the server's, keyed to this origin id and keeping
-    /// `addedAt` (a fact about this library); the blend list is the server's
-    /// plus any blend only this device knows. Files under `source/` and
-    /// `blends/` are untouched — the caller has already refreshed the bundle
-    /// members and the poster on disk.
-    func applyPulledUpdate(originID: UUID, capture arrived: CaptureProject, blends arrivedBlends: [BlendProject]) throws {
-        _ = try store.update(originID) { document in
+    /// record becomes the server's under THIS library's id for the project,
+    /// naming the shoot by `originID` and keeping `addedAt` and
+    /// `importedFromID` (facts about this library); the blend list is the
+    /// server's plus any blend only this device knows. Files under `source/`
+    /// and `blends/` are untouched — the caller has already refreshed the
+    /// bundle members and the poster on disk.
+    ///
+    /// `projectID` and `originID` differ for a copy that arrived by a
+    /// transfer or a `.lapse` (its folder has its own id). Until 2026-09-25
+    /// the update was keyed by the origin id alone, so every pull into such
+    /// a copy failed — "Project 132497FD is not in the library" — and the
+    /// iPad's conflicts could not take PicPlace's version.
+    func applyPulledUpdate(projectID: UUID, originID: UUID, capture arrived: CaptureProject, blends arrivedBlends: [BlendProject]) throws {
+        _ = try store.update(projectID) { document in
             var capture = arrived
-            capture.id = originID
+            capture.id = projectID
             capture.originID = originID
+            capture.importedFromID = document.capture.importedFromID
             capture.addedAt = document.capture.addedAt
             // This device's measurement of its own folder, never another's
             // (`PicPlaceSyncRun.deviceOnlyCaptureKeys`).
@@ -10366,7 +10374,7 @@ final class AppModel: ObservableObject {
             capture.sourceFileNames.removeAll { $0.hasSuffix(".json") }
             var blends = arrivedBlends.map { blend -> BlendProject in
                 var blend = blend
-                blend.captureID = originID
+                blend.captureID = projectID
                 return blend
             }
             let known = Set(blends.map(\.id))
@@ -10374,9 +10382,9 @@ final class AppModel: ObservableObject {
             document.capture = capture
             document.blends = blends
         }
-        validatedSourceFrames.remove(originID)
-        noteFilesChanged(for: originID)
-        assetStore.forget(projectFolder: captureFolderURL(for: originID))
+        validatedSourceFrames.remove(projectID)
+        noteFilesChanged(for: projectID)
+        assetStore.forget(projectFolder: captureFolderURL(for: projectID))
         noteIndexChanged()
     }
 

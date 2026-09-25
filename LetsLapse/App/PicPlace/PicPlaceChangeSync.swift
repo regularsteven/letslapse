@@ -288,6 +288,25 @@ extension PicPlaceController {
                     continue
                 }
                 let localRevision = revision(of: capture)
+                // One edit, two clocks: a copy that arrived by a transfer
+                // before this library ever synced can carry its last edit to
+                // the whole second (…387000) where PicPlace has it to the
+                // millisecond (…387363). Never agreed, same second, the
+                // local milliseconds lost → the same version: take
+                // PicPlace's records, which makes the two identical, rather
+                // than ask a person to choose between one edit and itself
+                // (2026-09-25: 23 of the iPad's 26 "different versions").
+                if base == nil, localRevision != row.revision, localRevision % 1000 == 0,
+                   localRevision / 1000 == row.revision / 1000 {
+                    do {
+                        try await pullUpdate(row, into: capture)
+                        outcome.updated += 1
+                        LLog("picplace: \(capture.displayTitle) — the same edit here and on PicPlace (\(localRevision) vs \(row.revision)); took PicPlace's records")
+                    } catch {
+                        outcome.failures.append("\(row.name): \(Self.describe(error))")
+                    }
+                    continue
+                }
                 if localRevision == row.revision {
                     if records[origin]?.revision != row.revision {
                         var record = records[origin] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: profile?.server ?? serverString, lastError: nil, policy: "in-step")
@@ -570,7 +589,7 @@ extension PicPlaceController {
             let data = try await download(assetID: poster.id, projectUUID: uuid)
             try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
         }
-        try model.applyPulledUpdate(originID: originID, capture: document.capture, blends: document.blends)
+        try model.applyPulledUpdate(projectID: capture.id, originID: originID, capture: document.capture, blends: document.blends)
         model.noteFilesChanged(for: capture.id)
         var record = records[originID] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: profile?.server ?? serverString, lastError: nil)
         record.syncedAt = Date()
@@ -683,16 +702,25 @@ extension PicPlaceController {
         }
     }
 
-    /// "Use the most recent edit" for every open conflict.
+    /// "Use the most recent edit" for every open conflict. One that cannot be
+    /// resolved stays in the list and the rest carry on; the sheet then says
+    /// how many stayed and why the first did, not only the last one's error.
     func resolveAllByNewest() async {
-        for conflict in conflicts {
+        let all = conflicts
+        var failed: [String] = []
+        for conflict in all {
             let serverIsNewer: Bool
             switch conflict.kind {
             case .deletedOnServer: serverIsNewer = (conflict.serverEditedAt ?? .distantPast) > (conflict.localEditedAt ?? .distantPast)
             case .deletedHereEditedThere: serverIsNewer = true
             default: serverIsNewer = conflict.serverRevision > (conflict.localRevision ?? 0)
             }
+            lastResolveError = nil
             await resolve(conflict, serverIsNewer ? .keepServer : .keepLocal)
+            if let error = lastResolveError { failed.append(error) }
+        }
+        if let first = failed.first {
+            lastResolveError = failed.count == 1 ? first : "\(failed.count) of \(all.count) could not be resolved — \(first)"
         }
     }
 
