@@ -426,6 +426,9 @@ retires `components/picplace-pill.*`), the Gallery tiles and Projects cards
 that wear it, the blend rows' pill, and the project card's progress rows.
 INDEX rows go 🟡 when stage 1 lands.
 
+**Drawn 2026-09-26** in the §16 scheme — see §16 ▸ *Mirrors*, and the design
+INDEX notes of that date.
+
 ## 9. Stage 1 — what landed (2026-09-25, uncommitted)
 
 **The model.** `Kit/…/Library/ProjectHoldings.swift` (9 tests,
@@ -1039,6 +1042,27 @@ meaning, and it must be taught.
   ended → *Backed up* 63 s later on the first schedule (5/15/30/60 s —
   PicPlace finished between the last two looks, hence the 10 s cadence).
 
-**Owed:** the SVG mirrors in this scheme (the canvas is their spec); the
-copy pass (TODO) (`scheduleHeavyRecheck`, 90 s) — watch
-whether it reads as "the upload failed".
+**Mirrors — drawn 2026-09-26** (Steven: "do the mirrors"): everything §8,
+§10–§15 owed, in this scheme — the pill as a generated component set
+(`design/components/holdings-pill.make.py`, 25 states; `picplace-pill.*`
+deleted), every tile / card / filmstrip / blend row wearing it, the Library
+filters (phone sheet, Mac sidebar), the *Here* row, the preview page on
+phone / iPad / Mac (the item view and the separate window), its prompt and
+progress, the project screen's preview state, the PicPlace card's glyphs and
+its `checking` / `preview-only` states, the drawer's downloads block,
+collections (banner, a clip on PicPlace, a still member, the picker's
+badges) and the Settings card's auto-sync switches. The design INDEX notes of
+that date list the files. **What the drawing found** (for Steven, no code
+changed): the pill is drawn over the type badge where they meet — on a
+3-column phone grid an *Interval* badge loses 4–19 pt under a 46 / 60 pt pill;
+`HoldingsHereRow.line` and the *Has blends* filter count a Photo's picture
+stack as a blend while the pill does not (a JPEG-burst photo reads
+*Originals and blends* with a camera-only pill, and sits under *Has blends*
+without layers); the downloading caption drops *· Light opens when …* until
+the first byte lands (`+` binds tighter than `?:` in `EditorPreviewPage.status`);
+*Share project* is not greyed on a preview though it asks — the last three are
+the TODO entry *Connected asset states — three small faults found drawing the
+mirrors* (Steven: "mark issues 2–4 as to-do"); the badge overlap is his open
+question. The mirrors the pass left are the TODO entry *Design mirrors left
+after the 2026-09-26 connected-asset-states pass*. **Still owed:** the copy pass (TODO) — and watch
+whether *checking* after an upload reads as "the upload failed".

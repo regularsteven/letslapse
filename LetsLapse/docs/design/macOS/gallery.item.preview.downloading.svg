@@ -1,0 +1,161 @@
+<svg viewBox="0 0 1350 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Gallery · item view · a preview · downloading the originals · 1310×800</title>
+  <desc>Mirrors the preview page's status card AS PROGRESS in the Mac's Gallery item view (plan §4.2 / §8 / §9, §16; new 2026-09-26): after 'Download and Continue' for Light (gallery.item.preview.prompt.svg) — or the card's own Download — EditorPreviewPage.status answers the download first (picplace.progress[id].phase == .downloading, stage 1's ordering fix): glyph `.cloud(.downloading)` — icloud.and.arrow.down.fill in LL.accent, the light palette's amber for 'moving' (§16; the SF symbol hangs its arrowhead under the cloud, drawn here as the pill set's cloud with the arrow knocked out); title 'Downloading \(noun.text)' → 'Downloading the originals' (one line: 163.6 of the 188.5 pt beside Stop); the caption '\(bytesDone) of \(bytesTotal)' plus, with a resume group, ' · \(group) opens when \(pronoun) \(verb) here' → '486,2 MB of 1,16 GB · Light opens when they are here', two lines; under it ProgressView(value: 0.419).tint(LL.accent), 2 pt below the caption — macOS 26's bar, measured on the 2026-09-25 bench capture of this card: a 20 pt frame with an 8 pt track (black 6 %) across the whole text column (the bar stretches the VStack to its 188.5 pt), the 6 pt fill inset a point top and bottom (the capture's fill is grey: a driver-launched window is inactive); the action 'Stop' 13 pt semibold LL.accent (picplace.cancelSync, drops resume). 298 × 96 at y 237 (the capture's two-line photo title made it 112: the same arithmetic). Before the first byte the caption is '1,16 GB to download' (no ' · Light opens …' — that rides only the 'of' line), before PicPlace has listed the files 'Asking PicPlace for the files…'; a download started by the card's own Download has no group, so no ' · Light opens …'. Non-blocking: the inspector, the filmstrip and ← → all still work, and moving on leaves the download running. THE FILMSTRIP'S TILE 8 wears holdings-pill.there.downloading (grey camera · amber ↓) while it runs — drawn over the strip component here (its tile art, the pill as a component reference at 0.8, the ring), since components/gallery-filmstrip.preview.svg draws the tile at rest; the grid's tile, the inspector's PICPLACE card and the Project Syncing drawer's 'Downloading from PicPlace' block show the same run. When the last file lands (checkArrival), PhotoViewerView replaces the page in this column with the Light panel open (EditorPageRequest.group → the editor's pendingPanel) — the rail becomes gallery.item.interval.svg's with Light open. Everything else as gallery.item.preview.svg. THE ITEM VIEW is gallery.item.svg's — the inspector column (GalleryPreviewPanel .inspector, 330 pt), the item header (▤ · ‹ Gallery · the name · 'n of N'), the editor column (the media beside the fixed 330 pt rail) and the filmstrip under everything, the floating tab bar — and GalleryItemEditor (App/GalleryItemView.swift) puts EditorPreviewPage in the editor's place when the focus request's asset is `.preview`: GalleryView.enterItem / move(to:) / step stage every project with `stageEditor(for:page:allowsPreview: true)`, so a preview opens, and the filmstrip and ← → walk straight through previews (they stalled on one until 2026-09-25). The page is its own view (EditorPreviewPageContent, plan T6), built from the editor's components with a `locked` state — never the editor mounted on a poster, so it has no write path (no persist net, no white migration, no as-shot reads). SAMPLE: tile 8 of gallery.svg's grid — the interval drawn there with holdings-pill.there.safe (a preview: its originals removed here, PicPlace holds them, the ✓ stays) — 8 of 14, an unnamed shoot, so its displayTitle is the dated 'Stack 7. 9. at 21:40' (the window title and the header both carry it); 214 JPEG originals (3024 × 4032 — INFO's Size), 1,16 GB recorded in assets.ndjson; the grade is a record, so the dots of Presets and Light still show. LAYOUT (App/EditorPreviewPage.swift railBody, the Mac's only dressing): the picture pane — black, the whole 648 × 568 column (no timeline strip, no full-screen button, no marquee badge: the badge is the dark card's) — with poster.jpg as it is (previewPictureURL; graded when it was made, never graded again), scaledToFit and centred: 426 × 568 at x 462; a Divider; the rail, a ScrollView padded 14 / 16 / 20 with 12 between — RailTabBar (App/RailTabBar.swift, locked: Text · Frames · Masks accent at 38 %, Editor selected), EditorGroupBar (.macCard, locked: every cell #6D6D72 at 42 %, none selected, the dots LL.accent at 55 %), then statusCard(style: .light) at y 237 — LL.cardBackground, radius 16, padding 12, no badge. Every greyed control stays clickable and ASKS (a click on a locked page → ask(.tab), a group → ask(.group), the card itself → ask(.line), subject 'Editing'). macOS rounds each Text frame up to the whole point (measured: the stage-1 captures' cards are 57 and 85 pt, exactly the rounded sums), so the rest card is 85 pt where the unrounded arithmetic says 83.7. HOOKS: `LL_DROP_SOURCES=&lt;uuid&gt;` on a Mac scratch root (`-storage.libraryRootPath`) in one launch renders poster.jpg and deletes the originals — with no server the card then reads the `.unavailable` offer ('The originals aren't on this Mac', the slashed camera, no Download) — and `LL_TAB=gallery LL_ITEM=&lt;uuid&gt;` in the next opens the item view on the page; the on-PicPlace reading drawn here needs the PicPlace bench (a bound scratch root, `LL_PICPLACE_TOKENS` always): upload, `LL_PICPLACE_REMOVE=&lt;uuid&gt;:originals`, then `LL_TAB=gallery LL_ITEM=&lt;uuid&gt;`. `LL_PREVIEW_PROMPT=light` raises the prompt 1.2 s after the page appears, `light:download` presses Download and Continue two seconds later; a driver-launched Mac instance is pressed through accessibility, never the pointer — `~/Library/Developer/LetsLapseRun/tools/ax press &lt;pid&gt; '*' AXButton 'Download and Continue'`; `LL_PICPLACE_TRANSFER_OUTAGE=0:20` holds the download long enough to see its progress. Geometry from the code, checked against the Mac Debug captures of 2026-09-25 (a photo preview in this item view — before §16's glyphs and today's copy: its words and glyphs come from the code, its seats from the captures).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1310" height="800" rx="11"/></clipPath>
+    <clipPath id="inspector"><rect x="20" y="48" width="330" height="621"/></clipPath>
+    <clipPath id="pframe"><rect x="0" y="0" width="300" height="400"/></clipPath>
+    <linearGradient id="pnight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#131A2A"/><stop offset="1" stop-color="#2E3348"/></linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="8" stdDeviation="7.5" flood-color="#000" flood-opacity="0.14"/></filter>
+    <clipPath id="t8"><rect x="652" y="682" width="80" height="60" rx="6"/></clipPath>
+    <linearGradient id="t8night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#131A2A"/><stop offset="1" stop-color="#2E3348"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1310" height="800" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="1310" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="675" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Stack 7. 9. at 21:40</text>
+    </g>
+
+    <!-- ================= INSPECTOR (GalleryPreviewPanel .inspector, 330 pt), at the top of its scroll ================= -->
+    <!-- Unchanged for a preview: everything here is metadata, and metadata needs nothing local (rule 5). The date line's
+         size is the folder as it is on this Mac (storageBytes) — the records and poster.jpg, the originals being on PicPlace.
+         TAGS is empty (an unnamed shoot nobody tagged: tag-field.empty), then the interval's Whole project / This frame
+         switch, INFO (only Size is true of every frame) and METADATA, which runs under the window edge. Further down,
+         past METADATA's 1218 pt: In frame / Storage / HERE (HoldingsHereRow — "Preview only — originals on PicPlace ·
+         1,16 GB") / Field notes, the PICPLACE group, the footer and OUTPUT (New clip greyed at 45 %; it and Share project
+         ask) — gallery.item.interval.svg and gallery.item.picplace.svg draw that foot. -->
+    <rect x="20" y="48" width="330" height="621" fill="#FFFFFF"/>
+    <line x1="350.5" y1="48" x2="350.5" y2="669" stroke="#000" stroke-opacity="0.10"/>
+    <g id="inspector" clip-path="url(#inspector)">
+      <text x="34" y="81" font-size="16" class="b" fill="#000">Stack 7. 9. at 21:40</text>
+      <!-- titleSection's HStack(spacing: 6): date · size — one text run with 6 pt gaps, so any renderer flows it (CoreText:
+           the date 56.3, "·" 3.6) -->
+      <text x="34" y="99" font-size="12" fill="#6D6D72">7. 9. 2026<tspan dx="6" fill="#000" fill-opacity="0.3">·</tspan><tspan dx="6">468 KB</tspan></text>
+      <line x1="20" y1="121" x2="350" y2="121" stroke="#000" stroke-opacity="0.10"/>
+      <text x="38" y="146" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+      <!-- tagsSection (VStack spacing 5), then recordSections 14 under it (VStack spacing 14): the shared components at 302 -->
+      <image href="../components/tag-field.empty.narrow.svg" x="34" y="154.5" width="302" height="33"/>
+      <image href="../components/metadata-scope.project.narrow.svg" x="34" y="201.5" width="302" height="22"/>
+      <image href="../components/metadata-info.interval.narrow.svg" x="34" y="237.5" width="302" height="44"/>
+      <image href="../components/metadata-fields.empty.narrow.svg" x="34" y="295.5" width="302" height="1218"/>
+    </g>
+
+    <!-- ================= EDITOR COLUMN: the item header, then the preview page (GalleryItemEditor → EditorPreviewPage) ================= -->
+    <g id="item-header">
+      <rect x="367" y="58" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.7" data-symbol="sidebar.left">
+        <rect x="375" y="66" width="16" height="16" rx="2.6"/><path d="M381 66 v16"/>
+      </g>
+      <rect x="409" y="61" width="77" height="26" rx="13" fill="#000" fill-opacity="0.06"/>
+      <path d="M425 69 l-5 5 5 5" fill="none" stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+      <text x="431" y="79" font-size="13" class="m" fill="#C36A00">Gallery</text>
+      <text x="879.5" y="80" font-size="16" class="b" text-anchor="middle" fill="#000">Stack 7. 9. at 21:40</text>
+      <text x="1314" y="78" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">8 of 14</text>
+    </g>
+    <line x1="351" y1="100.5" x2="1330" y2="100.5" stroke="#000" stroke-opacity="0.10"/>
+    <g id="media"><!-- railBody: picturePane(anchor: .center) — black, the whole 648 × 568 column (a preview page has no timeline strip, no
+         badge on the light card, no full-screen button); the Mac's page draws no Back / ⓘ over it (railChrome is iOS only —
+         the item header has Back) and no clear preview -->
+      <rect x="351" y="101" width="648" height="568" fill="#000000"/>
+      <!-- poster.jpg as it is (AppModel.previewPictureURL — graded when it was made, never graded again), scaledToFit
+           and centred in picturePane(anchor: .center): a 3:4 shoot is 426 × 568 at x 462. The grid's tile 8 is
+           its centre, cropped 4:3 — the same three stars, the dark ground from 57 % down, the cyan light trail. -->
+      <g id="poster" transform="translate(462,101) scale(1.4200)">
+        <g clip-path="url(#pframe)">
+          <rect x="0" y="0" width="300" height="400" fill="url(#pnight)"/>
+          <ellipse cx="150" cy="228" rx="190" ry="24" fill="#3A4466" opacity="0.35"/>
+          <circle cx="88" cy="142.0" r="2.4" fill="#FFFFFF" opacity="0.75"/><circle cx="160" cy="122.4" r="1.8" fill="#FFFFFF" opacity="0.65"/><circle cx="232" cy="157.2" r="2.1" fill="#FFFFFF" opacity="0.55"/><circle cx="24" cy="36" r="1.0" fill="#FFFFFF" opacity="0.5"/><circle cx="58" cy="70" r="0.8" fill="#FFFFFF" opacity="0.45"/><circle cx="112" cy="24" r="1.1" fill="#FFFFFF" opacity="0.55"/><circle cx="140" cy="62" r="0.7" fill="#FFFFFF" opacity="0.4"/><circle cx="196" cy="44" r="1.2" fill="#FFFFFF" opacity="0.6"/><circle cx="248" cy="80" r="0.9" fill="#FFFFFF" opacity="0.45"/><circle cx="276" cy="28" r="0.8" fill="#FFFFFF" opacity="0.5"/><circle cx="90" cy="12" r="0.6" fill="#FFFFFF" opacity="0.35"/><circle cx="230" cy="14" r="0.7" fill="#FFFFFF" opacity="0.4"/><circle cx="16" cy="84" r="0.7" fill="#FFFFFF" opacity="0.35"/><circle cx="286" cy="56" r="0.6" fill="#FFFFFF" opacity="0.3"/><circle cx="170" cy="8" r="0.6" fill="#FFFFFF" opacity="0.35"/><circle cx="40" cy="118" r="0.6" fill="#FFFFFF" opacity="0.3"/><circle cx="268" cy="128" r="0.6" fill="#FFFFFF" opacity="0.3"/><circle cx="126" cy="176" r="0.5" fill="#FFFFFF" opacity="0.25"/>
+          <rect x="0" y="226.4" width="300" height="173.6" fill="#0C1018"/>
+          <rect x="19.8" y="246.4" width="106.6" height="5" rx="2.5" fill="#7FD4FF" opacity="0.55"/>
+          <path d="M0 362 Q80 344 150 354 T300 346 V400 H0 Z" fill="#07090E"/>
+        </g>
+      </g>
+    </g>
+    <line x1="999.5" y1="101" x2="999.5" y2="669" stroke="#000" stroke-opacity="0.10"/>
+    <!-- The rail (railBody): a ScrollView, fixed 330 pt (railWidth, macOS — the right-hand divider holds still between the grid's
+         pane, the editor and this page), padded 14 top / 16 sides / 20 bottom, 12 between; LL.screenBackground under it -->
+    <g id="rail">
+        <g id="railtabs"><!-- RailTabBar(locked: Text · Frames · Masks) — App/RailTabBar.swift: the white capsule, padding 3, four equal segments 2 apart (Frames: a shoot of more than one frame), 13 pt semibold; the Editor page selected in LL.accent with a white label (it is never unselected: lockedTab answers .editor); a locked page is LL.accent at 38 % — still clickable, the click asks (hint "Needs the originals") -->
+        <rect x="1016" y="115" width="298" height="36" rx="18" fill="#FFFFFF"/>
+        <rect x="1019.0" y="118" width="71.5" height="30" rx="15" fill="#C36A00"/>
+        <text x="1054.75" y="138" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
+        <text x="1128.25" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Text</text>
+        <text x="1201.75" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Frames</text>
+        <text x="1275.25" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Masks</text>
+        </g>
+        <g id="groupbar"><!-- EditorGroupBar(style: .macCard, locked: true) — App/EditorControls/EditorGroupBar.swift: the white rail card (llCard, radius 12, padding 6), six 46 pt cells spread edge to edge — 18 pt symbol, 9.5 pt semibold label, 4 pt dot; locked: every cell #6D6D72 at 42 %, none selected (lockedGroup never sets — a click asks), still clickable; the dots still say which groups hold an edit (the grade is a record, here even when the pixels are not), LL.accent at 55 % — Presets and Light on this shoot -->
+        <rect x="1016" y="163" width="298" height="62" rx="12" fill="#FFFFFF"/>
+        <g opacity="0.42"><g transform="translate(1036,175) scale(0.75)" color="#6D6D72" data-symbol="photo.stack"><rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g><text x="1045" y="206" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Presets</text></g>
+        <circle cx="1045" cy="215" r="2" fill="#C36A00" fill-opacity="0.55"/>
+        <g opacity="0.42"><g transform="translate(1084,175) scale(0.75)" color="#6D6D72" data-symbol="sun.max"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g><text x="1093" y="206" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Light</text></g>
+        <circle cx="1093" cy="215" r="2" fill="#C36A00" fill-opacity="0.55"/>
+        <g opacity="0.42"><g transform="translate(1132,175) scale(0.75)" color="#6D6D72" data-symbol="circle.lefthalf.filled"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></g><text x="1141" y="206" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Color</text></g>
+        <g opacity="0.42"><g transform="translate(1180,175) scale(0.75)" color="#6D6D72" data-symbol="sparkles"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" fill="currentColor"/></g><text x="1189" y="206" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Effects</text></g>
+        <g opacity="0.42"><g transform="translate(1228,175) scale(0.75)" color="#6D6D72" data-symbol="triangle"><path d="M12 4l9 16H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g><text x="1237" y="206" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Detail</text></g>
+        <g opacity="0.42"><g transform="translate(1276,175) scale(0.75)" color="#6D6D72" data-symbol="crop.rotate"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g><text x="1285" y="206" font-size="9.5" class="sb" text-anchor="middle" fill="#6D6D72">Crop</text></g>
+        </g>
+        <g id="status-card"><!-- statusCard(style: .light) as PROGRESS — 298 × 96: status answers the download first (picplace.progress[id].phase == .downloading): the title "Downloading \(noun.text)", the caption "\(bytesDone) of \(bytesTotal)" + " · \(group) opens when \(pronoun) \(verb) here" (resume = Light, from the prompt), the ProgressView under it, Stop. The column beside Stop may take 188.5 pt, and the ProgressView stretches the VStack to all of it -->
+        <rect x="1016" y="237" width="298" height="96" rx="16" fill="#FFFFFF"/>
+        <!-- StatusGlyphView(.cloud(.downloading), size 13, surface .adaptive): icloud.and.arrow.down.fill in LL.accent (light palette: amber = moving) — the same cloud the tile's pill wears (there.downloading). The SF symbol hangs its arrowhead under the cloud; drawn here as the pill set's cloud with its arrow knocked out (in the card's white) -->
+        <g transform="translate(1027.51,246.71) scale(0.8009)" data-symbol="icloud.and.arrow.down.fill"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#C36A00"/><path d="M12 10.5V17.1M9.1 14.4L12 17.3L14.9 14.4" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <text x="1056" y="261.38" font-size="13" class="sb" fill="#000">Downloading the originals</text>
+        <text x="1056" y="278.95" font-size="11.5" fill="#6D6D72">486,2 MB of 1,16 GB · Light opens</text>
+        <text x="1056" y="292.67" font-size="11.5" fill="#6D6D72">when they are here</text>
+        <!-- ProgressView(value: 0.419).tint(LL.accent), 2 pt under the caption: macOS 26's bar — a 20 pt frame, an 8 pt track (black 6 %) across the column, the 6 pt fill inset a point top and bottom (measured on the 2026-09-25 bench capture; an inactive window draws the fill grey) -->
+        <rect x="1056" y="307" width="188.5" height="8" rx="4" fill="#000" fill-opacity="0.06"/>
+        <rect x="1056" y="308" width="79.0" height="6" rx="3" fill="#C36A00"/>
+        <text x="1302" y="261.38" text-anchor="end" font-size="13" class="sb" fill="#C36A00">Stop</text>
+        </g>
+    </g>
+
+    <!-- The filmstrip (components/gallery-filmstrip.preview.svg — the ring on tile 8, this project, its there.safe pill: the grey
+         camera and the ✓ cloud, the grid's own pill): the grid as one row, full width, its white ground continuing under the tab
+         bar's 58 pt clearance to the window edge. All fourteen tiles fit the 1310 pt strip (16–1240), so nothing scrolls. -->
+    <line x1="20" y1="669.5" x2="1330" y2="669.5" stroke="#000" stroke-opacity="0.10"/>
+    <rect x="20" y="670" width="1310" height="150" fill="#FFFFFF"/>
+    <image href="../components/gallery-filmstrip.preview.svg" x="20" y="670" width="1310" height="92"/>
+    <!-- While the originals come down, tile 8's pill reads there.downloading (grey camera · amber ↓ — HoldingsPillState's cloud is
+         .downloading while picplace.progress says so). The strip component draws the tile at rest, so the tile is drawn again here,
+         over it: the component's own art for tile 8, the pill as a component reference at 0.8, 3 pt in
+         (x = tileMaxX − 3 − 0.8 × 46, y = tileMaxY − 3 − 14.4), and the focus ring. -->
+    <g id="tile8-downloading">
+      <g clip-path="url(#t8)"><rect x="652" y="682" width="80" height="60" fill="url(#t8night)"/><rect x="652" y="720" width="80" height="22" fill="#0C1018" opacity="0.85"/></g>
+      <image href="../components/holdings-pill.there.downloading.svg" x="692.2" y="724.6" width="36.8" height="14.4"/>
+      <rect x="653.25" y="683.25" width="77.5" height="57.5" rx="6" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+    </g>
+
+    <g id="tab-bar" transform="translate(15,0)">
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(520 772) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+        <text x="520" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+      </g>
+      <rect x="557" y="757" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+      <g fill="none" stroke="#C36A00">
+        <g transform="translate(590 772) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+        <text x="590" y="796" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(660 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="660" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(730 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="730" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(800 772) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+        <text x="800" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1310" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="675" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · item view · a preview — the card as progress, downloading the originals · 1310×800 pt window</text>
+  <text x="675" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors EditorPreviewPage status (progress) + statusCard(.light) — Stop · LL_PREVIEW_PROMPT=light:download on the PicPlace bench</text>
+</svg>

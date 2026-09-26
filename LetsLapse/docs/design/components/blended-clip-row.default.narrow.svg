@@ -1,18 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 62" width="302" height="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>Component · Blended clip row · default · narrow</title>
-  <desc>Mirrors App/ProjectDetailView.swift versionRow — see blended-clip-row.default.wide.svg for the full mirror note. Narrow is the macOS Gallery preview panel's 302pt content column: same real copy as the wide row, clipped to the column the way SwiftUI's own .lineLimit(1) would truncate it on a narrower width.</desc>
+  <desc>Mirrors App/BlendedClipRow.swift — see blended-clip-row.default.wide.svg for the full mirror note. Narrow is the macOS Gallery preview panel's 302pt content column: same real copy as the wide row, clipped to the column the way SwiftUI's own .lineLimit(1) would truncate it on a narrower width. 2026-09-26 (plan §12 + §16): the thumbnail wears the clip's holdings pill, components/holdings-pill.blend.here.safe.svg at 0.8, 2 pt in from its bottom-right corner (BlendedClipRow: BlendHoldingsPill, .scaleEffect(0.8, anchor: .bottomTrailing).padding(2)) — its markup INLINED from the generated file (mask ids prefixed): a nested &lt;image&gt; is not followed once a screen places this row, so the pill travels with the row; re-copy it if holdings-pill.make.py changes the pill. The play.fill glyph the older mirrors drew over the thumbnail (the README's known gap — the code draws none) is gone: the pill holds that corner.</desc>
 <!-- LetsLapse design component · blended clip row · default · narrow (302pt, the macOS gallery preview-panel column).
      Same coordinate contract as the wide set (62pt tall, thumbnail at x=14, title/subtitle column at x=84),
      just narrower — Open sits at x = width-14 = 288. See components/README.md. -->
   <defs><clipPath id="text-col"><rect x="84" y="14" width="165" height="38"/></clipPath></defs>
-  
+
 <!-- 2026-09-13 (later): narrow is 302 pt now — the Gallery pane went 300 → 330 with the item view, so its
      content column is 302; there is no 272 pt column left anywhere (the iPad pane takes the same code). -->
   <style>text{font-family:inherit}.sb{font-weight:600}</style>
   <g id="blended-clip-row" data-state="default" data-width="narrow">
     <rect x="14" y="10" width="58" height="42" rx="7" fill="#463522"/>
-    <circle cx="43" cy="24" r="7" fill="#FFB340" opacity="0.8"/>
-    <path d="M37 24 l12 7 -12 7 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
+    <!-- the clip's holdings pill (components/holdings-pill.blend.here.safe.svg, W 44.3): 0.8 scale, bottom-right 2 pt in —
+         x = 72 − 2 − 35.44 = 34.56, y = 52 − 16.4 = 35.6. Screens repeat it at the same offset (nested references are not followed). -->
+    <g data-component="holdings-pill.blend.here.safe.svg" transform="translate(34.56,35.6) scale(0.8)"><rect x="0" y="0" width="44.3" height="18" rx="9" fill="#000" fill-opacity="0.5"/><g transform="translate(2.95,1.55) scale(0.6420)" data-symbol="square.3.layers.3d.top.filled"><path d="M12 3.2L20.8 8L12 12.8L3.2 8Z" fill="#30D158"/><g fill="none" stroke="#30D158" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M3.2 11.6L12 16.4L20.8 11.6"/><path d="M3.2 15.2L12 20L20.8 15.2"/></g></g><rect x="20.30" y="4" width="0.5" height="10" fill="#FFFFFF" fill-opacity="0.35"/><g transform="translate(23.91,1.03) scale(0.6872)" data-symbol="checkmark.icloud.fill"><mask id="br-default-narrow-knock-cloud" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M8.4 14L11 16.5L15.8 11.7" fill="none" stroke="#000000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></mask><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#FFFFFF" fill-opacity="0.9" mask="url(#br-default-narrow-knock-cloud)"/></g></g>
     <g clip-path="url(#text-col)">
       <text x="84" y="28" font-size="14.5" class="sb" fill="#000">Blended clip 1 · 18 frames · 6.1 s</text>
       <text x="84" y="45" font-size="11.5" fill="#6D6D72">24 fps · yesterday</text>

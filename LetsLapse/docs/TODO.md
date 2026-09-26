@@ -44,8 +44,9 @@ launch (2026-09-25: a wildcard handler, refused, then a request anyway), fixed t
 travel built app-side and dormant behind `features["collections"]`
 ([picplace-collections-ask.md](picplace-collections-ask.md) — the server's half); D4
 stills in collections built and Mac-verified (any photo joins as a still, 4 s, a gentle
-move) · **Owed:** the Projects tab sharing the filter component, Mac tooltips, Steven's
-look, then the mirrors (sidebar, picker, still row); the device tests (continued
+move) · **Mirrors drawn 2026-09-26** (every file the INDEX notes owed, in the §16 glyph scheme —
+what is left is the next entry) · **Owed:** the Projects tab sharing the filter component, Mac tooltips, Steven's
+look; the device tests (continued
 transfers; the status sweep's time on a thousand projects; the video page); the server
 endpoint · **Size:** large (five stages)
 
@@ -65,6 +66,58 @@ of a never-graded project stamped an edit and synced it** (one per project a swi
 walked). **Open decisions (Steven):** D1 blends upload on their own, D2 preview size
 1280 → 2048, D3 collections travel, D4 stills in collections, D5 blend records that move
 (plan §5).
+
+### Design mirrors left after the 2026-09-26 connected-asset-states pass
+
+**Raised:** 2026-09-26, drawing the owed mirrors (plan §16 ▸ *Mirrors*) · **Size:** medium (mirrors only,
+plus three small code questions for Steven). Each item is marked ⚠️ on its INDEX row.
+
+- **Mac Gallery grid siblings** — `macOS/gallery.timeline`, `.tags`, `.presets`, `.menu`, `.batch`,
+  `.batch.autorename`, `.metadata`: no holdings pills on the tiles, no PICPLACE section in the sidebar
+  (`macOS/gallery.svg` is the reference; the pills are `components/holdings-pill.*`, the sidebar rows
+  `PicPlaceFilter.statusGlyph`).
+- **iOS project screens' chrome** — the seven older `iOS/project-detail.*` files draw a *Projects* back label
+  (iOS 26 draws a glass disc with no label), no resize handle under the hero, no *Preset* row; `interval`,
+  `interval.reviewed`, `video`, `video.filtered` still draw six tabs. `project-detail.interval.preview` was
+  redrawn from the 2026-09-25 Simulator screenshot and is the reference.
+- **The five-tab bar** every iOS mirror copies (`projects.portrait.svg`) is ~7 pt short: 57 pt pill and a 45 pt
+  selected capsule where the Simulator draws ~64 and ~51 (the bottom edge is right).
+- **The retired phone preview sheet** — `iOS/gallery.preview.portrait.svg` and `gallery.preview.presets` still
+  draw it (retired 2026-09-21); redraw as the editor's ⓘ sheet, or retire the files.
+- **Blend rows** `from-codec`, `true-light`, `sliced` owe their inlined pills (and still draw a play glyph).
+- **Settings ▸ PicPlace card** — `picplace-account.signed-in.phone.svg` still leaves out the Library row, the
+  auto-sync status/problem rows, the free-up-space rows, Check PicPlace now and Disconnect; the iOS Settings
+  mirror has no Libraries card (code since 2026-09-17).
+- **Small drift** — `macOS/gallery.preview-window.svg`'s card 83.7 pt (macOS makes it 85) and its camera 18 pt
+  wide (ink ~15); the item mirrors' date-line "·" ~2.6 pt right; the sidebar's 33 pt row rhythm (34 measured).
+- **Open design question (Steven):** the holdings pill covers the type badge where they meet — on a 3-column
+  phone grid an *Interval* badge loses 4–19 pt under a 46 / 60 pt pill (both drawn as the code layers them). The
+  three code faults the drawing found are the next entry.
+
+### Connected asset states — three small faults found drawing the mirrors
+
+**Raised:** 2026-09-26, drawing the mirrors; Steven the same day: "mark issues 2–4 as to-do" · **Detail:** plan
+§16 ▸ *Mirrors* · **Size:** small (three local fixes; no mirror changes — the mirrors already draw the intended
+behaviour or don't show the state).
+
+1. **A Photo's picture stack counted as a blend.** The pill leaves a Photo capture's own stack out
+   (`holdingsPillState`: `holdings.blends.filter { $0.id != holdings.pictureBlendID }` — "a Photo's stack is its
+   picture, not a blend"), but two places count it: the **Here** row (`HoldingsHereRow.line(_:)` in
+   `App/GalleryPreviewPanel.swift` uses `holdings.blends.count` / `blendsHere`, so a JPEG-burst photo reads
+   *Originals and blends* beside a camera-only pill) and the **Has blends** filter (`ProjectStatus.swift`:
+   `row.blendCount > 0`, the index's `blend_count` — so the photo sits under a filter whose glyph is the layers it
+   doesn't wear). Exclude the picture blend in both; check the Gallery tile's "N clips" badge
+   (`model.blends(for:)`) against the same rule.
+2. **The downloading caption drops its panel suffix before the first byte.** `EditorPreviewPage.status`
+   (`App/EditorPreviewPage.swift`, the `.downloading` branch): `a ? b : c ? d : e + suffix` — `+` binds tighter
+   than `?:`, so *· Light opens when they are here* rides only the "X of Y" caption; *1,16 GB to download* (and
+   *Asking PicPlace for the files…*) never say which panel will open. The 2026-09-25 capture showed the suffix at
+   zero bytes, so this came in with the "to download" branch. Parenthesise the choice and add the suffix once.
+3. **OUTPUT's Share project isn't greyed on a preview.** `outputSection` in `App/GalleryPreviewPanel.swift` greys
+   *New clip* in place (`.opacity(model.isAvailable(.newBlend, for:) ? 1 : 0.45)`) but not *Share project*, which
+   asks too (`ask(.exportProject, …)` — a `.lapse` needs the originals and blends here). Give it the same
+   `.opacity` on `.exportProject`, and check the phone's ⓘ sheet and the project screen's ⋯ *Share project*
+   against the rule (greyed in place, still tappable, asks).
 
 ### Photo mode aborts at 8× on iOS 27 (18 Pro) — `capturePhotoWithSettings` throws
 

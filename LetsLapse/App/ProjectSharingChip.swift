@@ -316,11 +316,14 @@ struct ProjectSyncSheet: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                // The account, and what the server holds of it.
+                // The account, and what the server holds of it. The account's
+                // glyph, neutral — not a green tick: green means only "here"
+                // (plan §16, 2026-09-26), and the mismatch line above is the
+                // same person with a badge.
                 HStack(spacing: 8) {
-                    Image(systemName: "checkmark.icloud.fill")
+                    Image(systemName: "person.crop.circle")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.secondary)
                     Text(accountLine)
                         .font(.system(size: 15, weight: .medium))
                         .lineLimit(1)

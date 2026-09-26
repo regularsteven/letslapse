@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Settings · PicPlace · signed-in · portrait</title>
-  <desc>Mirrors App/SettingsView.swift scrolled to the PICPLACE section (picplaceCard, planned) SIGNED IN: Account (the PicPlace username), This device (the name this install registered as — what other devices see in a project's Also on row), On PicPlace (how many of this library's projects have a copy there and their bytes, from the server's own /projects answer), Server (read-only while signed in — changing it means signing out), and Sign out… in record red, which revokes this device's tokens on the server and keeps every local file. Everything else is settings.advanced.portrait.svg's, 105pt down.</desc>
+  <desc>Mirrors App/SettingsView.swift scrolled to the PICPLACE section — PicPlaceSettingsCard (App/PicPlace/PicPlaceViews.swift) SIGNED IN, this library connected: Account (the PicPlace username), This device (the name this install registered as — what other devices see in a project's Also on row), On PicPlace (how many of this library's projects have a copy there and their bytes, from the server's own /projects answer, the tally line under it), the first-connection row, the auto-sync switches — Sync changes automatically, Only on Wi-Fi, Upload blends automatically (2026-09-25, plan §11 stage 3: on by default, above the originals' switch) and Upload originals automatically (off) — Server (read-only while signed in; Mac and Simulator builds only) and Sign Out… in record red, which revokes this device's tokens on the server and keeps every local file. The card is components/picplace-account.signed-in.phone.svg, 754pt tall since 2026-09-26 (272 before), so this file now scrolls 347pt down rather than 105: the PICPLACE header sits where the STORAGE header did, just under the status bar, the Storage card is scrolled away above it, and the Server and Sign Out rows run under the floating tab bar. The Libraries card the code has between Storage and PicPlace since 2026-09-17 is not drawn here (settings.libraries.portrait.svg draws it). Everything else is settings.advanced.portrait.svg's.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
@@ -23,15 +23,18 @@
 
       <!-- scrolled content (the screen has no nav bar; content scrolls under the status bar) -->
       <g clip-path="url(#scroll)">
-        <!-- 105pt down, which puts the STORAGE header just under the status
-             bar, the whole Storage card in view and, under it, the PICPLACE
-             section this file exists for; the Advanced card runs on under the
-             tab bar as it always has. PICPLACE sits between STORAGE and
-             ADVANCED — it is about where projects live, not about the engine.
-             Header 28pt under the Storage card's bottom edge, card 8pt under
-             the header, ADVANCED 28pt under the PicPlace card: 404 → 432 → 440
-             → 660 → 688. The card is the component at its signed-in height (220pt). -->
-        <g transform="translate(0,-105)">
+        <!-- 347pt down (105 until 2026-09-26), which puts the PICPLACE header
+             just under the status bar, where the STORAGE header used to sit, and
+             the card this file exists for in view down to its Upload originals
+             switch; Server and Sign Out run under the tab bar, the Storage card
+             is scrolled away above and the Advanced card below. PICPLACE sits
+             between STORAGE and ADVANCED — it is about where projects live, not
+             about the engine. Header 28pt under the Storage card's bottom edge,
+             card 8pt under the header, ADVANCED 28pt under the PicPlace card:
+             404 → 432 → 440 → 1194 → 1222. The card is the component at its
+             signed-in height (754pt since 2026-09-26: the auto-sync switches and
+             the wrapped On PicPlace and first-connection rows). -->
+        <g transform="translate(0,-347)">
 
         <!-- storage -->
         <text x="20" y="190" class="hdr">STORAGE</text>
@@ -62,12 +65,13 @@
         <!-- picplace — components/picplace-account.signed-in.phone.svg; the screen draws the card -->
         <text x="20" y="432" class="hdr">PICPLACE</text>
         <g id="picplace-card">
-          <rect x="16" y="440" width="361" height="272" rx="16" fill="#FFF" filter="url(#soft)"/>
-          <image href="../components/picplace-account.signed-in.phone.svg" x="16" y="440" width="361" height="272"/>
+          <rect x="16" y="440" width="361" height="754" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <image href="../components/picplace-account.signed-in.phone.svg" x="16" y="440" width="361" height="754"/>
         </g>
 
-        <!-- advanced — 52pt lower since 2026-09-18 (the PicPlace card's first-connection row) -->
-        <g transform="translate(0 52)">
+        <!-- advanced — 534pt lower since 2026-09-26 (the PicPlace card at 754pt: its auto-sync switches, and the
+             On PicPlace and first-connection rows wrapped); 52 from 2026-09-18 (the first-connection row) -->
+        <g transform="translate(0 534)">
         <text x="20" y="688" class="hdr">ADVANCED</text>
         <g id="advanced-card">
           <rect x="16" y="696" width="361" height="676" rx="16" fill="#FFF" filter="url(#soft)"/>
@@ -222,5 +226,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Settings (PicPlace, signed in) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift · picplaceCard (planned) between storageCard and advancedCard</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift · PicPlaceSettingsCard between the Storage and Advanced cards · the auto-sync switches</text>
 </svg>

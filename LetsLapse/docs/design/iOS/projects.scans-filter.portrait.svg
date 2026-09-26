@@ -6,7 +6,7 @@ ENABLE SCANS MENU = OFF. The Scans tab leaves the tab bar (five tabs, 66pt each 
 
 DISPLAY COUNT IN PROJECTS = ON. Each segment carries how many projects it holds, counted AFTER the search field and tag chips have had their say, so the number always matches what tapping it produces. Written as a bare number ("All 6"), not in brackets: a segmented control truncates rather than shrinks and ignores any font SwiftUI hands it, and five segments on a 393pt iPhone leave about 64pt each — which "Interval (0)" overruns and "Interval 0" does not.
 
-Both switches are independent; this file draws them together because they share one bar. Their defaults are the other way round: Scans menu ON (so the tab exists once a scan does), counts OFF. **2026-09-14 (data model M2, code first — desc only, nothing drawn changes):** the rows, their order, the filter counts and the chip row come from the library's SQLite index (`AppModel.projectIDs(for:)` over one `ProjectListQuery`), and the search field is the index's full-text search: every typed word matches by PREFIX ("brid" finds bridge; "idge" no longer does — by decision) against the project's name or original file name, its tags AND their chip labels ("weather" finds Sky &amp; weather), the model's elements, and — new — its assets' titles, captions, keywords, creator, place and camera; every word must land on the same project, so typing more narrows. A word with no letter or digit ("&amp;") is not a term. The dated fallback title of an unnamed project ("Photo 13. 9. at 13:49") is a rendering, not a field, so a typed date fragment no longer finds it; "photo" now also finds unnamed interval shoots through their original name ("1057 photos"). Sort ties are the same as before (the capture date, then the id, turning with the sort). Verified 2026-09-14: 36 launch-hook cases (`LL_FILTER`, `LL_QUERY`, `LL_CHIPS`, `LL_DUMP_ORDER`) identical before and after on the Mac and the iPhone 16 Pro simulator bar the three search cases above.</desc>
+Both switches are independent; this file draws them together because they share one bar. Their defaults are the other way round: Scans menu ON (so the tab exists once a scan does), counts OFF. **2026-09-14 (data model M2, code first — desc only, nothing drawn changes):** the rows, their order, the filter counts and the chip row come from the library's SQLite index (`AppModel.projectIDs(for:)` over one `ProjectListQuery`), and the search field is the index's full-text search: every typed word matches by PREFIX ("brid" finds bridge; "idge" no longer does — by decision) against the project's name or original file name, its tags AND their chip labels ("weather" finds Sky &amp; weather), the model's elements, and — new — its assets' titles, captions, keywords, creator, place and camera; every word must land on the same project, so typing more narrows. A word with no letter or digit ("&amp;") is not a term. The dated fallback title of an unnamed project ("Photo 13. 9. at 13:49") is a rendering, not a field, so a typed date fragment no longer finds it; "photo" now also finds unnamed interval shoots through their original name ("1057 photos"). Sort ties are the same as before (the capture date, then the id, turning with the sort). Verified 2026-09-14: 36 launch-hook cases (`LL_FILTER`, `LL_QUERY`, `LL_CHIPS`, `LL_DUMP_ORDER`) identical before and after on the Mac and the iPhone 16 Pro simulator bar the three search cases above. **2026-09-26 (connected asset states plan §12/§16, code first):** every card now carries the holdings pill (HoldingsPill, top-right of the thumbnail, 4 pt in) — the video both.safe, the scan here.needs, the photo here.safe; the glyph rule is in components/README.md ▸ Holdings pill.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -139,6 +139,14 @@ Both switches are independent; this file draws them together because they share 
         <polygon points="30,298 60,282 92,296 116,286 116,314 30,314" fill="#232B36"/>
         <rect x="62" y="296" width="50" height="15" rx="7.5" fill="#000" opacity="0.5"/>
         <text x="87" y="307" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">0:36</text>
+        <!-- HOLDINGS PILL (2026-09-26, plan §12/§16) — as projects.portrait.svg:
+             HoldingsPill in ProjectCard's .overlay(alignment: .topTrailing) {
+             … .padding(4) } on the 86×64 thumbnail. Edit
+             components/holdings-pill.<state>.svg, never here. Placement:
+             x = thumbMaxX − 4 − W, y = thumbMinY + 4. This card: both.safe,
+             W 60.3 → x = 51.7, y = 254 — the source clips and both blends are
+             here (green camera, green layers) and PicPlace holds everything (✓). -->
+        <image href="../components/holdings-pill.both.safe.svg" x="51.7" y="254" width="60.3" height="18"/>
         <text x="128" y="267" font-size="16" class="b" fill="#000">Sunset over harbour</text>
         <text x="128" y="284" font-size="12" fill="#6D6D72">Video · 1080p · 30 fps · 2 days ago</text>
         <text x="128" y="300" font-size="12" fill="#6D6D72" id="source-line-1" data-note="video-kind only">4 source clips · 2 bursts at 120 fps</text>
@@ -182,6 +190,11 @@ Both switches are independent; this file draws them together because they share 
         </g>
         <rect x="44" y="504" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
         <text x="70" y="515" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">8 photos</text>
+        <!-- HOLDINGS PILL — a scan is a project like any other to PicPlace. This
+             one was made on this phone and has not gone up yet: here.needs,
+             W 46 → x = 116 − 4 − 46 = 66, y = 458 + 4 = 462 (inside the card's
+             translate). No layers: a scan with no blends draws none. -->
+        <image href="../components/holdings-pill.here.needs.svg" x="66" y="462" width="46" height="18"/>
         <text x="128" y="475" font-size="16" class="b" fill="#000">Scan 22 Aug at 14:25</text>
         <text x="128" y="492" font-size="12" fill="#6D6D72">Scan · 8 frames · 3 days ago</text>
         <text x="128" y="510" font-size="12" class="sb" fill="#6D6D72">549 KB</text>
@@ -205,6 +218,10 @@ Both switches are independent; this file draws them together because they share 
         <ellipse cx="73" cy="590" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
         <rect x="60" y="610" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
         <text x="86" y="621" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
+        <!-- HOLDINGS PILL — here.safe, W 46 → x = 66, y = 564 + 4 = 568: the
+             photo is here and PicPlace holds it (✓). A Photo's picture is its
+             stack, never a blend, so no layers. -->
+        <image href="../components/holdings-pill.here.safe.svg" x="66" y="568" width="46" height="18"/>
         <text x="128" y="581" font-size="16" class="b" fill="#000">Long exposure — falls</text>
         <text x="128" y="598" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
         <text x="128" y="616" font-size="12" class="sb" fill="#6D6D72">48 MB</text>

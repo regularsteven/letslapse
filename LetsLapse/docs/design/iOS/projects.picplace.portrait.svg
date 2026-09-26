@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Projects · PicPlace pills · portrait</title>
-  <desc>Mirrors App/ProjectsView.swift (ProjectCard) with the PicPlace pill (PicPlacePill, planned): projects.portrait.svg unchanged except that a card whose project has a copy on PicPlace — or a sync in flight, or a failed one — wears a 22×18 media pill on its thumbnail's top-right corner, 4pt in (components/picplace-pill.&lt;state&gt;.svg: checkmark.icloud.fill green · icloud.and.arrow.up amber · exclamationmark.icloud.fill orange). Card 1 is synced, card 2 is syncing, card 3 has never been synced and carries nothing — the list stays exactly as it was for anyone who never signs in. The pill is read from the device-local sync state (letslapse.picplace.syncStates), not from the index, so the M2 list query is untouched.</desc>
+  <title>iOS · Projects · holdings pills, PicPlace at work · portrait</title>
+  <desc>Mirrors App/ProjectsView.swift (ProjectCard) + App/HoldingsPill.swift (HoldingsPill, HoldingsPillBody, StatusGlyphView, AppModel.holdingsPillState(for:holdings:)): projects.portrait.svg with the pill in the states PicPlace moves it through. **2026-09-26 (connected asset states, plan §12/§16 — code first, mirrored after Steven's sign-off of the status glyphs):** the 22×18 PicPlace pill this file drew (PicPlacePill over the `picplace-pill` component set — synced green cloud-check, syncing amber arrow, failed orange; nothing on a project never synced) is RETIRED, with PicPlacePill and listState, and its component files are deleted; its seat — the thumbnail's top-right corner, 4pt in, over the picture and the duration badge — is the HOLDINGS PILL's, on every card: components/holdings-pill.&lt;state&gt;.svg, referenced, never redrawn, 18 high, black at 50 %, at x = thumbMaxX − 4 − W, y = thumbMinY + 4 (components/README.md). Left of a hairline, where each thing is — the camera the originals, the layers the blends (only when the project has blends; a Photo's stack is its picture), green here, grey on PicPlace, slashed nowhere reachable; right of it ONE cloud, never green. The retired states map to: SYNCED → ✓ (card 1, both.safe: the video and its two blends here, all verified on PicPlace — here.safe on a project without blends, there.safe on a preview, where the camera greys and the tick stays); SYNCING → amber ↑ (card 2, both.uploading: the originals going up — only a heavy run has an upload stop signal, so a records-only sync draws nothing and the pill stays as it was; here.uploading without blends); FAILED → red ! (card 3, here.attention: a failed sync or upload, a stopped upload job, a conflict — red #FF453A, no longer the old orange beside the amber). NEVER SYNCED no longer means no pill in a connected library: the camera is green and the cloud says ↑ until the originals are up (here.needs, projects.portrait.svg card 3). In a library never connected to PicPlace a project with only its originals here still carries nothing — the list stays as it was for anyone who never signs in — and one with blends carries the green layers alone. The pill is read from the project's holdings (ProjectHoldings, walked off the main actor and cached) and the PicPlace record, progress, jobs and conflicts, never from the index, so the M2 list query is untouched.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -123,12 +123,21 @@
       <g id="card-video-project">
         <rect x="16" y="238" width="361" height="120" rx="18" fill="#FFF" filter="url(#soft)"/>
         <rect x="30" y="250" width="86" height="64" rx="8" fill="#3D4A5C"/>
-        <!-- PicPlace pill (components/picplace-pill.*.svg): top-right of the thumbnail, 4pt in — this project is on PicPlace -->
-        <image href="../components/picplace-pill.synced.svg" x="90" y="254" width="22" height="18"/>
         <circle cx="56" cy="270" r="9" fill="#FFB340" opacity="0.85"/>
         <polygon points="30,298 60,282 92,296 116,286 116,314 30,314" fill="#232B36"/>
         <rect x="62" y="296" width="50" height="15" rx="7.5" fill="#000" opacity="0.5"/>
         <text x="87" y="307" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">0:36</text>
+        <!-- HOLDINGS PILL (2026-09-26, plan §12/§16; replaces the retired
+             PicPlace pill's synced state, 22×18 at x 90) — HoldingsPill in
+             ProjectCard's .overlay(alignment: .topTrailing) { … .padding(4) } on
+             the 86×64 thumbnail, over the picture and the duration badge. Edit
+             components/holdings-pill.<state>.svg (holdings-pill.make.py), never
+             here. Placement: x = thumbMaxX − 4 − W, y = thumbMinY + 4. SYNCED —
+             everything here verified on PicPlace: both.safe, W 60.3 →
+             x = 116 − 4 − 60.3 = 51.7, y = 254. The layers are there because the
+             project has blended clips (the code draws them for any blend but a
+             Photo's own picture). -->
+        <image href="../components/holdings-pill.both.safe.svg" x="51.7" y="254" width="60.3" height="18"/>
         <text x="128" y="267" font-size="16" class="b" fill="#000">Sunset over harbour</text>
         <text x="128" y="284" font-size="12" fill="#6D6D72">Video · 1080p · 30 fps · 2 days ago</text>
         <text x="128" y="300" font-size="12" fill="#6D6D72" id="source-line-1" data-note="video-kind only">4 source clips · 2 bursts at 120 fps</text>
@@ -166,12 +175,15 @@
       <g id="card-interval-project" transform="translate(0,-78)">
         <rect x="16" y="450" width="361" height="104" rx="18" fill="#FFF" filter="url(#soft)"/>
         <rect x="30" y="462" width="86" height="64" rx="8" fill="#4A3B2E"/>
-        <!-- PicPlace pill — a sync in flight on this project -->
-        <image href="../components/picplace-pill.syncing.svg" x="90" y="466" width="22" height="18"/>
         <circle cx="60" cy="484" r="8" fill="#FFD9A0" opacity="0.8"/>
         <polygon points="30,510 62,494 94,508 116,500 116,526 30,526" fill="#2E2419"/>
         <rect x="48" y="508" width="64" height="15" rx="7.5" fill="#000" opacity="0.5"/>
         <text x="80" y="519" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">184 photos</text>
+        <!-- holdings pill (replaces the retired pill's syncing state) — SYNCING: the
+             originals going up, amber ↑: both.uploading, W 60.3 → x = 51.7,
+             y = 462 + 4 = 466 (card coordinates). Only a heavy run (originals,
+             blends) draws it; a records-only sync leaves the resting pill. -->
+        <image href="../components/holdings-pill.both.uploading.svg" x="51.7" y="466" width="60.3" height="18"/>
         <text x="128" y="479" font-size="16" class="b" fill="#000">Interval — harbour dusk</text>
         <text x="128" y="496" font-size="12" fill="#6D6D72">Interval · 184 photos · yesterday</text>
         <text x="128" y="514" font-size="12" class="sb" fill="#C36A00">1 blended clip · 3.1 GB</text>
@@ -218,6 +230,11 @@
         <ellipse cx="73" cy="684" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
         <rect x="60" y="704" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
         <text x="86" y="715" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
+        <!-- holdings pill — FAILED (the third state of the retired PicPlace
+             pill, never drawn on a card before): its last sync or
+             upload failed, or a conflict waits — red !: here.attention, W 46 →
+             x = 116 − 4 − 46 = 66, y = 658 + 4 = 662 (card coordinates). -->
+        <image href="../components/holdings-pill.here.attention.svg" x="66" y="662" width="46" height="18"/>
         <text x="128" y="675" font-size="16" class="b" fill="#000">Long exposure — falls</text>
         <text x="128" y="692" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
         <text x="128" y="710" font-size="12" class="sb" fill="#6D6D72">48 MB</text>
@@ -268,6 +285,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Projects · PicPlace pills · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectsView.swift — header (title + SceneSearchField + CaptureFilterBar + SceneTagChips) · ProjectCard incl. source/burst line + SourceFormatPill + SceneTagLine · no blended-clip strip since 2026-09-06</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Projects · holdings pills, PicPlace at work · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectsView.swift (ProjectCard) + App/HoldingsPill.swift — backed up · uploading · needs attention</text>
 </svg>

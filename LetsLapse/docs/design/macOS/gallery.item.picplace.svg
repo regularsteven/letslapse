@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1350 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Gallery · item view · PicPlace</title>
-  <desc>Mirrors the Gallery ITEM VIEW on the Mac with the inspector's PICPLACE group (PicPlaceStatusCard at its 302pt narrow width, planned): gallery.item.interval.svg — "River Sunset to Dusk", the inspector scrolled to its foot — with one group added between the In frame / Storage / Field notes rows and the Rename · Finder · Delete… footer: the PICPLACE header and the status component, here SYNCED ("On PicPlace · Synced 5 min ago · 1,057 files · 4,8 GB", Sync again, and the Also on row naming the other devices the server has presence records for). The footer, OUTPUT and the clips list are the interval mirror's, 98pt lower. The six states are components/picplace-status.&lt;state&gt;.narrow.svg; the actions are the same as the iPhone card's.</desc>
+  <desc>Mirrors the Gallery ITEM VIEW on the Mac with the inspector's PICPLACE group (PicPlaceStatusCard at its 302pt narrow width, planned): gallery.item.interval.svg — "River Sunset to Dusk", the inspector scrolled to its foot — with one group added between the In frame / Storage / Field notes rows and the Rename · Finder · Delete… footer: the PICPLACE header and the status component, here SYNCED ("On PicPlace · Synced 5 min ago · 1,057 files · 4,8 GB", Sync again, and the Also on row naming the other devices the server has presence records for). The footer, OUTPUT and the clips list are the interval mirror's, 98pt lower. The six states are components/picplace-status.&lt;state&gt;.narrow.svg; the actions are the same as the iPhone card's. **2026-09-26 (connected asset states, plan §10 / §12 / §16):** the meta rows gain HERE under Storage — HoldingsHereRow, the holdings pill in words: “Originals and blends · backed up on PicPlace” (every original and all three blends here, PicPlace's backed-up marker matching), two lines at the 210 pt value width, so the inspector is drawn scrolled 42 pt further (1486.5) and the PICPLACE group, the footer and OUTPUT keep their places; the filmstrip's tiles wear the holdings pill (components/gallery-filmstrip.interval.svg — tile 1, this project, both.safe: the same fact as the Here row). The PICPLACE group stays a reference to components/picplace-status.synced.narrow.svg, whose card now speaks the status-glyph rule (its glyph the pill's cloud) — edit it there.</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1310" height="800" rx="11"/></clipPath>
     <clipPath id="inspector"><rect x="20" y="48" width="330" height="621"/></clipPath>
@@ -48,15 +48,27 @@
       <text x="675" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
     </g>
 
-    <!-- ================= INSPECTOR, scrolled 1444.5 pt: the foot of phase one and all of phase three ================= -->
+    <!-- ================= INSPECTOR, scrolled 1486.5 pt: the foot of phase one and all of phase three ================= -->
+    <!-- 2026-09-26: scrolled 42 pt further than gallery.item.interval.svg (1444.5) for the HERE row, so the PICPLACE
+         group, the footer and OUTPUT keep the places they had. -->
     <rect x="20" y="48" width="330" height="621" fill="#FFFFFF"/>
     <line x1="350.5" y1="48" x2="350.5" y2="669" stroke="#000" stroke-opacity="0.10"/>
     <g id="inspector" clip-path="url(#inspector)">
-      <image href="../components/metadata-fields.empty.narrow.svg" x="34" y="-1067" width="302" height="1218"/>
+      <image href="../components/metadata-fields.empty.narrow.svg" x="34" y="-1109" width="302" height="1218"/>
       <!-- metaRows on a 72pt label column, 12 under the record group -->
       <g id="meta">
-        <text x="34" y="180" font-size="12" class="sb" fill="#6D6D72">In frame</text><text x="116" y="180" font-size="12" fill="#6D6D72">river, bridge, quay, sky</text>
-        <text x="34" y="207" font-size="12" class="sb" fill="#6D6D72">Storage</text><text x="116" y="207" font-size="12" fill="#6D6D72">4,8 GB</text>
+        <text x="34" y="138" font-size="12" class="sb" fill="#6D6D72">In frame</text><text x="116" y="138" font-size="12" fill="#6D6D72">river, bridge, quay, sky</text>
+        <text x="34" y="165" font-size="12" class="sb" fill="#6D6D72">Storage</text><text x="116" y="165" font-size="12" fill="#6D6D72">4,8 GB</text>
+        <!-- HERE (2026-09-26 — connected asset states plan §10, words §12): HoldingsHereRow (GalleryPreviewPanel.swift),
+             under Storage on the same 72 pt label column, 12 pt secondary, wrapping (.fixedSize vertical). line(_:) for
+             this project: tier originals, its three blends all here → "Originals and blends"; on PicPlace with the
+             backed-up marker matching what is here (AppModel.isBackedUp) → " · backed up on PicPlace" — the filmstrip's
+             tile 1 pill (both.safe) in words. 253.8 pt of text in a 210 pt value column (302 − 72 − 10 − 10) → two
+             lines, a 42 pt row. Other readings: "Originals" (no blends) · "Originals · 1 of 3 blends" · "… · not backed
+             up" · "Blends only (2 of 3) — originals on PicPlace · 2.4 GB" · "Preview only — originals not on PicPlace
+             yet" · "… — originals missing". -->
+        <text x="34" y="192" font-size="12" class="sb" fill="#6D6D72">Here</text><text x="116" y="192" font-size="12" fill="#6D6D72">Originals and blends · backed up on</text>
+        <text x="116" y="207" font-size="12" fill="#6D6D72">PicPlace</text>
         <text x="34" y="234" font-size="12" class="sb" fill="#6D6D72">Field notes</text><text x="116" y="234" font-size="12" fill="#6D6D72">2 notes</text>
       </g>
       <!-- PICPLACE — components/picplace-status.synced.narrow.svg, flat on the pane like the rows above it:

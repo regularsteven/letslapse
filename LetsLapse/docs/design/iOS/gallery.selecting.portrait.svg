@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Gallery · selection mode — Select Multiple, nothing selected yet · portrait</title>
-  <desc>gallery.portrait.svg after the long-press menu's Select Multiple (App/GalleryView.swift selectionHeader + App/GalleryTile.swift selectionCircle, 2026-09-13): the compact header is replaced by the selection row — Done 15 pt semibold accent, "Select projects" 17 pt bold (the title until something is selected; then "N selected"), Select All 15 pt semibold accent, and the 32 pt Edit glyph, secondary and disabled until two or more are selected — 12 pt of vertical padding, so the divider sits at 117.5 and the grid starts 14 under it as before. Every tile wears the empty 22 pt circle top-leading, 6 pt in: black at 30 % with a 1.5 pt white ring. A tap on a tile — or on its circle — toggles it; the mode stays on until Done, or Done Selecting in the tile menu. A tap in a gutter or the margin selects none. Drawn from the iPhone 17 Pro simulator, 2026-09-13; LL_SELECT=multiple stages it.</desc>
+  <desc>gallery.portrait.svg after the long-press menu's Select Multiple (App/GalleryView.swift selectionHeader + App/GalleryTile.swift selectionCircle, 2026-09-13): the compact header is replaced by the selection row — Done 15 pt semibold accent, "Select projects" 17 pt bold (the title until something is selected; then "N selected"), Select All 15 pt semibold accent, and the 32 pt Edit glyph, secondary and disabled until two or more are selected — 12 pt of vertical padding, so the divider sits at 117.5 and the grid starts 14 under it as before. Every tile wears the empty 22 pt circle top-leading, 6 pt in: black at 30 % with a 1.5 pt white ring. A tap on a tile — or on its circle — toggles it; the mode stays on until Done, or Done Selecting in the tile menu. A tap in a gutter or the margin selects none. Drawn from the iPhone 17 Pro simulator, 2026-09-13; LL_SELECT=multiple stages it. **2026-09-26 (connected asset states plan §12/§16, code first):** every tile wears its holdings pill, as in gallery.portrait.svg — select mode keeps it (GalleryTile draws it in every mode).</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="t00"><rect x="14" y="140" width="113.67" height="85.25" rx="8"/></clipPath>
@@ -98,6 +98,37 @@
           <rect x="20" y="876" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="50" y="891.5" text-anchor="middle">Interval</text>
           <rect x="145.67" y="876" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="170.67" y="891.5" text-anchor="middle">Video</text>
           <rect x="271.33" y="876" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="891.5" text-anchor="middle">Photo</text>
+        </g>
+        <!-- HOLDINGS PILLS (2026-09-26, plan §12/§16) — GalleryTile draws HoldingsPill in every mode,
+             selection mode included: bottom-right 6 pt in, over the type badge; the circle (top-left) and
+             the ring never meet it. The same tiles and states as gallery.portrait.svg — see its comment
+             for the placement arithmetic and each state's moment. -->
+        <g id="holdings-pills">
+          <image href="../components/holdings-pill.here.checking.svg" x="75.67" y="201.25" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="201.34" y="201.25" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="327" y="201.25" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="75.67" y="298.5" width="46" height="18"/>
+          <image href="../components/holdings-pill.both.safe.svg" x="187.04" y="298.5" width="60.3" height="18"/>
+          <image href="../components/holdings-pill.here.safe.svg" x="327" y="298.5" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="75.67" y="395.75" width="46" height="18"/>
+          <image href="../components/holdings-pill.there.blend-here.safe.svg" x="187.04" y="395.75" width="60.3" height="18"/>
+          <image href="../components/holdings-pill.here.safe.svg" x="327" y="395.75" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.safe.svg" x="75.67" y="493" width="46" height="18"/>
+          <image href="../components/holdings-pill.there.safe.svg" x="201.34" y="493" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="327" y="493" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="75.67" y="590.25" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.safe.svg" x="201.34" y="590.25" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="327" y="590.25" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.safe.svg" x="75.67" y="687.5" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="201.34" y="687.5" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="327" y="687.5" width="46" height="18"/>
+          <!-- rows 7–8: under the floating tab bar and the screen edge, as the tiles are -->
+          <image href="../components/holdings-pill.here.safe.svg" x="75.67" y="784.75" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="201.34" y="784.75" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.safe.svg" x="327" y="784.75" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="75.67" y="882" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.safe.svg" x="201.34" y="882" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="327" y="882" width="46" height="18"/>
         </g>
         <!-- "N clips" badge: amber, top-trailing, only where blends ≥ 2 -->
         <g id="clip-badges" font-size="11.5" fill="#FFB340" class="sb">

@@ -258,7 +258,7 @@
       </g>
 
       <!-- ===== THE SHEET (ProjectSharingSheet) — what the pill opens =====
-           A medium detent on the phone; a fixed 360×520 panel on the Mac. Four
+           A medium detent on the phone; a fixed 360×620 panel on the Mac. Four
            things and no more: the switch, the code, the code as a QR, and what
            the server is doing. The switch is the SAME UserDefaults key
            (`transfer.sharingEnabled`) Settings ▸ Advanced writes, bound through
@@ -285,7 +285,7 @@
         <rect x="178.5" y="68" width="36" height="5" rx="2.5" fill="#000" fill-opacity="0.2"/>
 
         <g id="sheet-header">
-          <text x="16" y="94" font-size="17" class="b" fill="#000">Project Syncing</text>
+          <text x="16" y="94" font-size="17" class="sb" fill="#000">Project Syncing</text>
           <g data-symbol="xmark.circle.fill" transform="translate(367,88)">
             <circle cx="0" cy="0" r="10" fill="#8A8A8E" fill-opacity="0.45"/>
             <path d="M-3.6 -3.6 L3.6 3.6 M3.6 -3.6 L-3.6 3.6" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
@@ -298,12 +298,13 @@
         <g id="sheet-picplace">
           <text x="20" y="132" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PICPLACE</text>
 
-          <!-- checkmark.icloud.fill, green: the account line -->
-          <g data-symbol="checkmark.icloud.fill" transform="translate(16,150)">
-            <path d="M4 12 a4 4 0 0 1 0.6 -7.9 a5.5 5.5 0 0 1 10.4 -1.2 a4 4 0 0 1 1.5 9.1 Z" fill="#34C759"/>
-            <path d="M6.2 6.6 L8.4 8.8 L12.6 4.2" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- person.crop.circle, secondary: the account line — an account, not a status; no green tick (2026-09-26, plan §16: green means only "here") -->
+          <g data-symbol="person.crop.circle" transform="translate(16,149)" fill="none" stroke="#6D6D72" stroke-width="1.5" stroke-linecap="round">
+            <circle cx="8.5" cy="8.5" r="7.5"/>
+            <circle cx="8.5" cy="6.6" r="2.6"/>
+            <path d="M3.6 14 C4.9 11.4 6.6 10.4 8.5 10.4 C10.4 10.4 12.1 11.4 13.4 14"/>
           </g>
-          <text x="40" y="162" font-size="15" class="sb" fill="#000">@regularsteven on picplace.test · 118 projects</text>
+          <text x="40" y="162" font-size="15" font-weight="500" fill="#000">@regularsteven on picplace.test · 118 projects</text>
 
           <!-- pause.circle: auto-sync held by Only on Wi-Fi (autoHold) -->
           <g data-symbol="pause.circle" transform="translate(16,178)" fill="none" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round">
@@ -368,7 +369,7 @@
           <text x="16" y="542" font-size="13" fill="#6D6D72">Checked 2 minutes ago · 53 brought here</text>
 
           <!-- the way to the full card: selects Settings, scrolls to PICPLACE -->
-          <text x="16" y="568" font-size="13.5" class="sb" fill="#C36A00">All PicPlace settings</text>
+          <text x="16" y="568" font-size="13.5" font-weight="500" fill="#C36A00">All PicPlace settings</text>
           <path d="M158 562 L162 566 L158 570" fill="none" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </g>
 

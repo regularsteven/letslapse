@@ -1,12 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Collections · add clips picker · portrait</title>
-  <desc>Mirrors App/CollectionClipPicker.swift: the "Add clips" sheet (large detent, drag indicator) over the timeline builder. Header: Cancel (accent, left) · "Add clips" 17 semibold centered; native segmented control By project / All clips beneath. By project: one section per Interval/Video project with ≥1 blended clip — name 15 semibold + right meta ("Video · 5 blended clips" / "Interval · 1 clip + 1 still"), a horizontal reel of 96×54 r9 tiles with amber speed pills. Tile states: selectable; selected (2.5pt amber border + 18pt amber check circle, top-right); ADDED (green badge, 45% opacity — already in THIS collection, tap toasts "Already in City set — one appearance per collection"); STILL (dark badge, 45% opacity, tap toasts "Stills can't join a collection — v1 is video-only"). Sections containing stills add the footnote "Long-exposure stills can't join a collection — v1 is video-only." All clips: a 3-column grid of the same tiles with 10pt project-name captions. Footer CTA: "Add clips" disabled gray (#C8C8CD) at zero, "Add N clips" accent once selected — adding sets the canvas from the first clip when unset ("Canvas set to 16:9 — from your first clip"), else toasts "Added N clips". Selection order = timeline order.</desc>
+  <desc>Mirrors App/CollectionClipPicker.swift (header, projectSections, tile, photoItem, cornerBadge, MissingClipBadge, footer): the "Add clips" sheet (large detent, drag indicator) over the timeline builder. Header: Cancel (accent, left) · "Add clips" 17 semibold centered; native segmented control By project / All clips beneath. By project: one section per Interval/Video project with ≥1 blended clip, newest first — name 15 semibold + right meta ("Video · 5 blended clips" / "Interval · 1 clip + 1 still" / "Video · 1 blended clip"), a horizontal reel of 96×54 r9 tiles with the amber speed pill bottom-left (blend.speedLabel: "50×" for a video blend, the blend depth "4×" for an interval one — this file drew "18 frames" there until 2026-09-26 — "Long exposure" for a long-exposure still, "Still" for a photo's still). One corner badge top-right, first match wins: ADDED (green 90%; the whole tile, badge included, at 45% — already in THIS collection, a tap toasts "Already in City set — one appearance per collection") · selected (2.5pt amber border + 18pt amber check circle) · a clip NOT ON THIS DEVICE (2026-09-25/26, plan §11 and §15; MissingClipBadge, black 55% / white 85%, badged by what PicPlace is known to hold: ON PICPLACE once PicPlace's list for the project says so, NOT AVAILABLE when that list — or its count of none — says not, or the project was never on PicPlace, and NOT HERE while neither is known: the picker asks PicPlace nothing, its by-project view not being lazy; interim words, Steven's copy pass to come) — its tile shows the clip's still, and a tap asks first (the fetch prompt: "Download this blend?" — "Adding it to a collection needs this blend — 1 file · 410 KB on PicPlace. You can keep browsing while it downloads." — Download and Continue · Stay as Is), the clip picked once it lands · STILL (black 55%). Since D4 (2026-09-25) stills join a collection: they are no longer dimmed and select like any clip; the "v1 is video-only" toast and the footnote under a section with stills are gone. After the projects, the Photos group (D4 — Steven: any photo): "Photos" + "12 photos · each joins as a still" (the library's Photo captures, newest first — ids from the index as the sheet opens, each tile reading its record as it scrolls in). A photo whose still exists shows that still's tile (STILL, "Still"); a photo without one shows the photo itself badged PHOTO, and a tap makes its still (its picture through its grade, a JPEG blend of its project, a small spinner on the tile meanwhile) and picks it — on a device without the photo's original the fetch prompt asks first ("Making a still for the collection needs the full-size photo…"). Drawn: Ridge sunset came from PicPlace and its list has been read (one clip there, one never uploaded); Ramp capture's clip is not here either and its list has not been read. All clips: a 3-column grid of the same tiles with 10pt project-name captions, the photos after the clips. Footer CTA: "Add clips" disabled gray (#C8C8CD) at zero, "Add N clips" accent once selected — adding sets the canvas from the first clip when unset ("Canvas set to 16:9 — from your first clip"), else toasts "Added N clips". Selection order = timeline order. Nothing at all to add: "No blended clips yet — make one from any project first."</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
     <linearGradient id="clipA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#33415A"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
     <linearGradient id="clipB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A5A43"/><stop offset="1" stop-color="#232E1D"/></linearGradient>
     <linearGradient id="clipC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#463522"/><stop offset="1" stop-color="#241A10"/></linearGradient>
+    <!-- Ridge sunset's clips (their stills — the files are not here) -->
+    <linearGradient id="clipD" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7A5238"/><stop offset="1" stop-color="#2B1D1A"/></linearGradient>
+    <!-- photos: a photo's still (harbour at dusk), then three photos without one -->
+    <linearGradient id="stillA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B7835E"/><stop offset="0.55" stop-color="#6B5260"/><stop offset="1" stop-color="#262B38"/></linearGradient>
+    <linearGradient id="photoB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FA3B8"/><stop offset="1" stop-color="#3C4A5A"/></linearGradient>
+    <linearGradient id="photoC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A9B28C"/><stop offset="1" stop-color="#3E4632"/></linearGradient>
+    <linearGradient id="photoD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C9A27A"/><stop offset="1" stop-color="#5A4030"/></linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
 
@@ -31,6 +38,10 @@
         </g>
       </g>
 
+      <!-- Tiles: 96×54 r9, 8pt apart. Speed pill bottom-left 4pt in (9pt semibold amber on black 50%); one corner badge
+           top-right 4pt in (cornerBadge: 8.5pt bold, 6pt side padding) — ADDED, the selection check, a missing clip's
+           ON PICPLACE / NOT AVAILABLE / NOT HERE, STILL, or a photo's PHOTO. Pill and badge widths follow the text. -->
+
       <!-- section: Tram Tester -->
       <g id="section-1">
         <text x="18" y="180" font-size="15" class="sb" fill="#000">Tram Tester</text>
@@ -42,7 +53,7 @@
           <rect x="20" y="228" width="30" height="12" rx="6" fill="#000" opacity="0.5"/><text x="35" y="237" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
           <circle cx="99" cy="205" r="9" fill="#FFB340"/><path d="M95 205 l3 3 5 -6" stroke="#1C1C1E" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="checkmark"/>
         </g>
-        <!-- tiles 2-3 -->
+        <!-- tiles 2-4 -->
         <g>
           <rect x="120" y="192" width="96" height="54" rx="9" fill="url(#clipA)"/>
           <rect x="124" y="228" width="30" height="12" rx="6" fill="#000" opacity="0.5"/><text x="139" y="237" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
@@ -53,33 +64,79 @@
         </g>
       </g>
 
-      <!-- section: Interval — harbour dusk (with a locked still) -->
+      <!-- section: Interval — harbour dusk (a clip already in this collection, and a long-exposure still that can join) -->
       <g id="section-2">
         <text x="18" y="284" font-size="15" class="sb" fill="#000">Interval — harbour dusk</text>
         <text x="377" y="284" font-size="11.5" class="sec" text-anchor="end">Interval · 1 clip + 1 still</text>
-        <!-- video tile: ADDED (already in this collection) -->
+        <!-- video tile: ADDED (already in this collection) — the whole tile, badge included, at 45% -->
         <g opacity="0.45">
           <rect x="16" y="296" width="96" height="54" rx="9" fill="url(#clipB)"/>
-          <rect x="20" y="332" width="46" height="12" rx="6" fill="#000" opacity="0.5"/><text x="43" y="341" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">18 frames</text>
+          <rect x="20" y="332" width="26.9" height="12" rx="6" fill="#000" opacity="0.5"/><text x="33.45" y="341" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">4×</text>
+          <rect x="62.9" y="300" width="45.1" height="12" rx="6" fill="#34C759" opacity="0.9"/>
+          <text x="85.45" y="309" font-size="8.5" class="b" fill="#FFF" text-anchor="middle">ADDED</text>
         </g>
-        <rect x="74" y="300" width="34" height="12" rx="6" fill="#34C759" opacity="0.9"/>
-        <text x="91" y="309" font-size="8.5" class="b" fill="#FFF" text-anchor="middle">ADDED</text>
-        <!-- still tile: locked -->
-        <g opacity="0.45">
+        <!-- still tile: joins like any clip since D4 — not dimmed, badged STILL -->
+        <g id="tile-still">
           <rect x="120" y="296" width="96" height="54" rx="9" fill="url(#clipC)"/>
-          <rect x="124" y="332" width="28" height="12" rx="6" fill="#000" opacity="0.5"/><text x="138" y="341" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">PNG</text>
+          <rect x="124" y="332" width="84.4" height="12" rx="6" fill="#000" opacity="0.5"/><text x="166.2" y="341" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">Long exposure</text>
+          <rect x="173.6" y="300" width="38.4" height="12" rx="6" fill="#000" opacity="0.55"/>
+          <text x="192.8" y="309" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.85" text-anchor="middle">STILL</text>
         </g>
-        <rect x="180" y="300" width="30" height="12" rx="6" fill="#000" opacity="0.55"/>
-        <text x="195" y="309" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.8" text-anchor="middle">STILL</text>
-        <text x="18" y="368" font-size="11" class="sec">Long-exposure stills can’t join a collection — v1 is video-only.</text>
       </g>
 
-      <!-- section: Ramp capture -->
+      <!-- section: Ridge sunset — pulled from PicPlace; its list has been read: one clip there, one never uploaded -->
       <g id="section-3">
-        <text x="18" y="406" font-size="15" class="sb" fill="#000">Ramp capture</text>
-        <text x="377" y="406" font-size="11.5" class="sec" text-anchor="end">Video · 1 blended clip</text>
-        <rect x="16" y="418" width="96" height="54" rx="9" fill="url(#clipB)"/>
-        <rect x="20" y="454" width="30" height="12" rx="6" fill="#000" opacity="0.5"/><text x="35" y="463" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
+        <text x="18" y="388" font-size="15" class="sb" fill="#000">Ridge sunset</text>
+        <text x="377" y="388" font-size="11.5" class="sec" text-anchor="end">Video · 2 blended clips</text>
+        <g id="tile-on-picplace">
+          <rect x="16" y="400" width="96" height="54" rx="9" fill="url(#clipD)"/>
+          <rect x="20" y="436" width="38.1" height="12" rx="6" fill="#000" opacity="0.5"/><text x="39.05" y="445" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">100×</text>
+          <rect x="32.5" y="404" width="75.5" height="12" rx="6" fill="#000" opacity="0.55"/>
+          <text x="70.25" y="413" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.85" text-anchor="middle">ON PICPLACE</text>
+        </g>
+        <g id="tile-not-available">
+          <rect x="120" y="400" width="96" height="54" rx="9" fill="url(#clipD)"/>
+          <rect x="124" y="436" width="33.4" height="12" rx="6" fill="#000" opacity="0.5"/><text x="140.7" y="445" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">40×</text>
+          <rect x="125.5" y="404" width="86.5" height="12" rx="6" fill="#000" opacity="0.55"/>
+          <text x="168.75" y="413" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.85" text-anchor="middle">NOT AVAILABLE</text>
+        </g>
+      </g>
+
+      <!-- section: Ramp capture — its clip is not here and PicPlace's list for it has not been read: NOT HERE -->
+      <g id="section-4">
+        <text x="18" y="492" font-size="15" class="sb" fill="#000">Ramp capture</text>
+        <text x="377" y="492" font-size="11.5" class="sec" text-anchor="end">Video · 1 blended clip</text>
+        <g id="tile-not-here">
+          <rect x="16" y="504" width="96" height="54" rx="9" fill="url(#clipB)"/>
+          <rect x="20" y="540" width="30" height="12" rx="6" fill="#000" opacity="0.5"/><text x="35" y="549" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
+          <rect x="48.3" y="508" width="59.7" height="12" rx="6" fill="#000" opacity="0.55"/>
+          <text x="78.15" y="517" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.85" text-anchor="middle">NOT HERE</text>
+        </g>
+      </g>
+
+      <!-- Photos (D4): every Photo capture, each joining as its still — after the projects -->
+      <g id="section-photos">
+        <text x="18" y="596" font-size="15" class="sb" fill="#000">Photos</text>
+        <text x="377" y="596" font-size="11.5" class="sec" text-anchor="end">12 photos · each joins as a still</text>
+        <!-- a photo whose still exists: that still's tile -->
+        <g id="tile-photo-still">
+          <rect x="16" y="608" width="96" height="54" rx="9" fill="url(#stillA)"/>
+          <rect x="20" y="644" width="32.7" height="12" rx="6" fill="#000" opacity="0.5"/><text x="36.35" y="653" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">Still</text>
+          <rect x="69.6" y="612" width="38.4" height="12" rx="6" fill="#000" opacity="0.55"/>
+          <text x="88.8" y="621" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.85" text-anchor="middle">STILL</text>
+        </g>
+        <!-- photos without a still: the photo itself, PHOTO — a tap makes the still and picks it -->
+        <g id="tiles-photo">
+          <rect x="120" y="608" width="96" height="54" rx="9" fill="url(#photoB)"/>
+          <rect x="166.5" y="612" width="45.5" height="12" rx="6" fill="#000" opacity="0.55"/>
+          <text x="189.25" y="621" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.85" text-anchor="middle">PHOTO</text>
+          <rect x="224" y="608" width="96" height="54" rx="9" fill="url(#photoC)"/>
+          <rect x="270.5" y="612" width="45.5" height="12" rx="6" fill="#000" opacity="0.55"/>
+          <text x="293.25" y="621" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.85" text-anchor="middle">PHOTO</text>
+          <rect x="328" y="608" width="96" height="54" rx="9" fill="url(#photoD)"/>
+          <rect x="374.5" y="612" width="45.5" height="12" rx="6" fill="#000" opacity="0.55"/>
+          <text x="397.25" y="621" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.85" text-anchor="middle">PHOTO</text>
+        </g>
       </g>
 
       <!-- footer CTA -->
@@ -95,5 +152,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collections · add clips picker · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionClipPicker.swift — By project / All clips · tile states: selected · ADDED · STILL · CTA counts selection</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionClipPicker.swift — tiles: selected · ADDED · STILL · ON PICPLACE · NOT AVAILABLE · NOT HERE · PHOTO · the Photos group</text>
 </svg>

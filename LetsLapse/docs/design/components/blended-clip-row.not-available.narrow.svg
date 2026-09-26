@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 62" width="302" height="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Blended clip row · not-available · narrow</title>
+  <desc>Mirrors App/BlendedClipRow.swift — see blended-clip-row.not-available.wide.svg for the full mirror note (2026-09-26, plan §15 + §16): a clip neither here nor on PicPlace — the blend's still, components/holdings-pill.blend.nowhere.svg at 0.8 bottom-right 2 pt in (the slashed layers, no cloud), "Not available to download · " before the subtitle (BlendWhereLine), and no button. Narrow is the macOS (and iPad) Gallery panel's 302pt column: the same copy, clipped where the row's Spacer begins, the static stand-in for SwiftUI's .lineLimit(1) truncation.</desc>
+<!-- LetsLapse design component · blended clip row · not-available · narrow (302pt). Same contract as default.narrow — no trailing button, so the
+     column runs to x = 302 − 14 − 12 = 276 (192 wide). The pill: holdings-pill.blend.nowhere (W 22) at 52.4, 35.6, 17.6 × 14.4; the pill is INLINED
+     (nested references are not followed), so it travels with the row. See components/README.md. -->
+  <defs><clipPath id="text-col"><rect x="84" y="14" width="192" height="38"/></clipPath></defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}</style>
+  <g id="blended-clip-row" data-state="not-available" data-width="narrow">
+    <!-- the blend's still (posters/<blend id>.jpg), not the clip -->
+    <rect x="14" y="10" width="58" height="42" rx="7" fill="#463522"/>
+    <g data-component="holdings-pill.blend.nowhere.svg" transform="translate(52.4,35.6) scale(0.8)"><rect x="0" y="0" width="22" height="18" rx="9" fill="#000" fill-opacity="0.5"/><g transform="translate(0.35,0)"><g transform="translate(2.95,1.55) scale(0.6420)" data-symbol="square.3.layers.3d.slash"><mask id="br-not-available-narrow-knock-layers" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M3 2.4L21 21.6" stroke="#000000" stroke-width="5" stroke-linecap="round"/></mask><g mask="url(#br-not-available-narrow-knock-layers)" fill="none" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.2L20.8 8L12 12.8L3.2 8Z"/><path d="M3.2 11.6L12 16.4L20.8 11.6"/><path d="M3.2 15.2L12 20L20.8 15.2"/></g><path d="M3 2.4L21 21.6" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="2.3" stroke-linecap="round"/></g></g></g>
+    <g clip-path="url(#text-col)">
+      <text x="84" y="28" font-size="14.5" class="sb" fill="#000">Blended clip 1 · 18 frames · 6.1 s</text>
+      <text x="84" y="45" font-size="11.5" fill="#6D6D72">Not available to download · 24 fps · yesterday</text>
+    </g>
+  </g>
+</svg>

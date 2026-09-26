@@ -64,7 +64,7 @@ Device-local, in `UserDefaults` under `letslapse.picplace.syncStates` (a `[UUID:
 | Mac Gallery item inspector | `design/macOS/gallery.item.picplace.svg` | the PICPLACE group, synced |
 | The card's six states, two widths | `design/components/picplace-status.<state>.{phone,narrow}.svg` | signed-out · not-synced · changes · syncing · synced · failed |
 | The account card's two states | `design/components/picplace-account.<state>.phone.svg` | signed-out · signed-in |
-| The list pill's three states | `design/components/picplace-pill.<state>.svg` | synced · syncing · failed |
+| The list pill's three states | `design/components/picplace-pill.<state>.svg` — **retired and deleted 2026-09-26**: the holdings pill (`holdings-pill.<state>.svg`, connected asset states plan §16) took its seat | synced · syncing · failed |
 
 Interval and video project screens take the same card in the same seat (not drawn separately). The iPad shares the iOS spec. The Mac's Settings shares the iOS spec, as it does for every other card.
 

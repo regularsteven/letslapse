@@ -184,7 +184,7 @@ Per `CLAUDE.md`, UI has SVG mirrors in `docs/design/`. The PicPlace UI is
 mirrored:
 
 - Components: `components/picplace-status.<state>.{phone,narrow}.svg`,
-  `picplace-account.<state>.phone.svg`, `picplace-pill.<state>.svg`.
+  `picplace-account.<state>.phone.svg`, `picplace-pill.<state>.svg` (retired 2026-09-26 — `holdings-pill.<state>.svg` replaces it).
 - Screens: `iOS/settings.picplace.*.svg`, `iOS/project-detail.photo.picplace.portrait.svg`,
   `iOS/projects.picplace.portrait.svg`, `macOS/gallery.item.picplace.svg`.
 

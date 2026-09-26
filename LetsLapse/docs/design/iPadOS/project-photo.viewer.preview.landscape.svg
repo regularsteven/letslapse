@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1228 908" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iPadOS · Editor preview page · interval, originals on PicPlace · landscape</title>
+  <desc>Mirrors App/EditorPreviewPage.swift `floatingBody(in:)` — the preview page on an iPad in LANDSCAPE (plan §4.1 / §9, §16; new 2026-09-26): the editor's 5a dressing (a container ≥ 900 pt wide and wider than tall), greyed in place; its own view (`EditorPreviewPageContent`, T6), built from the editor's components with a `locked` state — never the editor mounted on a poster, so it has no write path (no persist net, no white migration, no as-shot reads). `Self.fit(aspect:in:)` sizes the picture to the whole safe area at the poster's aspect and the ZStack seats it top-left: a 3:4 shoot is 582 × 776 at (0, 24) — poster.jpg as it is, never graded again. `touchChrome` as on the phone: Back and ⓘ (the pager's project panel — the iPad's Gallery opens the same pager) at x 16 / 60 and the tab pill trailing at 16 (Editor selected; Text · Frames · Masks locked, amber at 38 %), all centred on y 54, 12 under the 24 pt safe area; the editor's INTERVAL chip beside the back disc is not here — the badge rides in the card. THE FOOT ROW, HStack(alignment: .bottom, spacing 18) padded 16: `statusCard(style: .dark)` takes the seat of the editor's timeline capsule (x 16 → 766, `maxWidth: .infinity`) and App/EditorControls/EditorGroupBar.swift (`.padPill`, `locked: true`) sits beside it (380 × 66, right 16, bottom 784; cells #8E8E93 at 42 %, none selected; the dots amber at 55 % — Presets, Light). The card: radius 16, black 60 % over material, padding 12; the INTERVAL · 54 s · 55 frames badge (App/EditorControls/EditorMarqueeBadge.swift); the grey camera (`StatusGlyphView(.asset(.originals, .there))`, 13 pt, white at 45 % — the originals are on PicPlace, not here); 'Preview only' 13 pt semibold white; 'Editing needs the originals — on PicPlace · 55 files · 209,9 MB' 11.5 pt #8E8E93 on one line (the column could take 607 pt); 'Download' amber at the card's trailing edge, the Spacer between — 750 × 86.2, its top at 697.8. A tap on a greyed control or the card asks, and the download shows, exactly as on the phone (iOS/project-photo.viewer.preview.prompt / .downloading.portrait.svg), in this seat. iPad PORTRAIT (and any container ≥ 500 pt wide that is not this) takes `railBody` — the dark rail (min(340, 42 %)) with Back / ⓘ over the picture and the card under the buttons card, no badge — undrawn. Clear preview: a tap on the picture leaves it alone, centred (`clearBody`). Canvas and status bar as the sibling iPadOS files (24 / 20 safe area). Not screenshot-verified on an iPad: drawn from the code with the sibling files' measured chrome. Staged like the phone: `LL_DROP_SOURCES=&lt;uuid&gt;` on a Simulator, then `LL_TAB=gallery LL_ITEM=&lt;uuid&gt;` on an iPad Simulator in landscape.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="1180" height="820" rx="18"/></clipPath>
+    <linearGradient id="psky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FA3B8"/><stop offset="0.45" stop-color="#E8B98C"/><stop offset="1" stop-color="#F6DFB2"/></linearGradient>
+    <linearGradient id="priver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9A45E"/><stop offset="1" stop-color="#5C666E"/></linearGradient>
+    <clipPath id="pframe"><rect x="0" y="0" width="582" height="776"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="1192" height="832" rx="24" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="1180" height="820" fill="#000000"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#FFFFFF"><!-- the page is a full-screen cover (the pager): the 24 pt bar stays, hidden only in clear preview -->
+        <text x="16" y="17" font-size="12.5" class="sb">18:14</text>
+        <text x="56" y="17" font-size="12.5" class="sb">Fri 25 Sep</text>
+        <path d="M1080 12 a8 8 0 0 1 12 0 M1083 15 a4.5 4.5 0 0 1 6 0 M1085.5 17.5 l0.5 0.5 0.5 -0.5" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="wifi"/>
+        <text x="1138" y="17" text-anchor="end" font-size="12.5" class="sb">100 %</text>
+        <g data-symbol="battery.100"><rect x="1144" y="7" width="23" height="11" rx="3.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.45"/><rect x="1168" y="10.5" width="2" height="4" rx="1" fill-opacity="0.45"/><rect x="1146" y="9" width="19" height="7" rx="2"/></g>
+      </g>
+      <!-- picturePane(anchor: .center) framed at Self.fit(aspect:in:) — the poster's aspect fitted to the whole safe area (1180 × 776) and seated top-left by the ZStack: a 3:4 shoot is 582 × 776 at (0, 24); the black beside it is the ground, not a pane -->
+      <g id="poster" transform="translate(0.00,24.00) scale(1.00000)">
+      <g clip-path="url(#pframe)">
+        <rect x="0" y="0" width="582" height="776" fill="url(#psky)"/>
+        <ellipse cx="157.1" cy="108.6" rx="98.9" ry="27.2" fill="#7E93A9" opacity="0.35"/>
+        <ellipse cx="407.4" cy="77.6" rx="116.4" ry="23.3" fill="#8A9DB1" opacity="0.3"/>
+        <ellipse cx="302.6" cy="201.8" rx="139.7" ry="23.3" fill="#EACBA0" opacity="0.45"/>
+        <ellipse cx="116.4" cy="279.4" rx="104.8" ry="17.1" fill="#F2D9AE" opacity="0.5"/>
+        <circle cx="337.6" cy="310.4" r="23.3" fill="#FFCE7E" opacity="0.95"/>
+        <path d="M0 434.6 L0 415.2 L23.3 415.2 L23.3 407.4 L58.2 407.4 L58.2 417.5 L116.4 417.5 L116.4 409.7 L174.6 409.7 L174.6 419 L232.8 419 L232.8 405.1 L273.5 397.3 L314.3 392.7 L360.8 397.3 L384.1 408.2 L419 403.5 L419 412.8 L465.6 412.8 L465.6 402 L506.3 402 L506.3 411.3 L582 411.3 L582 434.6 Z" fill="#5D5346"/>
+        <rect x="0" y="434.6" width="582" height="12.4" fill="#8C7B5F"/>
+        <rect x="0" y="447" width="582" height="9.3" fill="#6E6152"/>
+        <g fill="#524A40"><rect x="203.7" y="456.3" width="8.7" height="18.6"/><rect x="261.9" y="456.3" width="8.7" height="18.6"/><rect x="320.1" y="456.3" width="8.7" height="18.6"/><rect x="378.3" y="456.3" width="8.7" height="18.6"/></g>
+        <rect x="0" y="456.3" width="582" height="319.7" fill="url(#priver)"/>
+        <rect x="87.3" y="481.1" width="232.8" height="9.3" rx="3" fill="#EBC27E" opacity="0.5"/>
+        <rect x="64" y="512.2" width="291" height="9.3" rx="3" fill="#E0B26B" opacity="0.4"/>
+        <rect x="104.8" y="543.2" width="209.5" height="9.3" rx="3" fill="#D2A45F" opacity="0.3"/>
+        <path d="M273.5 682.9 L582 543.2 L582 776 L192.1 776 Z" fill="#8A7A55"/>
+        <path d="M424.9 776 L582 589.8 L582 776 Z" fill="#3F4438"/>
+        <g fill="#221F1C"><circle cx="320.1" cy="706.2" r="4"/><circle cx="349.2" cy="694.5" r="4"/><circle cx="381.2" cy="681.3" r="4"/><circle cx="413.2" cy="667.4" r="4"/><circle cx="296.8" cy="725.6" r="4"/><circle cx="448.1" cy="651.8" r="4"/></g>
+      </g>
+      </g>
+      <g id="touch-chrome"><!-- EditorPreviewPage.touchChrome: HStack(spacing 8) padded 16 / 12 under the safe area — Back · ⓘ · Spacer · EditorTabPill -->
+<g id="back-button"><!-- chromeDisc("chevron.left", "Back"): 36 pt, black 40 % -->
+  <circle cx="34" cy="54" r="18" fill="#000" opacity="0.4"/>
+  <path d="M37 48 L31 54 L37 60" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+</g>
+<g id="info-button"><!-- infoButton: chromeDisc("info.circle", "Project info") — the pager's onInfo raises the project's panel as a sheet (metadata works anywhere) -->
+  <circle cx="78" cy="54" r="18" fill="#000" opacity="0.4"/>
+  <g data-symbol="info.circle" fill="none" stroke="#FFF" stroke-linecap="round"><circle cx="78" cy="54" r="7.7" stroke-width="1.7"/><path d="M76.6 53.1H78.1V58.1M76.4 58.3H79.8" stroke-width="1.6" stroke-linejoin="round"/></g>
+  <circle cx="78" cy="50.1" r="1.15" fill="#FFF"/>
+</g>
+<g id="tab-pill"><!-- EditorTabPill(locked: Text · Frames · Masks): rgba(28,28,30,.85) over material, radius 18; the Editor page selected (amber, black label); a locked page's label is amber at 38 % — still tappable, the tap asks (hint "Needs the originals") -->
+<rect x="914.7" y="39" width="249.3" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+<rect x="917.7" y="42" width="59.2" height="24" rx="12" fill="#FFB340"/>
+<text x="947.3" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+<text x="1003.4" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Text</text>
+<text x="1063.7" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Frames</text>
+<text x="1130.2" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Masks</text>
+</g>
+</g>
+      <g id="foot-row"><!-- HStack(alignment: .bottom, spacing 18) { statusCard(.dark).frame(maxWidth: .infinity) ; EditorGroupBar(.padPill) } .padding(16) — the card takes the editor's timeline-capsule seat, x 16 → 766 -->
+<g id="status-card"><!-- statusCard(style: .dark) — 750 × 86.2; the text column may take 607.4 pt (the card less padding, the 18 pt glyph, three 10 pt gaps, the Spacer's 8 and the action) -->
+<rect x="16.0" y="697.77" width="750.0" height="86.23" rx="16" fill="#141416" fill-opacity="0.74"/>
+<g id="marquee-badge"><!-- EditorMarqueeBadge(kind: .interval): 20 pt, black 50 %, 11 pt semibold white — kind · length · frames -->
+<rect x="28.0" y="709.77" width="175.1" height="20" rx="10" fill="#000" opacity="0.5"/>
+<text x="39.0" y="723.77" font-size="11" class="sb" fill="#FFF">INTERVAL · 54 s · 55 frames</text></g>
+<!-- StatusGlyphView(.asset(.originals, .there), size 13, surface .photo): the grey camera — the originals are on PicPlace, not here (plan §16; slashed when PicPlace lacks them too) -->
+<g transform="translate(25.63,735.43) scale(0.9474)" data-symbol="camera.fill"><path fill="#FFFFFF" fill-opacity="0.45" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g>
+<text x="56.0" y="752.15" font-size="13" class="sb" fill="#FFF">Preview only</text>
+<text x="56.0" y="769.23" font-size="11.5" fill="#8E8E93">Editing needs the originals — on PicPlace · 55 files · 209,9 MB</text>
+<text x="754.0" y="752.15" text-anchor="end" font-size="13" class="sb" fill="#FFB340">Download</text>
+</g>
+<g id="main-buttons"><!-- EditorGroupBar(style: .padPill, locked: true): padding 6, six 58 pt cells 4 apart, radius 26 over rgba(28,28,30,.85) + material — 380 × 66, right 16 / bottom 16 off the safe area; cells #8E8E93 at 42 %, none selected; dots amber at 55 % -->
+<rect x="784" y="718" width="380" height="66" rx="26" fill="#1C1C1E" opacity="0.85"/>
+<g opacity="0.42"><g transform="translate(809.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="photo.stack"><rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g><text x="819.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Presets</text></g>
+<circle cx="819.0" cy="771.0" r="2" fill="#FFB340" fill-opacity="0.55"/>
+<g opacity="0.42"><g transform="translate(871.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="sun.max"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g><text x="881.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Light</text></g>
+<circle cx="881.0" cy="771.0" r="2" fill="#FFB340" fill-opacity="0.55"/>
+<g opacity="0.42"><g transform="translate(933.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="circle.lefthalf.filled"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></g><text x="943.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Color</text></g>
+<circle cx="943.0" cy="771.0" r="2" fill="none"/>
+<g opacity="0.42"><g transform="translate(995.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="sparkles"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" fill="currentColor"/></g><text x="1005.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Effects</text></g>
+<circle cx="1005.0" cy="771.0" r="2" fill="none"/>
+<g opacity="0.42"><g transform="translate(1057.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="triangle"><path d="M12 4l9 16H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g><text x="1067.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Detail</text></g>
+<circle cx="1067.0" cy="771.0" r="2" fill="none"/>
+<g opacity="0.42"><g transform="translate(1119.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="crop.rotate"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g><text x="1129.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Crop</text></g>
+<circle cx="1129.0" cy="771.0" r="2" fill="none"/>
+</g>
+      </g>
+      <rect x="485" y="806" width="210" height="5" rx="2.5" fill="#FFFFFF" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="614" y="874" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iPadOS · Editor preview page · interval, originals on PicPlace · landscape · 1180×820 pt</text>
+  <text x="614" y="892" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors EditorPreviewPage floatingBody — the status card in the timeline capsule's seat, EditorGroupBar(.padPill, locked) beside it</text>
+</svg>

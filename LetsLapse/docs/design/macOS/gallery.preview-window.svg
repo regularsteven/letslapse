@@ -1,0 +1,90 @@
+<svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Editor preview page in its own window · interval, originals on PicPlace · 1000×700</title>
+  <desc>Mirrors App/EditorPreviewPage.swift `railBody(in:)` in a Mac window of its own — `PreviewEditorWindowRequest`, the `WindowGroup(for:)` in App/LetsLapseApp.swift (default 1000 × 700, min 720 × 480, titled `navigationTitle(request.title)`) — plan §10 (stage 2) and §16; new 2026-09-26. On the Mac a preview's Edit opens the preview page in its own window where a project with its originals opens `PhotoEditorWindowRequest`: the project screen's hero Edit pill (App/ProjectDetailView.swift `openPreviewPage`), and `EditorOpenRequest.open(with:)` (App/EditorLaunch.swift) opens the same window for any `.preview` request made where no item view hosts the editor (the Gallery panel's Edit without an `onEdit` host); the Gallery's item view hosts the same page in place instead (plan §8's macOS/gallery.item.preview.svg). It is its own view (`EditorPreviewPageContent`, T6), built from the editor's components with a `locked` state — never the editor mounted on a poster, so it has no write path (no persist net, no white migration, no as-shot reads); when the originals land the window's page becomes `PhotoViewerView` in place, on the page and panel asked for. The window's chrome owns the title and the close — no Back, no ⓘ (`touchChrome` / `railChrome` are iOS only), no clear preview. LAYOUT: the page on LL.screenBackground; the picture pane (`picturePane(anchor: .center)`, black, 669 × 672) with poster.jpg fitted and centred — a 3:4 shoot is 504 × 672 at x 102.5; a hairline Divider; the fixed 330 pt rail (`railWidth`, macOS) — a ScrollView padded 14 top / 16 sides / 20 bottom, 12 between: App/RailTabBar.swift (`locked`) — the white capsule, Editor in LL.accent with a white label, Text · Frames · Masks accent at 38 %, still clickable (they ask); App/EditorControls/EditorGroupBar.swift (`.macCard`, `locked: true`) — the white card, six 46 pt cells #6D6D72 at 42 %, none selected, the dots LL.accent at 55 % (Presets, Light); then `statusCard(style: .light)` (`railCardStyle`, macOS): LL.cardBackground, radius 16, padding 12, NO badge (the marquee badge is the dark style's), the glyph in the light palette — `StatusGlyphView(.asset(.originals, .there), size 13, surface .adaptive)`: the grey camera #AEAEB2 (§16) — 'Preview only' 13 pt semibold primary; the caption 11.5 pt #6D6D72 — 'Editing needs \(noun.text) — on PicPlace · \(shortfall.sizeText)' wrapping in the 155.4 pt column to three lines ('Editing needs the originals' / '— on PicPlace · 55 files ·' / '209,9 MB'); 'Download' 13 pt semibold LL.accent trailing on the title's line — 298 × 83.7 at y 184. A click on a greyed control or on the card asks: the same `.alert` and words as the phone (iOS/project-photo.viewer.preview.prompt.portrait.svg — 'Download the originals?', 'Light needs the originals — 55 files · 209,9 MB on PicPlace. …', Download and Continue · Stay as Is), drawn by AppKit; while the download runs the card reads as the phone's progress (…preview.downloading) with LL.accent for the bar and Stop. Window geometry is macOS/photo-viewer.svg's (28 pt title bar, centred title, the 669 pt pane); the stage-2 screenshot of this window (2026-09-25, a photo's preview, before §16's camera) seats the tab capsule, the buttons card and the status card at the same 14 / 12 / 12 pt steps under macOS 26's taller (32 pt) title bar, whose title sits leading. Title: an interval project's dated `displayTitle` ('Stack &lt;day. month.&gt; at &lt;time&gt;'). HOOK: `LL_DROP_SOURCES=&lt;uuid&gt;` on a Mac scratch root (`-storage.libraryRootPath`) in one launch; in the next, the project screen's Edit pill opens this window (press it by AX).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
+    <linearGradient id="psky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FA3B8"/><stop offset="0.45" stop-color="#E8B98C"/><stop offset="1" stop-color="#F6DFB2"/></linearGradient>
+    <linearGradient id="priver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9A45E"/><stop offset="1" stop-color="#5C666E"/></linearGradient>
+    <clipPath id="pframe"><rect x="0" y="0" width="582" height="776"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1000" height="700" fill="#F2F2F7"/>
+
+    <g id="titlebar"><!-- the window's chrome owns the title (navigationTitle(request.title)) and the close: the page draws no Back, no ⓘ -->
+      <rect x="20" y="20" width="1000" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Stack 25. 9. at 18:12</text>
+    </g>
+
+    <g id="media"><!-- picturePane(anchor: .center): black, 669 × 672 — the window less the 330 pt rail and the Divider -->
+      <rect x="20" y="48" width="669" height="672" fill="#000000"/>
+      <!-- poster.jpg as it is, scaledToFit and centred: a 3:4 shoot is 504 × 672 at x 102.5 -->
+      <g id="poster" transform="translate(102.50,48.00) scale(0.86598)">
+      <g clip-path="url(#pframe)">
+        <rect x="0" y="0" width="582" height="776" fill="url(#psky)"/>
+        <ellipse cx="157.1" cy="108.6" rx="98.9" ry="27.2" fill="#7E93A9" opacity="0.35"/>
+        <ellipse cx="407.4" cy="77.6" rx="116.4" ry="23.3" fill="#8A9DB1" opacity="0.3"/>
+        <ellipse cx="302.6" cy="201.8" rx="139.7" ry="23.3" fill="#EACBA0" opacity="0.45"/>
+        <ellipse cx="116.4" cy="279.4" rx="104.8" ry="17.1" fill="#F2D9AE" opacity="0.5"/>
+        <circle cx="337.6" cy="310.4" r="23.3" fill="#FFCE7E" opacity="0.95"/>
+        <path d="M0 434.6 L0 415.2 L23.3 415.2 L23.3 407.4 L58.2 407.4 L58.2 417.5 L116.4 417.5 L116.4 409.7 L174.6 409.7 L174.6 419 L232.8 419 L232.8 405.1 L273.5 397.3 L314.3 392.7 L360.8 397.3 L384.1 408.2 L419 403.5 L419 412.8 L465.6 412.8 L465.6 402 L506.3 402 L506.3 411.3 L582 411.3 L582 434.6 Z" fill="#5D5346"/>
+        <rect x="0" y="434.6" width="582" height="12.4" fill="#8C7B5F"/>
+        <rect x="0" y="447" width="582" height="9.3" fill="#6E6152"/>
+        <g fill="#524A40"><rect x="203.7" y="456.3" width="8.7" height="18.6"/><rect x="261.9" y="456.3" width="8.7" height="18.6"/><rect x="320.1" y="456.3" width="8.7" height="18.6"/><rect x="378.3" y="456.3" width="8.7" height="18.6"/></g>
+        <rect x="0" y="456.3" width="582" height="319.7" fill="url(#priver)"/>
+        <rect x="87.3" y="481.1" width="232.8" height="9.3" rx="3" fill="#EBC27E" opacity="0.5"/>
+        <rect x="64" y="512.2" width="291" height="9.3" rx="3" fill="#E0B26B" opacity="0.4"/>
+        <rect x="104.8" y="543.2" width="209.5" height="9.3" rx="3" fill="#D2A45F" opacity="0.3"/>
+        <path d="M273.5 682.9 L582 543.2 L582 776 L192.1 776 Z" fill="#8A7A55"/>
+        <path d="M424.9 776 L582 589.8 L582 776 Z" fill="#3F4438"/>
+        <g fill="#221F1C"><circle cx="320.1" cy="706.2" r="4"/><circle cx="349.2" cy="694.5" r="4"/><circle cx="381.2" cy="681.3" r="4"/><circle cx="413.2" cy="667.4" r="4"/><circle cx="296.8" cy="725.6" r="4"/><circle cx="448.1" cy="651.8" r="4"/></g>
+      </g>
+      </g>
+    </g>
+
+    <line x1="690" y1="48" x2="690" y2="720" stroke="#000" stroke-opacity="0.1"/>
+
+    <!-- The rail (railBody): a ScrollView, fixed 330 pt (railWidth, macOS), padded 14 top / 16 sides / 20 bottom, 12 between -->
+    <g id="rail">
+<g id="railtabs"><!-- RailTabBar(locked: Text · Frames · Masks): white capsule, padding 3, equal segments 2 apart, 13 pt semibold; Editor selected in LL.accent with a white label; a locked page is accent at 38 % — still clickable, the click asks -->
+<rect x="706" y="62" width="298" height="36" rx="18" fill="#FFFFFF"/>
+<rect x="709.0" y="65" width="71.5" height="30" rx="15" fill="#C36A00"/>
+<text x="744.75" y="85" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
+<text x="818.25" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Text</text>
+<text x="891.75" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Frames</text>
+<text x="965.25" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Masks</text>
+</g>
+<g id="groupbar"><!-- EditorGroupBar(.macCard, locked: true): the white card, padding 6, six 46 pt cells spread edge to edge — 18 pt symbol, 9.5 pt semibold label, 4 pt dot; every cell #6D6D72 at 42 %, none selected; the dots LL.accent at 55 % (Presets, Light) -->
+<rect x="706" y="110" width="298" height="62" rx="12" fill="#FFFFFF"/>
+<g opacity="0.42"><g transform="translate(726.0,122.0) scale(0.7500)" color="#6D6D72" data-symbol="photo.stack"><rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g><text x="735.0" y="153.0" text-anchor="middle" font-size="9.5" class="sb" fill="#6D6D72">Presets</text></g>
+<circle cx="735.0" cy="162.0" r="2" fill="#C36A00" fill-opacity="0.55"/>
+<g opacity="0.42"><g transform="translate(774.0,122.0) scale(0.7500)" color="#6D6D72" data-symbol="sun.max"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g><text x="783.0" y="153.0" text-anchor="middle" font-size="9.5" class="sb" fill="#6D6D72">Light</text></g>
+<circle cx="783.0" cy="162.0" r="2" fill="#C36A00" fill-opacity="0.55"/>
+<g opacity="0.42"><g transform="translate(822.0,122.0) scale(0.7500)" color="#6D6D72" data-symbol="circle.lefthalf.filled"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></g><text x="831.0" y="153.0" text-anchor="middle" font-size="9.5" class="sb" fill="#6D6D72">Color</text></g>
+<circle cx="831.0" cy="162.0" r="2" fill="none"/>
+<g opacity="0.42"><g transform="translate(870.0,122.0) scale(0.7500)" color="#6D6D72" data-symbol="sparkles"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" fill="currentColor"/></g><text x="879.0" y="153.0" text-anchor="middle" font-size="9.5" class="sb" fill="#6D6D72">Effects</text></g>
+<circle cx="879.0" cy="162.0" r="2" fill="none"/>
+<g opacity="0.42"><g transform="translate(918.0,122.0) scale(0.7500)" color="#6D6D72" data-symbol="triangle"><path d="M12 4l9 16H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g><text x="927.0" y="153.0" text-anchor="middle" font-size="9.5" class="sb" fill="#6D6D72">Detail</text></g>
+<circle cx="927.0" cy="162.0" r="2" fill="none"/>
+<g opacity="0.42"><g transform="translate(966.0,122.0) scale(0.7500)" color="#6D6D72" data-symbol="crop.rotate"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g><text x="975.0" y="153.0" text-anchor="middle" font-size="9.5" class="sb" fill="#6D6D72">Crop</text></g>
+<circle cx="975.0" cy="162.0" r="2" fill="none"/>
+</g>
+<g id="status-card"><!-- statusCard(style: .light) — 298 × 83.7: LL.cardBackground, radius 16, padding 12, no badge (the dark style's); the text column may take 155.4 pt -->
+<rect x="706" y="184" width="298" height="83.67" rx="16" fill="#FFFFFF"/>
+<!-- StatusGlyphView(.asset(.originals, .there), size 13, surface .adaptive): the grey camera in the light palette (#AEAEB2) — the originals are on PicPlace, not on this Mac (plan §16) -->
+<g transform="translate(715.63,191.66) scale(0.9474)" data-symbol="camera.fill"><path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g>
+<text x="746" y="208.38" font-size="13" class="sb" fill="#000">Preview only</text>
+<text x="746" y="225.46" font-size="11.5" fill="#6D6D72">Editing needs the originals</text>
+<text x="746" y="239.18" font-size="11.5" fill="#6D6D72">— on PicPlace · 55 files ·</text>
+<text x="746" y="252.90" font-size="11.5" fill="#6D6D72">209,9 MB</text>
+<text x="992" y="208.38" text-anchor="end" font-size="13" class="sb" fill="#C36A00">Download</text>
+</g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Editor preview page · PreviewEditorWindowRequest · interval, originals on PicPlace · 1000×700 pt window</text>
+  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/EditorPreviewPage.swift railBody + statusCard(.light) — locked RailTabBar / EditorGroupBar(.macCard) · plan §10</text>
+</svg>

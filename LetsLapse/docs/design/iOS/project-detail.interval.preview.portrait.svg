@@ -1,0 +1,235 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 1467" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Project detail (interval) · preview · portrait</title>
+  <desc>Mirrors App/ProjectDetailView.swift for an interval capture in its PREVIEW state — connected asset states, plan §10 (stage 2: one UI, only capabilities change) and §16 (the status glyph rule), drawn 2026-09-26 from project-detail.interval.portrait.svg, whose chrome is stale; later the same day the chrome and layout were brought to what the app draws today, from the code and side by side with the iPhone 17 Pro Simulator screenshot of this very screen in this state (iOS 26, 2026-09-25 — that sample had no blends, so it has no BLENDED CLIPS section; this file's one blend sits where narrowBody puts it, after the preset strip). THE STATE: the project's originals are on PicPlace, not on this iPhone — pulled as a preview, or removed by free up space — so model.isAvailable(.pixelEdit) is false. Nothing leaves the screen: every control that needs the files stays in place and a tap ASKS (.fetchPrompt — "Download …?" · Download and Continue · Stay as Is, the tap carried out once the files land) instead of going dead. CHROME (2026-09-26): the iOS 26 inline navigation bar (navigationTitle + .inline) — the back button is a 44 pt glass disc with the chevron in the label colour and NO "Projects" label (the base file's label collided with the title), the title centred, 17 pt semibold, and the toolbar's ⋯ Menu (ToolbarItem .primaryAction, ellipsis.circle in the accent) in a second glass disc; both discs 16 pt in, their tops on the safe area; the bar is 54 pt, so the scroll content starts at 113. The tab bar is the FIVE-tab FloatingTabBar (66 pt seats, Projects selected; markup from projects.portrait.svg): Scans takes a seat only when the library holds a scan and Settings ▸ Advanced ▸ Layout ▸ Enable Scans menu is on (LLTab.visible(scans:), iOS/INDEX.md 2026-08-25) — the base file's six are stale. LAYOUT (narrowBody: VStack spacing 14, padded 16, 8 on top). THE HERO (ProjectHeroPane) takes the asset's own shape (MediaPaneMetrics: the column's width, capped at 46 % of the height): a 4:3 shoot is 361 × 271 at radius 18 — the base file's fixed 210 pt slot is stale — and under it MediaResizeHandle, a 36 × 5 capsule in Color.secondary at 35 % centred in a 28 pt row (drawn while the drag span is ≥ 40 pt). The hero shows the project's poster.jpg, a finished picture never graded again; its identity badge (MediaBadge, 12 pt in) reads "PREVIEW · 20 photos" (originalBadge — the noun is PREVIEW whenever .pixelEdit is unavailable); there is no play circle in the middle (editorAsset answers nothing for a preview, so heroButton is not drawn); the Edit pill (12.5 pt semibold, padded 12 × 7, 12 pt in) stays and opens the editor's preview page (EditorPreviewPage, a cover — the editor greyed in place over the poster); the format badge reads "Interval" (formatBadge: a stills project deliberately keeps "Interval"; drawn because the hero is at least 330 pt wide). PRESETSTRIPSECTION: the state row first — "Preset" (13 pt semibold, secondary) and PresetStatePill, 8 apart — at full strength; then the chips, greyed in place to 0.45 (a preset is a pixel edit — a chip asks, and applies once the originals are here): 13.5 pt semibold, padded 14 × 8 (32.3 pt tall), 8 apart and 2 in, white with primary text or the accent with white, no shadow, in a horizontal ScrollView cut at the column's edge. The lit chip and the pill are the project's preset state (chip: isActive = state.isOriginal / state.isNamed): this sample is on Original, as the Simulator's was — the pill "Original" in secondary on the hairline fill; a project on Natural lights Natural and its pill reads Natural in white on the accent. BLENDED CLIPS: the clip is on PicPlace too — components/blended-clip-row.on-picplace.wide.svg: its still, "On PicPlace · …", Download where Open was; its pill, components/holdings-pill.blend.there.safe.svg, is inlined in the row component and comes with it. NEW BLENDED CLIP at 0.4 (makeSection: blendable = isAvailable(.newBlend)) — a tap asks "A new blended clip"; SwiftUI's .opacity fades the fill and the label each on its own, so the label is white at 0.4 over the faded fill, as the Simulator draws it (the strip above fades as one layer). THE ORIGINALS card is drawn at full strength, as ProjectDetailView draws it: Save all to Photos, Review and View all photos each ask (.frames) before they run, but none is greyed — the plan's "the Originals rows greyed in place" is not what the code does, and the Simulator agrees; Stabilise photos stays disabled until a review exists, as always — its title and "Stabilise" in Color.secondary at 55 %, its subtitle in the ordinary secondary (LLRow draws every subtitle so; the base file greyed it); LLRow rows are 59.3 pt (12 pt padding, a 16 pt title, an 11.5 pt subtitle) with a divider from the text's leading edge to the card's trailing one, View all photos 43.3 pt; the count is the recorded one (20 photos). PICPLACE: components/picplace-status.preview-only.phone.svg (144 pt) in its seat after the Originals, before the management card — the grey camera, "Preview only", "Download originals", this project's numbers (20 files · 76,3 MB, the removal's note) and its Blends line — "On PicPlace · 1 blend · 410 KB — Download" — since the one blend is on PicPlace only. AT REST the frame ends inside the Originals card, whose first rows run under the tab bar, and the PICPLACE card is below the fold, so the strip under the caption draws that part of the same scroll content, y 718–1160 (the ORIGINALS and PICPLACE sections, placed with &lt;use&gt; so the strip cannot drift from the main drawing). Not drawn: Guided clip (video projects only), Share project and Duplicate as DNG archive (in the ⋯ menu, closed here — both ask, .exportProject / .frames; the menu does not grey them) and the management card, which follows at y 1165. MAPPING: the Simulator is 402 × 874 with a 62 pt safe area; this canvas keeps its own 59 (README), so everything top-anchored sits 3 pt above its measured place (the discs 59–103 against 62–106, the content from 113 against 116); trailing positions sit 9 pt further left and full-width pieces are 9 pt narrower — which makes the 4:3 hero 361 × 271 where the Simulator's is 370 × 278 and lifts everything under it 7 pt more; bottom-anchored chrome keeps its distance from the bottom edge (the tab bar's foot 40 pt up on both); the status bar is the family's drawn one.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <!-- the hero's picture: ProjectThumbnailView + clipShape(RoundedRectangle(cornerRadius: 18)) -->
+    <clipPath id="hero-clip"><rect x="16" y="121" width="361" height="271" rx="18"/></clipPath>
+    <!-- the preset strip's horizontal ScrollView: the column's width, the chips plus 2 pt either side -->
+    <clipPath id="preset-scroll"><rect x="16" y="469" width="361" height="36.33"/></clipPath>
+    <clipPath id="below-fold"><rect x="0" y="718" width="393" height="442"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <!-- iOS 26 glass (approximated flatly): a soft shadow falling slightly down, as measured around the Simulator's discs -->
+    <filter id="glass" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000" flood-opacity="0.07"/></filter>
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6B4A2E"/><stop offset="0.55" stop-color="#3E2E22"/><stop offset="1" stop-color="#241B14"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- iOS 26 inline navigation bar (navigationTitle + .navigationBarTitleDisplayMode(.inline)), measured on the
+           iPhone 17 Pro Simulator 2026-09-25: the back button is a 44 pt glass disc with the chevron in the label
+           colour and NO "Projects" label; the title centred, 17 pt semibold; the toolbar's ⋯ Menu (ToolbarItem
+           .primaryAction, Image(systemName: "ellipsis.circle"), the accent) in a second glass disc. Both discs 16 pt in,
+           their tops on the safe area (59 here, 62 on the 17 Pro), centred on y 81; the bar is 54 pt, so the scroll
+           content starts at 113. -->
+      <g id="nav-bar">
+        <g id="nav-back" data-symbol="chevron.backward">
+          <circle cx="38" cy="81" r="22" fill="#FBFBFF" filter="url(#glass)"/>
+          <circle cx="38" cy="81" r="21.7" fill="none" stroke="#FFF" stroke-width="0.6"/>
+          <path d="M40.9 73.1 L32.1 81.33 L40.9 89.57" stroke="#1C1C1E" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+        <text x="196.5" y="87.5" font-size="17" class="sb" fill="#000" text-anchor="middle">Interval — harbour dusk</text>
+        <g id="nav-more" data-symbol="ellipsis.circle">
+          <circle cx="355" cy="81" r="22" fill="#FBFBFF" filter="url(#glass)"/>
+          <circle cx="355" cy="81" r="21.7" fill="none" stroke="#FFF" stroke-width="0.6"/>
+          <circle cx="355" cy="81" r="10" fill="none" stroke="#C36A00" stroke-width="1.8"/>
+          <circle cx="350" cy="81" r="1.5" fill="#C36A00"/><circle cx="355" cy="81" r="1.5" fill="#C36A00"/><circle cx="360" cy="81" r="1.5" fill="#C36A00"/>
+        </g>
+      </g>
+
+      <!-- hero (ProjectHeroPane): the asset's own shape — MediaPaneMetrics fits a 4:3 shoot to the column's width,
+           361 × 271 at (16, 121) (8 under the bar), radius 18. The picture is the project's poster.jpg — a finished,
+           already-graded picture (the originals are on PicPlace), so no play circle (heroButton needs an editor asset,
+           and a preview has none); the Edit pill stays and opens the editor's preview page -->
+      <g id="grading-card">
+        <g clip-path="url(#hero-clip)">
+          <rect x="16" y="121" width="361" height="271" fill="url(#dusk)"/>
+          <circle cx="128" cy="203.6" r="22" fill="#FFD9A0" opacity="0.8"/>
+          <polygon points="16,314.6 96,263 176,309.4 258,260.4 336,304.3 377,281 377,392 16,392" fill="#2A2118"/>
+          <polygon points="16,353.3 112,317.2 236,361 338,327.5 377,348.1 377,392 16,392" fill="#191309"/>
+        </g>
+        <!-- identity badge (MediaBadge: 11.5 semibold, padded 11 × 5, 12 pt in): originalBadge → "PREVIEW · 20 photos" -->
+        <rect x="28" y="133" width="142.5" height="23.67" rx="11.83" fill="#000" opacity="0.5"/>
+        <text x="99.25" y="148.9" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">PREVIEW · 20 photos</text>
+        <!-- the edit affordance every hero carries (editPill: 12.5 semibold, padded 12 × 7, 12 pt in) — here it opens
+             EditorPreviewPage -->
+        <g id="edit-pill">
+          <rect x="28" y="351.33" width="72" height="28.67" rx="14.33" fill="#000" opacity="0.45"/>
+          <g data-symbol="slider.horizontal.3" stroke="#FFF" stroke-width="1.4" stroke-linecap="round" fill="none">
+            <path d="M42.3 361.5 H48.7 M52.5 361.5 H53.7 M42.3 365.4 H43.9 M47.7 365.4 H53.7 M42.3 369.3 H48.7 M52.5 369.3 H53.7"/>
+            <circle cx="50.6" cy="361.5" r="1.9"/>
+            <circle cx="45.8" cy="365.4" r="1.9"/>
+            <circle cx="50.6" cy="369.3" r="1.9"/>
+          </g>
+          <text x="64.8" y="370" font-size="12.5" class="sb" fill="#FFF">Edit</text>
+        </g>
+        <!-- format badge, bottom-right 12 pt in on a hero ≥ 330 pt wide: formatBadge → "Interval" -->
+        <rect x="299.5" y="356.33" width="65.5" height="23.67" rx="11.83" fill="#000" opacity="0.5"/>
+        <text x="332.25" y="372.3" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">Interval</text>
+      </g>
+
+      <!-- MediaResizeHandle: a 36 × 5 capsule in Color.secondary at 35 % (#CCCCD1 on this background), centred under
+           the picture in a 28 pt row, 392–420 — drag up to trade picture for the list, double-tap to put it back -->
+      <rect id="resize-handle" x="178.5" y="403.5" width="36" height="5" rx="2.5" fill="#3C3C43" fill-opacity="0.21"/>
+
+      <!-- PresetStripSection (434): VStack(spacing 10) { stateRow ; presetStrip } -->
+      <g id="preset-section">
+        <!-- the state row, at full strength even here: "Preset" 13 semibold secondary, then PresetStatePill 8 pt after
+             it (12.5 semibold, padded 10 × 5; Original / Edited in secondary on LL.hairline, a named preset in white
+             on the accent) -->
+        <g id="preset-state-row">
+          <text x="16" y="451.3" font-size="13" class="sb" fill="#6D6D72">Preset</text>
+          <rect x="65" y="434" width="68" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
+          <text x="99" y="451" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="middle">Original</text>
+        </g>
+        <!-- the chips, greyed in place to 0.45 (a preset is a pixel edit; a chip asks). 13.5 semibold, padded 14 × 8,
+             8 apart, 2 pt in, NO shadow; the strip scrolls sideways and is cut at the column's edge (377), so Original
+             — lit, the project's state — shows only its start -->
+        <g id="preset-strip" opacity="0.45" clip-path="url(#preset-scroll)">
+          <rect x="18" y="471" width="76" height="32.33" rx="16.17" fill="#FFF"/>
+          <text x="56" y="492" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Natural</text>
+          <rect x="102" y="471" width="77.33" height="32.33" rx="16.17" fill="#FFF"/>
+          <text x="140.67" y="492" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Cinema</text>
+          <rect x="187.33" y="471" width="66" height="32.33" rx="16.17" fill="#FFF"/>
+          <text x="220.33" y="492" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Matte</text>
+          <rect x="261.33" y="471" width="60.67" height="32.33" rx="16.17" fill="#FFF"/>
+          <text x="291.67" y="492" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Vivid</text>
+          <rect x="330" y="471" width="78.4" height="32.33" rx="16.17" fill="#C36A00"/>
+          <text x="369.2" y="492" font-size="13.5" class="sb" fill="#FFF" text-anchor="middle">Original</text>
+        </g>
+      </g>
+
+      <!-- blended clips (519.33: LLSectionHeader, 8, the tick-chip filter, 8, the card): the one clip is on PicPlace,
+           not here — components/blended-clip-row.on-picplace.wide.svg (the still, "On PicPlace · …", Download). Its pill
+           (holdings-pill.blend.there.safe at 0.8, 2 pt in from the thumbnail's bottom-right) is INLINED in the row
+           component, so it comes with the row. -->
+      <text x="20" y="532" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 1</text>
+      <image href="../components/blend-list-filter.all.wide.svg" x="16" y="543" width="361" height="33"/>
+      <g id="versions-card">
+        <rect x="16" y="583.33" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <image href="../components/blended-clip-row.on-picplace.wide.svg" x="16" y="583.33" width="361" height="62"/>
+      </g>
+
+      <!-- new blended clip (659.33): greyed in place, 0.4 (makeSection — blends from the originals; a tap asks).
+           LLPrimaryButtonStyle: 16 bold white, 50 tall, radius 14. SwiftUI's .opacity fades the fill and the label
+           each on its own, so the label is white at 0.4 over the faded fill (#ECD7BF), not a group fade — as the
+           Simulator draws it -->
+      <g id="new-version">
+        <rect x="16" y="659.33" width="361" height="50" rx="14" fill="#C36A00" opacity="0.4"/>
+        <path d="M125.83 678.81 v11.04 M120.31 684.33 h11.04" stroke="#FFF" stroke-width="2.3" stroke-linecap="round" opacity="0.4" data-symbol="plus"/>
+        <text x="143" y="690.33" font-size="16" class="b" fill="#FFF" opacity="0.4">New blended clip</text>
+      </g>
+
+      <!-- originals (723.33): drawn at full strength, as the code draws it — each control asks for the photos
+           (.frames) before it runs; Stabilise stays disabled until a review exists. LLRow: 12 pt padding, title 16,
+           subtitle 11.5 two under it, the trailing control 12.5 semibold 16 pt in; a row is 59.3 pt and its divider
+           runs from the text's leading edge (32) to the card's trailing one -->
+      <g id="originals-section">
+        <text x="20" y="736" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">ORIGINALS</text>
+        <g id="originals-card">
+          <rect x="16" y="747" width="361" height="222.33" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <g id="row-source-photos">
+            <text x="32" y="774.2" font-size="16" fill="#000">Source photos</text>
+            <text x="32" y="791.2" font-size="11.5" fill="#6D6D72">20 photos</text>
+            <text x="361" y="781.3" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Save all to Photos</text>
+          </g>
+          <line x1="32" y1="806.5" x2="377" y2="806.5" stroke="#000" stroke-opacity="0.08"/>
+          <g id="row-review-photos">
+            <text x="32" y="833.9" font-size="16" fill="#000">Review photos</text>
+            <text x="32" y="850.9" font-size="11.5" fill="#6D6D72">Finds knocks and drift in the framing</text>
+            <text x="361" y="841" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Review</text>
+          </g>
+          <line x1="32" y1="866.2" x2="377" y2="866.2" stroke="#000" stroke-opacity="0.08"/>
+          <!-- disabled: the title and "Stabilise" in Color.secondary at 55 %; the subtitle is LLRow's own secondary -->
+          <g id="row-stabilise-photos">
+            <text x="32" y="893.6" font-size="16" fill="#BFBFC1">Stabilise photos</text>
+            <text x="32" y="910.5" font-size="11.5" fill="#6D6D72">Review the photos first</text>
+            <text x="361" y="900.7" font-size="12.5" class="sb" fill="#BFBFC1" text-anchor="end">Stabilise</text>
+          </g>
+          <line x1="32" y1="925.8" x2="377" y2="925.8" stroke="#000" stroke-opacity="0.08"/>
+          <g id="row-view-all">
+            <text x="32" y="953.2" font-size="16" fill="#000">View all photos</text>
+            <path d="M354.75 942.47 L360.05 947.67 L354.75 952.87" stroke="#C4C4C6" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- PICPLACE (983.33): after the material, before the management of it —
+           components/picplace-status.preview-only.phone.svg (144 pt with its Blends line; the screen draws the white
+           card). Below the fold at rest: the strip under the caption shows it. -->
+      <g id="picplace-section">
+        <text x="20" y="996" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PICPLACE</text>
+        <g id="picplace-card">
+          <rect x="16" y="1007" width="361" height="144" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <image href="../components/picplace-status.preview-only.phone.svg" x="16" y="1007" width="361" height="144"/>
+        </g>
+      </g>
+      <!-- the management card follows at 1151 + 14 = 1165, below the fold -->
+
+      <!-- floating tab bar (Projects selected) — FIVE tabs, markup from projects.portrait.svg: FloatingTabBar draws
+           LLTab.visible(scans:), and Scans takes a seat only when the library holds a scan AND Settings ▸ Advanced ▸
+           Layout ▸ Enable Scans menu is on (iOS/INDEX.md, 2026-08-25) -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <g transform="translate(56.5 776) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g id="tab-gallery" fill="none" stroke="#8E8E93">
+          <g transform="translate(126.5 776) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <rect x="163.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-projects" fill="none" stroke="#C36A00">
+          <g transform="translate(196.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <g transform="translate(266.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <g id="tab-settings" fill="none" stroke="#8E8E93">
+          <g transform="translate(336.5 776) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Project detail (interval) · preview · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectDetailView.swift — ProjectHeroPane · MediaResizeHandle ·</text>
+  <text x="220.5" y="939" text-anchor="middle" font-size="11" fill="#8A8A90">PresetStripSection · BlendedClipRow · makeSection · originalsSection ·</text>
+  <text x="220.5" y="954" text-anchor="middle" font-size="11" fill="#8A8A90">PicPlaceStatusCard · FloatingTabBar (five tabs) · the iOS 26 navigation bar</text>
+
+  <!-- BELOW THE FOLD: the same scroll content, screen y 718–1160, drawn 291 pt lower (translate(24,291) — screen y 718
+       lands on 1009). Not a second screen: the rows the device frame cannot show at the at-rest scroll top — the
+       Originals card under the tab bar and the PICPLACE card this state is about. The two sections are the main
+       drawing's own groups, placed with <use>, so the strip cannot drift from it. -->
+  <text x="220.5" y="983" text-anchor="middle" font-size="12" class="sb" fill="#3A3A3F">Below the fold — the same scroll content, y 718–1160</text>
+  <text x="220.5" y="998" text-anchor="middle" font-size="11" fill="#8A8A90">the Originals card (under the tab bar at rest) and the PICPLACE card after it</text>
+  <g id="below-the-fold" transform="translate(24,291)">
+    <g clip-path="url(#below-fold)">
+      <rect x="0" y="718" width="393" height="442" fill="#F2F2F7"/>
+      <use href="#originals-section"/>
+      <use href="#picplace-section"/>
+    </g>
+    <rect x="0" y="718" width="393" height="442" fill="none" stroke="#AEAEB2" stroke-width="1" stroke-dasharray="4 3"/>
+  </g>
+</svg>

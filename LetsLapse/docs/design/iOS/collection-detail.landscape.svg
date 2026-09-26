@@ -1,12 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Collection detail (timeline builder) · landscape</title>
-  <desc>Mirrors App/CollectionDetailView.swift (wideLayout): past 560pt of width the builder splits — preview left, controls right. The left column (min(46% of width, 420pt)) vertically centres the crop surface at up to (column−20)×(height−120); a tall canvas (9:16 · 3:4) gets the room it needs, which is the point of rotating. The preview wears its own controls exactly as portrait does (2026-08-31 rework): clip badge top-left, canvas menu chip bottom-right ON the media (bare-ratio menu, widest→tallest, first clip's shape marked), the honest-pixels HUD at its top while a crop drag is live — the caption that used to sit under the preview is GONE. The right column stacks: the compact meta line "0:59 · exports 2160×3840" alone on the top row (it is the wide layout's summary card), then the scroll region opening with the header row — TIMELINE · 2 CLIPS left, the Ken Burns tri-state (Off | Auto | Custom) right, same control as portrait — then the rows card (same 66pt clipRow as portrait, CROP badges and all). No Ken Burns card follows the timeline any more: Auto deals silently, Custom opens the options drawer as a POPOVER anchored to the control here (iPad/Mac; see collection-detail.kenburns-options.portrait.svg). With Ken Burns on, the framing bar sits under the preview and the identity frames (white start / amber end, ties + haloed arrow) draw exactly as collection-detail.kenburns.portrait.svg; macOS additionally puts 7pt corner grips on the active frame and resizes it by scroll wheel over the preview. The bottom row is dashed "+ Add clips" + "Export collection" (44pt, side by side). Same layout serves iPad and macOS (the 760×680 default window is wide enough). Known gap, tracked in docs/TODO.md: on iPad the floating tab bar pill overlays the bottom row's Add button. Status text and nav are the system's; the floating tab bar continues to overlay (drawn omitted here for clarity of the split — geometry as portrait). Drawn with the 9:16 crop state selected, at rest (no drag, so no HUD).</desc>
+  <desc>Mirrors App/CollectionDetailView.swift (wideLayout, MissingClipsBanner, clipRow, rowSubtitle) over App/CollectionAvailability.swift: past 560pt of width the builder splits — preview left, controls right. The left column (min(46% of width, 420pt)) vertically centres the crop surface at up to (column−20)×(height−120); a tall canvas (9:16 · 3:4) gets the room it needs, which is the point of rotating. The preview wears its own controls exactly as portrait does (2026-08-31 rework): clip badge top-left, canvas menu chip bottom-right ON the media (bare-ratio menu, widest→tallest, first clip's shape marked), the honest-pixels HUD at its top while a crop drag is live — the caption that used to sit under the preview is GONE. The right column stacks: the compact meta line "0:19 · exports 2160×3840" alone on the top row (it is the wide layout's summary card), then the scroll region opening with the header row — TIMELINE · 2 CLIPS left, the Ken Burns tri-state (Off | Auto | Custom) right, same control as portrait — then the rows card (same 66pt clipRow as portrait, CROP badges and all). No Ken Burns card follows the timeline any more: Auto deals silently, Custom opens the options drawer as a POPOVER anchored to the control here (iPad/Mac; see collection-detail.kenburns-options.portrait.svg). With Ken Burns on, the framing bar sits under the preview and the identity frames (white start / amber end, ties + haloed arrow) draw exactly as collection-detail.kenburns.portrait.svg; macOS additionally puts 7pt corner grips on the active frame and resizes it by scroll wheel over the preview. The bottom row is dashed "+ Add clips" + "Export collection" (44pt, side by side). Same layout serves iPad and macOS (the 760×680 default window is wide enough). Known gap, tracked in docs/TODO.md: on iPad the floating tab bar pill overlays the bottom row's Add button. Status text and nav are the system's; the floating tab bar continues to overlay (drawn omitted here for clarity of the split — geometry as portrait). Drawn with the 9:16 crop state selected, at rest (no drag, so no HUD). 2026-09-26 — a clip on PicPlace and a still (plan §11 stage 3 rule 4 and §15 D4, code first, mirrored after sign-off): the SELECTED clip (row 1) is the one whose file is on PicPlace, not on this iPhone — the preview draws its still (posters/&lt;blend id&gt;.jpg) under the same crop frame, so nothing on the surface changes; its row wears an icloud glyph where the play glyph was and keeps its length, CROP badge, trim button and grip; a play, a trim / start point and Export ask first ("Download this clip?" · Download and Continue · Stay as Is — see collection-detail.portrait.svg). The scroll region opens, under the header, with the MissingClipsBanner (llCard, 12pt padding, 10pt above the rows): icloud 15 semibold secondary · "1 clip isn't on this iPhone" 13.5 semibold · "Playing, trimming and exporting need them here · 410 KB" 11.5 secondary · Download 13.5 semibold accent — then "Downloading from PicPlace…" with a spinner while they come down; "this iPad" / "this Mac" on those. The subtitle wraps at this drawing's 456pt column too — SwiftUI pushes "410" down beside "KB" rather than leave one word on a line (checked by laying the banner out headlessly); a real iPhone's landscape column, ≈350pt inside the safe area, breaks it "Playing, trimming and exporting / need them here · 410 KB". Row 2 is a STILL member (D4): a 3:4 photo's still — photo glyph over its thumbnail, "Still · 4.0s · gentle move", the ⏱ timer length menu in the trim button's seat — framed for this collection only, hence CROP 9:16 · CUSTOM. To make room the meta line and the header row sit at their code positions (meta 10pt under the nav, the header 12pt under it — 6–7pt higher than this file drew them before), the banner under the header and the rows card 70pt lower than before; row 2 still ends 5pt above the bottom row. The meta line's total is 15 + 4 s = 0:19.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
     <clipPath id="preview"><rect x="140" y="94" width="142" height="253" rx="12"/></clipPath>
     <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
     <linearGradient id="clipA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#33415A"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
     <linearGradient id="clipB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A5A43"/><stop offset="1" stop-color="#232E1D"/></linearGradient>
+    <!-- a photo's still: harbour at dusk -->
+    <linearGradient id="stillA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B7835E"/><stop offset="0.55" stop-color="#6B5260"/><stop offset="1" stop-color="#262B38"/></linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
 
@@ -24,7 +26,8 @@
         <g stroke="#C36A00" fill="#C36A00" data-symbol="ellipsis.circle"><circle cx="800" cy="36" r="9" fill="none" stroke-width="1.6"/><circle cx="795.5" cy="36" r="1.3" stroke="none"/><circle cx="800" cy="36" r="1.3" stroke="none"/><circle cx="804.5" cy="36" r="1.3" stroke="none"/></g>
       </g>
 
-      <!-- left column: crop surface (16:9 clip, 9:16 frame) vertically centred, wearing the canvas chip -->
+      <!-- left column: crop surface (16:9 clip, 9:16 frame) vertically centred, wearing the canvas chip.
+           The selected clip's file is on PicPlace: this is its still, under the same frame. -->
       <g id="left-preview">
         <rect x="70" y="94" width="282" height="253" rx="12" fill="#000"/>
         <!-- clip drawn aspect-fit: 282×159 16:9 centred; crop frame 89×159 -->
@@ -47,51 +50,70 @@
       <!-- right column -->
       <g id="right-column">
         <!-- meta line: the wide layout's summary card -->
-        <text x="372" y="80" font-size="11.5" class="sec">0:59 · exports 2160×3840</text>
+        <text x="372" y="73" font-size="11.5" class="sec">0:19 · exports 2160×3840</text>
 
         <!-- header row: TIMELINE left, Ken Burns tri-state right -->
         <g id="timeline-header">
-          <text x="372" y="112" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TIMELINE · 2 CLIPS</text>
-          <text x="685" y="111" font-size="10.5" class="sb" fill="#6D6D72" text-anchor="end">Ken Burns</text>
-          <rect x="691" y="94" width="137" height="28" rx="14" fill="#FFF" filter="url(#card)"/>
-          <rect x="693" y="96" width="33" height="24" rx="12" fill="#C36A00"/>
-          <text x="709.5" y="112" font-size="11" class="sb" fill="#FFF" text-anchor="middle">Off</text>
-          <text x="748" y="112" font-size="11" class="sb" fill="#C36A00" text-anchor="middle">Auto</text>
-          <text x="798" y="112" font-size="11" class="sb" fill="#C36A00" text-anchor="middle">Custom</text>
+          <text x="372" y="106" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TIMELINE · 2 CLIPS</text>
+          <text x="685" y="105" font-size="10.5" class="sb" fill="#6D6D72" text-anchor="end">Ken Burns</text>
+          <rect x="691" y="88" width="137" height="28" rx="14" fill="#FFF" filter="url(#card)"/>
+          <rect x="693" y="90" width="33" height="24" rx="12" fill="#C36A00"/>
+          <text x="709.5" y="106" font-size="11" class="sb" fill="#FFF" text-anchor="middle">Off</text>
+          <text x="748" y="106" font-size="11" class="sb" fill="#C36A00" text-anchor="middle">Auto</text>
+          <text x="798" y="106" font-size="11" class="sb" fill="#C36A00" text-anchor="middle">Custom</text>
         </g>
 
-        <!-- rows card -->
+        <!-- clips on PicPlace (2026-09-26, plan §11): MissingClipsBanner 6pt under the header, 10pt above the rows card. Same view
+             as portrait; its subtitle wraps at this column as SwiftUI breaks it (no one-word last line), so 70pt tall. -->
+        <g id="missing-clips-banner">
+          <rect x="372" y="122" width="456" height="70" rx="16" fill="#FFF" filter="url(#card)"/>
+          <g transform="translate(383.21 145.23) scale(0.9953)" data-symbol="icloud"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linejoin="round"/></g>
+          <text x="416" y="146.9" font-size="13.5" class="sb" fill="#000">1 clip isn't on this iPhone</text>
+          <text x="416" y="163.1" font-size="11.5" class="sec">Playing, trimming and exporting need them here ·</text>
+          <text x="416" y="176.8" font-size="11.5" class="sec">410 KB</text>
+          <text x="816" y="161.6" font-size="13.5" class="sb" fill="#C36A00" text-anchor="end">Download</text>
+        </g>
+
+        <!-- rows card — 70pt lower than before 2026-09-26 (the header 6pt up, the banner 70 + 10 under it) -->
         <g id="timeline">
-          <rect x="372" y="132" width="456" height="132" rx="16" fill="#FFF" filter="url(#card)"/>
+          <rect x="372" y="202" width="456" height="132" rx="16" fill="#FFF" filter="url(#card)"/>
 
-          <!-- row 1 (selected · crop) -->
-          <g id="row-1">
-            <rect x="372" y="132" width="456" height="66" rx="12" fill="#C36A00" opacity="0.07"/>
-            <rect x="384" y="144" width="58" height="42" rx="7" fill="url(#clipA)"/>
-            <path d="M409 159 l9 6 -9 6 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
-            <text x="452" y="160" font-size="14.5" class="sb" fill="#000">Tram Tester</text>
-            <text x="452" y="179" font-size="11.5" class="sec">50× · 15s</text>
-            <rect x="524" y="168" width="66" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
-            <rect x="524" y="168" width="66" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
-            <text x="557" y="178" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 9:16</text>
-            <circle cx="770" cy="165" r="17" fill="#C36A00" opacity="0.1"/>
-            <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="timeline.selection"><path d="M764 158 h-2 v14 h2 M776 158 h2 v14 h-2"/><path d="M767 165 h6"/></g>
-            <path d="M800 159 h16 M800 165 h16 M800 171 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
+          <!-- row 1 (selected · crop · the clip's file on PicPlace): its still, and a cloud where the play glyph was -->
+          <g id="row-1" data-state="clip-on-picplace">
+            <rect x="372" y="202" width="456" height="66" rx="12" fill="#C36A00" opacity="0.07"/>
+            <rect x="384" y="214" width="58" height="42" rx="7" fill="url(#clipA)"/>
+            <g transform="translate(403.73 225.93) scale(0.7820)" opacity="0.8" data-symbol="icloud"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linejoin="round"/></g>
+            <text x="452" y="230" font-size="14.5" class="sb" fill="#000">Tram Tester</text>
+            <text x="452" y="249" font-size="11.5" class="sec">50× · 15s</text>
+            <rect x="511" y="238" width="66" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
+            <rect x="511" y="238" width="66" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
+            <text x="544" y="248" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 9:16</text>
+            <circle cx="770" cy="235" r="17" fill="#C36A00" opacity="0.1"/>
+            <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="timeline.selection"><path d="M764 228 h-2 v14 h2 M776 228 h2 v14 h-2"/><path d="M767 235 h6"/></g>
+            <path d="M800 229 h16 M800 235 h16 M800 241 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
           </g>
-          <line x1="452" y1="198" x2="828" y2="198" stroke="#000" stroke-opacity="0.06"/>
+          <line x1="452" y1="268" x2="828" y2="268" stroke="#000" stroke-opacity="0.06"/>
 
-          <!-- row 2 (local override) -->
-          <g id="row-2">
-            <rect x="384" y="210" width="58" height="42" rx="7" fill="url(#clipB)"/>
-            <path d="M409 225 l9 6 -9 6 z" fill="#FFF" opacity="0.8"/>
-            <text x="452" y="226" font-size="14.5" class="sb" fill="#000">Ridge sunset</text>
-            <text x="452" y="245" font-size="11.5" class="sec">100× · 15s</text>
-            <rect x="536" y="234" width="118" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
-            <rect x="536" y="234" width="118" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
-            <text x="595" y="244" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 9:16 · CUSTOM</text>
-            <circle cx="770" cy="231" r="17" fill="#C36A00" opacity="0.1"/>
-            <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M764 224 h-2 v14 h2 M776 224 h2 v14 h-2"/><path d="M767 231 h6"/></g>
-            <path d="M800 225 h16 M800 231 h16 M800 237 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round"/>
+          <!-- row 2 (a still member, D4 · local crop override): photo glyph, "Still · 4.0s · gentle move", ⏱ length menu -->
+          <g id="row-2" data-state="still">
+            <rect x="384" y="280" width="58" height="42" rx="7" fill="url(#stillA)"/>
+            <g stroke="#FFF" stroke-opacity="0.8" fill="none" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" data-symbol="photo">
+              <rect x="405" y="295" width="16" height="12" rx="2.4"/>
+              <path d="M406.6 305.4 l3.6 -3.8 2.6 2.6 2.2 -2.2 4.4 3.4"/>
+              <circle cx="409.4" cy="298.8" r="1.2" fill="#FFF" fill-opacity="0.8" stroke="none"/>
+            </g>
+            <text x="452" y="296" font-size="14.5" class="sb" fill="#000">Photo 19. 9. at 20:00</text>
+            <text x="452" y="315" font-size="11.5" class="sec">Still · 4.0s · gentle move</text>
+            <rect x="595" y="304" width="118.5" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
+            <rect x="595" y="304" width="118.5" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
+            <text x="654.25" y="314" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 9:16 · CUSTOM</text>
+            <circle cx="770" cy="301" r="17" fill="#C36A00" opacity="0.1"/>
+            <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="timer">
+              <path d="M767.6 295.8 A6.6 6.6 0 1 0 772.4 295.8"/>
+              <path d="M770 294.6 v4.6"/>
+              <path d="M770 302 l-3 -3"/>
+            </g>
+            <path d="M800 295 h16 M800 301 h16 M800 307 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
           </g>
         </g>
 
@@ -108,5 +130,5 @@
   </g>
 
   <text x="450" y="446" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collection detail (timeline builder) · landscape · 852×393 pt (serves iPad and macOS)</text>
-  <text x="450" y="464" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionDetailView.swift wideLayout — chip on the preview · meta line alone · TIMELINE + Ken Burns tri-state header · no Ken Burns card</text>
+  <text x="450" y="464" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionDetailView.swift wideLayout — clips-on-PicPlace banner · the selected clip on PicPlace · a still (⏱ length)</text>
 </svg>

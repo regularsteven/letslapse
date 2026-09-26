@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Projects · sync panel (Project Syncing) · portrait</title>
-  <desc>Mirrors App/ProjectSharingChip.swift (ProjectSharingChip pill + ProjectSharingSheet) over Shared/ProjectTransferServer.swift, on the Projects list projects.portrait.svg draws. **Reworked 2026-09-06.** What was here before was a full-width chip ROW under the title, drawn only while sharing was on, carrying the code and a tap-to-stop and shifting the whole list down 48pt. It could only ever say one thing — you are sharing — for the width of the header, and it said nothing at all the rest of the time. Now: a PILL opposite the title, always drawn, GREEN while this device is serving its library and RED while it is not (projects.portrait.svg), and everything the row carried lives in the sheet behind it. THE PILL: 32pt circle, glyph antenna.radiowaves.left.and.right (…slash when off) on a 12% tint with a 35% ring, its centre on the title's baseline minus 6. A third state, desc-only: sharing ON but the server could not start draws it AMBER with exclamationmark.triangle.fill — almost always a refused Local Network prompt, which otherwise presents as "nobody ever connects". A SEND IN FLIGHT draws a 2pt accent ring around the pill at the transfer's fraction (nil fraction, no ring — the job has no honest denominator), because the row this replaced showed a 12GB pull's progress and losing sight of that entirely would be the worse trade; the byte counts are in the sheet. THE SHEET: the switch, the code, the QR, and the send. The switch writes the SAME `transfer.sharingEnabled` key Settings ▸ Advanced writes, bound straight through from the list, so the two are one state rather than two that agree by convention; the server arms on it and stands down on it, on background (iOS suspends network activity anyway; this only makes it honest) and, on the Mac, after 15 idle minutes. The code is minted fresh on every arm — a code read off this screen an hour ago is not still valid — and shown 3+3. The QR is the same code as PairingQR's payload, `LLXFER1:379783`, drawn here at its real module layout (correction M, version 1, 21 modules at 8.57pt inside 180pt); it carries the code ALONE, the serving device's identity being derivable from it, which is what lets the scanning end verify a scan against the device it already picked before it connects. A SEND draws a card under the code: green arrow.up.circle.fill, "Sending Tram morning", "3,2 GB of 12,4 GB" and a 4pt accent bar (uncompressed both sides — there is no compression on the payload path, so this denominator is the truth). With the switch OFF the code, the QR and the sentence about the other device are replaced by one line: "While this is off, this device does not advertise itself and no other device can see its projects." Verified on the simulator 2026-09-06 (pill green, code 379 783, and the drawn QR decoded back to LLXFER1:379783 with OpenCV); the Mac end is macOS/library-import.*.svg. **2026-09-14 (data model M2, code first — desc only, nothing drawn changes):** the rows, their order, the filter counts and the chip row come from the library's SQLite index (`AppModel.projectIDs(for:)` over one `ProjectListQuery`), and the search field is the index's full-text search: every typed word matches by PREFIX ("brid" finds bridge; "idge" no longer does — by decision) against the project's name or original file name, its tags AND their chip labels ("weather" finds Sky &amp; weather), the model's elements, and — new — its assets' titles, captions, keywords, creator, place and camera; every word must land on the same project, so typing more narrows. A word with no letter or digit ("&amp;") is not a term. The dated fallback title of an unnamed project ("Photo 13. 9. at 13:49") is a rendering, not a field, so a typed date fragment no longer finds it; "photo" now also finds unnamed interval shoots through their original name ("1057 photos"). Sort ties are the same as before (the capture date, then the id, turning with the sort). Verified 2026-09-14: 36 launch-hook cases (`LL_FILTER`, `LL_QUERY`, `LL_CHIPS`, `LL_DUMP_ORDER`) identical before and after on the Mac and the iPhone 16 Pro simulator bar the three search cases above. **2026-09-15 — the sheet is "Project Syncing" (working title) and leads with PicPlace.** The same pill (unchanged: green serving / red not / amber failed) now also sits in the Gallery header, and the sheet it opens carries, above the nearby-devices block it always had: signed OUT, one prominent "Sign in with PicPlace" button (or "Sign in as @user" on a bound library) with "Keep a copy of your projects on picplace.co" under it — no server row, that is Settings' alone; signed IN but the library not this account's, "Connect this library" (unbound) or whose it is (mismatch); CONNECTED, the account line with checkmark.icloud.fill ("@regularsteven on picplace.test · 118 projects"), ONE status line (N projects need your decision — Review > what auto-sync is doing with a spinner > the first connection's progress > the last auto-sync problem > "Auto-sync waiting for Wi-Fi" > "Edits go to PicPlace as you make them" / "Auto-sync is off — projects sync when you ask"), the *Check PicPlace now* button (.bordered, accent; "Checking PicPlace…" with a spinner while it runs) with the last check's summary under it ("Checked 2 minutes ago · 53 brought here", the same line as the Settings card's), and "All PicPlace settings ›", which selects the Settings tab and scrolls it to the PICPLACE card. Drawn here at the LARGE detent so all of it is on one screen. On touch devices a deliberate pull on the Projects list or the Gallery grid is the same "Check PicPlace now" (`.refreshable` on the List and on the grid's scroll views), and what the check brings, updates or trashes reaches both tabs through the index. Code first (Steven, 2026-09-15), the mirror drawn the same day from the Mac run (the connected state) and the iPhone 16 Pro simulator (signed out).</desc>
+  <desc>Mirrors App/ProjectSharingChip.swift (ProjectSharingChip pill + ProjectSharingSheet) over Shared/ProjectTransferServer.swift, on the Projects list projects.portrait.svg draws. **Reworked 2026-09-06.** What was here before was a full-width chip ROW under the title, drawn only while sharing was on, carrying the code and a tap-to-stop and shifting the whole list down 48pt. It could only ever say one thing — you are sharing — for the width of the header, and it said nothing at all the rest of the time. Now: a PILL opposite the title, always drawn, GREEN while this device is serving its library and RED while it is not (projects.portrait.svg), and everything the row carried lives in the sheet behind it. THE PILL: 32pt circle, glyph antenna.radiowaves.left.and.right (…slash when off) on a 12% tint with a 35% ring, its centre on the title's baseline minus 6. A third state, desc-only: sharing ON but the server could not start draws it AMBER with exclamationmark.triangle.fill — almost always a refused Local Network prompt, which otherwise presents as "nobody ever connects". A SEND IN FLIGHT draws a 2pt accent ring around the pill at the transfer's fraction (nil fraction, no ring — the job has no honest denominator), because the row this replaced showed a 12GB pull's progress and losing sight of that entirely would be the worse trade; the byte counts are in the sheet. THE SHEET: the switch, the code, the QR, and the send. The switch writes the SAME `transfer.sharingEnabled` key Settings ▸ Advanced writes, bound straight through from the list, so the two are one state rather than two that agree by convention; the server arms on it and stands down on it, on background (iOS suspends network activity anyway; this only makes it honest) and, on the Mac, after 15 idle minutes. The code is minted fresh on every arm — a code read off this screen an hour ago is not still valid — and shown 3+3. The QR is the same code as PairingQR's payload, `LLXFER1:379783`, drawn here at its real module layout (correction M, version 1, 21 modules at 8.57pt inside 180pt); it carries the code ALONE, the serving device's identity being derivable from it, which is what lets the scanning end verify a scan against the device it already picked before it connects. A SEND draws a card under the code: green arrow.up.circle.fill, "Sending Tram morning", "3,2 GB of 12,4 GB" and a 4pt accent bar (uncompressed both sides — there is no compression on the payload path, so this denominator is the truth). With the switch OFF the code, the QR and the sentence about the other device are replaced by one line: "While this is off, this device does not advertise itself and no other device can see its projects." Verified on the simulator 2026-09-06 (pill green, code 379 783, and the drawn QR decoded back to LLXFER1:379783 with OpenCV); the Mac end is macOS/library-import.*.svg. **2026-09-14 (data model M2, code first — desc only, nothing drawn changes):** the rows, their order, the filter counts and the chip row come from the library's SQLite index (`AppModel.projectIDs(for:)` over one `ProjectListQuery`), and the search field is the index's full-text search: every typed word matches by PREFIX ("brid" finds bridge; "idge" no longer does — by decision) against the project's name or original file name, its tags AND their chip labels ("weather" finds Sky &amp; weather), the model's elements, and — new — its assets' titles, captions, keywords, creator, place and camera; every word must land on the same project, so typing more narrows. A word with no letter or digit ("&amp;") is not a term. The dated fallback title of an unnamed project ("Photo 13. 9. at 13:49") is a rendering, not a field, so a typed date fragment no longer finds it; "photo" now also finds unnamed interval shoots through their original name ("1057 photos"). Sort ties are the same as before (the capture date, then the id, turning with the sort). Verified 2026-09-14: 36 launch-hook cases (`LL_FILTER`, `LL_QUERY`, `LL_CHIPS`, `LL_DUMP_ORDER`) identical before and after on the Mac and the iPhone 16 Pro simulator bar the three search cases above. **2026-09-15 — the sheet is "Project Syncing" (working title) and leads with PicPlace.** The same pill (unchanged: green serving / red not / amber failed) now also sits in the Gallery header, and the sheet it opens carries, above the nearby-devices block it always had: signed OUT, one prominent "Sign in with PicPlace" button (or "Sign in as @user" on a bound library) with "Keep a copy of your projects on picplace.co" under it — no server row, that is Settings' alone; signed IN but the library not this account's, "Connect this library" (unbound) or whose it is (mismatch); CONNECTED, the account line with checkmark.icloud.fill ("@regularsteven on picplace.test · 118 projects"), ONE status line (N projects need your decision — Review > what auto-sync is doing with a spinner > the first connection's progress > the last auto-sync problem > "Auto-sync waiting for Wi-Fi" > "Edits go to PicPlace as you make them" / "Auto-sync is off — projects sync when you ask"), the *Check PicPlace now* button (.bordered, accent; "Checking PicPlace…" with a spinner while it runs) with the last check's summary under it ("Checked 2 minutes ago · 53 brought here", the same line as the Settings card's), and "All PicPlace settings ›", which selects the Settings tab and scrolls it to the PICPLACE card. Drawn here at the LARGE detent so all of it is on one screen. On touch devices a deliberate pull on the Projects list or the Gallery grid is the same "Check PicPlace now" (`.refreshable` on the List and on the grid's scroll views), and what the check brings, updates or trashes reaches both tabs through the index. Code first (Steven, 2026-09-15), the mirror drawn the same day from the Mac run (the connected state) and the iPhone 16 Pro simulator (signed out). **2026-09-26 — the DOWNLOADS card (connected asset states, plan §10 stage 2, code 2026-09-25; `ProjectSyncSheet.downloadsBlock`).** Originals and blends coming down from PicPlace — started from a greyed control's *Download and Continue*, the project card's *Download originals*, a blend row's or a collection's Download — are listed here, so a person can browse on while they come and find them all in one place: one white rx12 card (12pt padding) between the status line and *Check PicPlace now*, after the sending block and the uploads card when those show (projects.sharing.uploads.portrait.svg; neither shows here). One row per project whose progress phase is `.downloading`, sorted by title, 12pt apart: "Downloading from PicPlace" (15 medium) over the project's title (caption, secondary), **Stop** trailing on the same line (bordered, secondary tint, 13.5 semibold — `picplace.cancelSync`: what landed stays and the next press skips it), a linear bar in accent at bytes done of total, and "118 of 301 files · 2.9 GB of 7.4 GB" (caption, secondary; `LLFormat.bytes`, "1 of 1 file" singular) — "Asking PicPlace for the files…" until PicPlace's list has been read. Nothing else in the drawer changes while a download runs (it sets no auto-sync status). The project's own pill meanwhile shows the grey camera and the amber ↓ (`components/holdings-pill.there.downloading.svg`). Drawn: one download (a Stack the iPad uploaded, coming down to this phone); the card costs 98pt, so everything under it is 98pt lower and the sheet still fits one screen at the large detent. The Projects list under the sheet (covered at this detent) now wears the holdings pills projects.portrait.svg draws. Not driven on a device yet (plan §10: "Not driven: the drawer's downloads block"); drawn from the code.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -126,6 +126,10 @@
         <polygon points="30,298 60,282 92,296 116,286 116,314 30,314" fill="#232B36"/>
         <rect x="62" y="296" width="50" height="15" rx="7.5" fill="#000" opacity="0.5"/>
         <text x="87" y="307" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">0:36</text>
+        <!-- holdings pill (2026-09-26) — the list under the sheet is
+             projects.portrait.svg's, pills included (placement and states are
+             explained there); covered by the sheet at this detent -->
+        <image href="../components/holdings-pill.there.blend-here.safe.svg" x="51.7" y="254" width="60.3" height="18"/>
         <text x="128" y="267" font-size="16" class="b" fill="#000">Sunset over harbour</text>
         <text x="128" y="284" font-size="12" fill="#6D6D72">Video · 1080p · 30 fps · 2 days ago</text>
         <text x="128" y="300" font-size="12" fill="#6D6D72" id="source-line-1" data-note="video-kind only">4 source clips · 2 bursts at 120 fps</text>
@@ -167,6 +171,7 @@
         <polygon points="30,510 62,494 94,508 116,500 116,526 30,526" fill="#2E2419"/>
         <rect x="48" y="508" width="64" height="15" rx="7.5" fill="#000" opacity="0.5"/>
         <text x="80" y="519" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">184 photos</text>
+        <image href="../components/holdings-pill.both.safe.svg" x="51.7" y="466" width="60.3" height="18"/>
         <text x="128" y="479" font-size="16" class="b" fill="#000">Interval — harbour dusk</text>
         <text x="128" y="496" font-size="12" fill="#6D6D72">Interval · 184 photos · yesterday</text>
         <text x="128" y="514" font-size="12" class="sb" fill="#C36A00">1 blended clip · 3.1 GB</text>
@@ -213,6 +218,7 @@
         <ellipse cx="73" cy="684" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
         <rect x="60" y="704" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
         <text x="86" y="715" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
+        <image href="../components/holdings-pill.here.needs.svg" x="66" y="662" width="46" height="18"/>
         <text x="128" y="675" font-size="16" class="b" fill="#000">Long exposure — falls</text>
         <text x="128" y="692" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
         <text x="128" y="710" font-size="12" class="sb" fill="#6D6D72">48 MB</text>
@@ -258,7 +264,7 @@
       </g>
 
       <!-- ===== THE SHEET (ProjectSharingSheet) — what the pill opens =====
-           A medium detent on the phone; a fixed 360×520 panel on the Mac. Four
+           A medium detent on the phone; a fixed 360×620 panel on the Mac. Four
            things and no more: the switch, the code, the code as a QR, and what
            the server is doing. The switch is the SAME UserDefaults key
            (`transfer.sharingEnabled`) Settings ▸ Advanced writes, bound through
@@ -272,7 +278,10 @@
            connection > the last problem > "Edits go to PicPlace as you make them"),
            the *Check PicPlace now* button (bordered, accent) with the last check's
            line under it, and "All PicPlace settings ›" — which selects the Settings
-           tab and scrolls its list to the PICPLACE card. Signed out, the block is
+           tab and scrolls its list to the PICPLACE card. Between the status line
+           and the check, when they have anything to show: the sending block
+           (2026-09-24), the uploads card (projects.sharing.uploads.portrait.svg)
+           and the DOWNLOADS card (2026-09-25, drawn here). Signed out, the block is
            one prominent button, "Sign in with PicPlace" (or "Sign in as @user" on a
            bound library), over "Keep a copy of your projects on picplace.co"; signed
            in on a library that is not this account's, "Connect this library" (or
@@ -285,7 +294,7 @@
         <rect x="178.5" y="68" width="36" height="5" rx="2.5" fill="#000" fill-opacity="0.2"/>
 
         <g id="sheet-header">
-          <text x="16" y="94" font-size="17" class="b" fill="#000">Project Syncing</text>
+          <text x="16" y="94" font-size="17" class="sb" fill="#000">Project Syncing</text>
           <g data-symbol="xmark.circle.fill" transform="translate(367,88)">
             <circle cx="0" cy="0" r="10" fill="#8A8A8E" fill-opacity="0.45"/>
             <path d="M-3.6 -3.6 L3.6 3.6 M3.6 -3.6 L-3.6 3.6" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
@@ -298,12 +307,13 @@
         <g id="sheet-picplace">
           <text x="20" y="132" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PICPLACE</text>
 
-          <!-- checkmark.icloud.fill, green: the account line -->
-          <g data-symbol="checkmark.icloud.fill" transform="translate(16,150)">
-            <path d="M4 12 a4 4 0 0 1 0.6 -7.9 a5.5 5.5 0 0 1 10.4 -1.2 a4 4 0 0 1 1.5 9.1 Z" fill="#34C759"/>
-            <path d="M6.2 6.6 L8.4 8.8 L12.6 4.2" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- person.crop.circle, secondary: the account line — an account, not a status; no green tick (2026-09-26, plan §16: green means only "here") -->
+          <g data-symbol="person.crop.circle" transform="translate(16,149)" fill="none" stroke="#6D6D72" stroke-width="1.5" stroke-linecap="round">
+            <circle cx="8.5" cy="8.5" r="7.5"/>
+            <circle cx="8.5" cy="6.6" r="2.6"/>
+            <path d="M3.6 14 C4.9 11.4 6.6 10.4 8.5 10.4 C10.4 10.4 12.1 11.4 13.4 14"/>
           </g>
-          <text x="40" y="162" font-size="15" class="sb" fill="#000">@regularsteven on picplace.test · 118 projects</text>
+          <text x="40" y="162" font-size="15" font-weight="500" fill="#000">@regularsteven on picplace.test · 118 projects</text>
 
           <!-- arrow.triangle.2.circlepath: what auto-sync is doing -->
           <g data-symbol="arrow.triangle.2.circlepath" transform="translate(16,178)" fill="none" stroke="#6D6D72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -312,27 +322,59 @@
           </g>
           <text x="40" y="190" font-size="13.5" fill="#6D6D72">Edits go to PicPlace as you make them</text>
 
-          <!-- Check PicPlace now — .bordered, tinted accent -->
+          <!-- DOWNLOADS — downloadsBlock (2026-09-25, plan §10 stage 2; mirrored
+               2026-09-26): one row per project whose originals or blends are
+               coming down (progress phase .downloading), sorted by title, 12pt
+               apart in ONE white rx12 card with 12pt padding, 10pt under the
+               status line — under the sending block and the uploads card when
+               they show (neither does here). ROW: the HStack (center) of
+               "Downloading from PicPlace" (15 medium) over the project's title
+               (caption, secondary) and Stop (bordered, secondary tint, 13.5
+               semibold → picplace.cancelSync: what landed stays, the next
+               press skips it); then the linear bar in accent (bytes done of
+               total); then "N of M files · X of Y" (caption, secondary) —
+               "Asking PicPlace for the files…" until PicPlace's list is read.
+               Bordered buttons drawn as capsules (iOS 26+), as in the uploads
+               variant. The card costs 98pt (88 + the 10pt VStack gap): every
+               line below is 98pt lower than before. -->
+          <g id="sheet-downloads">
+            <rect x="16" y="204" width="361" height="88" rx="12" fill="#FFFFFF"/>
+            <g id="download-row">
+              <text x="28" y="230" font-size="15" font-weight="500" fill="#000">Downloading from PicPlace</text>
+              <text x="28" y="246" font-size="12" fill="#6D6D72">Stack 21. 9. at 19:50</text>
+              <g data-control="bordered" data-tint="secondary">
+                <rect x="308" y="216.5" width="57" height="32" rx="16" fill="#8E8E93" fill-opacity="0.15"/>
+                <text x="336.5" y="237.5" font-size="13.5" class="sb" fill="#6D6D72" text-anchor="middle">Stop</text>
+              </g>
+              <!-- ProgressView(value: bytesDone / bytesTotal) — 2.9 of 7.4 GB = 0.39 of 337 -->
+              <rect x="28" y="256" width="337" height="4" rx="2" fill="#E9E9EB"/>
+              <rect x="28" y="256" width="132" height="4" rx="2" fill="#C36A00"/>
+              <text x="28" y="278" font-size="12" fill="#6D6D72">118 of 301 files · 2.9 GB of 7.4 GB</text>
+            </g>
+          </g>
+
+          <!-- Check PicPlace now — .bordered, tinted accent (98pt lower: the downloads card) -->
           <g id="sheet-check">
-            <rect x="16" y="204" width="361" height="40" rx="10" fill="#C36A00" fill-opacity="0.15"/>
-            <g data-symbol="arrow.clockwise.icloud" transform="translate(126,224)" fill="none" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="16" y="302" width="361" height="40" rx="10" fill="#C36A00" fill-opacity="0.15"/>
+            <g data-symbol="arrow.clockwise.icloud" transform="translate(126,322)" fill="none" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
               <path d="M-7 4 a4 4 0 0 1 0.6 -7.9 a5.5 5.5 0 0 1 10.4 -1.2 a4 4 0 0 1 1.5 9.1 Z"/>
               <path d="M-1.5 -1 a3 3 0 1 1 -0.8 2.2 M-2.8 -1.6 L-1.5 -1 L-1.2 -2.4"/>
             </g>
-            <text x="146" y="229" font-size="15" class="sb" fill="#C36A00">Check PicPlace now</text>
+            <text x="146" y="327" font-size="15" class="sb" fill="#C36A00">Check PicPlace now</text>
           </g>
-          <text x="16" y="262" font-size="13" fill="#6D6D72">Checked 2 minutes ago · 53 brought here</text>
+          <text x="16" y="360" font-size="13" fill="#6D6D72">Checked 2 minutes ago · 53 brought here</text>
 
           <!-- the way to the full card: selects Settings, scrolls to PICPLACE -->
-          <text x="16" y="288" font-size="13.5" class="sb" fill="#C36A00">All PicPlace settings</text>
-          <path d="M158 282 L162 286 L158 290" fill="none" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="16" y="386" font-size="13.5" font-weight="500" fill="#C36A00">All PicPlace settings</text>
+          <path d="M158 380 L162 384 L158 388" fill="none" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </g>
 
-        <text x="20" y="318" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">NEARBY DEVICES</text>
+        <text x="20" y="416" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">NEARBY DEVICES</text>
 
-        <!-- the block this sheet always had, 99pt higher than before the PicPlace
-             block took the top of the sheet -->
-        <g transform="translate(0,-99)">
+        <!-- the block this sheet always had: 99pt higher than before the PicPlace
+             block took the top of the sheet, 98pt lower again for the downloads
+             card — still all on one screen at the large detent -->
+        <g transform="translate(0,-1)">
         <!-- the Settings switch, in the place the code is read -->
         <g id="sheet-toggle">
           <text x="16" y="451" font-size="15" class="sb" fill="#000">Share with nearby devices</text>
@@ -487,5 +529,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Projects · sync panel · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectSharingChip.swift — pill green on / red off · PicPlace block over nearby devices · other states desc-only</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectSharingChip.swift — pill green on / red off · PicPlace block with a download · nearby devices</text>
 </svg>

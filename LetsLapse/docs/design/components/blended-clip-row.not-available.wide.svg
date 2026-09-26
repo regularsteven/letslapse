@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 361 62" width="361" height="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Blended clip row · not-available · wide</title>
+  <desc>Mirrors App/BlendedClipRow.swift for a clip whose file is neither on this device nor on PicPlace (2026-09-26, plan §15 — "A clip that is not here claims only what PicPlace holds" — and §16): PicPlace's list for the project has been read and does not name the file, or PicPlace holds none of the project's heavy files (PicPlaceController.blendAvailability == .notOnPicPlace). It happens to a blend that was only ever on the device that made it — Victory Bridge Sunset on the 18 Pro, whose six rows used to say On PicPlace and offer a Download that failed four times. The row keeps the blend's still (posters/&lt;blend id&gt;.jpg rides the records bundle even when the clip never went up) with components/holdings-pill.blend.nowhere.svg at 0.8, 2 pt in — the slashed layers alone (square.3.layers.3d.slash), no cloud: PicPlace holds none of it. The subtitle leads with "Not available to download · " (BlendWhereLine), and there is no button: BlendDownloadButton draws nothing unless the list holds the file, so the text column runs to the row's Spacer (x 335 — HStack spacing 12 before it, 14 padding). While the list is still unread (.unknown) the row claims neither way: the plain subtitle, no button, and holdings-pill.blend.there (grey layers, no cloud). A tap on the row still asks (the parent's onPlay → .fetchPrompt), and the prompt can only say the clip isn't on PicPlace (FetchOffer.notUploaded / .unavailable). The words are interim — Steven's copy pass (docs/TODO.md).</desc>
+<!-- LetsLapse design component · blended clip row · not-available · wide (361pt). Same contract as default.wide — 62pt, thumbnail at 14,10 (58×42),
+     title/subtitle column from x 84, clipped at 335 (251 wide) with no trailing button. The pill: holdings-pill.blend.nowhere (W 22, the 22pt
+     minimum with the glyph centred) at x = 72 − 2 − 17.6 = 52.4, y = 52 − 16.4 = 35.6, 17.6 × 14.4; the pill is INLINED (nested references are not followed),
+     so it travels with the row. See components/README.md. -->
+  <defs><clipPath id="text-col"><rect x="84" y="14" width="251" height="38"/></clipPath></defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}</style>
+  <g id="blended-clip-row" data-state="not-available" data-width="wide">
+    <!-- the blend's still (posters/<blend id>.jpg), not the clip -->
+    <rect x="14" y="10" width="58" height="42" rx="7" fill="#463522"/>
+    <g data-component="holdings-pill.blend.nowhere.svg" transform="translate(52.4,35.6) scale(0.8)"><rect x="0" y="0" width="22" height="18" rx="9" fill="#000" fill-opacity="0.5"/><g transform="translate(0.35,0)"><g transform="translate(2.95,1.55) scale(0.6420)" data-symbol="square.3.layers.3d.slash"><mask id="br-not-available-wide-knock-layers" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M3 2.4L21 21.6" stroke="#000000" stroke-width="5" stroke-linecap="round"/></mask><g mask="url(#br-not-available-wide-knock-layers)" fill="none" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.2L20.8 8L12 12.8L3.2 8Z"/><path d="M3.2 11.6L12 16.4L20.8 11.6"/><path d="M3.2 15.2L12 20L20.8 15.2"/></g><path d="M3 2.4L21 21.6" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="2.3" stroke-linecap="round"/></g></g></g>
+    <g clip-path="url(#text-col)">
+      <text x="84" y="28" font-size="14.5" class="sb" fill="#000">Blended clip 1 · 18 frames · 6.1 s</text>
+      <text x="84" y="45" font-size="11.5" fill="#6D6D72">Not available to download · 24 fps · yesterday</text>
+    </g>
+  </g>
+</svg>
