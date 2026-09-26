@@ -331,6 +331,11 @@ final class CameraController: NSObject, ObservableObject {
     private var intervalFrameCap: Int?
     private var intervalFramesRequested = 0
     private var intervalActive = false
+    /// A run's still requests that `PhotoRequestPreflight` corrected or
+    /// refused — logged once a run, not once a tick. sessionQueue-confined.
+    private var intervalStillSizeNoted = false
+    private var intervalStillsRefused = 0
+    private var intervalStillRefusal: String?
     /// The per-frame capture sidecar for runs on the plain photo-output timer:
     /// EVERY interval-style shoot writes `frames.timestamps` now, not just the
     /// ramped ones, so a finished project always knows its own pacing. The
@@ -1431,6 +1436,11 @@ final class CameraController: NSObject, ObservableObject {
     /// confined; set through `setPhotoViewfinder`. The stored preference is
     /// untouched — this never persists anything.
     private var photoViewfinderActive = false
+    /// Photo or Interval on screen: the modes whose stills come from the photo
+    /// output, where video stabilization and the video frame rate are not the
+    /// format's job — see `captureFormatMatch(stills:)`. sessionQueue-confined;
+    /// set through `setStillsCapture`.
+    private var stillsCaptureActive = false
 
     /// What the session log should report as this session's frame count: the
     /// stills or blended outputs a run produced, else the recorded segment
@@ -1948,6 +1958,19 @@ final class CameraController: NSObject, ObservableObject {
             guard self.photoViewfinderActive != active else { return }
             self.photoViewfinderActive = active
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive,
+                  self.photoAspectPreviousPreset == nil else { return }
+            _ = self.applyCaptureFormat(resolution: self.selectedResolution, fps: self.selectedFrameRate)
+        }
+    }
+
+    /// Photo or Interval on or off — see `stillsCaptureActive`. Applies the
+    /// chosen size while idle when it turns on, so the viewfinder and the
+    /// stills are on it before the shutter rather than after.
+    func setStillsCapture(_ active: Bool) {
+        sessionQueue.async {
+            guard self.stillsCaptureActive != active else { return }
+            self.stillsCaptureActive = active
+            guard active, !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive,
                   self.photoAspectPreviousPreset == nil else { return }
             _ = self.applyCaptureFormat(resolution: self.selectedResolution, fps: self.selectedFrameRate)
         }
@@ -3357,9 +3380,22 @@ final class CameraController: NSObject, ObservableObject {
 
     @discardableResult
     private func applyCaptureFormat(resolution: CaptureResolution, fps: Int) -> Bool {
-        guard let device = videoDevice,
-              let match = captureFormatMatch(for: device, resolution: resolution, fps: fps)
-        else { return false }
+        guard let device = videoDevice else { return false }
+        let stills = photoViewfinderActive || stillsCaptureActive
+        guard let match = captureFormatMatch(for: device, resolution: resolution, fps: fps, stills: stills) else {
+            // Never silent. This miss returned without a word for a week on
+            // the 18 Pro: the menu offered 4224×3024, the Triple Camera took
+            // none of it, and Photo shot 351 projects at the 1920×1080 the
+            // session configures with (docs/fieldtests/2026-09-26-18pro-crash-triage.md).
+            LLog("applyCaptureFormat: no \(resolution.width)×\(resolution.height)@\(fps)"
+                 + "\(stills ? " for stills" : "") on \(device.localizedName) — "
+                 + formatMissReason(on: device, resolution: resolution, fps: fps))
+            if stills, let fallback = stillsFallback(on: device, for: resolution) {
+                LLog("applyCaptureFormat: stills fall back to \(fallback.width)×\(fallback.height)")
+                return applyCaptureFormat(resolution: fallback, fps: fps)
+            }
+            return false
+        }
         #if os(iOS)
         LLog("applyCaptureFormat: enter · \(opticsStateLine(device)) → \(resolution.width)×\(resolution.height)@\(fps)")
         #endif
@@ -3821,17 +3857,29 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// `stills`: the format is for Photo or Interval stills, so video
+    /// stabilization and the frame rate rank formats instead of ruling them
+    /// out — a still never passes through either, and ruling on them is what
+    /// kept the 18 Pro's Photo mode off 4224×3024 (see `applyCaptureFormat`).
+    /// `frameDuration(forNominal:in:)` clamps the rate to what the pick takes.
     private func captureFormatMatch(
         for device: AVCaptureDevice,
         resolution: CaptureResolution,
-        fps: Int
+        fps: Int,
+        stills: Bool = false
     ) -> (format: AVCaptureDevice.Format, photoDimensions: CMVideoDimensions?)? {
         let targetFPS = Double(fps)
+        func takesRate(_ format: AVCaptureDevice.Format) -> Bool {
+            format.videoSupportedFrameRateRanges.contains { range in
+                Self.supportsFrameRate(targetFPS, in: range)
+            }
+        }
         return device.formats
             .filter { format in
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 #if os(iOS)
-                let stabilizationMatches = !videoStabilizationRequested || stabilizationMode(for: format) != nil
+                let stabilizationMatches = stills || !videoStabilizationRequested
+                    || stabilizationMode(for: format) != nil
                 #else
                 let stabilizationMatches = true
                 #endif
@@ -3849,14 +3897,21 @@ final class CameraController: NSObject, ObservableObject {
                     && dims.height == resolution.height
                     && codecMatches
                     && stabilizationMatches
-                    && format.videoSupportedFrameRateRanges.contains { range in
-                        Self.supportsFrameRate(targetFPS, in: range)
-                    }
+                    && (stills || takesRate(format))
             }
             .map { format in
                 (format: format, photoDimensions: bestPhotoDimensions(for: format, preferred: resolution))
             }
             .sorted { first, second in
+                // Stills take any rate, but one that runs the asked rate
+                // still wins — the viewfinder is what the rate is for.
+                if stills {
+                    let firstTakes = takesRate(first.format)
+                    let secondTakes = takesRate(second.format)
+                    if firstTakes != secondTakes {
+                        return firstTakes
+                    }
+                }
                 // Ramp runs first prefer a format that carries BOTH of the
                 // run's rates: base and burst queries then resolve to the
                 // same format, the segment switch collapses to a frame-
@@ -3899,6 +3954,49 @@ final class CameraController: NSObject, ObservableObject {
                 return firstPixels > secondPixels
             }
             .first
+    }
+
+    /// Why `captureFormatMatch` found nothing, rule by rule — the line a
+    /// silent miss never had.
+    private func formatMissReason(on device: AVCaptureDevice, resolution: CaptureResolution, fps: Int) -> String {
+        let sized = device.formats.filter { format in
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            return dims.width == resolution.width && dims.height == resolution.height
+        }
+        guard !sized.isEmpty else { return "no format at that size" }
+        let coded = sized.filter {
+            Self.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType($0.formatDescription)) == resolution.isProRes
+        }
+        let rated = coded.filter { format in
+            format.videoSupportedFrameRateRanges.contains { Self.supportsFrameRate(Double(fps), in: $0) }
+        }
+        let reason = "\(sized.count) at that size, \(coded.count) in its codec, \(rated.count) take \(fps) fps"
+        #if os(iOS)
+        let stabilized = coded.filter { stabilizationMode(for: $0) != nil }
+        return reason + ", \(stabilized.count) stabilize (stabilization \(videoStabilizationRequested ? "asked" : "off"))"
+        #else
+        return reason
+        #endif
+    }
+
+    /// The stills size to fall back to when the chosen one is not on the
+    /// session's camera: the largest smaller size of about the same shape
+    /// (4224×3024 → 4032×3024), else the largest smaller size of any shape.
+    /// Never the chosen size itself, so `applyCaptureFormat` cannot recurse
+    /// on it; nil when nothing smaller exists.
+    private func stillsFallback(on device: AVCaptureDevice, for resolution: CaptureResolution) -> CaptureResolution? {
+        let shape = Double(resolution.width) / Double(max(resolution.height, 1))
+        let sizes = Set(device.formats.compactMap { format -> CaptureResolution? in
+            guard !Self.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType(format.formatDescription))
+            else { return nil }
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            return CaptureResolution(width: dims.width, height: dims.height)
+        })
+        let smaller = sizes.filter { $0.pixelCount < resolution.pixelCount }
+        let sameShape = smaller.filter {
+            abs(Double($0.width) / Double(max($0.height, 1)) - shape) < 0.1
+        }
+        return (sameShape.isEmpty ? smaller : sameShape).max { $0.pixelCount < $1.pixelCount }
     }
 
     private func formatSupportsRates(_ format: AVCaptureDevice.Format, _ rates: [Int]) -> Bool {
@@ -6502,6 +6600,7 @@ final class CameraController: NSObject, ObservableObject {
             self.detachTestCardTapNow()
             self.detachFramingTapNow()
             self.detachShapeTapNow()
+            self.assertStillsFormat()
             // Same rule as a video take: the shot is in focus when the user
             // presses the shutter, so the lens stops there for the whole run.
             // An interval shoot is the least forgiving of the three — a hunt
@@ -6535,6 +6634,9 @@ final class CameraController: NSObject, ObservableObject {
             LLog("capture: \(frameCap != nil ? "photo" : "interval") — \(conditions.summary)")
             self.intervalFrameCap = frameCap
             self.intervalFramesRequested = 0
+            self.intervalStillSizeNoted = false
+            self.intervalStillsRefused = 0
+            self.intervalStillRefusal = nil
             self.intervalActive = true
             CaptureSessionLogger.shared.log("capture_start", [
                 "kind": "interval",
@@ -6575,11 +6677,27 @@ final class CameraController: NSObject, ObservableObject {
                 #endif
                 let settings = AVCapturePhotoSettings()
                 if let photoDimensions = self.selectedPhotoDimensions {
-                    settings.maxPhotoDimensions = photoDimensions
+                    // Asked of the live output and format, never assumed:
+                    // built against the iOS 27 SDK, a size either would refuse
+                    // is an abort, not a dropped still (the 18 Pro, 4224×3024
+                    // at 8×, 2026-09-26 — see `PhotoRequestPreflight`).
+                    let fitted = PhotoRequestPreflight.dimensions(
+                        photoDimensions, output: self.photoOutput, device: self.videoDevice)
+                    if let size = fitted.dimensions {
+                        settings.maxPhotoDimensions = size
+                    }
+                    if let note = fitted.note, !self.intervalStillSizeNoted {
+                        self.intervalStillSizeNoted = true
+                        LLog("capture: still size — \(note)")
+                    }
                 }
                 #if os(iOS)
                 settings.suppressShutterSound(for: self.photoOutput)
                 #endif
+                if let problem = PhotoRequestPreflight.connectionProblem(of: self.photoOutput) {
+                    self.refuseIntervalStill(problem)
+                    return
+                }
                 self.photoOutput.capturePhoto(with: settings, delegate: self)
                 self.intervalFramesRequested += 1
                 // Burst complete: stop the repeating timer now. The session
@@ -6600,6 +6718,55 @@ final class CameraController: NSObject, ObservableObject {
         cancelScheduledStop()
         sessionQueue.async {
             self.finishIntervalOnQueue()
+        }
+    }
+
+    /// sessionQueue-confined. A still run shoots at the size the menu shows,
+    /// whatever the screen's history: the session can be sitting on the
+    /// 1920×1080 it configures with, or on whatever a pinned Holy Grail or
+    /// Ladder run left behind — the 18 Pro did both for a week
+    /// (docs/fieldtests/2026-09-26-18pro-crash-triage.md). Applied before the
+    /// focus lock and the exposure settle, which then work on the real format.
+    private func assertStillsFormat() {
+        guard let device = videoDevice, photoAspectPreviousPreset == nil else { return }
+        let chosen = selectedResolution
+        let target = captureFormatMatch(for: device, resolution: chosen, fps: selectedFrameRate, stills: true) != nil
+            ? chosen
+            : (stillsFallback(on: device, for: chosen) ?? chosen)
+        let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+        guard dims.width != target.width || dims.height != target.height else { return }
+        LLog("capture: the camera is on \(dims.width)×\(dims.height), not \(target.width)×\(target.height)"
+             + " — applying it before the first still")
+        let wasStills = stillsCaptureActive
+        stillsCaptureActive = true
+        _ = applyCaptureFormat(resolution: chosen, fps: selectedFrameRate)
+        stillsCaptureActive = wasStills
+    }
+
+    /// sessionQueue-confined. A still the photo output would refuse is not
+    /// asked for — built against the iOS 27 SDK, the refusal is an abort. An
+    /// Interval run skips the tick and carries on (a connection can come back);
+    /// a Photo asks for nothing more and finishes once what it did ask for has
+    /// landed, so the shutter never waits on a still that will not come.
+    private func refuseIntervalStill(_ problem: String) {
+        intervalStillsRefused += 1
+        if intervalStillsRefused == 1 {
+            intervalStillRefusal = problem
+            LLog("capture: still refused — \(problem)")
+            CaptureSessionLogger.shared.log("capture_refused", [
+                "kind": intervalFrameCap != nil ? "photo" : "interval",
+                "reason": "photoRequest",
+                "detail": problem,
+            ])
+            plainRunLog?.issues.append(CaptureExposureLog.Issue(
+                at: Date(), windowIndex: nil, kind: "refused", severity: "error", detail: problem))
+        }
+        guard intervalFrameCap != nil else { return }
+        intervalTimer?.cancel()
+        intervalTimer = nil
+        intervalFrameCap = intervalFramesRequested
+        if photoURLs.count >= intervalFramesRequested {
+            finishIntervalOnQueue(reason: "refused")
         }
     }
 
@@ -6635,10 +6802,14 @@ final class CameraController: NSObject, ObservableObject {
             LLog("interval: too hot — run ended, last \(count) still(s) discarded")
         }
         let urls = self.photoURLs
+        if self.intervalStillsRefused > 0 {
+            LLog("capture: \(self.intervalStillsRefused) still(s) refused this run — "
+                 + (self.intervalStillRefusal ?? "?"))
+        }
         CaptureSessionLogger.shared.log(
             "capture_end",
             ["kind": wasHolyGrail ? "holyGrail" : "interval", "frameCount": urls.count,
-             "endReason": reason])
+             "endReason": reason, "stillsRefused": self.intervalStillsRefused])
         self.intervalFrameCap = nil
         self.intervalFramesRequested = 0
         DispatchQueue.main.async {

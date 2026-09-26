@@ -607,6 +607,7 @@ struct CaptureView: View {
             // follow the user across the switch.
             if burstPillMode != nil, burstPillMode != newMode { dismissBurstPill() }
             updateTestCardWatch()
+            camera.setStillsCapture(newMode != .video)
             camera.setPhotoViewfinder(newMode == .photo)
             updateShapeWatch()
             // M is Photo-only chrome (`clusterSlot`, `exposurePanel` both
@@ -1016,6 +1017,7 @@ struct CaptureView: View {
             testRig.seedDemoChip()
         }
         updateTestCardWatch()
+        camera.setStillsCapture(mode != .video)
         camera.setPhotoViewfinder(mode == .photo)
         updateShapeWatch()
         #if DEBUG
@@ -1567,6 +1569,7 @@ struct CaptureView: View {
         camera.stopTestCardTap()
         camera.stopShapeTap()
         camera.setPhotoViewfinder(false)
+        camera.setStillsCapture(false)
         // Same reasoning as `steadiness.stop()` above: a mid-session close
         // shouldn't leave the manual-exposure servo timer running against a
         // screen nobody can see.
