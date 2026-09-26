@@ -561,7 +561,7 @@ private struct EditorPreviewPageContent: View {
     private enum CardStyle { case dark, light }
 
     private struct Status {
-        var systemImage: String
+        var glyph: StatusGlyph
         var title: String
         var caption: String
         var fraction: Double?
@@ -595,11 +595,14 @@ private struct EditorPreviewPageContent: View {
                     ? "\(LLFormat.bytes(progress.bytesTotal)) to download"
                     : "\(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
                     + (resume?.group.map { " · \($0.title) opens when \(noun.pronoun) \(noun.verb) here" } ?? "")
-            return Status(systemImage: "arrow.down.circle", title: "Downloading \(noun.text)",
+            return Status(glyph: .cloud(.downloading), title: "Downloading \(noun.text)",
                           caption: caption, fraction: progress.fraction, action: .stop)
         }
         let tier = holdings?.tier ?? .preview
-        guard let capture else { return Status(systemImage: tier.systemImage, title: tier.label, caption: "", action: nil) }
+        // The pill's glyphs (`StatusGlyph`): the originals on PicPlace are the
+        // grey camera; not on PicPlace either, the slashed one.
+        var glyph: StatusGlyph = tier == .originals ? .asset(.originals, .here) : .asset(.originals, .there)
+        guard let capture else { return Status(glyph: glyph, title: tier.label, caption: "", action: nil) }
         let offer = shortfall.map { picplace.fetchOffer(for: capture, shortfall: $0) } ?? .download
         let subject = noun.capitalized
         let verb = noun.isPlural ? "are" : "is"
@@ -616,18 +619,19 @@ private struct EditorPreviewPageContent: View {
             caption = "\(subject) \(verb) on PicPlace — connect this library in Settings to download \(noun.object)"
         case .notUploaded(let device):
             caption = "\(subject) \(verb) only on \(device ?? "the device that made \(noun.object)") for now"
+            glyph = .asset(.originals, .nowhere)
         case .unavailable:
             caption = "\(subject) \(verb)n't on \(PicPlaceController.deviceWord)"
-            // Not on PicPlace either: no cloud to promise — the tile's badge
+            // Not on PicPlace either: no cloud to promise — the tile's pill
             // says the same with the same glyph.
-            return Status(systemImage: "exclamationmark.triangle", title: tier.label, caption: caption, action: nil)
+            return Status(glyph: .asset(.originals, .nowhere), title: tier.label, caption: caption, action: nil)
         }
         // A download that failed says why, on the line that offers it again.
         if let error = picplace.records[model.originID(of: capture)]?.lastError,
            picplace.records[model.originID(of: capture)]?.failedHeavyOnly == true {
             caption = error
         }
-        return Status(systemImage: tier.systemImage, title: tier.label, caption: caption, action: action)
+        return Status(glyph: glyph, title: tier.label, caption: caption, action: action)
     }
 
     private func statusCard(style: CardStyle) -> some View {
@@ -640,9 +644,7 @@ private struct EditorPreviewPageContent: View {
                                    frameCount: marqueeKind == .interval ? frameCount : nil)
             }
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: status.systemImage)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(secondary)
+                StatusGlyphView(glyph: status.glyph, size: 13, surface: style == .dark ? .photo : .adaptive)
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(status.title)

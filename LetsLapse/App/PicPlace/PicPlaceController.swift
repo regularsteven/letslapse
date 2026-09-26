@@ -304,6 +304,9 @@ final class PicPlaceController: ObservableObject {
     /// Heavy sets (by digest) the blends queue found incomplete for want of
     /// something it does not send — not read again until the set moves.
     var heavySetMissing: [UUID: String] = [:]
+    /// The looks right after an upload PicPlace was still reading back,
+    /// by capture id (`verifyAfterUpload`).
+    var verifyTasks: [UUID: Task<Void, Never>] = [:]
     var pathMonitorBox: AnyObject?
     /// One usage refresh for a whole run of syncs, not two requests per project.
     var usageRefreshTask: Task<Void, Never>?
@@ -1483,6 +1486,8 @@ final class PicPlaceController: ObservableObject {
         originalsQueueTask?.cancel(); originalsQueueTask = nil
         blendsQueueTask?.cancel(); blendsQueueTask = nil
         heavyRecheckTask?.cancel(); heavyRecheckTask = nil
+        for task in verifyTasks.values { task.cancel() }
+        verifyTasks = [:]
         usageRefreshTask?.cancel(); usageRefreshTask = nil
         for task in pendingPushes.values { task.cancel() }
         pendingPushes.removeAll()
@@ -1777,9 +1782,20 @@ final class PicPlaceController: ObservableObject {
                 }
                 records[key] = record
                 // PicPlace reads what it received back within a minute or
-                // two: the set's marker — the holdings pill's green tick —
-                // is written by the blends queue's look after that.
-                if policy.sendsHeavy, verifiedDigest == nil { scheduleHeavyRecheck() }
+                // two: until then the pill says *checking* (not *needs
+                // uploading* beside "Here and on PicPlace" — Steven,
+                // 2026-09-26), and this project is looked at again within
+                // seconds and every minute after (`verifyAfterUpload`); the
+                // blends queue's look stays the backstop.
+                if policy.sendsHeavy {
+                    if verifiedDigest == nil, (divergent ?? []).isEmpty {
+                        records[key]?.verifyPendingSince = Date()
+                        verifyAfterUpload(capture.id)
+                        scheduleHeavyRecheck()
+                    } else {
+                        records[key]?.verifyPendingSince = nil
+                    }
+                }
                 if job { noteUploadRunEnded(capture.id, outcome: .done) }
             } catch is PicPlaceSyncRun.Paused {
                 // Stopped between files on request: what finished is on

@@ -455,25 +455,42 @@ struct PicPlaceStatusCard: View {
 
     // MARK: Pieces
 
+    /// The card's glyph speaks the pill's language (`StatusGlyph`,
+    /// 2026-09-26): at rest, the pill's own cloud — ✓ only when what is here
+    /// is verified on PicPlace, never for a records-only sync (the green tick
+    /// above "only on this device — Upload" in Steven's review); amber while
+    /// something moves, a removal's check included; red for attention; the
+    /// grey camera for a preview.
     @ViewBuilder
     private func glyph(for state: PicPlaceController.ProjectState, size: CGFloat) -> some View {
         switch state {
-        case .conflict:
-            Image(systemName: "exclamationmark.icloud.fill").font(.system(size: size * 0.85)).foregroundStyle(LL.amber)
-        case .previewOnly:
-            Image(systemName: "icloud.and.arrow.down").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
         case .elsewhere:
             Image(systemName: "folder.badge.questionmark").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
-        case .signedOut, .notSynced:
-            Image(systemName: "icloud").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
-        case .notConnected:
+        case .signedOut, .notConnected:
             Image(systemName: "icloud.slash").font(.system(size: size * 0.85)).foregroundStyle(.secondary)
-        case .changes, .syncing:
-            Image(systemName: "icloud.and.arrow.up").font(.system(size: size * 0.85)).foregroundStyle(LL.accent)
-        case .synced:
-            Image(systemName: "checkmark.icloud.fill").font(.system(size: size * 0.85)).foregroundStyle(Color.green)
-        case .failed:
-            Image(systemName: "exclamationmark.icloud.fill").font(.system(size: size * 0.85)).foregroundStyle(LL.levelOff)
+        default:
+            StatusGlyphView(glyph: statusGlyph(for: state), size: size * 0.8)
+        }
+    }
+
+    private func statusGlyph(for state: PicPlaceController.ProjectState) -> StatusGlyph {
+        switch state {
+        case .conflict, .failed:
+            return .cloud(.attention)
+        case .previewOnly:
+            return model.shownHoldings(for: captureID)?.tier == .blends ? .asset(.blends, .here) : .asset(.originals, .there)
+        case .syncing(let progress):
+            switch progress.phase {
+            case .downloading: return .cloud(.downloading)
+            case .verifying, .removing: return .cloud(.checking)
+            default: return .cloud(.uploading)
+            }
+        case .notSynced:
+            return .cloud(.needsUploading)
+        case .changes, .synced:
+            return .cloud(model.holdingsPillState(for: captureID, holdings: model.shownHoldings(for: captureID))?.cloud ?? .safe)
+        case .elsewhere, .signedOut, .notConnected:
+            return .symbol("icloud.slash")
         }
     }
 

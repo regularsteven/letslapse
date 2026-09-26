@@ -86,6 +86,14 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     /// here now means something was added or rewritten since, and is not
     /// known to be on PicPlace. nil: never verified (a push from before).
     var heavyDigest: String?
+    /// A heavy push ended with every file confirmed and PicPlace still
+    /// reading some back (2026-09-26): the pill says *checking*, not *needs
+    /// uploading*, until the look right after the upload
+    /// (`verifyAfterUpload`) or the blends queue's whole look writes the
+    /// marker — or `verifyWindow` passes. nil: nothing waiting.
+    var verifyPendingSince: Date?
+    /// How long a push's *checking* lasts before the markers speak alone.
+    static let verifyWindow: TimeInterval = 30 * 60
     /// When this device last removed originals or blends PicPlace holds.
     var removedAt: Date?
     /// Heavy files here that PicPlace would not take because its confirmed

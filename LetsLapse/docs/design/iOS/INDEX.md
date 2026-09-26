@@ -16,6 +16,8 @@ uploading · Has blends · Syncing / Needs attention, each with its glyph and co
 ▤ lights while one is on. ⚠️ on the Gallery sidebar-sheet mirror (`gallery.sidebar.portrait.svg` or its nearest);
 staged with `LL_SIDEBAR=1` (+ `LL_PICPLACE_FILTER=<filter>`) on a bound library.
 
+🟡 **2026-09-26, status glyphs — green means here, one cloud (plan §16) — SIGNED OFF on the canvas "Holdings Pill States" (https://claude.ai/artifact/7zbnCfyZLsMC2huVLY7A4T, revision 2), code landed, mirrors OWED**: the Direction B pill below is superseded. Every mirror of the pill, the blend rows' pill, the PicPlace card's glyph, the editor's preview banner and the Library filters is drawn in the new scheme: camera/layers green here, grey on PicPlace, slashed nowhere; one cloud (✓ / ↑ / amber ↑ ↓ ↻ / paused / red !), never green. The canvas is the spec; `LL_PILL_SHEET=1` renders every state on the device.
+
 🟡 **2026-09-25, connected asset states — the holdings pill (Direction B, Steven's choice) — code first, mirrors OWED
 after sign-off** (plan §12; it replaces stage 2's holdings badge and the Projects card's PicPlace pill): one pill, two
 halves, on every **Gallery tile** (bottom-right) and **Projects card** (top-right, the old pill's seat) — *this phone*:

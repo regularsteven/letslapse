@@ -128,7 +128,8 @@ struct GallerySidebar: View {
                 } label: {
                     LibraryFilterRow(
                         label: f.label,
-                        icon: f.systemImage,
+                        icon: "",
+                        glyph: f.statusGlyph,
                         isSelected: selection.wrappedValue == f,
                         count: f == .all ? nil : picplaceCounts[f]
                     )
@@ -274,16 +275,26 @@ struct GallerySidebar: View {
 private struct LibraryFilterRow: View {
     var label: String
     var icon: String
+    /// A status glyph in place of `icon` (the PicPlace section): drawn in
+    /// its own colours, which carry its meaning — selection shows on the
+    /// label alone.
+    var glyph: StatusGlyph? = nil
     var isSelected: Bool
     /// How many projects the row keeps, where the section shows numbers.
     var count: Int? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(isSelected ? LL.accent : .secondary)
-                .frame(width: 20, alignment: .center)
+            Group {
+                if let glyph {
+                    StatusGlyphView(glyph: glyph, size: 13)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(isSelected ? LL.accent : .secondary)
+                }
+            }
+            .frame(width: 20, alignment: .center)
 
             // The PicPlace section's names are the brief's, in full: a
             // narrow sidebar wraps "Not available to download" rather than

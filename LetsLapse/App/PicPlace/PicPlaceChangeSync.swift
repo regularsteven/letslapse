@@ -415,6 +415,8 @@ extension PicPlaceController {
             refreshUsage(rows: index.projects)
             scheduleOriginalsQueue()
             scheduleBlendsQueue()
+            // A look after an upload the app was closed in the middle of.
+            resumePendingVerifications()
             // The library's collections travel too, where PicPlace keeps them.
             if syncsCollections { await pullCollections() }
             #if DEBUG

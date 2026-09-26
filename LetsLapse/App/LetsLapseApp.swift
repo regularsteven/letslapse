@@ -801,7 +801,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE", "LL_PILL_SHEET"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -1476,6 +1476,15 @@ struct ContentView: View {
             model.guidedBuilderFocused = true
             if let ratio = environment["LL_CANVAS"].flatMap(CanvasRatio.init(rawValue:)) {
                 model.blendCanvasRatio = ratio
+            }
+        }
+        // LL_PILL_SHEET=1 — every pill state and filter glyph, rendered by
+        // the device at its own scale into Logs/pill-sheet.png (2026-09-26):
+        // the real-size check of the status glyphs, pulled with devicectl.
+        if environment["LL_PILL_SHEET"] != nil {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                HoldingsPillSheet.renderToLogs()
             }
         }
         #if os(iOS)

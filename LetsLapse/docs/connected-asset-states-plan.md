@@ -966,3 +966,79 @@ a thousand-project phone (measured below when run).
   opened (DEBUG `blend row:` log); the record's four failures cleared. The
   words are interim — Steven's copy pass (TODO).
 
+
+## 16. Status glyphs — green means here, one cloud (2026-09-26, signed off)
+
+Steven's review of the shipped pill (eleven screenshots of one project's
+life) found a green tick meaning *backed up*, an outline cloud meaning four
+things, an upload arrow over *Freeing up space*, a card with a green tick
+above *only on this device — Upload*, and a blend that vanished from the pill
+when it was only on PicPlace. The scheme that replaced it was drawn first on
+the canvas **Holdings Pill States**
+(https://claude.ai/artifact/7zbnCfyZLsMC2huVLY7A4T — revision 2 is the
+signed-off one: the rule, his A/B/C scenario of a raw DNG timelapse and its
+lossy copy, his moments at actual size on bright and dark photos, every
+surface). A first proposal (colour = here, *fill* = safe on PicPlace) failed
+Steven's own test: fill is the weakest channel carrying the most important
+meaning, and it must be taught.
+
+**The rule** (`StatusGlyph`, `StatusGlyphView`, `App/HoldingsPill.swift`):
+
+- **Asset glyphs say where each thing is.** Camera = the originals, layers =
+  the blends (shown only when the project has blends; a Photo's stack is its
+  picture, not a blend). **Green = here, ready to edit or play**; grey = on
+  PicPlace, download it; grey and slashed = nowhere reachable. Green means
+  nothing else, anywhere. Blends are green only when every one is here.
+- **One cloud, never green, says whether what is HERE is safe**: ✓ everything
+  heavy here verified on PicPlace; ↑ something here isn't up yet; amber ↑ ↓ ↻
+  while uploading, downloading, checking (free up space); a paused cloud
+  while a job waits (paused, Wi-Fi, stopped by iOS); red ! for attention
+  (a failure, a conflict — red, not the old `levelOff` orange beside the
+  amber); no cloud when nothing heavy is here or there is no PicPlace.
+  **A records-only sync draws nothing** (only a heavy run has an upload stop
+  signal). Which asset needs uploading is the detail panel's to say.
+- **One vocabulary everywhere**: the pill (Gallery tiles, Projects rows,
+  the Mac item view), the blend rows' pill, the PicPlace card's glyph (its
+  rest state is the pill's cloud; `icloud.slash` only for signed out / not
+  connected), the editor's preview banner (grey camera; slashed when
+  PicPlace lacks the originals; amber ↓ while downloading), and the Library
+  filters (each filter's glyph is its state's: green camera *On this
+  device*, grey *Download available*, slashed *Not available*, cloud ↑
+  *Needs uploading*, amber cloud *Syncing / Needs attention*).
+- **Symbols**: `camera.fill`, `square.3.layers.3d.top.filled` (no fully
+  filled layers exists), `square.3.layers.3d.slash`, `checkmark.icloud.fill`,
+  `icloud.and.arrow.up.fill`, `icloud.and.arrow.down.fill`,
+  `arrow.clockwise.icloud.fill`, `exclamationmark.icloud.fill`; composed:
+  the slashed camera (a slash knocked through `camera.fill`) and the paused
+  cloud (pause bars knocked out of `icloud.fill`). Pill: 18 pt, glyphs 9 pt
+  semibold, the cloud 10 pt.
+- **Checks**: `LL_PILL_SHEET=1` (DEBUG) renders every pill state and the
+  filter glyphs on the device at its own scale into `Logs/pill-sheet.png`;
+  `LL_DUMP_PILLS=1` logs each drawn pill's words (`pill: <title> — …`).
+
+**Two corrections the same day** (Steven, on the 16 Pro/18 Pro builds):
+
+- **The tick stays when the originals leave.** The first rule drew no cloud
+  when nothing heavy was here, so *Remove originals* turned green camera · ✓
+  into a lone grey camera — as if the project had lost something. The cloud
+  now answers *does PicPlace hold everything this project has*: ✓ also when
+  nothing heavy is here and PicPlace holds the originals (and no blend is
+  nowhere). Freeing space greys the camera; the tick stays.
+- **No ↑ right after an upload.** Every upload ends *"N original(s)
+  confirmed, PicPlace still checking them"*; the marker came only from a
+  look 90 s later, gated on the automatic rules, then the 3-minute check —
+  one to five minutes of ↑ beside *Originals: Here and on PicPlace*. Now the
+  push marks the record (`verifyPendingSince`), the pill and the card show
+  amber ↻ *checking*, the filters count it under *Syncing / Needs
+  attention*, and `verifyAfterUpload` looks at that project every 10 s for
+  two minutes, every 30 s to five, every minute to thirty
+  (`PicPlaceSyncRecord.verifyWindow`), whatever the automatic rules; a check
+  resumes a look the app was closed in. A read that fails is *not known
+  yet*, no longer *missing*. **Verified on the iPad** (a one-photo upload,
+  11.1 MB): *Uploading* → *Checking with PicPlace* the instant the upload
+  ended → *Backed up* 63 s later on the first schedule (5/15/30/60 s —
+  PicPlace finished between the last two looks, hence the 10 s cadence).
+
+**Owed:** the SVG mirrors in this scheme (the canvas is their spec); the
+copy pass (TODO) (`scheduleHeavyRecheck`, 90 s) — watch
+whether it reads as "the upload failed".

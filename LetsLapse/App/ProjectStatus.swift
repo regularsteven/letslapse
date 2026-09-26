@@ -78,16 +78,17 @@ enum PicPlaceFilter: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// The pill's own glyphs where it has one for the state.
-    var systemImage: String {
+    /// Each filter's glyph is its state's own (`StatusGlyph`, 2026-09-26):
+    /// a filter looks like the tiles it keeps.
+    var statusGlyph: StatusGlyph {
         switch self {
-        case .all: return "icloud"
-        case .onDevice: return "camera"
-        case .downloadAvailable: return "icloud.and.arrow.down"
-        case .notAvailable: return "icloud.slash"
-        case .needsUploading: return "icloud.and.arrow.up"
-        case .hasBlends: return HoldingsPillBody.blendsGlyph
-        case .attention: return "exclamationmark.icloud"
+        case .all: return .symbol("square.grid.2x2")
+        case .onDevice: return .asset(.originals, .here)
+        case .downloadAvailable: return .asset(.originals, .there)
+        case .notAvailable: return .asset(.originals, .nowhere)
+        case .needsUploading: return .cloud(.needsUploading)
+        case .hasBlends: return .symbol(HoldingsPillBody.blendsGlyph)
+        case .attention: return .cloud(.uploading)
         }
     }
 }
@@ -129,6 +130,9 @@ struct ProjectPicPlaceStatus: Equatable {
     var onPicPlace: Bool
     var transferring: Bool
     var needsAttention: Bool
+    /// Uploaded and confirmed; PicPlace still reading it back — the pill's
+    /// *checking* (2026-09-26): syncing, not needing an upload.
+    var verifying: Bool = false
 }
 
 extension AppModel {
@@ -163,7 +167,8 @@ extension AppModel {
             onPicPlace: onPicPlace,
             transferring: picplace.progress[id] != nil,
             needsAttention: picplace.conflicts.contains { $0.originID == origin }
-                || (picplace.canSync && record?.lastError != nil))
+                || (picplace.canSync && record?.lastError != nil),
+            verifying: !backedUp && (record?.verifyPendingSince.map { Date().timeIntervalSince($0) < PicPlaceSyncRecord.verifyWindow } ?? false))
     }
 
     /// Whether PicPlace holds the project's originals — its own list when a
@@ -171,7 +176,7 @@ extension AppModel {
     /// else the backed-up marker (this device saw its whole heavy set
     /// there), else the heavy count (sources and blends together — the
     /// best a record from before `serverSourceFiles` can say).
-    private func originalsOnPicPlace(origin: UUID, record: PicPlaceSyncRecord?) -> Bool {
+    func originalsOnPicPlace(origin: UUID, record: PicPlaceSyncRecord?) -> Bool {
         if let remote = picplace.serverHeavy[origin] {
             return remote.contains { $0.isConfirmed && PicPlaceSyncInventory.heavyKind($0.name) == .source }
         }
@@ -195,8 +200,8 @@ extension AppModel {
         case .onDevice: return status.originalsHere
         case .downloadAvailable: return !status.originalsHere && status.originalsOnPicPlace
         case .notAvailable: return !status.originalsHere && !status.originalsOnPicPlace
-        case .needsUploading: return status.originalsHere && !status.backedUp
-        case .attention: return status.transferring || status.needsAttention
+        case .needsUploading: return status.originalsHere && !status.backedUp && !status.verifying
+        case .attention: return status.transferring || status.verifying || status.needsAttention
         }
     }
 

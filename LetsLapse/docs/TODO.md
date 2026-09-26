@@ -66,6 +66,26 @@ walked). **Open decisions (Steven):** D1 blends upload on their own, D2 preview 
 1280 → 2048, D3 collections travel, D4 stills in collections, D5 blend records that move
 (plan §5).
 
+### Photo mode aborts at 8× on iOS 27 (18 Pro) — `capturePhotoWithSettings` throws
+
+**Found:** 2026-09-26, two crash reports on Steven's 18 Pro (iOS 27.0, 24A437) at 09:28:12 and 09:29:02 ·
+**Size:** unknown until the exception's reason is read
+
+Both: `EXC_CRASH SIGABRT` from an NSException in `-[AVCapturePhotoOutput capturePhotoWithSettings:delegate:]`,
+called from `closure #2 in closure #1 in CameraController.startInterval(every:frameCap:)` on
+`com.letslapse.capture` — Photo mode (it runs on the interval engine). The console's last lines:
+`capture: photo — 4× optical · Back Telephoto Camera · zoom 8.0 (native) · jpeg-flat`, the first 8 s after an
+optics ramp 1.00 → 8.00, the second 18 s after `applyCaptureFormat … 4032×3024 → 4224×3024@25` at zoom 8. A photo
+at 8× between them (no ramp or format change just before) worked. Crash reports: pull with
+`devicectl … --domain-type systemCrashLogs` (`LetsLapse-2026-09-26-092815.ips`, `…092904.ips`).
+
+Next: read the exception's reason — relaunch with `devicectl … --console` (stderr carries *Terminating app due to
+uncaught exception … reason:*) and repeat: Photo mode, the 4224×3024 format, zoom to 8×, shoot; or a sysdiagnose.
+Suspects: settings the new active format or the telephoto constituent refuses (`maxPhotoDimensions` not in
+`supportedMaxPhotoDimensions` after the format change, a quality prioritisation above the maximum); the same class as
+the iOS 27 virtual-device exposure abort (docs/fieldtests/2026-09-21-ios27-virtual-device-custom-exposure.md): ask
+the output before setting, never let AVFoundation throw.
+
 ### Copy pass — where a file is when it is not on this device (Steven, later)
 
 **Raised:** 2026-09-26 · **Size:** small (words), device names medium
@@ -85,6 +105,9 @@ offered for download on the 18 Pro):
   device name only with Apple's `com.apple.developer.device-information.user-assigned-device-name`
   entitlement (requested from Apple, justified by the feature). Without it, the app
   could let a person name each device in Settings and send that to PicPlace.
+- The PicPlace card's first line after an originals upload: *"Synced 2 minutes ago · records and preview ·
+  209,9 MB · 55 uploaded"* — the policy label (records and preview) beside the originals just sent. It should say
+  what the last run sent (Steven, 2026-09-26).
 
 ### Rotate 90° as a project record — originals are never rewritten
 

@@ -716,6 +716,7 @@ extension PicPlaceController {
                 switch await heavySetOnPicPlace(listing, origin: origin, folder: folder) {
                 case .verified:
                     records[origin]?.heavyDigest = wholeDigest
+                    records[origin]?.verifyPendingSince = nil
                     if !blendListing.isEmpty { records[origin]?.blendsDigest = digest }
                     heavySetMissing[origin] = nil
                     saveSyncState()
@@ -764,10 +765,92 @@ extension PicPlaceController {
             // PicPlace is still reading back waits for `scheduleHeavyRecheck`.
             if wholeSet, case .verified = await heavySetOnPicPlace(listing, origin: origin, folder: folder) {
                 records[origin]?.heavyDigest = wholeDigest
+                records[origin]?.verifyPendingSince = nil
                 saveSyncState()
             }
         }
         if autoStatus?.hasPrefix("Uploading blends") == true { autoStatus = nil }
+    }
+
+    // MARK: The look right after an upload (2026-09-26)
+
+    /// A heavy push left PicPlace reading files back: this project alone is
+    /// looked at again every 10 s for two minutes, every 30 s to five, then
+    /// every minute to thirty (a large upload takes PicPlace longer to read
+    /// back) — whatever the automatic rules, since it is one read after the
+    /// person's own upload — so the pill's *checking* turns to ✓ within
+    /// seconds of PicPlace finishing (Steven: "it's just completed, but this
+    /// takes a minute or two"; the iPad's first single photo: verified 63 s
+    /// after its upload on a 5/15/30/60 s schedule, PicPlace done between
+    /// the last two looks). The blends queue's look stays the backstop.
+    func verifyAfterUpload(_ captureID: UUID) {
+        verifyTasks[captureID]?.cancel()
+        verifyTasks[captureID] = Task { [weak self] in
+            let started = Date()
+            let delays = Array(repeating: 10.0, count: 12) + Array(repeating: 30.0, count: 6) + Array(repeating: 60.0, count: 25)
+            for delay in delays {
+                try? await Task.sleep(for: .seconds(delay))
+                guard let self, !Task.isCancelled else { return }
+                guard canSync, let capture = model.capture(id: captureID) else { continue }
+                let origin = model.originID(of: capture)
+                guard records[origin]?.verifyPendingSince != nil else { break }
+                let folder = model.projectFolderURL(for: capture)
+                let listing = await Task.detached(priority: .utility) { Self.heavyFiles(in: folder) }.value
+                guard !listing.isEmpty else { break }
+                switch await heavySetOnPicPlace(listing, origin: origin, folder: folder) {
+                case .verified:
+                    records[origin]?.heavyDigest = PicPlaceOriginalsCheck.digest(listing)
+                    let blends = listing.filter { $0.kind == .blend }
+                    if !blends.isEmpty { records[origin]?.blendsDigest = PicPlaceOriginalsCheck.digest(blends) }
+                    records[origin]?.verifyPendingSince = nil
+                    heavySetMissing[origin] = nil
+                    saveSyncState()
+                    LLog("picplace: \(capture.displayTitle) — PicPlace finished checking the upload: all \(listing.count) heavy file(s) verified \(Int(Date().timeIntervalSince(started))) s after it ended — backed up")
+                    verifyTasks[captureID] = nil
+                    return
+                case .checking:
+                    continue
+                case .missing:
+                    records[origin]?.verifyPendingSince = nil
+                    saveSyncState()
+                    LLog("picplace: \(capture.displayTitle) — after the upload PicPlace lacks some of it: needs uploading")
+                    verifyTasks[captureID] = nil
+                    return
+                }
+            }
+            // Thirty minutes, or the project left: the pill says what the
+            // markers say, and the next walk looks again.
+            guard let self else { return }
+            if let capture = model.capture(id: captureID), records[model.originID(of: capture)]?.verifyPendingSince != nil {
+                records[model.originID(of: capture)]?.verifyPendingSince = nil
+                saveSyncState()
+                LLog("picplace: \(capture.displayTitle) — PicPlace still checking the upload after thirty minutes; left to the next look")
+            }
+            verifyTasks[captureID] = nil
+        }
+    }
+
+    /// Looks the app was killed in the middle of (a relaunch within the
+    /// window) go on — the check's end calls this.
+    func resumePendingVerifications() {
+        let now = Date()
+        let pending = records.filter { $0.value.verifyPendingSince.map { now.timeIntervalSince($0) < PicPlaceSyncRecord.verifyWindow } == true }.map(\.key)
+        guard !pending.isEmpty else { return }
+        var rows: [LibraryIndex.ProjectRow]?
+        for origin in pending {
+            // A project made here has its origin id for its id; a copy is
+            // found through the index.
+            var captureID: UUID? = model.capture(id: origin) != nil ? origin : nil
+            if captureID == nil, let libraryIndex = model.libraryIndex {
+                if rows == nil {
+                    var query = LibraryIndex.ProjectQuery()
+                    query.limit = 100_000
+                    rows = (try? libraryIndex.projects(query).rows) ?? []
+                }
+                captureID = rows?.first { $0.originID == origin }?.id
+            }
+            if let captureID, verifyTasks[captureID] == nil { verifyAfterUpload(captureID) }
+        }
     }
 
     /// Where PicPlace stands with a project's heavy files.
@@ -787,7 +870,8 @@ extension PicPlaceController {
     /// upload then decides, by hash, what is missing.
     private func heavySetOnPicPlace(_ listing: [PicPlaceOriginalsCheck.LocalFile], origin: UUID, folder: URL) async -> HeavySetState {
         let detail: PPProjectDetail
-        do { detail = try await client.get("projects/\(origin.uuidString.lowercased())") } catch { return .missing }
+        // A read that failed says nothing about PicPlace: not known yet.
+        do { detail = try await client.get("projects/\(origin.uuidString.lowercased())") } catch { return .checking }
         let remote = Self.remoteHeavy(detail.assets)
         serverHeavy[origin] = remote
         guard PicPlaceOriginalsCheck.notCovered(listing, by: remote).isEmpty else { return .missing }

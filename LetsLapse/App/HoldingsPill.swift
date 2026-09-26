@@ -1,33 +1,135 @@
+import ImageIO
 import LetsLapseKit
 import SwiftUI
 
-// MARK: - The holdings pill (2026-09-25, Direction B)
+// MARK: - Status glyphs (2026-09-26, Steven's sign-off of the "Holdings Pill States" canvas, revision 2)
 //
-// docs/connected-asset-states-plan.md §4.3. One pill, two halves, on every
-// Gallery tile, Projects card and Mac filmstrip tile — Steven's four states
-// on the left, PicPlace on the right:
+// Green means here — on this device, ready to edit or play — and nothing
+// else is ever green. The asset glyphs say where each thing is: the camera
+// is the originals, the layers the blends; green here, grey on PicPlace (it
+// can come down), grey and slashed nowhere reachable. One cloud, never
+// green, says whether what is HERE is also on PicPlace, and whether anything
+// moves:
 //
-//   left — on this device   (nothing)  the project only: records + preview (a)
-//                           camera     every original (b) — a Photo
-//                                      capture's picture is its original
-//                           layers     blends (c)
-//                           camera layers  both (d)
-//                           ring       the originals coming down
-//                           triangle   the originals are neither here nor
-//                                      on PicPlace
-//   right — PicPlace        (nothing)  not there
-//                           cloud      there — records at least
-//                           cloud ✓    everything heavy here is verified
-//                                      there (`heavyDigest`); with nothing
-//                                      heavy here, PicPlace holds the
-//                                      originals
-//                           cloud ↑    sending now (amber)
-//                           cloud !    a sync failed (the failure tint)
+//   cloud ✓   PicPlace holds everything the project has: all of it here
+//             verified there (`heavyDigest`), or — nothing heavy here — its
+//             originals there. Removing the originals keeps the tick: the
+//             camera greys, nothing was lost (Steven, 2026-09-26).
+//   cloud ↑   something here is not on PicPlace yet
+//   amber ↑ ↓ ↻  uploading, downloading, checking — a removal's check, and a
+//             fresh upload PicPlace is still reading back (never ↑ beside
+//             "Here and on PicPlace"); never a records-only sync
+//   cloud ‖   an upload job waits (paused, Wi-Fi, iOS stopped it)
+//   red !     needs attention: a failure, a conflict
+//   (none)    no PicPlace, or PicPlace holds nothing of it
 //
-// No glyph appears twice: content on the left, clouds on the right. In a
-// library never connected to PicPlace the pill shows only what is not the
-// norm — layers, a triangle — or every tile there would carry a camera.
-// Drawn in the PicPlace pill's dress (18 high, black at 50 %).
+// Every surface — tiles, list rows, blend rows, the PicPlace card, the
+// editor's banner, the filters — draws from `StatusGlyph`: one glyph, one
+// meaning (the 2026-09-26 review found a green tick meaning "backed up", an
+// outline cloud meaning four things, an upload arrow over a removal).
+
+/// One status glyph.
+enum StatusGlyph: Equatable {
+    enum Asset: Equatable { case originals, blends }
+    enum Place: Equatable { case here, there, nowhere }
+    enum Cloud: Equatable { case safe, needsUploading, uploading, downloading, checking, waiting, attention }
+    case asset(Asset, Place)
+    case cloud(Cloud)
+    /// Not a status: an ordinary symbol in the neutral colour (a filter's All).
+    case symbol(String)
+
+    /// The blends' glyph as a status: the layers, drawn solid.
+    static let blendsSolid = "square.3.layers.3d.top.filled"
+}
+
+/// A status glyph as drawn. `photo`: on a picture, in the pill's dark dress,
+/// whatever the appearance; `adaptive`: lists and cards, light or dark.
+struct StatusGlyphView: View {
+    enum Surface { case photo, adaptive }
+    let glyph: StatusGlyph
+    var size: CGFloat
+    var surface: Surface = .adaptive
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        content.font(.system(size: size, weight: .semibold))
+    }
+
+    @ViewBuilder private var content: some View {
+        switch glyph {
+        case .asset(let asset, let place):
+            assetImage(asset, place).foregroundStyle(place == .here ? green : grey)
+        case .cloud(let cloud):
+            cloudImage(cloud).foregroundStyle(colour(for: cloud))
+        case .symbol(let name):
+            Image(systemName: name).foregroundStyle(neutral)
+        }
+    }
+
+    @ViewBuilder private func assetImage(_ asset: StatusGlyph.Asset, _ place: StatusGlyph.Place) -> some View {
+        switch (asset, place) {
+        case (.originals, .nowhere):
+            // No slashed camera in SF Symbols: the slash is drawn, a gap
+            // knocked through the camera first.
+            Image(systemName: "camera.fill")
+                .overlay { SlashLine().stroke(style: StrokeStyle(lineWidth: size * 0.34, lineCap: .round)).blendMode(.destinationOut) }
+                .overlay { SlashLine().stroke(style: StrokeStyle(lineWidth: size * 0.13, lineCap: .round)) }
+                .compositingGroup()
+        case (.originals, _):
+            Image(systemName: "camera.fill")
+        case (.blends, .nowhere):
+            Image(systemName: "square.3.layers.3d.slash")
+        case (.blends, _):
+            Image(systemName: StatusGlyph.blendsSolid)
+        }
+    }
+
+    @ViewBuilder private func cloudImage(_ cloud: StatusGlyph.Cloud) -> some View {
+        switch cloud {
+        case .safe: Image(systemName: "checkmark.icloud.fill")
+        case .needsUploading, .uploading: Image(systemName: "icloud.and.arrow.up.fill")
+        case .downloading: Image(systemName: "icloud.and.arrow.down.fill")
+        case .checking: Image(systemName: "arrow.clockwise.icloud.fill")
+        case .attention: Image(systemName: "exclamationmark.icloud.fill")
+        case .waiting:
+            // No paused cloud in SF Symbols: pause bars knocked out of a cloud.
+            Image(systemName: "icloud.fill")
+                .overlay {
+                    Image(systemName: "pause.fill")
+                        .font(.system(size: size * 0.42, weight: .black))
+                        .offset(y: size * 0.08)
+                        .blendMode(.destinationOut)
+                }
+                .compositingGroup()
+        }
+    }
+
+    private var dark: Bool { surface == .photo || scheme == .dark }
+    private var green: Color { dark ? Color(red: 48 / 255, green: 209 / 255, blue: 88 / 255) : Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255) }
+    private var grey: Color { dark ? Color.white.opacity(0.45) : Color(white: 0.68) }
+    private var neutral: Color { dark ? Color.white.opacity(0.9) : Color(white: 0.28) }
+
+    private func colour(for cloud: StatusGlyph.Cloud) -> Color {
+        switch cloud {
+        case .safe, .needsUploading, .waiting: return neutral
+        case .uploading, .downloading, .checking: return dark ? LL.amber : LL.accent
+        // Red, not the old failure tint (`levelOff`, an orange beside the amber).
+        case .attention: return dark ? Color(red: 1, green: 69 / 255, blue: 58 / 255) : Color(red: 215 / 255, green: 0, blue: 21 / 255)
+        }
+    }
+}
+
+/// The slash of a slashed glyph, corner to corner.
+private struct SlashLine: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + rect.width * 0.06, y: rect.minY + rect.height * 0.02))
+        path.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.06, y: rect.maxY - rect.height * 0.02))
+        return path
+    }
+}
+
+// MARK: - The holdings pill
 
 /// A project's holdings pill.
 struct HoldingsPill: View {
@@ -39,27 +141,14 @@ struct HoldingsPill: View {
     }
 }
 
-/// What the pill says, read from the holdings and the PicPlace record.
+/// What the pill says: where the originals and the blends are, and the cloud.
+/// A nil part is not drawn.
 struct HoldingsPillState: Equatable {
-    enum Here: Equatable {
-        case nothing
-        case originals
-        case blends
-        case both
-        case downloading(Double)
-        case missing
-    }
-    enum Cloud: Equatable {
-        case none
-        case onPicPlace
-        case backedUp
-        case sending
-        case failed
-    }
-    var here: Here
-    var cloud: Cloud
+    var originals: StatusGlyph.Place?
+    var blends: StatusGlyph.Place?
+    var cloud: StatusGlyph.Cloud?
 
-    static let empty = HoldingsPillState(here: .nothing, cloud: .none)
+    static let empty = HoldingsPillState(originals: nil, blends: nil, cloud: nil)
     var isEmpty: Bool { self == .empty }
 }
 
@@ -67,52 +156,74 @@ extension AppModel {
     /// The pill's state for a project — nil until its holdings are known
     /// (the pill keeps its seat and asks).
     func holdingsPillState(for captureID: UUID, holdings: ProjectHoldings?) -> HoldingsPillState? {
-        guard let capture = capture(id: captureID) else { return nil }
+        guard let capture = capture(id: captureID), let holdings else { return nil }
         let connected = picplace.binding != nil
         let origin = originID(of: capture)
         let record = picplace.records[origin]
-        let progress = picplace.progress[captureID]
+        let known = record.map { $0.revision > 0 || $0.policy == "pull" } ?? false
 
-        // Right: PicPlace — what the Projects pill said, split: a record
-        // there is a cloud; verified originals turn it green. Not
-        // `listState`, which stats the folder on every draw.
-        var cloud = HoldingsPillState.Cloud.none
-        if connected {
-            let failed = picplace.conflicts.contains { $0.originID == origin }
-                || (picplace.canSync && record?.lastError != nil)
-            if failed {
-                cloud = .failed
-            } else if let progress, progress.phase != .downloading {
-                cloud = .sending
-            } else if let record, record.revision > 0 || record.policy == "pull" {
-                cloud = .onPicPlace
-                if let holdings, Self.isBackedUp(record, holdings: holdings) { cloud = .backedUp }
+        // Where each thing is. The originals: here, else on PicPlace by the
+        // filters' own rule (`originalsOnPicPlace`), else nowhere reachable.
+        let originalsHere = holdings.tier == .originals
+        var originals: StatusGlyph.Place? = originalsHere ? .here
+            : known && originalsOnPicPlace(origin: origin, record: record) ? .there : .nowhere
+        // The blends — a Photo's stack is its picture, not a blend here.
+        // Green only when every one is here; grey when a missing one can
+        // come down (or PicPlace has not said); slashed when none can.
+        var blends: StatusGlyph.Place?
+        let others = holdings.blends.filter { $0.id != holdings.pictureBlendID }
+        if !others.isEmpty {
+            if others.allSatisfy(\.isHere) {
+                blends = .here
+            } else {
+                let canCome = others.contains { held in
+                    guard !held.isHere, let blend = blend(id: held.id) else { return false }
+                    return picplace.blendAvailability(blend, of: capture) != .notOnPicPlace
+                }
+                blends = canCome ? .there : .nowhere
             }
         }
+        // A library never connected to PicPlace: every original here is
+        // the norm, and a camera on every tile would say nothing.
+        if !connected, originals == .here { originals = nil }
 
-        // Left: this device.
-        if let progress, progress.phase == .downloading {
-            return HoldingsPillState(here: .downloading(progress.fraction), cloud: cloud)
+        // Whether what is here is safe, and whether anything moves.
+        var cloud: StatusGlyph.Cloud?
+        if connected {
+            let progress = picplace.progress[captureID]
+            let job = picplace.uploadJobs[captureID]
+            if let progress, progress.phase == .downloading {
+                cloud = .downloading
+            } else if let progress, progress.phase == .verifying || progress.phase == .removing {
+                cloud = .checking
+            } else if progress != nil, picplace.uploadStops[captureID] != nil {
+                // Only a heavy run (originals, blends) has a stop signal: a
+                // records-only sync draws nothing.
+                cloud = .uploading
+            } else if picplace.conflicts.contains(where: { $0.originID == origin })
+                        || (picplace.canSync && record?.lastError != nil) || job?.hold == .failed {
+                cloud = .attention
+            } else if let hold = job?.hold, hold == .paused || hold == .waitingForWiFi || hold == .interrupted {
+                cloud = .waiting
+            } else if holdings.localHeavyFiles > 0 {
+                let safe = known && record.map {
+                    Self.isBackedUp($0, holdings: holdings)
+                        || (!originalsHere && $0.blendsDigest != nil && $0.blendsDigest == holdings.localBlendsDigest)
+                } == true
+                if safe {
+                    cloud = .safe
+                } else if let since = record?.verifyPendingSince, Date().timeIntervalSince(since) < PicPlaceSyncRecord.verifyWindow {
+                    // Uploaded and confirmed; PicPlace still reading it back.
+                    cloud = .checking
+                } else {
+                    cloud = .needsUploading
+                }
+            } else if originals == .there, blends != .nowhere {
+                // Nothing heavy here, and PicPlace holds the project.
+                cloud = .safe
+            }
         }
-        guard let holdings else { return cloud == .none ? nil : HoldingsPillState(here: .nothing, cloud: cloud) }
-        let originals = holdings.tier == .originals
-        let blends = holdings.otherBlendsHere > 0
-        var here: HoldingsPillState.Here
-        switch (originals, blends) {
-        case (true, true): here = .both
-        case (true, false): here = .originals
-        case (false, true): here = .blends
-        case (false, false): here = .nothing
-        }
-        if here == .nothing, cloud == .none || cloud == .failed, record.map({ $0.revision > 0 || $0.policy == "pull" }) != true {
-            // Neither here nor accounted for by PicPlace — gone.
-            here = .missing
-        }
-        // Unconnected: the norm (every original here) says nothing.
-        if !connected, here == .originals || here == .both {
-            here = here == .both ? .blends : .nothing
-        }
-        return HoldingsPillState(here: here, cloud: cloud)
+        return HoldingsPillState(originals: originals, blends: blends, cloud: cloud)
     }
 
     /// Everything heavy here is verified on PicPlace — the heavy set's
@@ -154,26 +265,40 @@ private struct HoldingsPillContent: View {
         .task(id: HoldingsAsk(id: captureID, missing: model.cachedHoldings(for: captureID) == nil ? holdings.revision : nil)) {
             model.requestHoldings(captureID)
         }
+        #if DEBUG
+        // `LL_DUMP_PILLS=1`: every drawn pill's words as they change — the
+        // device check of the mapping on a real library (2026-09-26).
+        .onChange(of: state, initial: true) { _, now in
+            guard HoldingsPillBody.dumps, let now else { return }
+            LLog("pill: \(model.capture(id: captureID)?.displayTitle ?? "?") — \(HoldingsPillBody.label(now))")
+        }
+        #endif
     }
 }
 
-/// The pill as drawn — the project's, and a blend row's.
+/// The pill as drawn — the project's, and a blend row's. Real size: 18 pt
+/// high, 9 pt glyphs, the cloud a point larger.
 struct HoldingsPillBody: View {
     let state: HoldingsPillState
 
     var body: some View {
         HStack(spacing: 3) {
-            leftHalf(state.here)
-            if state.here != .nothing, state.cloud != .none {
+            if let place = state.originals {
+                StatusGlyphView(glyph: .asset(.originals, place), size: 9, surface: .photo)
+            }
+            if let place = state.blends {
+                StatusGlyphView(glyph: .asset(.blends, place), size: 9, surface: .photo)
+            }
+            if state.originals != nil || state.blends != nil, state.cloud != nil {
                 Rectangle()
                     .fill(Color.white.opacity(0.35))
                     .frame(width: 0.5, height: 10)
                     .padding(.horizontal, 1)
             }
-            rightHalf(state.cloud)
+            if let cloud = state.cloud {
+                StatusGlyphView(glyph: .cloud(cloud), size: 10, surface: .photo)
+            }
         }
-        .font(.system(size: 9, weight: .semibold))
-        .foregroundStyle(Color.white.opacity(0.85))
         .padding(.horizontal, 5)
         .frame(minWidth: 22, minHeight: 18, maxHeight: 18)
         .background(Color.black.opacity(0.5), in: Capsule())
@@ -181,82 +306,40 @@ struct HoldingsPillBody: View {
         .accessibilityLabel(Self.label(state))
     }
 
-    @ViewBuilder private func leftHalf(_ here: HoldingsPillState.Here) -> some View {
-        switch here {
-        case .nothing:
-            EmptyView()
-        case .originals:
-            Image(systemName: "camera")
-        case .blends:
-            Image(systemName: Self.blendsGlyph)
-        case .both:
-            Image(systemName: "camera")
-            Image(systemName: Self.blendsGlyph)
-        case .downloading(let fraction):
-            ring(fraction)
-        case .missing:
-            Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(LL.levelOff)
-        }
-    }
-
-    @ViewBuilder private func rightHalf(_ cloud: HoldingsPillState.Cloud) -> some View {
-        switch cloud {
-        case .none:
-            EmptyView()
-        case .onPicPlace:
-            Image(systemName: "icloud")
-        case .backedUp:
-            Image(systemName: "checkmark.icloud")
-                .foregroundStyle(.green)
-        case .sending:
-            Image(systemName: "icloud.and.arrow.up")
-                .foregroundStyle(LL.amber)
-        case .failed:
-            Image(systemName: "exclamationmark.icloud")
-                .foregroundStyle(LL.levelOff)
-        }
-    }
-
-    private func ring(_ fraction: Double) -> some View {
-        ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.25), lineWidth: 2)
-            Circle()
-                .trim(from: 0, to: max(0.04, fraction))
-                .stroke(LL.amber, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-        }
-        .frame(width: 10, height: 10)
-    }
-
     /// Layers — a blend is frames laid over each other. Not `square.stack`,
-    /// the Projects tab's own glyph.
+    /// the Projects tab's own glyph. (The outline, where it is not a status:
+    /// a filter's Has blends.)
     static let blendsGlyph = "square.3.layers.3d"
+
+    #if DEBUG
+    static let dumps = ProcessInfo.processInfo.environment["LL_DUMP_PILLS"] != nil
+    #endif
 
     /// The pill in the Gallery's PicPlace filter names (plan §1b: one set
     /// of words for VoiceOver, the Mac's tooltips and the filters).
     static func label(_ state: HoldingsPillState) -> String {
         var parts: [String] = []
-        let originalsHere = state.here == .originals || state.here == .both
-        switch state.here {
-        case .originals: parts.append("On this device")
-        case .both: parts.append("On this device"); parts.append("Blends on this device")
-        case .blends: parts.append("Blends on this device")
-        case .downloading: parts.append("Downloading")
-        case .missing, .nothing: break
+        switch state.originals {
+        case .here?: parts.append("On this device")
+        case .there?: parts.append("Download available")
+        case .nowhere?: parts.append("Not available to download")
+        case nil: break
+        }
+        switch state.blends {
+        case .here?: parts.append("Blends on this device")
+        case .there?: parts.append("Blends on PicPlace")
+        case .nowhere?: parts.append("Blends not available")
+        case nil: break
         }
         switch state.cloud {
-        case .failed: parts.append("Needs attention")
-        case .sending: parts.append("Uploading")
-        case .backedUp: parts.append(originalsHere ? "Backed up" : "Download available")
-        case .onPicPlace: parts.append(originalsHere ? "Needs uploading" : "Not available to download")
-        case .none:
-            if originalsHere {
-                parts.append("Needs uploading")
-            } else if state.here == .missing {
-                parts.append("Not available to download")
-            }
+        case .safe?: parts.append("Backed up")
+        case .needsUploading?: parts.append("Needs uploading")
+        case .uploading?: parts.append("Uploading")
+        case .downloading?: parts.append("Downloading")
+        case .checking?: parts.append("Checking with PicPlace")
+        case .waiting?: parts.append("Upload waiting")
+        case .attention?: parts.append("Needs attention")
+        case nil: break
         }
         return parts.joined(separator: " · ")
     }
@@ -271,10 +354,9 @@ private struct HoldingsAsk: Hashable {
 
 // MARK: - One blend's pill
 
-/// A blend row's pill (the project screen, the Gallery panel): layers when
-/// the clip's file is here | PicPlace — the project pill's halves for one
-/// clip. Nothing in a library never connected to PicPlace while the file
-/// is here (the norm).
+/// A blend row's pill (the project screen, the Gallery panel): the layers,
+/// where the clip is | the cloud for it. Nothing in a library never
+/// connected to PicPlace while the file is here (the norm).
 struct BlendHoldingsPill: View {
     @EnvironmentObject private var model: AppModel
     let blend: AppModel.BlendProject
@@ -303,40 +385,117 @@ private struct BlendHoldingsPillContent: View {
 }
 
 extension AppModel {
-    /// A blend's pill: layers when its file is here; PicPlace's half from
-    /// its own confirmed entry in PicPlace's list once read (`serverHeavy`),
-    /// else from the markers — the whole set or every blend here verified.
-    /// A clip that is not here, before the list is read, claims nothing —
-    /// unless PicPlace's count says it holds none of the project's heavy
-    /// files: *not available* (`blendAvailability`; it used to claim "On
-    /// PicPlace" for a blend never uploaded, 2026-09-26).
+    /// A blend's pill. Where: here, else PicPlace's answer for this clip
+    /// (`blendAvailability`: its list once read, a count of none) — grey
+    /// until it says no. The cloud, for a clip here: its own confirmed
+    /// entry in PicPlace's list once read, else the markers (the whole set
+    /// or every blend here verified); amber while its project moves.
     func blendPillState(for blend: BlendProject, holdings: ProjectHoldings?) -> HoldingsPillState {
         guard let capture = capture(for: blend) else { return .empty }
         let here = !blendFileMissing(blend)
         let connected = picplace.binding != nil
+        if !connected, here { return .empty }
         let origin = originID(of: capture)
-        var cloud = HoldingsPillState.Cloud.none
-        var unknown = false
-        if connected, let record = picplace.records[origin], record.revision > 0 || record.policy == "pull" {
-            if let listed = picplace.serverHeavy[origin] {
-                if let asset = listed.first(where: { $0.name == blend.outputFileName && $0.isConfirmed }) {
-                    cloud = asset.isVerified ? .backedUp : .onPicPlace
+        let place: StatusGlyph.Place = here ? .here
+            : picplace.blendAvailability(blend, of: capture) == .notOnPicPlace ? .nowhere : .there
+        var cloud: StatusGlyph.Cloud?
+        if connected {
+            let progress = picplace.progress[capture.id]
+            let record = picplace.records[origin]
+            let known = record.map { $0.revision > 0 || $0.policy == "pull" } ?? false
+            let pending = record?.verifyPendingSince.map { Date().timeIntervalSince($0) < PicPlaceSyncRecord.verifyWindow } ?? false
+            let listed = picplace.serverHeavy[origin].map { $0.contains { $0.name == blend.outputFileName && $0.isConfirmed } }
+            if !here, let progress, progress.phase == .downloading {
+                cloud = .downloading
+            } else if here, progress != nil, picplace.uploadStops[capture.id] != nil {
+                cloud = .uploading
+            } else if here {
+                if let listed {
+                    cloud = listed ? .safe : pending ? .checking : .needsUploading
+                } else if known, let record, let holdings, Self.isBackedUp(record, holdings: holdings)
+                            || (record.blendsDigest != nil && record.blendsDigest == holdings.localBlendsDigest) {
+                    cloud = .safe
+                } else {
+                    cloud = pending ? .checking : .needsUploading
                 }
-            } else if here, let holdings,
-                      Self.isBackedUp(record, holdings: holdings)
-                        || (record.blendsDigest != nil && record.blendsDigest == holdings.localBlendsDigest) {
-                cloud = .backedUp
-            } else if !here {
-                unknown = picplace.blendAvailability(blend, of: capture) == .unknown
+            } else if listed == true {
+                // Not here, and PicPlace holds it: safe, just not on this device.
+                cloud = .safe
             }
         }
-        var left: HoldingsPillState.Here = here ? .blends : .nothing
-        if !here, let progress = picplace.progress[capture.id], progress.phase == .downloading {
-            left = .downloading(progress.fraction)
-        } else if !here, cloud == .none, !unknown {
-            left = .missing
-        }
-        if !connected, here { left = .nothing }
-        return HoldingsPillState(here: left, cloud: cloud)
+        return HoldingsPillState(originals: nil, blends: place, cloud: cloud)
     }
 }
+
+#if DEBUG
+// MARK: - Every state, rendered on the device (`LL_PILL_SHEET=1`)
+
+/// Every pill state on a bright and a dark ground, and the adaptive glyphs
+/// on a light list — rendered by the device itself at its own scale into
+/// `Logs/pill-sheet.png`, the size check no Mac drawing can make
+/// (2026-09-26).
+struct HoldingsPillSheet: View {
+    static let states: [(String, HoldingsPillState)] = [
+        ("Here · backed up", .init(originals: .here, cloud: .safe)),
+        ("Here · needs uploading", .init(originals: .here, cloud: .needsUploading)),
+        ("Preview only (removed here)", .init(originals: .there, cloud: .safe)),
+        ("Just uploaded · PicPlace checking", .init(originals: .here, cloud: .checking)),
+        ("Uploading", .init(originals: .here, cloud: .uploading)),
+        ("All here · backed up", .init(originals: .here, blends: .here, cloud: .safe)),
+        ("Blend on PicPlace", .init(originals: .here, blends: .there, cloud: .safe)),
+        ("Uploading the blend", .init(originals: .here, blends: .here, cloud: .uploading)),
+        ("New blend not up", .init(originals: .here, blends: .here, cloud: .needsUploading)),
+        ("Checking", .init(originals: .here, cloud: .checking)),
+        ("Not available", .init(originals: .nowhere, blends: .nowhere)),
+        ("Waiting", .init(originals: .here, cloud: .waiting)),
+        ("Needs attention", .init(originals: .here, cloud: .attention)),
+        ("Downloading", .init(originals: .there, cloud: .downloading)),
+        ("Photos on PicPlace · blend here", .init(originals: .there, blends: .here, cloud: .safe)),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Self.states.indices, id: \.self) { index in
+                let (name, state) = Self.states[index]
+                HStack(spacing: 10) {
+                    Text(name).font(.system(size: 11)).frame(width: 170, alignment: .leading)
+                    ground(Color(red: 0.91, green: 0.86, blue: 0.77), state)
+                    ground(Color(red: 0.12, green: 0.12, blue: 0.14), state)
+                }
+            }
+            HStack(spacing: 14) {
+                ForEach(PicPlaceFilter.allCases) { filter in
+                    StatusGlyphView(glyph: filter.statusGlyph, size: 14)
+                }
+            }
+            .padding(.top, 8)
+        }
+        .padding(14)
+        .background(Color.white)
+        .environment(\.colorScheme, .light)
+    }
+
+    private func ground(_ colour: Color, _ state: HoldingsPillState) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            colour.frame(width: 96, height: 30)
+            HoldingsPillBody(state: state).padding(6)
+        }
+    }
+
+    /// Renders the sheet at the screen's scale into the logs folder.
+    @MainActor static func renderToLogs() {
+        let renderer = ImageRenderer(content: HoldingsPillSheet())
+        #if os(iOS)
+        renderer.scale = UIScreen.main.scale
+        #else
+        renderer.scale = 2
+        #endif
+        guard let image = renderer.cgImage else { LLog("pill sheet: could not render"); return }
+        let url = StorageRoot.logsURL.appendingPathComponent("pill-sheet.png")
+        try? FileManager.default.createDirectory(at: StorageRoot.logsURL, withIntermediateDirectories: true)
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else { return }
+        CGImageDestinationAddImage(destination, image, nil)
+        LLog(CGImageDestinationFinalize(destination) ? "pill sheet: \(image.width)×\(image.height) at \(url.path)" : "pill sheet: could not write")
+    }
+}
+#endif

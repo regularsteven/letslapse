@@ -11,6 +11,8 @@ collections mirrors; staged with `LL_COLLECTIONS=still|still-kb`.
 rows with glyphs and counts, long names wrapping). ⚠️ on [gallery.svg](gallery.svg) (the sidebar); staged with
 `LL_PICPLACE_FILTER=<filter>` on a bound bench root.
 
+🟡 **2026-09-26, status glyphs — green means here, one cloud (plan §16) — SIGNED OFF on the canvas "Holdings Pill States" (https://claude.ai/artifact/7zbnCfyZLsMC2huVLY7A4T, revision 2), code landed, mirrors OWED**: the Direction B pill below is superseded. Every mirror of the pill, the blend rows' pill, the PicPlace card's glyph, the editor's preview banner and the Library filters is drawn in the new scheme: camera/layers green here, grey on PicPlace, slashed nowhere; one cloud (✓ / ↑ / amber ↑ ↓ ↻ / paused / red !), never green. The canvas is the spec; `LL_PILL_SHEET=1` renders every state on the device.
+
 🟡 **2026-09-25, connected asset states — the holdings pill (Direction B, Steven's choice) — code first, mirrors OWED
 after sign-off** (plan §12): the Gallery grid's tiles, the Projects cards and the item view's filmstrip (at 0.8) wear
 one pill, *this Mac | PicPlace* — camera · layers · both · ring · triangle | cloud · green cloud-check · amber · failure

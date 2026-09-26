@@ -5,6 +5,8 @@ Canvas 820×1180 pt (iPad 10th gen class), portrait + landscape where bespoke.
 🟡 **2026-09-25, connected asset states — the Gallery's PicPlace filters — code first, mirrors OWED after sign-off**
 (plan §14): the iPad's Gallery sidebar gains the phone's and Mac's PicPlace section; nothing iPad-specific.
 
+🟡 **2026-09-26, status glyphs — green means here, one cloud (plan §16) — SIGNED OFF on the canvas "Holdings Pill States" (https://claude.ai/artifact/7zbnCfyZLsMC2huVLY7A4T, revision 2), code landed, mirrors OWED**: the Direction B pill below is superseded. Every mirror of the pill, the blend rows' pill, the PicPlace card's glyph, the editor's preview banner and the Library filters is drawn in the new scheme: camera/layers green here, grey on PicPlace, slashed nowhere; one cloud (✓ / ↑ / amber ↑ ↓ ↻ / paused / red !), never green. The canvas is the spec; `LL_PILL_SHEET=1` renders every state on the device.
+
 🟡 **2026-09-25, connected asset states — the holdings pill (Direction B) — code first, mirrors OWED after sign-off**
 (plan §12): the iPhone's pill on the iPad's Gallery tiles and Projects cards; nothing iPad-specific. Not yet run on an
 iPad simulator — it goes to the iPad Air M3 with stage 3.
