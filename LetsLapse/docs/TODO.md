@@ -119,25 +119,51 @@ behaviour or don't show the state).
    `.opacity` on `.exportProject`, and check the phone's ⓘ sheet and the project screen's ⋯ *Share project*
    against the rule (greyed in place, still tappable, asks).
 
-### Photo mode aborts at 8× on iOS 27 (18 Pro) — `capturePhotoWithSettings` throws
+### The 18 Pro's 4224×3024 choice on iOS 27 — Photo shot 1080p for a week, then aborted; JPEG runs save nothing
 
-**Found:** 2026-09-26, two crash reports on Steven's 18 Pro (iOS 27.0, 24A437) at 09:28:12 and 09:29:02 ·
-**Size:** unknown until the exception's reason is read
+**Detail:** [fieldtests/2026-09-26-18pro-crash-triage.md](fieldtests/2026-09-26-18pro-crash-triage.md) (the
+resolution finding, every crash report, the on-device verification table, the offline reason-decoding recipe) ·
+**Found:** 2026-09-26 · **Status:** Photo resolution and the Photo abort **fixed on branch `claude/photo-preflight`
+and verified on the 18 Pro** (2026-09-26 evening; the phone runs that build) — **not in `ios-app` yet** (merge is
+Steven's call); the rest below owed
 
-Both: `EXC_CRASH SIGABRT` from an NSException in `-[AVCapturePhotoOutput capturePhotoWithSettings:delegate:]`,
-called from `closure #2 in closure #1 in CameraController.startInterval(every:frameCap:)` on
-`com.letslapse.capture` — Photo mode (it runs on the interval engine). The console's last lines:
-`capture: photo — 4× optical · Back Telephoto Camera · zoom 8.0 (native) · jpeg-flat`, the first 8 s after an
-optics ramp 1.00 → 8.00, the second 18 s after `applyCaptureFormat … 4032×3024 → 4224×3024@25` at zoom 8. A photo
-at 8× between them (no ramp or format change just before) worked. Crash reports: pull with
-`devicectl … --domain-type systemCrashLogs` (`LetsLapse-2026-09-26-092815.ips`, `…092904.ips`).
+**Photo resolution (the headline):** 351 of the 18 Pro's 371 JPEG projects since 09-18 are 1920×1080 under a menu
+that said 4224×3024 — unrecoverable. The menu comes from the telephoto's own formats; the Triple Camera has no
+4224×3024, `applyCaptureFormat` returned before logging, and the session stayed on the `.high` 1080p preset. **Photo
+abort:** the same silent miss after a pinned run's lens release left `selectedPhotoDimensions` at 4224×3024 on another
+format — iOS 27's refusal, read on the device: *"If you specify a maxPhotoDimensions, it must match one of the
+supportedMaxPhotoDimensions of the video devices's active format"*. Fixed by the format layer (stills matching,
+logged misses, 4224×3024 → 4032×3024 fallback, a format check at every Photo/Interval run) and the request check
+(`PhotoRequestPreflight`). Verified: 0.5×/1×/4× Photos 3024×4032, the crash-1 path saves full size, no abort.
 
-Next: read the exception's reason — relaunch with `devicectl … --console` (stderr carries *Terminating app due to
-uncaught exception … reason:*) and repeat: Photo mode, the 4224×3024 format, zoom to 8×, shoot; or a sysdiagnose.
-Suspects: settings the new active format or the telephoto constituent refuses (`maxPhotoDimensions` not in
-`supportedMaxPhotoDimensions` after the format change, a quality prioritisation above the maximum); the same class as
-the iOS 27 virtual-device exposure abort (docs/fieldtests/2026-09-21-ios27-virtual-device-custom-exposure.md): ask
-the output before setting, never let AVFoundation throw.
+**JPEG interval runs on the same format save nothing** — five of five Holy Grail runs pinned to the telephoto at
+`4224×3024@25` logged `CVPixelBuffer wrap failed (status -6684)` (not Metal-compatible) and ended with 0 frames, no
+error shown. Their frames come from the video data output (32BGRA), not the photo output, so this is its own fix. DNG on `4224×3024@25` is fine (the 4,908-window shoot of 09-23). The Video abort owed below
+(*iOS 27 exposure follow-ups* #1) was on `4224x3024@10`.
+
+Owed:
+1. **Merge `claude/photo-preflight` into `ios-app`** once Steven says so; check the 16 Pro and an iPad on it (the
+   format layer changes what Photo/Interval apply at launch on every device — expected: nothing, where the chosen
+   size exists).
+2. **An honest menu** — Photo offers 4224×3024, which its camera cannot shoot; it now shoots 4032×3024 and says so only
+   in the log. Either list the Triple Camera's sizes for stills, or pin the physical lens for stills (which is also
+   the only way to force the telephoto at 4× in low light). Design question for Steven.
+3. **The JPEG live blend on the pinned telephoto at 4224×3024** — every frame `-6684`, 0 saved; copy a
+   non-Metal-compatible buffer before wrapping it, or refuse the run at arm time.
+4. The request check for the Scanner shot, the DNG fire/bracket paths and the blend-depth probe (connection check
+   only — they set no `maxPhotoDimensions`); the Video abort (*iOS 27 exposure follow-ups* #1).
+5. A capture-time size check: a still smaller than the chosen size should never pass silently again.
+
+### Capture observers registered more than once — every optics and lifecycle line logged ×5
+
+**Found:** 2026-09-26 in the 18 Pro's console logs · **Size:** S
+
+By the morning after a long session every `app didBecomeActive`, `optics: constituent →` and `optics: ramp …` line was
+logged five times (on 09-26, twice). `CameraController` adds NotificationCenter block observers (interruption,
+did-start/stop running, `didBecomeActiveNotification` → `resumeIfNeeded`) whose tokens are dropped, and each controller
+installs its own constituent KVO — so either five controllers were alive or the registration ran five times. Beyond
+the noise, `resumeIfNeeded` runs once per copy. Find which (count `CameraController` inits/deinits in the log), keep the
+tokens, remove them on teardown.
 
 ### Copy pass — where a file is when it is not on this device (Steven, later)
 
