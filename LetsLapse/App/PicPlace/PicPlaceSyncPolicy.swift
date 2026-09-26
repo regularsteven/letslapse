@@ -14,9 +14,22 @@ enum PicPlaceSyncPolicy: String {
     case originals
     /// Both.
     case everything
+    /// The blends alone, by hash (D1, Steven 2026-09-25): a blend is the
+    /// portable unit — it travels as it is rendered, under the Wi-Fi rule,
+    /// without waiting for the originals (docs/connected-asset-states-plan.md).
+    case blends
 
-    var sendsRecords: Bool { self != .originals }
+    var sendsRecords: Bool { self == .minimal || self == .everything }
     var sendsHeavy: Bool { self != .minimal }
+
+    /// Whether a heavy file of `kind` (`source` · `blend`) goes.
+    func sendsHeavy(kind: String) -> Bool {
+        switch self {
+        case .minimal: return false
+        case .blends: return kind == PicPlaceOriginalsCheck.Kind.blend.rawValue
+        case .originals, .everything: return true
+        }
+    }
 }
 
 /// One regular file of a project folder, classified for a sync by the one
@@ -110,10 +123,10 @@ enum PicPlaceSyncInventory {
                 summary.bundleBytes += item.bytes
             case .object:
                 if policy.sendsRecords { summary.objects += 1; summary.bytes += item.bytes }
-            case .heavy:
+            case .heavy(let kind):
                 summary.heavyFiles += 1
                 summary.heavyBytes += item.bytes
-                if policy.sendsHeavy { summary.objects += 1; summary.bytes += item.bytes }
+                if policy.sendsHeavy(kind: kind) { summary.objects += 1; summary.bytes += item.bytes }
             case .skipped:
                 summary.strays.append(item.relativePath)
             }

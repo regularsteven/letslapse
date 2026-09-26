@@ -314,7 +314,7 @@ extension PicPlaceController {
                         records[origin] = record
                     }
                     let record = records[origin]
-                    let failedRecords = record?.lastError != nil && record?.failedPolicy != PicPlaceSyncPolicy.originals.rawValue
+                    let failedRecords = record?.lastError != nil && record?.failedHeavyOnly != true
                     if failedRecords, syncTasks[capture.id] == nil {
                         // The manifest got through and the rest of the push
                         // did not (the bundle, the poster, the confirms):
@@ -414,6 +414,9 @@ extension PicPlaceController {
             // The index was read a moment ago: the usage line needs only /status.
             refreshUsage(rows: index.projects)
             scheduleOriginalsQueue()
+            scheduleBlendsQueue()
+            // The library's collections travel too, where PicPlace keeps them.
+            if syncsCollections { await pullCollections() }
             #if DEBUG
             // `LL_PICPLACE_DOWNLOAD=<uuid>` moves a project's originals down
             // after the check (stage 5).
@@ -601,6 +604,7 @@ extension PicPlaceController {
         let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
         record.serverHeavyFiles = heavy.count
         record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }
+        record.serverSourceFiles = heavy.filter { PicPlaceSyncInventory.heavyKind($0.name) == .source }.count
         if model.sourcesMissing(capture) {
             record.heavyFiles = heavy.count
             record.heavyBytes = record.serverHeavyBytes

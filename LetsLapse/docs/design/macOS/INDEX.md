@@ -2,6 +2,49 @@
 
 Canvas: 760×680 pt default window (`LetsLapseApp.defaultSize`); capture presents as a ≥960×720 sheet. The guided builder's own files are drawn at **1000×700**, the window size its layout was signed off at — each one says what the 760×680 default does instead. Since the 2026-08-12 mac review, `LL.screenBackground` on macOS light mode is the token table's #F2F2F7 (was `underPageBackgroundColor`, a dark canvas grey) — that fix brightens EVERY mac screen, so all other mac drawings now match the app rather than being aspirational.
 
+🟡 **2026-09-25, connected asset states — stills in collections (D4) — code first, mirrors OWED after sign-off**
+(plan §15): the Add clips sheet's Photos group and unlocked stills; a still's row with its length menu. ⚠️ on the Mac
+collections mirrors; staged with `LL_COLLECTIONS=still|still-kb`.
+
+🟡 **2026-09-25, connected asset states — the Gallery's PicPlace filters — code first, mirrors OWED after sign-off**
+(plan §14): the Gallery's sidebar column gains a **PicPlace** section under Library in a connected library (seven
+rows with glyphs and counts, long names wrapping). ⚠️ on [gallery.svg](gallery.svg) (the sidebar); staged with
+`LL_PICPLACE_FILTER=<filter>` on a bound bench root.
+
+🟡 **2026-09-25, connected asset states — the holdings pill (Direction B, Steven's choice) — code first, mirrors OWED
+after sign-off** (plan §12): the Gallery grid's tiles, the Projects cards and the item view's filmstrip (at 0.8) wear
+one pill, *this Mac | PicPlace* — camera · layers · both · ring · triangle | cloud · green cloud-check · amber · failure
+tint (the states in plan §12); it replaces stage 2's badge and the card's PicPlace pill. Blend rows (project screen,
+inspector) wear it for one clip. Bench-verified moment by moment on picplace.test. ⚠️ on [gallery.svg](gallery.svg),
+[gallery.item.svg](gallery.item.svg), the Projects list mirrors; 🟡 `components/holdings-pill.*`.
+
+🟡 **2026-09-25, connected asset states, stage 3 — code first, mirrors OWED after sign-off** (plan §11): the Settings
+PicPlace card gains **Upload blends automatically**; the collection builder's missing-clip states (still + cloud, the
+banner with Download, Export / play / trim asking, the picker's ON PICPLACE badge) as on iOS — verified on the Mac
+(`LL_DROP_SOURCES=<uuid>:blends`, `LL_COLLECTIONS=detail`, Export and Download pressed by AX). Mirrors owed for the
+Mac's collections and Settings screens.
+
+🟡 **2026-09-25, connected asset states, stage 2 — code first, mirrors OWED after sign-off** (plan §10): the Gallery
+grid's tiles and the item view's filmstrip carry the **holdings badge** (a cloud for a preview, a stack for blends
+only, a ring while the originals download, a triangle when they are nowhere); the inspector and the pane gain a
+**Here** row. The project screen of a preview reads **PHOTO · PREVIEW** / **PREVIEW · 20 photos** and its hero's Edit
+pill opens the preview page in a **window of its own** (`PreviewEditorWindowRequest`); the preset chips grey out, and
+New blended clip, the Originals rows, Share project and the DNG archive ask (verified: New blended clip pressed by AX on
+an interval preview). ⚠️ on [gallery.svg](gallery.svg), [gallery.item.svg](gallery.item.svg) (the filmstrip's badge)
+and the inspector mirrors ([gallery.item.picplace.svg](gallery.item.picplace.svg)); 🟡 `gallery.preview-window.svg`.
+
+🟡 **2026-09-25, connected asset states, stage 1 — code first, mirrors OWED after sign-off** (plan
+`docs/connected-asset-states-plan.md` §4, §8, §9): the item view, the filmstrip and ←/→ now open and walk a project whose
+picture is not on this Mac — it was refused (the filmstrip stalled on it) — as the editor's **preview page**
+(`App/EditorPreviewPage.swift`, rail layout): the graded `poster.jpg` in the media column; in the rail the tab bar (Text /
+Frames / Masks greyed), the six buttons card greyed, and a status card (*Preview only · Editing needs the full-size photo —
+on PicPlace · 1 file · 3,2 MB · Download*, progress with **Stop** while it downloads). A tap on anything greyed asks
+(*Download the full-size photo?* · **Download and Continue** · **Stay as Is**); when the file lands the real editor
+replaces the page with the tapped panel open. The inspector (tags, info, metadata) is unchanged — metadata edits need
+nothing local. To draw after sign-off: `gallery.item.preview.svg`, `gallery.item.preview.prompt.svg`,
+`gallery.item.preview.downloading.svg`. Staged with `LL_DROP_SOURCES` on a scratch root, then `LL_TAB=gallery
+LL_ITEM=<uuid> [LL_PREVIEW_PROMPT=light]` (CLAUDE.md).
+
 ✅ **2026-09-13, Gallery item view — code first (Steven: build it to feel it), signed off the same evening, mirrored after:** on the
 Mac the editor is no longer a window the Gallery opens; Open / ⏎ / double-click / Edit / Text / Shapes turn the Gallery's own three
 columns into the item view — the Library column becomes the project's inspector (the preview panel's `.inspector` dress: title,

@@ -172,5 +172,19 @@
 			</array>
 		</dict>
 	</array>
+	<!-- PicPlace transfers a person starts (Upload, Resume, Use mobile data,
+	     Download) ask iOS 26+ to keep the app running as a continued-processing
+	     task (`PicPlaceContinuedTransfer`). The wildcard only PERMITS identifiers
+	     made at run time: each request registers a handler for its own identifier
+	     just before it is submitted — a request without one aborts the app
+	     (2026-09-25). Continued processing needs the Background processing mode. -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.regularsteven.letslapse.transfer.*</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+	</array>
 </dict>
 </plist>

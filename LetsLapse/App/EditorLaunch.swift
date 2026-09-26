@@ -1,3 +1,4 @@
+import QuartzCore
 import SwiftUI
 
 // MARK: - Opening a project's editor from outside its detail screen
@@ -11,19 +12,29 @@ import SwiftUI
 
 /// The asset a project's editor opens on — the project hero's preview, which
 /// is also what its Edit pill leads to. A still goes to `PhotoViewerView`, a
-/// movie to `VideoEditorView`.
+/// movie to `VideoEditorView`, and a project whose picture is not on this
+/// device to `EditorPreviewPage` (2026-09-25): the editor's chrome, greyed,
+/// over the graded preview — the same place, only less it can do.
 enum EditorAsset: Equatable {
     case still(URL)
     case movie(URL)
+    /// The project's `poster.jpg` when it has one, else its folder — the
+    /// page finds its own picture; this is its identity.
+    case preview(URL)
 
     var url: URL {
         switch self {
-        case .still(let url), .movie(let url): return url
+        case .still(let url), .movie(let url), .preview(let url): return url
         }
     }
 
     var isMovie: Bool {
         if case .movie = self { return true }
+        return false
+    }
+
+    var isPreview: Bool {
+        if case .preview = self { return true }
         return false
     }
 }
@@ -41,10 +52,13 @@ struct EditorOpenRequest: Identifiable, Equatable {
 }
 
 /// Which rail page an editor should land on, addressed to the project whose
-/// editor consumes it (`PhotoViewerView` / `VideoEditorView`).
+/// editor consumes it (`PhotoViewerView` / `VideoEditorView`) — and, when a
+/// preview page's *Download and Continue* brought the originals, the group
+/// whose panel was tapped, opened once the editor has its grade.
 struct EditorPageRequest: Equatable {
     let captureID: UUID
     let page: RailTab
+    var group: EditorGroup? = nil
 }
 
 /// A host asking an embedded editor to leave (the Gallery's item view on the
@@ -76,6 +90,11 @@ struct EditorPagingContext {
     var onClearPreviewChanged: (Bool) -> Void
     /// The chrome's ⓘ: the pager presents the project's panel as a sheet.
     var onInfo: () -> Void
+    /// The editor's first picture of this project is up — said outright,
+    /// so the pager's poster never waits on when a preference update lands
+    /// (a picture served from the look-ahead's cache can be up before the
+    /// pager hears of the page at all, 2026-09-25).
+    var onPicture: (UUID) -> Void = { _ in }
 }
 
 /// What the editor on the page allows and where its picture is — published
@@ -95,12 +114,82 @@ struct EditorPagingState: Equatable {
     /// True once the editor has drawn its own picture, so the settled
     /// poster over it can go.
     var hasPicture: Bool
+    /// Whose page this is — the pager takes the handover from the editor it
+    /// just mounted, never from the one leaving. (It waited for a blank
+    /// frame instead, and a first picture served from the look-ahead's cache
+    /// landed before any blank frame was published: the poster sat over the
+    /// editor until its 1.5 s safety net, 2026-09-25.)
+    var captureID: UUID? = nil
 }
 
 struct EditorPagingStateKey: PreferenceKey {
     static let defaultValue: EditorPagingState? = nil
     static func reduce(value: inout EditorPagingState?, nextValue: () -> EditorPagingState?) {
         if let next = nextValue() { value = next }
+    }
+}
+
+/// Where a page turn's time goes (connected asset states, stage 4 —
+/// docs/connected-asset-states-plan.md §13): the pager opens a trace when a
+/// swipe is let go, the pager and the editor it mounts mark their phases, and
+/// the pager closes it when the new picture is up — one log line per turn,
+/// `pager: turn → …`. Marks made with no trace open (the Mac, a cover opened
+/// from anywhere else) cost a comparison.
+@MainActor enum PageTurnTrace {
+    private static var startedAt: CFTimeInterval?
+    private static var lastAt: CFTimeInterval = 0
+    private static var phases: [(name: String, ms: Double)] = []
+    /// When each phase ended, for `phase(at:)`.
+    private static var ends: [(name: String, at: CFTimeInterval)] = []
+    private static var note = ""
+
+    static var isOpen: Bool { startedAt != nil }
+
+    /// A swipe was let go toward `title`: the slide-out begins.
+    static func begin(_ title: String) {
+        let now = CACurrentMediaTime()
+        startedAt = now
+        lastAt = now
+        phases = []
+        ends = []
+        note = title
+    }
+
+    /// `phase` ended now.
+    static func mark(_ phase: String) {
+        guard startedAt != nil else { return }
+        let now = CACurrentMediaTime()
+        phases.append((phase, (now - lastAt) * 1000))
+        ends.append((phase, now))
+        lastAt = now
+    }
+
+    /// The phase that was running at `time` — the one that ended first
+    /// after it — with how far into the turn that was.
+    static func phase(at time: CFTimeInterval) -> String? {
+        guard let startedAt else { return nil }
+        let offset = Int(((time - startedAt) * 1000).rounded())
+        let name = ends.first(where: { $0.at >= time })?.name ?? "after the last mark"
+        return "\(name), +\(offset) ms"
+    }
+
+    /// Something about the turn worth a word — the kind of project, a cache
+    /// hit — appended to the line.
+    static func annotate(_ text: String) {
+        guard startedAt != nil else { return }
+        note += " · " + text
+    }
+
+    /// The picture is up (or the poster gave up waiting): one line, and
+    /// the trace closes.
+    static func finish(_ outcome: String, stall: String? = nil) {
+        guard let startedAt else { return }
+        mark(outcome)
+        let total = (CACurrentMediaTime() - startedAt) * 1000
+        let steps = phases.map { "\($0.name) \(Int($0.ms.rounded()))" }.joined(separator: " · ")
+        LLog("pager: turn → \(note): \(steps) = \(Int(total.rounded())) ms\(stall.map { "; main thread \($0)" } ?? "")")
+        self.startedAt = nil
+        phases = []
     }
 }
 
@@ -130,10 +219,21 @@ extension AppModel {
     /// Stages the editor for `capture` to open on `page` and returns what to
     /// present — a full-screen cover's item on iOS (`editorCover`), a window
     /// on the Mac (`EditorOpenRequest.open(with:)`). nil, with nothing
-    /// staged, when the project has no asset to open.
-    func stageEditor(for capture: CaptureProject, page: RailTab = .editor) -> EditorOpenRequest? {
-        guard let asset = editorAsset(for: capture) else { return nil }
-        requestedEditorPage = EditorPageRequest(captureID: capture.id, page: page)
+    /// staged, when the project has no asset to open — unless the caller
+    /// takes the preview page (`allowsPreview`: the Gallery's own doors, the
+    /// pager, the item view, a cover), which every project has: one UI
+    /// whatever this device holds (docs/connected-asset-states-plan.md §4.1).
+    func stageEditor(for capture: CaptureProject, page: RailTab = .editor, group: EditorGroup? = nil,
+                     allowsPreview: Bool = false) -> EditorOpenRequest? {
+        guard let asset = editorAsset(for: capture) else {
+            guard allowsPreview else { return nil }
+            // The preview page lives on the Editor page: the others need
+            // the originals and are drawn greyed.
+            requestedEditorPage = nil
+            let identity = posterURL(for: capture) ?? projectFolderURL(for: capture)
+            return EditorOpenRequest(captureID: capture.id, title: capture.displayTitle, asset: .preview(identity))
+        }
+        requestedEditorPage = EditorPageRequest(captureID: capture.id, page: page, group: group)
         return EditorOpenRequest(captureID: capture.id, title: capture.displayTitle, asset: asset)
     }
 }
@@ -156,6 +256,8 @@ private struct EditorCover: ViewModifier {
                     PhotoViewerView(captureID: request.captureID, url: url)
                 case .movie(let url):
                     VideoEditorView(captureID: request.captureID, url: url)
+                case .preview:
+                    EditorPreviewPage(captureID: request.captureID)
                 }
             }
             .environmentObject(model)
@@ -181,6 +283,8 @@ extension EditorOpenRequest {
             openWindow(value: PhotoEditorWindowRequest(captureID: captureID, url: url, title: title))
         case .movie(let url):
             openWindow(value: VideoEditorWindowRequest(captureID: captureID, url: url, title: title))
+        case .preview:
+            openWindow(value: PreviewEditorWindowRequest(captureID: captureID, title: title))
         }
     }
 }

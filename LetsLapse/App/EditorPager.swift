@@ -1,4 +1,5 @@
 #if os(iOS)
+import LetsLapseKit
 import SwiftUI
 
 // MARK: - The editor pager (iOS, 2026-09-21)
@@ -45,8 +46,9 @@ struct EditorPager: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let request: EditorPagerRequest
-    /// A page turned: the host follows (the Gallery selects and scrolls to
-    /// the project on screen, so Back needs no catching up).
+    /// A page turned and came to rest: the host follows (the Gallery selects
+    /// and scrolls to the project on screen, so Back needs no catching up) —
+    /// a beat after the turn, never during it (`follow`).
     var onMove: ((UUID) -> Void)? = nil
     /// The pager is leaving: the host lands where the outcome says. A cover
     /// dismisses itself first; an overlay (the camera's) is the host's to
@@ -73,12 +75,20 @@ struct EditorPager: View {
     /// the editor has drawn its own picture — so a page turn hands over in
     /// place rather than through a spinner.
     @State private var settledPoster: Poster?
-    /// True once the new editor has reported a blank frame, so the first
-    /// `hasPicture` after it is the new editor's and not the old one's.
-    @State private var sawBlankFrame = false
     @State private var deleteFailure: String?
     /// The page's width, for a page turn made without a finger.
     @State private var containerWidth: CGFloat = 0
+    /// Frame gaps on the main thread while a page turns (`PageTurnTrace`).
+    @State private var stallProbe = MainThreadStallProbe()
+    /// The neighbours' opening pictures, made while this page is looked at
+    /// (`EditorLookAhead`): the posters a swipe slides in, and the editor's
+    /// first render once one is the page. Only the pages either side.
+    @State private var lookAhead: [UUID: CGImage] = [:]
+    @State private var lookAheadTask: Task<Void, Never>?
+    /// The way the last page turned — its side is made first.
+    @State private var lastDirection = 1
+    /// The host's follow of the page on screen, once it has been at rest.
+    @State private var followTask: Task<Void, Never>?
 
     private enum Transition: Equatable {
         case back(UUID?)
@@ -94,6 +104,14 @@ struct EditorPager: View {
         let url: URL?
         let kind: AppModel.MediaKind
         let grade: PhotoGrade?
+        /// The editor's own opening picture when the look-ahead has made
+        /// it — drawn instead of the grid's thumbnail.
+        var picture: CGImage? = nil
+
+        static func == (lhs: Poster, rhs: Poster) -> Bool {
+            lhs.id == rhs.id && lhs.url == rhs.url && lhs.kind == rhs.kind && lhs.grade == rhs.grade
+                && lhs.picture === rhs.picture
+        }
     }
 
     init(request: EditorPagerRequest,
@@ -153,14 +171,9 @@ struct EditorPager: View {
         .background(Color.black.ignoresSafeArea())
         .onPreferenceChange(EditorPagingStateKey.self) { state in
             pagingState = state
-            guard let state, settledPoster != nil else { return }
             // The poster goes once the editor under it has a picture of
             // its own — the new editor's, not the last frame of the old.
-            if !state.hasPicture {
-                sawBlankFrame = true
-            } else if sawBlankFrame {
-                withAnimation(.easeOut(duration: 0.18)) { settledPoster = nil }
-            }
+            if let state, state.hasPicture, let captureID = state.captureID { pictureArrived(captureID) }
         }
         // And never for longer than a beat: a picture that fails to render
         // (a missing file) must not leave the poster nailed over the editor.
@@ -168,7 +181,15 @@ struct EditorPager: View {
             guard settledPoster != nil else { return }
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
+            PageTurnTrace.finish("poster timed out", stall: stallProbe.stop())
             withAnimation(.easeOut(duration: 0.18)) { settledPoster = nil }
+            startLookAhead()
+        }
+        .onDisappear {
+            lookAheadTask?.cancel()
+            lookAheadTask = nil
+            lookAhead = [:]
+            followTask?.cancel()
         }
         .onAppear { stage(currentID, page: request.page, poster: true) }
         // The project on the page left the library (deleted from the ⓘ
@@ -207,25 +228,39 @@ struct EditorPager: View {
         EditorPagingContext(
             startsClear: clearPreview,
             onClearPreviewChanged: { clearPreview = $0 },
-            onInfo: { showsInfo = true })
+            onInfo: { showsInfo = true },
+            onPicture: { pictureArrived($0) })
+    }
+
+    /// The editor on the page has its own picture up: the poster over it
+    /// goes, and the pages either side are made while this one is looked
+    /// at. Said by the editor itself and by its paging preference —
+    /// whichever comes first; the other finds nothing left to do.
+    private func pictureArrived(_ id: UUID) {
+        guard let arriving = settledPoster, arriving.id == id else { return }
+        PageTurnTrace.finish("handover", stall: stallProbe.stop())
+        withAnimation(.easeOut(duration: 0.18)) { settledPoster = nil }
+        startLookAhead()
     }
 
     // MARK: - Mounting and moving
 
     /// Puts `id`'s editor on the page — on `page`, under its poster when a
-    /// picture would otherwise take a beat to arrive.
+    /// picture would otherwise take a beat to arrive. A project whose
+    /// picture is not on this device gets the editor's preview page (it
+    /// closed the pager until 2026-09-25).
     private func stage(_ id: UUID, page: RailTab, poster: Bool) {
         guard let capture = model.capture(id: id),
-              let opened = model.stageEditor(for: capture, page: page) else {
-            // Nothing to open on (files gone): leave the way we came.
+              let opened = model.stageEditor(for: capture, page: page, allowsPreview: true) else {
+            // The project left the library: leave the way we came.
             close()
             onClose?(.back(nil))
             return
         }
         currentID = id
+        PageTurnTrace.annotate(Self.traceKind(capture, asset: opened.asset))
         focus = GalleryFocus(request: opened, page: page)
         if poster {
-            sawBlankFrame = false
             settledPoster = self.poster(for: id)
         }
         prefetchNeighbourPosters()
@@ -248,6 +283,7 @@ struct EditorPager: View {
     /// offer in the way — and the next project's editor takes its place.
     private func beginMove(to id: UUID) {
         guard transition == nil else { return }
+        PageTurnTrace.mark("slide")
         transition = .move(id)
         exitRequest = EditorExitRequest(offersPresetSave: false)
     }
@@ -272,20 +308,40 @@ struct EditorPager: View {
         exitRequest = nil
         switch outcome {
         case .move(let next):
+            PageTurnTrace.mark("exit")
             // The poster of the arriving page is at rest where the editor
             // will draw: mount the editor and drop the drag in one pass.
             stage(next, page: .editor, poster: true)
             drag = .zero
-            onMove?(next)
+            follow(next)
         case .back(let landing):
+            followTask?.cancel()
             close()
             onClose?(.back(landing))
         case .newClip(let id):
+            followTask?.cancel()
             close()
             onClose?(.newClip(id))
         case nil:
+            followTask?.cancel()
             close()
             onClose?(.back(currentID))
+        }
+    }
+
+    /// The host follows a page once it has been at rest a moment — never
+    /// during the turn (stage 4, 2026-09-25): the Gallery behind the cover
+    /// re-selecting and scrolling its grid kept the main thread busy through
+    /// every handover, and the new picture waited behind it (~150–300 ms of
+    /// a 48 MP photo's turn on the iPhone 16 Pro). A run of quick swipes
+    /// follows once, where it stopped; Back lands the grid either way.
+    private func follow(_ id: UUID) {
+        followTask?.cancel()
+        guard onMove != nil else { return }
+        followTask = Task {
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled else { return }
+            onMove?(id)
         }
     }
 
@@ -339,6 +395,8 @@ struct EditorPager: View {
                         delta = nil
                     }
                     if let delta, let target = neighbourID(delta) {
+                        lastDirection = delta
+                        beginTrace(to: target)
                         withAnimation(.easeOut(duration: 0.22)) {
                             drag = CGSize(width: delta > 0 ? -width : width, height: 0)
                         } completion: {
@@ -368,37 +426,109 @@ struct EditorPager: View {
     // MARK: - Hooks
 
     #if DEBUG
-    /// `LL_PAGE=next|previous[@<seconds>]` — one page turn without a
-    /// finger, `seconds` (default 2) after the pager opens: the settle
-    /// animation, the editor swap and the landing, for screenshots and
-    /// checks a headless run can make.
+    /// `LL_PAGE=next|previous[@<seconds>][x<turns>]` — page turns without a
+    /// finger, the first `seconds` (default 2) after the pager opens and the
+    /// rest as far apart: the settle animation, the editor swap and the
+    /// landing, for screenshots and checks a headless run can make — and,
+    /// with `x10`, a swipe bench whose every turn logs its `PageTurnTrace`.
     private func consumePageHook() async {
         guard let raw = ProcessInfo.processInfo.environment["LL_PAGE"] else { return }
-        let parts = raw.split(separator: "@", maxSplits: 1).map(String.init)
+        var spec = raw
+        var turns = 1
+        if let x = spec.lastIndex(of: "x"), let count = Int(spec[spec.index(after: x)...]) {
+            turns = max(1, count)
+            spec = String(spec[..<x])
+        }
+        let parts = spec.split(separator: "@", maxSplits: 1).map(String.init)
         let delta = parts[0] == "previous" ? -1 : 1
         let delay = parts.count > 1 ? (Double(parts[1]) ?? 2) : 2
-        try? await Task.sleep(for: .seconds(delay))
-        guard !Task.isCancelled, transition == nil, let target = neighbourID(delta),
-              containerWidth > 0 else { return }
-        let width = containerWidth
-        withAnimation(.easeOut(duration: 0.22)) {
-            drag = CGSize(width: delta > 0 ? -width : width, height: 0)
-        } completion: {
-            beginMove(to: target)
+        for _ in 0..<turns {
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, transition == nil, let target = neighbourID(delta),
+                  containerWidth > 0 else { return }
+            let width = containerWidth
+            lastDirection = delta
+            beginTrace(to: target)
+            withAnimation(.easeOut(duration: 0.22)) {
+                drag = CGSize(width: delta > 0 ? -width : width, height: 0)
+            } completion: {
+                beginMove(to: target)
+            }
         }
     }
     #endif
+
+    // MARK: - Look-ahead
+
+    /// Makes the neighbours' opening pictures, the way the last page turned
+    /// first, one at a time on the look-ahead lane (below every render a
+    /// person is waiting on): a still's graded opening render, a preview's
+    /// decoded picture. What is kept is only ever the pages either side; a
+    /// movie keeps the grid's thumbnail as its poster.
+    private func startLookAhead() {
+        lookAheadTask?.cancel()
+        let ids = [neighbourID(lastDirection), neighbourID(-lastDirection)].compactMap { $0 }
+        // A movie's asset is opened ahead too (its page mounts a player;
+        // the grid's thumbnail stays its poster).
+        for id in ids {
+            guard let capture = model.capture(id: id), case .movie(let url) = model.editorAsset(for: capture) else { continue }
+            Task { await VideoAssetCache.prepare(url) }
+        }
+        lookAhead = lookAhead.filter { ids.contains($0.key) }
+        let jobs: [(id: UUID, work: EditorLookAheadJob)] = ids
+            .filter { lookAhead[$0] == nil }
+            .compactMap { id in model.capture(id: id).flatMap(model.editorLookAheadJob(for:)).map { (id, $0) } }
+        guard !jobs.isEmpty else { return }
+        lookAheadTask = Task {
+            for job in jobs {
+                let started = CACurrentMediaTime()
+                let made = await MediaWorkQueue.lookAhead.run { job.work.make() }
+                guard !Task.isCancelled else { return }
+                if let made, let picture = made {
+                    lookAhead[job.id] = picture
+                    LLog("pager: look-ahead made \(model.capture(id: job.id)?.displayTitle ?? "?") in \(Int(((CACurrentMediaTime() - started) * 1000).rounded())) ms")
+                }
+            }
+        }
+    }
+
+    // MARK: - The turn's trace
+
+    /// A swipe was let go toward `target`: its trace opens, and the main
+    /// thread's frame gaps are watched until the new picture is up.
+    private func beginTrace(to target: UUID) {
+        PageTurnTrace.begin(model.capture(id: target)?.displayTitle ?? target.uuidString)
+        stallProbe.start()
+    }
+
+    /// What arrived, in a word or two — what the turn's time is read against.
+    private static func traceKind(_ capture: AppModel.CaptureProject, asset: EditorAsset) -> String {
+        let type = asset.url.pathExtension.uppercased()
+        switch asset {
+        case .preview: return "preview"
+        case .movie: return "video \(type)"
+        case .still:
+            if capture.isPhotoCapture { return "photo \(type)" }
+            return "interval \(capture.sourceFileNames.count) frames \(type)"
+        }
+    }
 
     // MARK: - Posters
 
     private func poster(for id: UUID) -> Poster {
         let capture = model.capture(id: id)
-        let grade = capture.map(model.photoGrade(for:))
+        let url = capture.flatMap(model.thumbnailURL(for:))
+        // A preview's `poster.jpg` is a finished, already-graded picture —
+        // the tile's rule (`ProjectThumbnailView.isPoster`): decoded as the
+        // image it is and never graded a second time (it was, 2026-09-25).
+        let isPoster = url?.lastPathComponent == ProjectFileRegistry.posterName
+        let grade = isPoster ? nil : capture.map(model.photoGrade(for:))
         return Poster(
             id: id,
-            url: capture.flatMap(model.thumbnailURL(for:)),
-            kind: capture.map(model.mediaKind(for:)) ?? .image,
-            grade: grade.flatMap { $0.isIdentity ? nil : $0 })
+            url: url,
+            kind: isPoster ? .image : (capture.map(model.mediaKind(for:)) ?? .image),
+            grade: grade.flatMap { $0.isIdentity ? nil : $0 },
+            picture: lookAhead[id])
     }
 
     /// A poster fitted where the editor's picture is — the pane the editor
@@ -406,7 +536,7 @@ struct EditorPager: View {
     @ViewBuilder private func posterView(_ poster: Poster) -> some View {
         if let frame = pagingState?.paneFrame, frame.width > 0, frame.height > 0 {
             EditorPosterImage(
-                url: poster.url, kind: poster.kind, grade: poster.grade,
+                url: poster.url, kind: poster.kind, grade: poster.grade, picture: poster.picture,
                 alignment: pagingState?.anchor == .top ? .top : .center)
                 .frame(width: frame.width, height: frame.height)
                 .position(x: frame.midX, y: frame.midY)
@@ -459,12 +589,64 @@ struct EditorPager: View {
     }
 }
 
+/// Frame gaps on the main thread while a page turns: a display link that
+/// notes how late each frame was. `stop()` answers with the longest gap and
+/// how many frames were over 50 ms — the stalls a swipe feels.
+@MainActor final class MainThreadStallProbe: NSObject {
+    private var link: CADisplayLink?
+    private var last: CFTimeInterval = 0
+    private var longest: CFTimeInterval = 0
+    /// When the longest gap began — so the trace can say which phase it
+    /// fell in.
+    private var longestFrom: CFTimeInterval = 0
+    private var late = 0
+
+    func start() {
+        _ = stop()
+        let link = CADisplayLink(target: self, selector: #selector(tick(_:)))
+        // A steady rate whatever the screen is doing: the system slows an
+        // idle link (nothing animating between the slide and the picture),
+        // and a slowed link reads as a stall that never happened.
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        if last > 0 {
+            let gap = link.timestamp - last
+            if gap > longest {
+                longest = gap
+                longestFrom = last
+            }
+            if gap > 0.05 { late += 1 }
+        }
+        last = link.timestamp
+    }
+
+    /// Stops watching; nil when it was not.
+    func stop() -> String? {
+        guard let link else { return nil }
+        link.invalidate()
+        self.link = nil
+        var summary = "longest stall \(Int((longest * 1000).rounded())) ms, \(late) frame(s) over 50 ms"
+        if longest > 0.05, let phase = PageTurnTrace.phase(at: longestFrom) { summary += " (from \(phase))" }
+        last = 0
+        longest = 0
+        longestFrom = 0
+        late = 0
+        return summary
+    }
+}
+
 /// The poster's picture: the grid's thumbnail (already decoded for the tile
 /// that was just tapped, or its neighbours), fitted, on black.
 private struct EditorPosterImage: View {
     var url: URL?
     var kind: AppModel.MediaKind
     var grade: PhotoGrade?
+    /// The editor's own opening picture, when the look-ahead made it.
+    var picture: CGImage? = nil
     /// Where the picture rests in the pane — the editor's anchor.
     var alignment: Alignment
     @State private var image: Image?
@@ -472,14 +654,18 @@ private struct EditorPosterImage: View {
     var body: some View {
         ZStack(alignment: alignment) {
             Color.black
-            if let image {
+            if let picture {
+                Image(decorative: picture, scale: 1)
+                    .resizable()
+                    .scaledToFit()
+            } else if let image {
                 image
                     .resizable()
                     .scaledToFit()
             }
         }
         .task(id: "\(url?.path ?? "-")|\(grade?.cacheToken ?? "-")") {
-            guard let url else { return }
+            guard picture == nil, let url else { return }
             if let loaded = await ProjectThumbnailCache.shared.thumbnail(for: url, kind: kind, grade: grade) {
                 image = loaded
             }

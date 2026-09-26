@@ -75,6 +75,45 @@ What it buys: lock the phone, pocket it, and the upload keeps going for as
 long as iOS allows, with its progress on the Lock Screen. What it doesn't:
 a guarantee. Measure it (§6) before deciding how much of Stage 2 is urgent.
 
+**Built 2026-09-25 — and the first build crashed every launch on the iPad
+(iPadOS 26.6.2) and would have on the 16 Pro.** The rules it broke, now in
+`PicPlaceContinuedTransfer` (`App/PicPlace/PicPlaceTransfer.swift`):
+
+- **One handler for the wildcard is refused by design.** The wildcard in
+  `BGTaskSchedulerPermittedIdentifiers` (`com.regularsteven.letslapse.transfer.*`)
+  only *permits* identifiers made at run time. Each request registers a
+  handler for **its own identifier** just before it is submitted (Apple DTS,
+  developer forums thread 799126; Apple's guide *Performing long-running
+  tasks on iOS and iPadOS* registers the unique `taskIdentifier`). The first
+  build registered `…transfer.*` once at launch: `register` returned false.
+- **A request with no handler is not an error `submit` returns.**
+  BackgroundTasks asserts
+  (`-[BGTaskScheduler _handleSubmissionWithoutRegistrationForTaskRequest:error:]`,
+  `NSInternalInconsistencyException`) and the app aborts. So: no registration,
+  no request — `begin` returns nil and the transfer keeps the thirty seconds.
+- **Only for a press.** Apple: the request is made *"in response to someone's
+  action, such as tapping a button"*, from the foreground. The upload job
+  that was waiting resumed at launch and asked: that is what turned one crash
+  into a crash at every launch. Now `startUploadJob(_:reason:pressed:)`:
+  Upload, Resume and *Use mobile data* ask; launch, network, retry and
+  follow-up resumes never do.
+- `UIBackgroundModes` → `processing` (Background processing) is declared.
+- iOS 27 deprecates `submit(_:)` for `submitTaskRequest(_:completionHandler:)`
+  (async form `try await submitTaskRequest(_:)`), which reports every refusal
+  and must not be called on the main thread. Used there, off the main actor.
+- Device check without a transfer: `LL_CONTINUED_PROBE=<seconds>` (DEBUG) runs
+  the transfers' own activity with a continued task and nothing behind it.
+- Verified on devices 2026-09-25: the probe on the iPad (iPadOS 26.6.2) and
+  the 18 Pro (iOS 27.0, the `submitTaskRequest` path); Steven's own presses —
+  Resume on the 18 Pro (6 GB), Upload on the 16 Pro (9.69 GB, *"carried on by
+  the continued task"* once the app left the screen).
+- **Owed:** a Resume pressed while the run is still stopping between files
+  is started by `followUpUploadJob` once the task clears — with
+  `pressed: false`, so it gets no continued task. Carry the press through
+  (remember it in `resumeUpload` when `syncTasks[id] != nil`, consume it in
+  the follow-up). And a job the app resumed on its own (a relaunch) holds
+  the app only after Pause → Resume.
+
 ### Stage 2 — the daemon does the PUTs (the durable one, medium)
 
 - **One background session per library**, identifier

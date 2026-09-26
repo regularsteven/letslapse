@@ -43,6 +43,13 @@ struct GalleryItemEditor: View {
                 VideoEditorView(
                     captureID: focus.captureID, url: url,
                     exitRequest: exitRequest, onExit: onExit, paging: paging)
+            case .preview:
+                // The picture is not on this device: the editor's page,
+                // greyed, over the preview — and the editor itself once the
+                // originals come (EditorPreviewPage.swift).
+                EditorPreviewPage(
+                    captureID: focus.captureID,
+                    exitRequest: exitRequest, onExit: onExit, paging: paging)
             }
         }
         .id(focus.captureID)
@@ -104,6 +111,13 @@ struct GalleryFilmstrip: View {
             cornerRadius: Self.tileCornerRadius,
             grade: grade.isIdentity ? nil : grade)
             .frame(width: Self.tileHeight * 4 / 3, height: Self.tileHeight)
+            // What this Mac holds of it | PicPlace — the grid tile's pill,
+            // smaller.
+            .overlay(alignment: .bottomTrailing) {
+                HoldingsPill(captureID: capture.id)
+                    .scaleEffect(0.8, anchor: .bottomTrailing)
+                    .padding(3)
+            }
             .overlay {
                 if isFocused {
                     shape.strokeBorder(LL.accent, lineWidth: 2.5)

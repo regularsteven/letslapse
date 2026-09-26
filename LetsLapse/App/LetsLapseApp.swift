@@ -344,6 +344,20 @@ struct LetsLapseApp: App {
         }
         .defaultSize(width: 1000, height: 700)
 
+        // A project whose picture is not on this Mac: the editor's preview
+        // page, greyed, in the photo editor's window (2026-09-25) — its
+        // originals arrive, and the page becomes the editor in place.
+        WindowGroup(for: PreviewEditorWindowRequest.self) { $request in
+            if let request {
+                EditorPreviewPage(captureID: request.captureID)
+                .environmentObject(model)
+            .environmentObject(model.processingProgress)
+                .navigationTitle(request.title)
+                .frame(minWidth: 720, minHeight: 480)
+            }
+        }
+        .defaultSize(width: 1000, height: 700)
+
         // The video editor gets the same window treatment as the photo
         // editor: free resizing, one window per movie, reopen fronts it.
         WindowGroup(for: VideoEditorWindowRequest.self) { $request in
@@ -787,7 +801,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -1177,6 +1191,16 @@ struct ContentView: View {
                 LLog("LL_ROTATE turned \(capture.id.uuidString.prefix(8)) \(turns)× — quarterTurns now \(model.capture(id: capture.id)?.quarterTurns ?? 0)")
             }
         }
+        // LL_DROP_SOURCES=<latest|uuid>[:originals|blends|all] — a genuine
+        // preview-only project with no server (scratch roots and the
+        // Simulator only; `AppModel.debugDropSources`): the poster rendered,
+        // the heavy files deleted, the records kept. Run it in one launch
+        // and look in the next (docs/connected-asset-states-plan.md §7).
+        if let raw = environment["LL_DROP_SOURCES"], !raw.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                Task { await model.debugDropSources(raw) }
+            }
+        }
         // LL_EXPORT_ARCHIVE=latest|<capture-uuid> — writes that project's
         // `.lapse` to the temporary directory and logs the path, so a round
         // trip (export → LL_IMPORT_ARCHIVE) needs no Share sheet.
@@ -1454,6 +1478,17 @@ struct ContentView: View {
                 model.blendCanvasRatio = ratio
             }
         }
+        #if os(iOS)
+        // LL_CONTINUED_PROBE=<seconds> — a continued task with no transfer
+        // behind it, three seconds after launch: register → submit → launch
+        // → progress → end on a real device, nothing sent (2026-09-25).
+        if let raw = environment["LL_CONTINUED_PROBE"], let seconds = Int(raw), #available(iOS 26.0, *) {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                await PicPlaceBackgroundActivity.runProbe(seconds: seconds)
+            }
+        }
+        #endif
         // LL_COLLECTIONS=seed|list|detail|kenburns — bring the tab front; seed
         // demo collections from existing video blends (no-op without any);
         // detail additionally opens the first collection's timeline, kenburns
@@ -1468,6 +1503,17 @@ struct ContentView: View {
                     model.setKenBurnsEnabled(true, for: first.id)
                 }
                 collectionsPath = [first.id]
+            }
+            // `still` (D4): a "Still test" collection — a video blend and a
+            // still made from the newest photo — opened on its timeline.
+            if hook == "still" || hook == "still-kb" {
+                Task { @MainActor in
+                    await model.debugSeedStillCollection()
+                    if let made = model.collections.first(where: { $0.name == "Still test" }) {
+                        if hook == "still-kb" { model.setKenBurnsEnabled(true, for: made.id) }
+                        collectionsPath = [made.id]
+                    }
+                }
             }
         }
         // LL_IMPORT=checking|extracting|installing|duplicate|failed — freeze the project

@@ -18,6 +18,10 @@ struct EditorTabPill: View {
     var tabs: [RailTab]
     /// `LL.amber` on the dark editors.
     var accent: Color
+    /// Pages drawn greyed in place — they need the originals, which are not
+    /// on this device (`EditorPreviewPage`). A tap still reaches the
+    /// selection, whose owner asks whether to fetch them.
+    var locked: Set<RailTab> = []
 
     var body: some View {
         HStack(spacing: 2) {
@@ -44,7 +48,7 @@ struct EditorTabPill: View {
         } label: {
             Text(tab.rawValue)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(selected ? Color.black : accent)
+                .foregroundStyle(selected ? Color.black : locked.contains(tab) ? accent.opacity(0.38) : accent)
                 .padding(.vertical, 5)
                 .padding(.horizontal, 12)
                 .background(
@@ -55,6 +59,7 @@ struct EditorTabPill: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .accessibilityLabel("\(tab.rawValue) controls")
+        .accessibilityHint(locked.contains(tab) ? "Needs the originals" : "")
     }
 }
 

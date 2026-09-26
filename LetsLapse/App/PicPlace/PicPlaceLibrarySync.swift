@@ -401,6 +401,7 @@ extension PicPlaceController {
                 heavyFiles: heavy.count, heavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) },
                 serverHeavyFiles: heavy.count, serverHeavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) },
                 serverConfirmedSeen: assets.count)
+            records[originID]?.serverSourceFiles = heavy.filter { PicPlaceSyncInventory.heavyKind($0.name) == .source }.count
             saveSyncState()
             let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": row.revision, "tier": "preview"])
             LLog("picplace: pulled \(capture.displayTitle) (\(uuid.prefix(8))) — \(files) object(s), \(bytes) bytes; \(heavy.count) heavy file(s) stay on PicPlace")

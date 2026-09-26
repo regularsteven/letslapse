@@ -55,7 +55,12 @@ struct ProjectDetailView: View {
     @State private var isPurging = false
     @State private var isRotating = false
     @State private var rotateFailure: String?
+    /// A control tapped while what it needs is on PicPlace (FetchPrompt.swift).
+    @State private var fetchRequest: FetchPromptRequest?
     @State private var isBrowsingOriginals = false
+    /// The editor's preview page over a project whose picture is on
+    /// PicPlace (iOS; a window on the Mac).
+    @State private var previewPage: GradingPhoto?
     /// The framing review, presented as a sheet on iOS (a window on macOS —
     /// `FramingReviewWindowRequest`).
     @State private var framingReviewRequest: FramingReviewRequest?
@@ -119,6 +124,10 @@ struct ProjectDetailView: View {
         }
         .fullScreenCover(item: $editingVideo) { video in
             VideoEditorView(captureID: captureID, url: video.url)
+                .environmentObject(model)
+        }
+        .fullScreenCover(item: $previewPage) { _ in
+            EditorPreviewPage(captureID: captureID)
                 .environmentObject(model)
         }
         #endif
@@ -195,6 +204,7 @@ struct ProjectDetailView: View {
         } message: {
             Text(exportFailure ?? "")
         }
+        .fetchPrompt($fetchRequest)
         .alert(
             "Couldn't rotate",
             isPresented: Binding(
@@ -451,14 +461,17 @@ struct ProjectDetailView: View {
                     }
                     #endif
                     Button {
-                        exportArchive(capture)
+                        // A `.lapse` carries every file: the originals and the
+                        // blends must be here (it ended on an alert).
+                        ask(.exportProject, "Sharing the project", for: capture) { exportArchive(capture) }
                     } label: {
                         Label("Share project", systemImage: "square.and.arrow.up")
                     }
                     .disabled(isExportingArchive)
                     if model.canArchiveAsDNG(capture) {
                         Button {
-                            showingDNGArchive = true
+                            // The archive is written from the original DNGs.
+                            ask(.frames, "A DNG archive", for: capture) { showingDNGArchive = true }
                         } label: {
                             Label("Duplicate as DNG archive…", systemImage: "doc.zipper")
                         }
@@ -574,6 +587,7 @@ struct ProjectDetailView: View {
             onOpenViewer: { url in previewGradedPhoto(capture, url: url) },
             onPlay: { playOriginal(capture) },
             onEditVideo: { url in editVideo(capture, url: url) },
+            onOpenPreview: { openPreviewPage(capture) },
             // Interval only: the shoot has frames to play as motion, so its
             // hero leads with Play and keeps the editor as a second affordance.
             // Photo has one still and video has a movie — neither has a
@@ -617,31 +631,32 @@ struct ProjectDetailView: View {
     @ViewBuilder
     private func makeSection(for capture: AppModel.CaptureProject) -> some View {
         VStack(spacing: 8) {
+            let blendable = model.isAvailable(.newBlend, for: capture)
             Button {
-                model.openCapture(capture)
+                // A new clip blends from the originals (rule 1): on PicPlace
+                // only, the tap asks to fetch them — greyed in place, never a
+                // button that swallows the tap (2026-09-25).
+                ask(.newBlend, "A new blended clip", for: capture) { model.openCapture(capture) }
             } label: {
                 Label("New blended clip", systemImage: "plus")
             }
             .buttonStyle(LLPrimaryButtonStyle())
-            // A new clip blends from the originals: on PicPlace only, the
-            // button waits for the download rather than failing on open (the
-            // style draws no disabled state of its own).
-            .disabled(model.sourcesMissing(capture))
-            .opacity(model.sourcesMissing(capture) ? 0.4 : 1)
+            .opacity(blendable ? 1 : 0.4)
 
             // A side-step into the SAME flow: a survey that authors the warp +
             // reframe as states and transitions instead of a timeline. It must
             // never displace the primary button above.
             if capture.kind == .video {
                 Button {
-                    model.openCapture(capture)
-                    model.guidedBuilderFocused = true
+                    ask(.newBlend, "A guided clip", for: capture) {
+                        model.openCapture(capture)
+                        model.guidedBuilderFocused = true
+                    }
                 } label: {
                     Label("Guided clip", systemImage: "wand.and.stars")
                 }
                 .buttonStyle(LLSecondaryButtonStyle())
-                .disabled(model.sourcesMissing(capture))
-                .opacity(model.sourcesMissing(capture) ? 0.4 : 1)
+                .opacity(blendable ? 1 : 0.4)
             }
         }
     }
@@ -669,10 +684,12 @@ struct ProjectDetailView: View {
             }
         } else if capture.kind == .video {
             let clipNames = model.sourceClipNames(for: capture)
-            // Clips on PicPlace, not here: their rows would draw nothing
-            // under the header; the PICPLACE card says where they are.
             if !clipNames.isEmpty, !model.sourcesMissing(capture) {
                 sourceClipsSection(for: capture, clipNames: clipNames)
+            } else if !clipNames.isEmpty {
+                // Clips on PicPlace, not here: the section stays (one UI)
+                // with one row that says where they are and fetches them.
+                missingClipsSection(for: capture, count: clipNames.count)
             }
         } else {
             // Interval frames are stacking material, not clips — one compact
@@ -705,6 +722,27 @@ struct ProjectDetailView: View {
     /// nominated as bad.
     private func heroMediaURL(for capture: AppModel.CaptureProject) -> URL? {
         model.thumbnailURL(for: capture)
+    }
+
+    /// A video's clips when they are not on this device: the section's
+    /// header, and a row that asks to bring them down.
+    private func missingClipsSection(for capture: AppModel.CaptureProject, count: Int) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            LLSectionHeader(count == 1 ? "Source Clip" : "Source Clips · \(count)")
+            Button {
+                ask(.frames, "The source clips", for: capture) {}
+            } label: {
+                LLRow(title: count == 1 ? "The clip isn't on \(PicPlaceController.deviceWord)" : "The clips aren't on \(PicPlaceController.deviceWord)",
+                      subtitle: "Tap to download them", showsDivider: false) {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(LL.accent)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .llCard()
+        }
     }
 
     private func sourceClipsSection(for capture: AppModel.CaptureProject, clipNames: [String]) -> some View {
@@ -794,7 +832,10 @@ struct ProjectDetailView: View {
                 }
 
                 Button {
-                    isBrowsingOriginals = true
+                    // A grid of grey placeholders without the frames: ask.
+                    ask(.frames, isBurst ? "View all frames" : "View all photos", for: capture) {
+                        isBrowsingOriginals = true
+                    }
                 } label: {
                     LLRow(title: isBurst ? "View all frames" : "View all photos", showsDivider: false) {
                         Image(systemName: "chevron.right")
@@ -838,7 +879,13 @@ struct ProjectDetailView: View {
 
         LLRow(title: "Review photos", subtitle: reviewSubtitle(review: review, measuring: measuring, captureID: capture.id)) {
             Button(measuring ? "Open" : (review == nil ? "Review" : "Report")) {
-                presentReview(for: capture)
+                // Measuring reads every photo; a report already made is
+                // records only and opens anywhere.
+                if review == nil, !measuring {
+                    ask(.frames, "Reviewing the photos", for: capture) { presentReview(for: capture) }
+                } else {
+                    presentReview(for: capture)
+                }
             }
             .font(.system(size: 12.5, weight: .semibold))
             .foregroundStyle(LL.accent)
@@ -919,7 +966,7 @@ struct ProjectDetailView: View {
                 .foregroundStyle(.secondary)
         case .idle, .failed:
             Button(originalsSaveState == .idle ? "Save all to Photos" : "Retry") {
-                saveOriginals(capture)
+                ask(.frames, "Saving to Photos", for: capture) { saveOriginals(capture) }
             }
             .font(.system(size: 12.5, weight: .semibold))
             .foregroundStyle(LL.accent)
@@ -939,12 +986,14 @@ struct ProjectDetailView: View {
         BlendedClipRow(
             blend: blend,
             model: model,
-            onPlay: { previewVersion(blend, in: capture) },
-            onOpen: { model.openBlend(blend) }
+            // Playing needs this blend's file; opening its result screen
+            // re-reads the originals. Either asks when they are on PicPlace.
+            onPlay: { ask(.blend(blend.id), "Playing the clip", for: capture) { previewVersion(blend, in: capture) } },
+            onOpen: { ask(.newBlend, "Opening the clip", for: capture) { model.openBlend(blend) } }
         )
         .contextMenu {
             Button {
-                model.openBlend(blend)
+                ask(.newBlend, "Opening the clip", for: capture) { model.openBlend(blend) }
             } label: {
                 Label("Open", systemImage: "arrow.up.forward.app")
             }
@@ -952,8 +1001,10 @@ struct ProjectDetailView: View {
             // the settings-based "New blended clip" path stays off for them.
             if model.capture(for: blend)?.isPhotoCapture != true {
                 Button {
-                    model.openBlend(blend)
-                    model.stage = .configure
+                    ask(.newBlend, "A new blended clip", for: capture) {
+                        model.openBlend(blend)
+                        model.stage = .configure
+                    }
                 } label: {
                     Label("New blended clip from these settings", systemImage: "slider.horizontal.3")
                 }
@@ -962,16 +1013,18 @@ struct ProjectDetailView: View {
             // has no place on a timeline, so no menu for it.
             if blend.kind == .video {
                 Menu {
+                    // A collection is made of blends (rule 4): the clip's
+                    // file has to be here to join one.
                     ForEach(model.collections) { collection in
                         Button("\(collection.name) · \(collection.clipCountLabel)") {
-                            addToCollection(blend, collection)
+                            ask(.blend(blend.id), "Adding to a collection", for: capture) { addToCollection(blend, collection) }
                         }
                     }
                     if !model.collections.isEmpty {
                         Divider()
                     }
                     Button {
-                        newCollectionWith(blend)
+                        ask(.blend(blend.id), "A new collection", for: capture) { newCollectionWith(blend) }
                     } label: {
                         Label("New collection…", systemImage: "plus")
                     }
@@ -1243,17 +1296,20 @@ struct ProjectDetailView: View {
     }
 
     private func originalBadge(for capture: AppModel.CaptureProject) -> String {
+        // The hero of a project whose picture is not here is its preview,
+        // and says so — it read ORIGINAL over the poster (2026-09-25).
+        let noun = model.isAvailable(.pixelEdit, for: capture) ? "ORIGINAL" : "PREVIEW"
         // One photo, one badge — never a frame count.
         if capture.isPhotoCapture {
-            return "PHOTO"
+            return noun == "PREVIEW" ? "PHOTO · PREVIEW" : "PHOTO"
         }
         if capture.kind == .photos {
-            return "ORIGINAL · \(model.effectiveFrameCount(for: capture)) photos"
+            return "\(noun) · \(model.effectiveFrameCount(for: capture)) photos"
         }
         if let duration = capture.sourceDurationSeconds {
-            return "ORIGINAL · \(DurationFormatter.recordingTime(from: duration))"
+            return "\(noun) · \(DurationFormatter.recordingTime(from: duration))"
         }
-        return "ORIGINAL"
+        return noun
     }
 
     private func formatBadge(for capture: AppModel.CaptureProject) -> String? {
@@ -1376,6 +1432,24 @@ struct ProjectDetailView: View {
         #endif
     }
 
+    /// The editor's preview page for a project whose picture is not here —
+    /// a cover on iOS, a window on the Mac (EditorPreviewPage.swift).
+    private func openPreviewPage(_ capture: AppModel.CaptureProject) {
+        #if os(macOS)
+        openWindow(value: PreviewEditorWindowRequest(captureID: capture.id, title: capture.displayTitle))
+        #else
+        previewPage = GradingPhoto(url: model.projectFolderURL(for: capture))
+        #endif
+    }
+
+    /// A control that needs files this device may not hold: `action` when
+    /// they are here, else the question — and `action` once they arrive
+    /// (FetchPrompt.swift). Never a disabled control that swallows the tap.
+    private func ask(_ capability: ProjectCapability, _ subject: String,
+                     for capture: AppModel.CaptureProject, then action: @escaping () -> Void) {
+        fetchRequest = model.request(capability, for: capture, subject: subject, then: action)
+    }
+
     /// Opens the grading viewer: the photo at size, rendered through its
     /// current grade, with the preset strip and the adjustment sliders.
     /// A full-screen cover on iOS/iPadOS; a freely resizable window on macOS.
@@ -1495,6 +1569,12 @@ struct ProjectDetailView: View {
 
     private func rotateProject() {
         guard let capture else { return }
+        // A turn is a pixel edit (plan T2): the poster and the look are
+        // rendered again from the source, which may be on PicPlace only.
+        guard model.isAvailable(.pixelEdit, for: capture) else {
+            fetchRequest = model.request(.pixelEdit, for: capture, subject: "Rotate 90°") { rotateProject() }
+            return
+        }
         // A record now (2026-09-24): instant, no file is touched.
         do {
             try model.rotateProject(capture)
@@ -1595,6 +1675,10 @@ private struct ProjectHeroPane: View {
     /// Video: open the video editor on this movie — the player beside the
     /// grading controls, the video sibling of `onOpenViewer`.
     var onEditVideo: (URL) -> Void
+    /// A project whose picture is not on this device: its Edit pill opens
+    /// the editor's preview page (greyed in place) — the same door, only
+    /// less it can do (2026-09-25).
+    var onOpenPreview: (() -> Void)? = nil
     /// Interval: play the shoot as motion from its frames. When this is set the
     /// hero shows two affordances — Play in the middle, Edit below it — because
     /// an interval project has both a sequence to watch and a frame to grade.
@@ -1775,8 +1859,13 @@ private struct ProjectHeroPane: View {
                 editPill { onOpenViewer(url) }
             case .movie(let url):
                 editPill { onEditVideo(url) }
-            case nil:
-                EmptyView()
+            case .preview, nil:
+                // `editorAsset` never answers a preview: the hero draws the
+                // poster, and its Edit pill opens the preview page — the
+                // editor greyed in place — when there is a picture to show.
+                if preview == nil, poster != nil, let onOpenPreview {
+                    editPill(action: onOpenPreview)
+                }
             }
         }
         .overlay(alignment: .topLeading) {
@@ -1830,6 +1919,8 @@ private struct ProjectHeroPane: View {
                     systemImage: "arrow.up.left.and.arrow.down.right",
                     label: "View photo") { onOpenViewer(url) }
             }
+        case .preview:
+            EmptyView()
         }
     }
 
@@ -1877,6 +1968,9 @@ private struct ProjectHeroPane: View {
                     whiteBalance: grade.whiteBalance, maxDimension: 1400)
             case .movie(let url):
                 return VideoGrader.gradedFrame(at: url, grade: grade, maxDimension: 1400)
+            case .preview:
+                // A poster is already graded; the hero shows it as it is.
+                return nil
             }
         }
         // Ignore a nil render (missing file, or the view went away mid-decode)
@@ -1902,6 +1996,8 @@ private struct PresetStripSection: View {
     /// A chip tap held back for confirmation, because applying it from Edited
     /// would throw the project's manual adjustments away.
     @State private var pendingApply: PresetApplyRequest?
+    /// A chip tapped while the originals are elsewhere (FetchPrompt.swift).
+    @State private var fetchRequest: FetchPromptRequest?
 
     private var capture: AppModel.CaptureProject? {
         model.capture(id: captureID)
@@ -1913,7 +2009,11 @@ private struct PresetStripSection: View {
             VStack(alignment: .leading, spacing: 10) {
                 stateRow(state: state)
                 presetStrip(capture: capture, state: state)
+                    // Greyed in place without the originals: a preset is a
+                    // pixel edit (rule 6), and a tap asks for them.
+                    .opacity(model.isAvailable(.pixelEdit, for: capture) ? 1 : 0.45)
             }
+            .fetchPrompt($fetchRequest)
             .alert(item: $pendingApply) { request in
                 Alert(
                     title: Text(request.confirmationTitle),
@@ -1987,6 +2087,15 @@ private struct PresetStripSection: View {
         for capture: AppModel.CaptureProject,
         state: PresetState
     ) {
+        // Without the originals the look cannot be rendered: ask for them,
+        // and apply the chip once they are here.
+        guard model.isAvailable(.pixelEdit, for: capture) else {
+            fetchRequest = model.request(.pixelEdit, for: capture, subject: "Presets") {
+                guard let fresh = model.capture(id: capture.id) else { return }
+                self.request(target, for: fresh, state: model.presetState(for: fresh))
+            }
+            return
+        }
         // From here there is no playhead to aim at, so a chip really does
         // flatten a keyframed grade — say how much of one.
         let request = PresetApplyRequest(

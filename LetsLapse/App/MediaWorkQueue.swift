@@ -41,6 +41,12 @@ final class MediaWorkQueue {
     /// `shared` can never queue-block a slider.
     static let grading = MediaWorkQueue(width: 1)
 
+    /// Pictures made ahead of need — the editor pager's neighbours
+    /// (`EditorLookAhead`): one at a time, below everything a person is
+    /// waiting on, and off `grading`, so a slider never queues behind a page
+    /// nobody has turned to yet.
+    static let lookAhead = MediaWorkQueue(width: 1, qualityOfService: .utility)
+
     private static let log = Logger(subsystem: "com.regularsteven.letslapse", category: "media")
 
     /// One place to record why a tile or a size stayed empty.
@@ -61,13 +67,13 @@ final class MediaWorkQueue {
 
     private let queue = OperationQueue()
 
-    init(width: Int? = nil) {
+    init(width: Int? = nil, qualityOfService: QualityOfService = .userInitiated) {
         // Wide enough to keep a grid filling briskly, narrow enough that
         // several full-sensor RAW decodes can't pile their intermediates up
         // into a memory warning.
         queue.maxConcurrentOperationCount = width
             ?? max(2, min(4, ProcessInfo.processInfo.activeProcessorCount / 2))
-        queue.qualityOfService = .userInitiated
+        queue.qualityOfService = qualityOfService
         queue.name = "com.letslapse.media-io"
     }
 

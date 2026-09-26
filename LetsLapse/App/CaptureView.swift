@@ -4399,13 +4399,12 @@ struct CaptureView: View {
     /// The tile: the newest project's editor over the camera (2026-09-21),
     /// with the library behind it in the Gallery's own order, so a swipe
     /// walks back through what was shot. Back returns to the viewfinder. On
-    /// the Mac — and for a project with nothing to open — the Gallery.
+    /// the Mac — and with an empty library — the Gallery.
     private func openRecent() {
         #if os(iOS)
         let ids = model.liveProjectIDs(ProjectListQuery(
             sort: .capture, ascending: false, filter: .all, query: .empty, listsScans: false).indexQuery)
-        if let first = ids.first, let capture = model.capture(id: first),
-           model.editorAsset(for: capture) != nil {
+        if let first = ids.first, model.capture(id: first) != nil {
             withAnimation(.easeInOut(duration: 0.2)) {
                 recentPager = EditorPagerRequest(ids: ids, current: first)
             }

@@ -16,6 +16,10 @@ struct PicPlaceLibrarySettings: Codable, Equatable {
         /// Off by default, always: a 431 GB library must not start uploading
         /// the moment it connects.
         var autoOriginals = false
+        /// *Upload blends automatically* (D1, Steven 2026-09-25): a blend is
+        /// the portable unit and travels as it is rendered. On unless the
+        /// person switched it off — nil in a file written before it existed.
+        var autoBlends: Bool? = nil
     }
 
     static let format = 1

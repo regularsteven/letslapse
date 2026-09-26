@@ -27,10 +27,30 @@ struct PicPlaceDownloadRun {
     /// Files fetched even when one of the listed size is here — copies that
     /// differ from PicPlace's, being replaced by them (the card's Replace).
     var replacing: Set<String> = []
+    /// Only these files, by project-relative name — one blend a collection
+    /// or a play needs rather than every blend of the project (2026-09-25).
+    /// nil: the whole of `kinds`.
+    var only: Set<String>? = nil
     /// Where each landed file's hash is recorded (`assets.ndjson`), so the
     /// next push or free-up check trusts it without reading it again.
     var assetStore: AssetRecordStore? = nil
     let progress: @MainActor (PicPlaceSyncProgress) -> Void
+
+    /// PicPlace holds none of what the download asked for. Nothing failed
+    /// on this device, so it is not a failure on the project's record —
+    /// four refused Downloads of a blend never uploaded left *Victory Bridge
+    /// Sunset* marked failed on the 18 Pro (2026-09-26).
+    struct NotThere: LocalizedError {
+        static let oneBlend = "PicPlace doesn't hold this blend yet."
+        static let someBlends = "PicPlace doesn't hold these blends yet."
+        static let noBlends = "PicPlace holds no blends for this project."
+        static let noOriginals = "PicPlace holds no originals for this project."
+        /// Every caption — how a failure recorded before this type is known.
+        static let captions: Set<String> = [oneBlend, someBlends, noBlends, noOriginals]
+
+        let caption: String
+        var errorDescription: String? { caption }
+    }
 
     private static let pageSize = 100
     private static let concurrentDownloads = 4
@@ -58,9 +78,11 @@ struct PicPlaceDownloadRun {
         // the sidecars under source/ as `source`, and they are not originals.
         let wanted = (detail.assets ?? [])
             .filter { $0.status == "confirmed" && PicPlaceSyncInventory.heavyKind($0.name).map(kinds.contains) == true }
+            .filter { only?.contains($0.name) ?? true }
             .map { Item(id: $0.id, name: $0.name, bytes: $0.bytes ?? 0, sha256: $0.sha256) }
         guard !wanted.isEmpty else {
-            throw PicPlaceSyncRun.Failed(caption: kinds == [.blend] ? "PicPlace holds no blends for this project." : "PicPlace holds no originals for this project.")
+            throw NotThere(caption: only != nil ? (only!.count == 1 ? NotThere.oneBlend : NotThere.someBlends)
+                : kinds == [.blend] ? NotThere.noBlends : NotThere.noOriginals)
         }
 
         // What is already here at the right size stays — and so does a file

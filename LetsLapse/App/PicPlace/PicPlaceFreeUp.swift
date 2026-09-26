@@ -162,8 +162,12 @@ extension PicPlaceController {
     /// This device's heavy files in a project folder — path, kind and size,
     /// by the same classification a push uses. No hashes.
     nonisolated static func heavyFiles(in folder: URL) -> [PicPlaceOriginalsCheck.LocalFile] {
-        let entries = (try? PicPlaceSyncRun.listFiles(in: folder)) ?? []
-        return PicPlaceSyncInventory.classify(entries).compactMap { item in
+        heavyFiles((try? PicPlaceSyncRun.listFiles(in: folder)) ?? [])
+    }
+
+    /// The heavy files of a folder already listed.
+    nonisolated static func heavyFiles(_ entries: [PicPlaceSyncRun.FolderEntry]) -> [PicPlaceOriginalsCheck.LocalFile] {
+        PicPlaceSyncInventory.classify(entries).compactMap { item in
             guard case .heavy(let kind) = item.role, let heavy = PicPlaceOriginalsCheck.Kind(rawValue: kind) else { return nil }
             return PicPlaceOriginalsCheck.LocalFile(name: item.relativePath, kind: heavy, bytes: item.bytes)
         }
@@ -202,7 +206,7 @@ extension PicPlaceController {
         guard let record = records[key], record.elsewhereLibrary == nil else { return nil }
         let previewOnly = isPreviewOnly(capture)
         if !previewOnly {
-            guard record.lastError == nil || record.failedPolicy == PicPlaceSyncPolicy.originals.rawValue else { return nil }
+            guard record.lastError == nil || record.failedHeavyOnly else { return nil }
         }
         guard let local = heavyListings[capture.id] else {
             refreshHeavyListing(for: capture)
@@ -255,7 +259,16 @@ extension PicPlaceController {
     /// Whether the card's *Download originals* has anything to bring.
     func hasOriginalsToDownload(_ capture: AppModel.CaptureProject) -> Bool {
         guard let status = originalsStatus(for: capture) else { return false }
-        return !status.originals.onlyThere.isEmpty
+        // A Photo capture's picture is its stack, which is a blend: its
+        // originals come down with it (plan T3, 2026-09-25).
+        return !status.originals.onlyThere.isEmpty || (capture.isPhotoCapture && !status.blends.onlyThere.isEmpty)
+    }
+
+    /// What the card's *Download originals* brings: the source media — and
+    /// for a Photo capture its stack too, the picture it is edited on (it
+    /// was unreachable: the card hides a Photo's Blends line).
+    func originalsDownloadKinds(for capture: AppModel.CaptureProject) -> Set<PicPlaceOriginalsCheck.Kind> {
+        capture.isPhotoCapture ? [.source, .blend] : [.source]
     }
 
     // MARK: Removal — one project
@@ -430,6 +443,7 @@ extension PicPlaceController {
             let heavy = confirmed.filter { PicPlaceSyncInventory.isHeavy($0.name) }
             record.serverHeavyFiles = heavy.count
             record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }
+            record.serverSourceFiles = heavy.filter { PicPlaceSyncInventory.heavyKind($0.name) == .source }.count
             record.serverConfirmedSeen = confirmed.count
             // The marker a library's Remove trusts: only for files PicPlace
             // has read back.

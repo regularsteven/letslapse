@@ -59,6 +59,9 @@ struct VideoEditorView: View {
     /// applied preset. See `PhotoViewerView` for the same pattern on stills.
     @State private var presetState: PresetState = .original
     @State private var loaded = false
+    /// A panel asked for before the grade was seeded — see the photo
+    /// editor's twin (the preview page's *Download and Continue*).
+    @State private var pendingPanel: EditorGroup?
 
     @State private var player = AVPlayer()
     @State private var asset: AVAsset?
@@ -271,10 +274,15 @@ struct VideoEditorView: View {
         .preferredColorScheme(.dark)
         .statusBarHidden(isClearPreview)
         .onChange(of: isClearPreview) { _, clear in paging?.onClearPreviewChanged(clear) }
+        .onChange(of: surfaceReady) { _, ready in
+            guard ready else { return }
+            if let paging { paging.onPicture(captureID) } else { PageTurnTrace.finish("picture") }
+        }
         #endif
         .task {
             // Seed once from the project, then let this view own the values.
             guard !loaded, let capture else { return }
+            PageTurnTrace.mark("mount")
             preset = model.photoPreset(for: capture)
             adjustments = model.photoAdjustments(for: capture)
             presetState = model.presetState(for: capture)
@@ -289,17 +297,33 @@ struct VideoEditorView: View {
             // The project's quarter turns ride the asset (Rotate 90° as a
             // record, 2026-09-24): the grade's composition and the size probe
             // below both read the turned track transform.
-            let asset = await TurnedMedia.asset(for: url)
+            // The pager's look-ahead opened it while this page was a swipe
+            // away (`VideoAssetCache`), else it is opened here.
+            let prepared = VideoAssetCache.take(url)
+            if prepared != nil { PageTurnTrace.annotate("asset made ahead") }
+            let asset = if let prepared { prepared.asset } else { await TurnedMedia.asset(for: url) }
             self.asset = asset
             // The clip's length, before the first composition: a keyframed
             // grade has no position to render at without it.
-            duration = (try? await asset.load(.duration))?.seconds ?? 0
-            let item = AVPlayerItem(asset: asset)
-            item.videoComposition = VideoGrader.composition(
-                for: asset, grade: liveGrade, durationSeconds: duration)
+            duration = if let prepared { prepared.duration } else { (try? await asset.load(.duration))?.seconds ?? 0 }
+            PageTurnTrace.mark("asset")
+            // The item and its grade's composition are made off the main
+            // actor (stage 4, 2026-09-25): the composition's initializer
+            // loads the asset's tracks synchronously, and on a 4K clip of
+            // five segments that held a page turn's main thread ~200 ms.
+            let grade = liveGrade
+            let clipSeconds = duration
+            let item = await Task.detached(priority: .userInitiated) { () -> AVPlayerItem in
+                let item = AVPlayerItem(asset: asset)
+                item.videoComposition = VideoGrader.composition(
+                    for: asset, grade: grade, durationSeconds: clipSeconds)
+                return item
+            }.value
+            PageTurnTrace.mark("item")
             player.replaceCurrentItem(with: item)
             observePlayerTime()
             player.play()
+            PageTurnTrace.mark("play")
             // Then correct from the file itself: the project's stored size
             // latches on the first segment, and a metadata-only rotate swaps it.
             if let size = await MediaGeometry.videoDisplaySize(asset: asset), size.height > 0 {
@@ -316,6 +340,10 @@ struct VideoEditorView: View {
             applyKeyframeHook()
             applySectionsHook()
             #endif
+            if let group = pendingPanel {
+                pendingPanel = nil
+                openPanel(for: group)
+            }
         }
         .task(id: renderToken) {
             guard loaded else { return }
@@ -564,7 +592,8 @@ struct VideoEditorView: View {
             canPage: allowsPaging,
             paneFrame: proxy.frame(in: .named(EditorPagingState.hostSpace)),
             anchor: anchor,
-            hasPicture: surfaceReady)
+            hasPicture: surfaceReady,
+            captureID: captureID)
     }
 
     // MARK: - Editor page layouts
@@ -1011,6 +1040,12 @@ struct VideoEditorView: View {
     private func consumePageRequest(_ request: EditorPageRequest?) {
         guard let request, request.captureID == captureID else { return }
         if availableRailTabs.contains(request.page) { railTab = request.page }
+        if let group = request.group {
+            railTab = .editor
+            // `loaded` flips before the movie is ready: until the asset is
+            // in, the panel waits for the end of the load.
+            if loaded, asset != nil { openPanel(for: group) } else { pendingPanel = group }
+        }
         DispatchQueue.main.async {
             if model.requestedEditorPage == request { model.requestedEditorPage = nil }
         }

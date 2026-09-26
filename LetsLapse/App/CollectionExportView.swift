@@ -104,7 +104,7 @@ private struct CollectionExportProgressView: View {
 
     private var hero: some View {
         ZStack {
-            ProjectThumbnailView(url: firstClipURL, kind: .video)
+            ProjectThumbnailView(url: firstClipURL, kind: firstClipKind)
                 .frame(height: 260)
                 .frame(maxWidth: .infinity)
                 .blur(radius: 2.5)
@@ -113,6 +113,13 @@ private struct CollectionExportProgressView: View {
 
             LLRigProgress(progress: controller.progress)
         }
+    }
+
+    /// A collection may open on a still (D4).
+    private var firstClipKind: AppModel.MediaKind {
+        model.collection(withID: controller.collectionID)?.entries.first
+            .flatMap { model.blend(id: $0.blendID) }
+            .map { model.mediaKind(for: $0) } ?? .video
     }
 
     private var firstClipURL: URL? {

@@ -100,7 +100,7 @@ extension PicPlaceController {
         job.hold = nil
         job.lastError = nil
         setJob(job, for: capture.id)
-        startUploadJob(capture.id, reason: "Upload")
+        startUploadJob(capture.id, reason: "Upload", pressed: true)
     }
 
     /// Pause: the run stops between files; what reached PicPlace stays, and
@@ -121,7 +121,7 @@ extension PicPlaceController {
         job.hold = nil
         job.lastError = nil
         setJob(job, for: id)
-        startUploadJob(id, reason: "Resume")
+        startUploadJob(id, reason: "Resume", pressed: true)
     }
 
     /// *Use mobile data* — for this job alone, never the setting.
@@ -132,7 +132,7 @@ extension PicPlaceController {
         job.lastError = nil
         setJob(job, for: id)
         LLog("picplace: upload of \(title(of: id)) may use mobile data")
-        startUploadJob(id, reason: "mobile data allowed")
+        startUploadJob(id, reason: "mobile data allowed", pressed: true)
     }
 
     /// Cancel: the job goes. What already reached PicPlace stays there — it
@@ -151,8 +151,10 @@ extension PicPlaceController {
     // MARK: Running
 
     /// Starts a job's run unless something holds it: already running, not
-    /// signed in (the launch resumes it), or the Wi-Fi rule.
-    func startUploadJob(_ id: UUID, reason: String) {
+    /// signed in (the launch resumes it), or the Wi-Fi rule. `pressed`: a
+    /// person's press started it just now — only then may the run ask iOS
+    /// to hold the app (a continued task).
+    func startUploadJob(_ id: UUID, reason: String, pressed: Bool = false) {
         guard var job = uploadJobs[id], syncTasks[id] == nil, !isShutDown else { return }
         guard let capture = model.capture(id: id) else {
             // The project is gone; so is the job.
@@ -175,7 +177,7 @@ extension PicPlaceController {
             setJob(job, for: id)
         }
         LLog("picplace: upload of \(capture.displayTitle) — \(reason)\(job.filesDone > 0 ? " (\(job.filesDone) of \(job.filesTotal) files sent before)" : "")")
-        if !syncUploadJob(capture) {
+        if !syncUploadJob(capture, pressed: pressed) {
             // Another transfer of this project (a removal) holds it: the
             // next launch, foreground or network change tries again.
             job.hold = .interrupted

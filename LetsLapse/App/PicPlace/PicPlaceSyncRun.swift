@@ -33,8 +33,13 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     var alsoOn: [String]
     var server: String
     var lastError: String?
-    /// The policy that produced the record (`minimal` · `originals` · `everything`).
+    /// The policy that produced the record (`minimal` · `originals` ·
+    /// `everything` · `blends`).
     var policy: String?
+    /// The blends last seen on PicPlace by path and size, confirmed — the
+    /// blends queue's "already there" (D1, 2026-09-25). Never the removal
+    /// gate: that is `heavyDigest`, which a blends-only run leaves alone.
+    var blendsDigest: String?
     /// The heavy set — source frames and blends — that stayed on this device
     /// under the minimal policy, for the card's "originals stay here" line.
     var heavyFiles: Int?
@@ -47,6 +52,10 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     /// device last uploaded or downloaded them.
     var serverHeavyFiles: Int?
     var serverHeavyBytes: Int64?
+    /// Of those, the source media — the originals proper, without the
+    /// blends (2026-09-25): what *Download available* means. nil on a record
+    /// from before, which then falls back to the heavy count.
+    var serverSourceFiles: Int?
     var originalsMovedAt: Date?
     /// When a preview-only project last asked the server for a poster it
     /// lacks — asked again only once the server's row moved.
@@ -92,7 +101,14 @@ struct PicPlaceSyncRecord: Codable, Equatable {
 
     /// Whether the records — bundle and poster — of a push by THIS device
     /// reached the server: a record that has only ever failed has none.
-    var recordsReachedServer: Bool { revision > 0 && (lastError == nil || failedPolicy == PicPlaceSyncPolicy.originals.rawValue) }
+    var recordsReachedServer: Bool { revision > 0 && (lastError == nil || failedHeavyOnly) }
+
+    /// The failure on record was a heavy upload's — the originals, or the
+    /// blends alone (D1) — which leaves the records where the last push put
+    /// them.
+    var failedHeavyOnly: Bool {
+        failedPolicy == PicPlaceSyncPolicy.originals.rawValue || failedPolicy == PicPlaceSyncPolicy.blends.rawValue
+    }
 
     /// When the failed push may be tried again on its own: three minutes
     /// after the first failure, doubling, an hour at most.
@@ -683,7 +699,7 @@ struct PicPlaceSyncRun {
             switch item.role {
             case .object(let kind) where policy.sendsRecords:
                 files.append(try await hashed(item, kind: kind))
-            case .heavy(let kind) where policy.sendsHeavy:
+            case .heavy(let kind) where policy.sendsHeavy(kind: kind):
                 files.append(try await hashed(item, kind: kind))
             default:
                 continue

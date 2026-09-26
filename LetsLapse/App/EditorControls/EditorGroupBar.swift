@@ -24,6 +24,11 @@ struct EditorGroupBar: View {
     var style: Style
     /// `LL.amber` on the dark editors, `LL.accent` on the Mac.
     var accent: Color
+    /// Drawn greyed in place — the project's originals are not on this
+    /// device (`EditorPreviewPage`, 2026-09-25). Still tappable: the tap is
+    /// the host's, which asks whether to fetch them. The dots still say
+    /// which groups hold an edit.
+    var locked = false
 
     enum Style {
         /// 2a: six 58 pt cells spread across a black bar.
@@ -105,10 +110,10 @@ struct EditorGroupBar: View {
                     .font(.system(size: labelSize, weight: .semibold))
                     .lineLimit(1)
                 Circle()
-                    .fill(nonNeutral.contains(group) ? accent : Color.clear)
+                    .fill(nonNeutral.contains(group) ? accent.opacity(locked ? 0.55 : 1) : Color.clear)
                     .frame(width: 4, height: 4)
             }
-            .foregroundStyle(selected ? accent : idle)
+            .foregroundStyle(locked ? idle.opacity(0.42) : selected ? accent : idle)
             .frame(width: cellWidth)
             .padding(.top, cellPaddingTop)
             .padding(.bottom, cellPaddingBottom)
@@ -120,6 +125,7 @@ struct EditorGroupBar: View {
         .buttonStyle(.plain)
         .accessibilityLabel(group.title)
         .accessibilityValue(nonNeutral.contains(group) ? "adjusted" : "")
+        .accessibilityHint(locked ? "Needs the originals" : "")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }

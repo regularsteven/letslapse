@@ -50,6 +50,9 @@ struct GalleryGridContent: View {
     /// The editor the tile menu's Edit presents (a window on the Mac).
     @State private var editorRequest: EditorOpenRequest?
     #endif
+    /// A menu item that needs files this device does not hold, asking
+    /// whether to fetch them (FetchPrompt.swift).
+    @State private var fetchRequest: FetchPromptRequest?
 
     var body: some View {
         Group {
@@ -72,6 +75,7 @@ struct GalleryGridContent: View {
         #if os(iOS)
         .editorCover($editorRequest)
         #endif
+        .fetchPrompt($fetchRequest)
     }
 
     // MARK: Standard grid
@@ -210,7 +214,11 @@ struct GalleryGridContent: View {
 
         if !capture.isPhotoCapture {
             Button {
-                model.openCapture(capture)
+                // A blend is made from the originals (rule 1): without them
+                // the flow opened on an error; now the question comes first.
+                fetchRequest = model.request(.newBlend, for: capture, subject: "A new blended clip") {
+                    model.openCapture(capture)
+                }
             } label: {
                 Label("New blended clip", systemImage: "plus")
             }

@@ -1,3 +1,4 @@
+import LetsLapseKit
 import SwiftUI
 
 // MARK: - Gallery preview panel
@@ -94,6 +95,9 @@ struct GalleryPreviewPanel: View {
     /// A preset tile tap held back for confirmation, because applying it
     /// from Edited would throw the project's manual adjustments away.
     @State private var pendingPresetApply: PresetApplyRequest?
+    /// A tap on something this device cannot do yet — the originals or a
+    /// blend are on PicPlace — asking whether to fetch them (FetchPrompt.swift).
+    @State private var fetchRequest: FetchPromptRequest?
     /// The Presets tiles' renders, kept for the panel's life so re-opening
     /// the row shows pictures at once.
     @StateObject private var presetThumbnails = PresetThumbnailCache()
@@ -199,8 +203,10 @@ struct GalleryPreviewPanel: View {
         #if os(iOS)
         .editorCover($editorRequest)
         #endif
+        .fetchPrompt($fetchRequest)
         .task(id: capture.id) {
             metadataScope = .project
+            model.loadHoldings(for: [capture.id])
             if let bytes = await model.storageBytes(for: capture) {
                 storageBytes = bytes
             }
@@ -301,10 +307,13 @@ struct GalleryPreviewPanel: View {
     /// a shared design component; the row here is what the code shows until
     /// that component is drawn.
     private var actionGrid: some View {
-        // A preview-only project (its sources are not on this device, v2
-        // plan D7) has nothing to edit: the buttons say so instead of doing
-        // nothing (libraries plan L20).
-        let missing = model.sourcesMissing(capture)
+        // A project whose originals are not on this device (a preview, or
+        // originals removed to free space) keeps every button, greyed in
+        // place: Edit opens the editor's preview page like any other project,
+        // and the rest ask whether to fetch what they need — never a button
+        // that swallows the tap (docs/connected-asset-states-plan.md §4).
+        let editable = model.isAvailable(.pixelEdit, for: capture)
+        let blendable = model.isAvailable(.newBlend, for: capture)
         return VStack(spacing: 8) {
             actionButton("Open", icon: "arrow.up.forward.square", filled: true) {
                 onOpen()
@@ -313,32 +322,37 @@ struct GalleryPreviewPanel: View {
                 actionButton("Edit", icon: "pencil") {
                     openEditor(page: .editor)
                 }
-                .disabled(missing)
+                .opacity(editable ? 1 : 0.45)
                 actionButton("Text", icon: "textformat") {
-                    openEditor(page: .text)
+                    ask(.pixelEdit, "Text") { openEditor(page: .text) }
                 }
-                .disabled(missing)
+                .opacity(editable ? 1 : 0.45)
                 if capture.kind == .photos {
                     actionButton("Shapes", icon: "circle.square") {
-                        openEditor(page: .masks)
+                        ask(.pixelEdit, "Shapes") { openEditor(page: .masks) }
                     }
-                    .disabled(missing)
+                    .opacity(editable ? 1 : 0.45)
                 }
                 if !capture.isPhotoCapture {
                     actionButton("New clip", icon: "plus.circle") {
-                        onNewClip()
+                        ask(.newBlend, "A new clip") { onNewClip() }
                     }
-                    .disabled(missing)
+                    .opacity(blendable ? 1 : 0.45)
                 }
             }
-            .opacity(missing ? 0.45 : 1)
-            if missing {
-                Text("Preview only — download the originals to edit")
+            if !editable {
+                Text("\(model.shownHoldings(for: capture.id)?.tier.label ?? "Preview only") — editing needs the originals")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    /// `action` when this device holds what `capability` needs, else the
+    /// question — and `action` once the files are here.
+    private func ask(_ capability: ProjectCapability, _ subject: String, then action: @escaping () -> Void) {
+        fetchRequest = model.request(capability, for: capture, subject: subject, then: action)
     }
 
     /// The editor, straight from here, on the page named: the host's own
@@ -347,7 +361,9 @@ struct GalleryPreviewPanel: View {
     /// the page request moves it).
     private func openEditor(page: RailTab) {
         if let onEdit { onEdit(page); return }
-        guard let request = model.stageEditor(for: capture, page: page) else { return }
+        // The Editor page opens on a project whose picture is not here too —
+        // as its preview page: a cover on iOS, a window on the Mac.
+        guard let request = model.stageEditor(for: capture, page: page, allowsPreview: page == .editor) else { return }
         #if os(macOS)
         request.open(with: openWindow)
         #else
@@ -544,6 +560,13 @@ struct GalleryPreviewPanel: View {
     /// anywhere else it applies straight away. The same rule as the project
     /// screen's chip strip.
     private func requestPreset(_ target: PresetApplyRequest.Target) {
+        // A preset is a pixel edit (rule 6): it waits for the originals,
+        // which re-render the look — applied here without them, the grade
+        // synced with a poster that could not follow (2026-09-25).
+        guard model.isAvailable(.pixelEdit, for: capture) else {
+            ask(.pixelEdit, "Presets") { requestPreset(target) }
+            return
+        }
         let request = PresetApplyRequest(
             target: target,
             discardsMoments: model.gradeTimeline(for: capture).keyframes.count)
@@ -596,6 +619,9 @@ struct GalleryPreviewPanel: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // What this device holds of the project, in words — the tiles
+            // badge only what is not the norm (connected asset states §4.3).
+            HoldingsHereRow(holdings: model.holdingsStore, capture: capture)
             if !fieldNotes.isEmpty {
                 metaRow("Field notes") {
                     Text("\(fieldNotes.count) note\(fieldNotes.count == 1 ? "" : "s")")
@@ -651,8 +677,11 @@ struct GalleryPreviewPanel: View {
                         BlendedClipRow(
                             blend: blend,
                             model: model,
-                            onPlay: { playBlend(blend) },
-                            onOpen: { model.openBlend(blend) }
+                            // Each asks first when what it needs is on
+                            // PicPlace: the clip's file to play, the
+                            // originals to open its result screen.
+                            onPlay: { ask(.blend(blend.id), "Playing the clip") { playBlend(blend) } },
+                            onOpen: { ask(.newBlend, "Opening the clip") { model.openBlend(blend) } }
                         )
                     }
                 }
@@ -683,12 +712,15 @@ struct GalleryPreviewPanel: View {
             HStack(spacing: 8) {
                 if !capture.isPhotoCapture {
                     actionButton("New clip", icon: "plus.circle") {
-                        onNewClip()
+                        ask(.newBlend, "A new clip") { onNewClip() }
                     }
+                    .opacity(model.isAvailable(.newBlend, for: capture) ? 1 : 0.45)
                 }
                 actionButton(isExporting ? "Sharing…" : "Share project",
                              icon: "square.and.arrow.up") {
-                    exportShare()
+                    // A `.lapse` carries every file: the originals and the
+                    // blends must be here first (it failed silently).
+                    ask(.exportProject, "Sharing the project") { exportShare() }
                 }
                 .disabled(isExporting)
             }
@@ -770,6 +802,74 @@ struct GalleryPreviewPanel: View {
             } catch {
                 await MainActor.run { isExporting = false }
             }
+        }
+    }
+}
+
+/// The panel's **Here** row: what this device holds of the project, in words
+/// — observing the holdings store, so it fills in when the walk lands
+/// without re-rendering the whole panel through the model.
+private struct HoldingsHereRow: View {
+    @EnvironmentObject private var model: AppModel
+    @ObservedObject var holdings: ProjectHoldingsStore
+    let capture: AppModel.CaptureProject
+
+    var body: some View {
+        Group {
+            if let known = model.shownHoldings(for: capture.id) {
+                HStack(alignment: .top, spacing: 10) {
+                    Text("Here")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 72, alignment: .leading)
+                    Text(line(known))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 6)
+            }
+        }
+        // Asks again whenever the answer is dropped (a removal, a download),
+        // as the holdings pill does.
+        .task(id: model.cachedHoldings(for: capture.id) == nil ? holdings.revision : -1) {
+            model.requestHoldings(capture.id)
+        }
+    }
+
+    /// The holdings pill in words (plan §4.3): what is here, then where
+    /// the originals are — "Originals and blends · backed up on PicPlace" ·
+    /// "Originals · 1 of 3 blends · not backed up" · "Blends only (2 of 3)
+    /// — originals on PicPlace · 2.4 GB" · "Preview only — originals not on
+    /// PicPlace yet" (the project is; its originals are on the device that
+    /// made it) · "… — originals missing" when PicPlace has neither.
+    private func line(_ holdings: ProjectHoldings) -> String {
+        let blends = holdings.blends.count
+        let blendsHere = holdings.blendsHere
+        let record = model.picplace.records[model.originID(of: capture)]
+        let onPicPlace = record.map { $0.revision > 0 || $0.policy == "pull" } ?? false
+        switch holdings.tier {
+        case .originals:
+            var line = blends == 0 || blendsHere == blends
+                ? (blends == 0 ? "Originals" : "Originals and blends")
+                : "Originals · \(blendsHere) of \(blends) blends"
+            if let record, onPicPlace {
+                line += AppModel.isBackedUp(record, holdings: holdings) ? " · backed up on PicPlace" : " · not backed up"
+            }
+            return line
+        case .blends, .preview:
+            let originalsThere = record.map { ($0.serverHeavyFiles ?? 0) > 0 || $0.heavyDigest != nil } ?? false
+            let originals: String
+            if originalsThere {
+                let short = holdings.shortfall(for: .originals)
+                originals = "originals on PicPlace" + (short.map { $0.bytes > 0 ? " · \(LLFormat.bytes($0.bytes))" : "" } ?? "")
+            } else if onPicPlace {
+                originals = "originals not on PicPlace yet"
+            } else {
+                originals = "originals missing"
+            }
+            return holdings.tier == .blends ? "Blends only (\(blendsHere) of \(blends)) — \(originals)" : "Preview only — \(originals)"
         }
     }
 }

@@ -597,7 +597,9 @@ final class AppModel: ObservableObject {
                 if let compressionRatio { return "\(compressionRatio)×" }
                 return "Video"
             case .image:
-                return "Long exposure"
+                // One photo's still for a collection (D4) is not an exposure
+                // of many.
+                return inputFrames == 1 ? "Still" : "Long exposure"
             }
         }
 
@@ -626,7 +628,7 @@ final class AppModel: ObservableObject {
                 }
                 return label
             }
-            if kind == .image { return "Long exposure" }
+            if kind == .image { return speedLabel }
             if let outputSeconds {
                 return "\(speedLabel) · \(SpeedMath.clipLengthCompact(outputSeconds))"
             }
@@ -975,6 +977,9 @@ final class AppModel: ObservableObject {
     /// index.)
     @Published private(set) var deletedCollections: [LapseCollection] = []
     @Published private(set) var collections: [LapseCollection] = []
+    /// True while PicPlace's collections are being written here, so the
+    /// write is not sent straight back (D3).
+    var applyingRemoteCollections = false
     /// Per-project `shapes.json` summaries for the Gallery's Shapes rows,
     /// keyed by capture id; a project with no register has no entry. Filled
     /// by `refreshShapeSummaries()` and `shapeRegisterDidChange(for:)`
@@ -2288,14 +2293,21 @@ final class AppModel: ObservableObject {
         var setRatio: CanvasRatio?
         for blendID in blendIDs {
             guard let blend = blend(id: blendID),
-                  blend.kind == .video,
                   collection.entry(for: blendID) == nil else { continue }
             if collection.ratio == nil {
                 let ratio = canvasRatio(for: blend)
                 collection.ratio = ratio
                 setRatio = ratio
             }
-            collection.entries.append(LapseCollection.Entry(blendID: blendID))
+            // A still joins with its length and — Steven's call, D4 — a
+            // gentle move of its own, whatever the collection's mode.
+            let still = blend.kind == .image
+            collection.entries.append(LapseCollection.Entry(
+                blendID: blendID, stillSeconds: still ? LapseCollection.defaultStillSeconds : nil))
+            if still, let last = collection.entries.indices.last {
+                collection.entries[last].kenBurns = CollectionMath.kenBurnsDefaultMove(
+                    forClipIndex: last, base: kenBurnsUnitBase(entry: collection.entries[last], in: collection))
+            }
         }
         // Clips joining a collection that has met Ken Burns arrive with
         // their moves already dealt.
@@ -2654,9 +2666,24 @@ final class AppModel: ObservableObject {
 
     /// One clip's kept length on the timeline.
     func entrySeconds(_ entry: LapseCollection.Entry) -> Double {
-        guard let blend = blend(id: entry.blendID),
-              let duration = blendDuration(for: blend) else { return 0 }
+        guard let blend = blend(id: entry.blendID) else { return 0 }
+        // A still has no range of its own: its length is what it was given.
+        if blend.kind == .image { return entry.stillSeconds ?? LapseCollection.defaultStillSeconds }
+        guard let duration = blendDuration(for: blend) else { return 0 }
         return entry.keptFraction * duration
+    }
+
+    /// The member is a still (D4): an image blend, played for its length.
+    func isStill(_ entry: LapseCollection.Entry) -> Bool {
+        blend(id: entry.blendID)?.kind == .image
+    }
+
+    /// A still member's length, from its row.
+    func setStillSeconds(_ seconds: Double, blendID: UUID, in collectionID: UUID) {
+        mutateCollection(collectionID) { collection in
+            guard let index = collection.entries.firstIndex(where: { $0.blendID == blendID }) else { return }
+            collection.entries[index].stillSeconds = max(1, seconds)
+        }
     }
 
     /// The whole timeline's length as it will export: each clip's Ken Burns
@@ -2682,6 +2709,8 @@ final class AppModel: ObservableObject {
             return entrySeconds(entry)
         }
         let target = Double(kenBurnsEffectiveClipSeconds(collection))
+        // A still can last as long as asked: consistent means the target.
+        if isStill(entry) { return target }
         guard let blend = blend(id: entry.blendID),
               let full = blendDuration(for: blend) else { return target }
         if kenBurns.autoAdjustSpeed {
@@ -2705,12 +2734,20 @@ final class AppModel: ObservableObject {
     /// durations haven't probed yet don't get to drag the cap to zero.
     func kenBurnsMaxClipSeconds(_ collection: LapseCollection) -> Int {
         let lengths: [Double]
+        // A still supplies any length, so it never caps the target (D4).
+        let clips = collection.entries.filter { !isStill($0) }
         if collection.kenBurnsUsesWindows {
-            lengths = collection.entries.compactMap { entry in
+            lengths = clips.compactMap { entry in
                 blend(id: entry.blendID).flatMap(blendDuration(for:))
             }
         } else {
-            lengths = collection.entries.map(entrySeconds)
+            lengths = clips.map(entrySeconds)
+        }
+        // Stills never cap a timeline with clips; a timeline of stills alone
+        // takes its target from the shortest still's own length.
+        if clips.isEmpty {
+            let stills = collection.entries.map { $0.stillSeconds ?? LapseCollection.defaultStillSeconds }
+            return max(1, Int((stills.min() ?? LapseCollection.defaultStillSeconds).rounded(.down)))
         }
         guard let shortest = lengths.filter({ $0 > 0.5 }).min() else { return 1 }
         return max(1, Int(shortest.rounded(.down)))
@@ -2789,7 +2826,11 @@ final class AppModel: ObservableObject {
             if let blend = blend(id: entry.blendID), case let turns = displayQuarterTurns(for: blend), turns != 0 {
                 part += "q\(turns)"
             }
-            if kenBurnsOn {
+            // A still renders its length and its own move whatever the
+            // collection's mode (D4).
+            let still = isStill(entry)
+            if still { part += String(format: "s%.2f", entry.stillSeconds ?? LapseCollection.defaultStillSeconds) }
+            if kenBurnsOn || still {
                 let move = kenBurnsResolvedMove(entry: entry, in: collection)
                 part += String(
                     format: "~%.3f,%.3f,%.3f>%.3f,%.3f,%.3f",
@@ -2866,6 +2907,23 @@ final class AppModel: ObservableObject {
     func persistCollections(waiting: Bool) throws {
         let document = CollectionsDocument(collections: collections + deletedCollections)
         try persister.persistCollections(document, version: persister.mint(), waiting: waiting)
+        // A change made here goes to PicPlace a beat later, where it keeps
+        // collections (D3); one taken from PicPlace does not go back.
+        if !applyingRemoteCollections { picplace.collectionsChanged() }
+    }
+
+    /// Every collection, tombstoned ones included — the document as synced.
+    var allCollections: [LapseCollection] { collections + deletedCollections }
+
+    /// PicPlace's merged answer, written as this library's collections
+    /// (D3). The live ones and the tombstones split as the store keeps them.
+    func applyRemoteCollections(_ merged: [LapseCollection]) {
+        applyingRemoteCollections = true
+        defer { applyingRemoteCollections = false }
+        let ordered = merged.sorted { $0.createdAt < $1.createdAt }
+        collections = ordered.filter { $0.deletedAt == nil }
+        deletedCollections = ordered.filter { $0.deletedAt != nil }
+        persistCollectionsQuietly()
     }
 
     /// Collection edits are frequent and small; a failed write surfaces like
@@ -2879,6 +2937,23 @@ final class AppModel: ObservableObject {
     }
 
     #if DEBUG
+    /// `LL_COLLECTIONS=still` (D4): a collection holding a video blend and a
+    /// still made from the newest photo whose original is here.
+    func debugSeedStillCollection() async {
+        guard !collections.contains(where: { $0.name == "Still test" }) else { return }
+        let captures = liveCaptures()
+        let video = captures.flatMap { blends(for: $0) }.first { $0.kind == .video && !blendFileMissing($0) }
+        let photo = captures.first { $0.isPhotoCapture && !sourcesMissing($0) }
+        var ids: [UUID] = []
+        if let video { ids.append(video.id) }
+        if let photo {
+            do { ids.append(try await makeStillBlend(for: photo).id) } catch { LLog("collections: still test — \(error.localizedDescription)") }
+        }
+        let collection = createCollection(named: "Still test")
+        addBlends(ids, to: collection.id)
+        LLog("collections: seeded Still test — \(ids.count) member(s)")
+    }
+
     /// LL_COLLECTIONS screenshot hook: demo collections built from whatever
     /// video blends the library already has. No-op once any collection exists
     /// so repeated launches don't multiply.
@@ -4579,11 +4654,22 @@ final class AppModel: ObservableObject {
     /// file-mutating persists invalidate both.
     private var validatedSourceFrames: Set<UUID> = []
 
+    /// What this device holds of each project, as far as it has been asked
+    /// (`ProjectAvailability.swift`) — one folder walk per project, dropped
+    /// with the size cache by `noteFilesChanged(for:)`. Its own observable,
+    /// not a `@Published` of the model: a grid of tiles learning their
+    /// badges batch by batch must not re-render every view the model feeds.
+    let holdingsStore = ProjectHoldingsStore()
+    /// Every project's summary for the Gallery's PicPlace filters
+    /// (`App/ProjectStatus.swift`).
+    let statusStore = ProjectStatusStore()
+
     /// Drops one project's cached size — for paths that change a folder's
     /// contents without persisting the library (field notes today).
     func invalidateStorageCache(for id: UUID) {
         projectStorageBytes[id] = nil
         validatedSourceFrames.remove(id)
+        dropHoldings(for: id)
     }
 
     /// Walks the whole library — every project folder and every cache item — so
@@ -9172,6 +9258,7 @@ final class AppModel: ObservableObject {
     func noteFilesChanged(for captureID: UUID) {
         projectStorageBytes.removeValue(forKey: captureID)
         validatedSourceFrames.remove(captureID)
+        dropHoldings(for: captureID)
     }
 
     private var applicationSupportURL: URL {
@@ -10342,6 +10429,7 @@ final class AppModel: ObservableObject {
         }
         try store.insert(ProjectDocument(capture: capture, blends: blends))
         validatedSourceFrames.remove(originID)
+        dropHoldings(for: originID)
         assetStore.forget(projectFolder: captureFolderURL(for: originID))
         return capture
     }
@@ -10417,6 +10505,8 @@ final class AppModel: ObservableObject {
         try store.insert(ProjectDocument(capture: capture, blends: blends))
         validatedSourceFrames.remove(id)
         validatedSourceFrames.remove(newID)
+        dropHoldings(for: id)
+        dropHoldings(for: newID)
         assetStore.forget(projectFolder: from)
         assetStore.forget(projectFolder: to)
         noteIndexChanged()
@@ -10801,9 +10891,15 @@ final class AppModel: ObservableObject {
         // reads and writes exactly the sidecar it always did.
         let stored: GradeTimeline? = timeline.isEmpty ? nil : timeline
         guard let current = capture(id: captureID) else { return }
-        guard current.selectedPreset != preset.rawValue
-                || current.adjustments != adjustments
-                || current.presetState != state
+        // Against what the project READS as, not its raw fields: an editor
+        // seeds from the resolved grade (`photoPreset(for:)`, `.neutral`
+        // for no adjustments, the resolved state) and writes it back, so a
+        // project never graded — every field absent — read as changed on
+        // the editor's first open, stamped an edit and synced it. Walking
+        // the pager through a library made one per project (2026-09-25).
+        guard photoPreset(for: current) != preset
+                || photoAdjustments(for: current) != adjustments
+                || presetState(for: current) != state
                 || current.gradeTimeline != stored else { return }
         // A LUT is named by its content hash and the library store holds
         // the cube; nothing is copied into the project — the spike's §4.4

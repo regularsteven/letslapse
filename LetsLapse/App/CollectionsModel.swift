@@ -82,15 +82,23 @@ struct LapseCollection: Identifiable, Codable, Equatable {
         var crops: [String: Double]
         /// Assigned when the collection's Ken Burns turns on (and to clips
         /// added while it is); absent on entries that predate the feature.
+        /// A still gets its move the moment it joins (D4, Steven: a gentle
+        /// move by default).
         var kenBurns: KenBurnsMove?
+        /// How long a still member plays (D4, 2026-09-25) — nil for a clip,
+        /// whose length is its trimmed range; a still has no range of its
+        /// own, only this (`LapseCollection.defaultStillSeconds` when it
+        /// joins).
+        var stillSeconds: Double?
 
         init(blendID: UUID, inPoint: Double = 0, outPoint: Double = 1,
-             crops: [String: Double] = [:], kenBurns: KenBurnsMove? = nil) {
+             crops: [String: Double] = [:], kenBurns: KenBurnsMove? = nil, stillSeconds: Double? = nil) {
             self.blendID = blendID
             self.inPoint = inPoint
             self.outPoint = outPoint
             self.crops = crops
             self.kenBurns = kenBurns
+            self.stillSeconds = stillSeconds
         }
 
         /// A move that doesn't decode (a dev build's earlier shape) is
@@ -104,6 +112,7 @@ struct LapseCollection: Identifiable, Codable, Equatable {
             outPoint = try container.decode(Double.self, forKey: .outPoint)
             crops = try container.decode([String: Double].self, forKey: .crops)
             kenBurns = (try? container.decodeIfPresent(KenBurnsMove.self, forKey: .kenBurns)) ?? nil
+            stillSeconds = try container.decodeIfPresent(Double.self, forKey: .stillSeconds)
         }
 
         var id: UUID { blendID }
@@ -188,6 +197,11 @@ struct LapseCollection: Identifiable, Codable, Equatable {
     /// The crossfade length `fadeTransition` uses. One place on purpose —
     /// this number is expected to become adjustable.
     static let fadeSeconds = 0.5
+    /// A still's length when it joins a collection (D4, Steven 2026-09-25:
+    /// long enough for a slow move to read).
+    static let defaultStillSeconds = 4.0
+    /// The lengths a still can be given from its row.
+    static let stillSecondsChoices: [Double] = [2, 3, 4, 5, 6, 8, 10]
 
     var id: UUID
     var name: String

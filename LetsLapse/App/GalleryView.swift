@@ -48,6 +48,11 @@ struct GalleryView: View {
     @State private var query       = SceneQuery.empty
     @State private var filter      = CaptureFilter.all
     @State private var shapeSelection = GalleryView.initialShapeSelection  // sidebar Shapes rows
+    /// The sidebar's PicPlace section (connected libraries only).
+    @State private var picplaceFilter = PicPlaceFilter.all
+    /// Follows `statusStore.revision`, so the grid re-filters as the status
+    /// sweep lands and as PicPlace moves.
+    @State private var statusRevision = 0
     /// One tile → the preview panel; more → batch mode (GallerySelection).
     @State private var selection = GallerySelection()
     @State private var showSidebarSheet  = false  // iPhone/compact only
@@ -199,6 +204,13 @@ struct GalleryView: View {
             .onReceive(model.$requestedProjectDetailID) { consumeDetailRequest($0) }
             // The Shapes rows read each project's `shapes.json`; re-check on every visit.
             .onAppear   { model.refreshShapeSummaries() }
+            // The PicPlace section's numbers and filters need every
+            // project's state: the sweep walks what it has not seen, or what
+            // moved, off the main actor (a connected library only).
+            .task(id: picplaceConnected) {
+                if picplaceConnected { model.startStatusSweep() } else { picplaceFilter = .all }
+            }
+            .onReceive(model.statusStore.$revision) { statusRevision = $0 }
             // The sync pill in this header opens the same panel as the
             // Projects one: this tab arms the nearby-device server too.
             .armsProjectSharing(model.transferServer, isEnabled: sharingEnabled)
@@ -209,6 +221,16 @@ struct GalleryView: View {
                 if let hooked = ListDebugHooks.filter { filter = hooked }
                 if let text = ListDebugHooks.queryText { query.text = text }
                 if let chips = ListDebugHooks.chips { query.tags = chips }
+                // `LL_PICPLACE_FILTER=<onDevice|downloadAvailable|…>` — the
+                // sidebar's PicPlace section, pressed from launch.
+                if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_FILTER"],
+                   let hooked = PicPlaceFilter(rawValue: raw) { picplaceFilter = hooked }
+                // `LL_SIDEBAR=1` — the phone's library sheet (Library, PicPlace,
+                // Tags, Shapes) up from launch, a beat late: a sheet raised in
+                // the tab's first pass is dropped on iOS.
+                if ProcessInfo.processInfo.environment["LL_SIDEBAR"] == "1", !isWide {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { showSidebarSheet = true }
+                }
             }
             .onChange(of: sortedIDs, initial: true) { _, ids in
                 ListDebugHooks.dump(screen: "gallery", sort: sortKey.rawValue, ascending: sortAscending, filter: filter, query: query, ids: ids)
@@ -241,7 +263,10 @@ struct GalleryView: View {
                     presentTags: presentTags,
                     // The phone's only Timeline switch since the header glyph
                     // was retired (2026-09-15); the wide layouts keep the button.
-                    timelineMode: $timelineMode
+                    timelineMode: $timelineMode,
+                    picplaceFilter: picplaceConnected ? $picplaceFilter : nil,
+                    picplaceCounts: picplaceCounts,
+                    picplaceProgress: model.statusStore.sweeping
                 )
                 .navigationTitle("Library")
                 .toolbar {
@@ -420,7 +445,10 @@ struct GalleryView: View {
                 filter: $filter,
                 tagSelection: $query.tags,
                 shapeSelection: $shapeSelection,
-                presentTags: presentTags
+                presentTags: presentTags,
+                picplaceFilter: picplaceConnected ? $picplaceFilter : nil,
+                picplaceCounts: picplaceCounts,
+                picplaceProgress: model.statusStore.sweeping
             )
             .transition(.opacity)
         }
@@ -813,7 +841,7 @@ struct GalleryView: View {
     /// library is narrowed" on the compact one: `showSidebar` is a Mac pane
     /// state, and reading it on an iPhone lit the button permanently.
     private var libraryButton: some View {
-        let isLit = isWide ? showSidebar : (filter != .all || !query.tags.isEmpty || !shapeSelection.isEmpty)
+        let isLit = isWide ? showSidebar : (filter != .all || !query.tags.isEmpty || !shapeSelection.isEmpty || picplaceFilter != .all)
         return Button {
             if isWide {
                 withAnimation(.easeInOut(duration: 0.22)) { showSidebar.toggle() }
@@ -884,7 +912,20 @@ struct GalleryView: View {
     /// rows — the index's rows, in the grid's order (M2; a library with no
     /// index shows nothing, M3). A tile reads its own record.
     private var sortedRows: [LibraryIndex.ProjectRow] {
-        model.listRows(for: listQuery) ?? []
+        guard picplaceConnected, picplaceFilter != .all else { return model.listRows(for: listQuery) ?? [] }
+        return model.listRows(for: listQuery, picplace: picplaceFilter, revision: statusRevision) ?? []
+    }
+
+    /// The library is connected to PicPlace: the sidebar's PicPlace section
+    /// shows, and its filter narrows the grid (a standalone device has
+    /// neither — the brief).
+    private var picplaceConnected: Bool { model.picplace.binding != nil }
+
+    /// The section's numbers, over what the kind, tags, words and shapes
+    /// leave.
+    private var picplaceCounts: [PicPlaceFilter: Int] {
+        guard picplaceConnected else { return [:] }
+        return model.picplaceCounts(for: listQuery, revision: statusRevision)
     }
 
     /// The ids as drawn.
@@ -908,9 +949,10 @@ struct GalleryView: View {
     }
 
     /// Open — a double-click, the panel's Open, ⏎, the tile menu, and on
-    /// iOS a plain tap: the item view on the Mac, the pager on iOS, and the
-    /// project screen when the project has nothing the editor can open (a
-    /// preview-only project, files gone missing).
+    /// iOS a plain tap: the item view on the Mac, the pager on iOS — for
+    /// every project, a preview-only one included, which opens on the
+    /// editor's preview page (2026-09-25: it went to the project screen, a
+    /// second UI for the same project).
     private func open(_ id: UUID) {
         guard let capture = model.capture(id: id) else { return }
         #if os(macOS)
@@ -922,11 +964,11 @@ struct GalleryView: View {
     }
 
     #if os(iOS)
-    /// Opens the pager on `capture`, over the grid's current result set.
-    /// False when the project has no asset to open on.
+    /// Opens the pager on `capture`, over the grid's current result set —
+    /// any project: one whose picture is not here pages as the editor's
+    /// preview page.
     @discardableResult
     private func openPager(_ capture: AppModel.CaptureProject, page: RailTab) -> Bool {
-        guard model.editorAsset(for: capture) != nil else { return false }
         selection.select(only: capture.id)
         scrollTarget = capture.id
         var startsClear = false
@@ -981,17 +1023,18 @@ struct GalleryView: View {
 
     // MARK: Item view
 
-    /// Enters the item view on `capture`, the editor on `page`. False when
-    /// the project has no asset to open on. The tile is selected too, so the
-    /// grid is on it on the way back.
+    /// Enters the item view on `capture`, the editor on `page` — or its
+    /// preview page when the picture is not on this Mac. The tile is
+    /// selected too, so the grid is on it on the way back.
     @discardableResult
     private func enterItem(_ capture: AppModel.CaptureProject, page: RailTab) -> Bool {
-        guard let request = model.stageEditor(for: capture, page: page) else { return false }
+        guard let request = model.stageEditor(for: capture, page: page, allowsPreview: true) else { return false }
         selection.select(only: capture.id)
         scrollTarget = capture.id
         withAnimation(.easeInOut(duration: 0.25)) {
             focus = GalleryFocus(request: request, page: page)
         }
+        EditorLookAheadRunner.warm(around: capture.id, in: sortedIDs, direction: 1, model: model)
         return true
     }
 
@@ -1010,7 +1053,12 @@ struct GalleryView: View {
         guard let focus, id != focus.captureID, itemTransition == nil,
               sortedIDs.contains(id), let capture = model.capture(id: id) else { return }
         let page: RailTab = (capture.kind == .video && focus.page == .masks) ? .editor : focus.page
-        guard let request = model.stageEditor(for: capture, page: page) else { return }
+        // A preview walks like any other project (it stalled the filmstrip
+        // and ←/→ until 2026-09-25).
+        guard let request = model.stageEditor(for: capture, page: page, allowsPreview: true) else { return }
+        // Timed like the phone's page turns (`PageTurnTrace`): the editor
+        // closes the trace when its picture is up.
+        PageTurnTrace.begin(capture.displayTitle)
         itemTransition = .move(GalleryFocus(request: request, page: page))
         exitRequest = EditorExitRequest(offersPresetSave: false)
     }
@@ -1032,9 +1080,15 @@ struct GalleryView: View {
         exitRequest = nil
         switch transition {
         case .move(let next):
+            PageTurnTrace.mark("exit")
+            // The way the walk went: its side is made first.
+            let from = focus.flatMap { sortedIDs.firstIndex(of: $0.captureID) }
+            let to = sortedIDs.firstIndex(of: next.captureID)
+            let direction = (from.flatMap { f in to.map { $0 - f } } ?? 1) >= 0 ? 1 : -1
             selection.select(only: next.captureID)
             scrollTarget = next.captureID
             withAnimation(.easeInOut(duration: 0.2)) { focus = next }
+            EditorLookAheadRunner.warm(around: next.captureID, in: sortedIDs, direction: direction, model: model)
         case .back, nil:
             withAnimation(.easeInOut(duration: 0.25)) { focus = nil }
         }

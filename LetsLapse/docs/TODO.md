@@ -11,6 +11,81 @@ live inline.
 
 ## Open
 
+### Connected asset states — one app whatever the device holds; only capabilities change
+
+**Detail:** [connected-asset-states-plan.md](connected-asset-states-plan.md) (Steven's
+brief verbatim, the map of today, the model, the UI, decisions, stages) · **Raised:**
+2026-09-25 (Steven's brief: a device without the shoot sources gets a crippled
+experience — previews can't be browsed, the edit view doesn't behave as on the capture
+device) · **Working mode:** code first, mirrors after sign-off · **Status:** mapped;
+**stages 1–3 built and verified 2026-09-25, uncommitted** (plan §9: Mac, iPhone
+Simulator, and the picplace.test round trip — prompt → *Download and Continue* → the
+editor on the tapped panel, on the Mac and on the Simulator as a second device; stage 1
+installed as a Release build on the iPhone 16 Pro, iPhone 18 Pro and iPad Air M3. Plan
+§10: holdings badges on every tile (now the pill, §12), the *Here* row, the project screen's preview state
+and prompts, downloads in the drawer; stage 2 installed on the three devices. Plan §11:
+**D1 built** — blends upload on their own (the blends queue, *Upload blends
+automatically*, on by default), a still per blend at push, collections that ask for
+missing clips — bench-verified A → PicPlace → B. Plan §12: **the holdings pill**,
+Steven's Direction B — one pill, *this device | PicPlace* (camera · layers · both |
+cloud · green cloud-check when backed up), on the Gallery tiles, the Projects cards, the
+filmstrip and the blend rows; the blends queue keeps the tick true; the 11:32 tile that
+lost its badge after *Remove originals* fixed — bench-verified moment by moment. Plan §13:
+**stage 4's swipe** — neighbours rendered ahead, the first picture waiting for nothing,
+the Gallery following once a page rests — measured on the iPhone 16 Pro: DNG pages 530–734
+→ 345–357 ms, previews to 289–373 ms, main-thread stalls 140–213 → 17 ms; a video page
+still stalls ~220 ms) · **D2
+deferred** (Steven's server-side master + per-device renditions) · **Plan §14: the Gallery's PicPlace filters built and bench-verified** (the rest of
+Steven's brief, §1b, which never reached the plan until then; the brief's icon set was
+set aside by Steven — the pill stays). **Plan §15: stage 5** — background transfers
+Stage 1 (continued processing, iOS 26+) built — its first build crashed the iPad at every
+launch (2026-09-25: a wildcard handler, refused, then a request anyway), fixed the same day
+(uploads plan Stage 1 has the rules); D3 collections
+travel built app-side and dormant behind `features["collections"]`
+([picplace-collections-ask.md](picplace-collections-ask.md) — the server's half); D4
+stills in collections built and Mac-verified (any photo joins as a still, 4 s, a gentle
+move) · **Owed:** the Projects tab sharing the filter component, Mac tooltips, Steven's
+look, then the mirrors (sidebar, picker, still row); the device tests (continued
+transfers; the status sweep's time on a thousand projects; the video page); the server
+endpoint · **Size:** large (five stages)
+
+The gap in one paragraph: a preview-only project never reaches the editor (the Gallery
+sends it to the project screen, a swipe onto one closes the pager, the Mac filmstrip
+stalls); nothing is greyed in place because nothing mounts; dimmed controls give no
+reason and several are dead ends; presets apply without sources (a pixel edit that
+syncs with a poster that cannot follow); there is no just-in-time fetch and no
+"blends here" state; a preview's download shows no progress; blends travel only with
+the originals; collections don't travel at all. **Stage 1:** `ProjectHoldings` (Kit) +
+one capability function; `EditorPreviewPage` (the editor's chrome, greyed, over the
+graded preview); previews open everywhere the editor does; the prompt with *Download
+and Continue*; progress; presets and Rotate 90° gated; a Photo's stack downloads with
+its originals. Fixed on the way: a preview's download showed no progress; a blend row's
+Download fetched every blend; the pager graded a poster twice; **the editor's first open
+of a never-graded project stamped an edit and synced it** (one per project a swipe
+walked). **Open decisions (Steven):** D1 blends upload on their own, D2 preview size
+1280 → 2048, D3 collections travel, D4 stills in collections, D5 blend records that move
+(plan §5).
+
+### Copy pass — where a file is when it is not on this device (Steven, later)
+
+**Raised:** 2026-09-26 · **Size:** small (words), device names medium
+
+Steven is not a fan of *"Only on iPhone so far"*: most people have one iPhone, and
+iPhones have names — *Steve 16 Pro*, *Steve 18 Pro*. The words now in place are
+**interim** (2026-09-26, the *Victory Bridge Sunset* fix — a blend never uploaded was
+offered for download on the 18 Pro):
+
+- Blend row (project detail, Mac preview panel): *On PicPlace · …* / *Not available to
+  download · …* / nothing claimed until PicPlace's list is read (`BlendWhereLine`).
+- Collection clip picker badges: *ON PICPLACE* / *NOT AVAILABLE* / *NOT HERE*
+  (`MissingClipBadge`).
+- The builder's prompt (`ClipsPrompt`, `.notUploaded`): *"It's only on {device} so far —
+  once uploaded from there, it can come down here"* — `{device}` is PicPlace's
+  `alsoOn` name, which is the **model** ("iPhone"): iOS 16+ gives an app the user's
+  device name only with Apple's `com.apple.developer.device-information.user-assigned-device-name`
+  entitlement (requested from Apple, justified by the feature). Without it, the app
+  could let a person name each device in Settings and send that to PicPlace.
+
 ### Rotate 90° as a project record — originals are never rewritten
 
 **Raised:** 2026-09-24 (Steven, on the free-up sweep's finding: "a rotation should

@@ -56,6 +56,13 @@ struct GalleryBatchPanel: View {
         captures.filter { !$0.isScannerCapture }
     }
 
+    /// The ones a preset can reach on this device: a preset is a pixel edit
+    /// (rule 6), and a project whose originals are on PicPlace keeps its
+    /// look until they are here (docs/connected-asset-states-plan.md).
+    private var editablePresetTargets: [AppModel.CaptureProject] {
+        presetTargets.filter { model.isAvailable(.pixelEdit, for: $0) }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -229,6 +236,14 @@ struct GalleryBatchPanel: View {
 
             if presetsExpanded {
                 presetTiles
+                let skipped = presetTargets.count - editablePresetTargets.count
+                if skipped > 0 {
+                    Text("\(skipped) of these \(presetTargets.count) have no originals on \(PicPlaceController.deviceWord) — a preset leaves \(skipped == 1 ? "it" : "them") as \(skipped == 1 ? "it is" : "they are")")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 4)
+                }
                 if let first = presetTargets.first {
                     Text("Previewed on \(first.displayTitle)")
                         .font(.system(size: 11))
@@ -304,16 +319,18 @@ struct GalleryBatchPanel: View {
     /// A tile tap: straight through when no selected project is Edited,
     /// otherwise the confirmation, which says how many are.
     private func requestPreset(_ target: PresetApplyRequest.Target) {
-        let edited = presetTargets.filter { model.presetState(for: $0).isEdited }.count
+        let targets = editablePresetTargets
+        guard !targets.isEmpty else { return }
+        let edited = targets.filter { model.presetState(for: $0).isEdited }.count
         guard edited > 0 else {
             applyPreset(target)
             return
         }
-        pendingPreset = BatchPresetRequest(target: target, edited: edited, total: presetTargets.count)
+        pendingPreset = BatchPresetRequest(target: target, edited: edited, total: targets.count)
     }
 
     private func applyPreset(_ target: PresetApplyRequest.Target) {
-        for capture in presetTargets {
+        for capture in editablePresetTargets {
             switch target {
             case .builtIn(let preset): model.applyPreset(preset, for: capture)
             case .custom(let preset): model.applyCustomPreset(preset, for: capture)

@@ -65,6 +65,11 @@ struct PhotoViewerView: View {
     /// save, and not on the next screen.
     @State private var presetState: PresetState = .original
     @State private var loaded = false
+    /// A panel asked for before the grade was seeded — the preview page's
+    /// *Download and Continue* hands the editor the group that was tapped
+    /// (`EditorPageRequest.group`); it opens once there is a grade to
+    /// snapshot.
+    @State private var pendingPanel: EditorGroup?
 
     // MARK: Keyframes
     //
@@ -418,7 +423,9 @@ struct PhotoViewerView: View {
 
     /// The preview render's longest edge. Past this the picture on screen is an
     /// upscale, which is the moment the detail patch has to take over.
-    private let previewLongEdge: CGFloat = 2000
+    /// The pager's look-ahead renders at the same size, so its picture is
+    /// this editor's first render from the grader's cache (`EditorLookAhead`).
+    private let previewLongEdge: CGFloat = AppModel.editorPreviewLongEdge
     /// Where the drag handle sits, as a fraction between the floor and the
     /// ceiling. 1 = the ceiling, which is where every presentation starts.
     /// Only the Text / Frames / Masks pages still have a handle: the Editor
@@ -634,6 +641,16 @@ struct PhotoViewerView: View {
     /// untouched project and an already-migrated one both pass straight
     /// through. Reads the converter for each keyframe's frame, off the main
     /// actor.
+    /// Whether the grade still carries a relative white to migrate — the
+    /// cheap half of `migrateRelativeWhiteIfNeeded`'s test, so the first
+    /// render waits for the migration only when there is one.
+    private var needsWhiteMigration: Bool {
+        guard !adjustments.ownsWhite,
+              !timeline.keyframes.contains(where: { $0.adjustments.ownsWhite }) else { return false }
+        let carriesOffsets = { (a: PhotoAdjustments) in a.temperature != 0 || a.tint != 0 }
+        return carriesOffsets(adjustments) || timeline.keyframes.contains(where: { carriesOffsets($0.adjustments) })
+    }
+
     private func migrateRelativeWhiteIfNeeded() async {
         guard !adjustments.ownsWhite,
               !timeline.keyframes.contains(where: { $0.adjustments.ownsWhite }) else { return }
@@ -1097,6 +1114,7 @@ struct PhotoViewerView: View {
             // Seed once from the project, then let this view own the values —
             // re-seeding on every model change would fight the sliders.
             guard !loaded, let capture else { return }
+            PageTurnTrace.mark("mount")
             preset = model.photoPreset(for: capture)
             adjustments = model.photoAdjustments(for: capture)
             presetState = model.presetState(for: capture)
@@ -1127,19 +1145,39 @@ struct PhotoViewerView: View {
                 allFrames = sources
                 // A sidecar that doesn't describe this shoot frame for frame is
                 // ignored rather than guessed at — the axis falls back to frame
-                // numbers, which are at least true.
-                allFrameSeconds = await Task.detached(priority: .utility) {
-                    FrameTimestamps.load(besideFrames: sources)?
-                        .elapsedSeconds(coveringExactly: sources.count) ?? []
-                }.value
+                // numbers, which are at least true. The clock comes in behind
+                // the first picture (stage 4, 2026-09-25): it labels the
+                // strip, the opening frame is frame 0 either way, and reading
+                // it for a 2,425-frame shoot held a page turn ~200 ms.
+                Task {
+                    let seconds = await Task.detached(priority: .utility) {
+                        FrameTimestamps.load(besideFrames: sources)?
+                            .elapsedSeconds(coveringExactly: sources.count) ?? []
+                    }.value
+                    guard allFrames == sources else { return }
+                    allFrameSeconds = seconds
+                    refreshFrameWindow()
+                }
             }
             refreshFrameWindow()
             refreshLightroomSidecar()
             loaded = true
+            PageTurnTrace.mark("seed")
             let viewedURL = url
-            // First, because it sizes the layout: a metadata-only read, well
-            // ahead of the render that would otherwise have to land before the
-            // image slot knew its shape.
+            // The first picture goes as soon as the grade is known (stage 4,
+            // 2026-09-25): the probes below size the layout and the readouts,
+            // and the render never needed them — it waited behind both, one
+            // after the other. A legacy relative white is the exception: it
+            // is migrated first, or the first picture would be graded
+            // against the reading it is about to replace.
+            if needsWhiteMigration {
+                await refreshAsShotAnchor(for: viewedURL)
+                await migrateRelativeWhiteIfNeeded()
+                PageTurnTrace.mark("white")
+            }
+            renderToken += 1
+            // A metadata-only read: sizes the image slot (the render's own
+            // shape corrects it if the metadata was wrong).
             if let size = await Task.detached(priority: .utility, operation: {
                 MediaGeometry.stillDisplaySize(url: viewedURL)
             }).value, size.height > 0 {
@@ -1149,7 +1187,6 @@ struct PhotoViewerView: View {
                 sourcePixels = size
             }
             await refreshAsShotAnchor(for: viewedURL)
-            await migrateRelativeWhiteIfNeeded()
             #if DEBUG
             if ProcessInfo.processInfo.environment["LL_VIEWER"] == "expanded" {
                 // The handle dragged all the way up — the state the "expanded"
@@ -1166,7 +1203,10 @@ struct PhotoViewerView: View {
             applyMixerHook()
             applySectionsHook()
             #endif
-            renderToken += 1
+            if let group = pendingPanel {
+                pendingPanel = nil
+                openPanel(for: group)
+            }
         }
         .task(id: RenderRequest(
             token: renderToken,
@@ -1178,9 +1218,13 @@ struct PhotoViewerView: View {
             // a slider drag collapses into one render and one manifest write
             // instead of one of each per tick. A live scrub or a playback sweep
             // wants the frame it asked for as fast as it can have it, so it
-            // waits a beat rather than a tenth of a second.
-            try? await Task.sleep(for: isScrubbing || isPlaying ? .milliseconds(16) : renderDebounce)
-            guard !Task.isCancelled else { return }
+            // waits a beat rather than a tenth of a second. The first picture
+            // waits for nothing: there is no burst to collapse yet, and the
+            // tenth of a second was a tenth of every page turn.
+            if rendered != nil {
+                try? await Task.sleep(for: isScrubbing || isPlaying ? .milliseconds(16) : renderDebounce)
+                guard !Task.isCancelled else { return }
+            }
             await render()
         }
         // The persist safety net, for edits that arrive without a
@@ -2063,7 +2107,8 @@ struct PhotoViewerView: View {
                     canPage: allowsPaging,
                     paneFrame: proxy.frame(in: .named(EditorPagingState.hostSpace)),
                     anchor: geometry.anchor,
-                    hasPicture: rendered != nil))
+                    hasPicture: rendered != nil,
+                    captureID: captureID))
             // The crop frame's own pinch scales the crop, not the picture:
             // the whole time the Crop panel is open (it fitted the picture
             // on opening, and a pinch there is for the frame), not only once
@@ -3118,6 +3163,10 @@ struct PhotoViewerView: View {
     private func consumePageRequest(_ request: EditorPageRequest?) {
         guard let request, request.captureID == captureID else { return }
         if request.page != .frames { railTab = request.page }
+        if let group = request.group {
+            railTab = .editor
+            if loaded { openPanel(for: group) } else { pendingPanel = group }
+        }
         DispatchQueue.main.async {
             if model.requestedEditorPage == request { model.requestedEditorPage = nil }
         }
@@ -4607,6 +4656,8 @@ struct PhotoViewerView: View {
     }
 
     private func render() async {
+        let firstPicture = rendered == nil
+        if firstPicture { PageTurnTrace.mark("debounce") }
         let preset = preset
         // The moment on screen, not the project's stored grade: with keyframes
         // those are only the same thing at the head of the clip. Less its
@@ -4625,7 +4676,6 @@ struct PhotoViewerView: View {
         // depends on where the playhead is now, not where it is when the
         // render lands.
         let whiteBalance = frozenWhiteBalance(at: renderedPosition)
-        await refreshAsShotAnchor(for: url)
         // A sweep renders smaller: a 2000px still per step is a render the
         // machine can't finish before the next one cancels it.
         let longEdge: CGFloat = isScrubbing || isPlaying ? 1100 : previewLongEdge
@@ -4669,8 +4719,17 @@ struct PhotoViewerView: View {
         // screen rather than blanking the viewer. The double optional is the
         // work queue's own "didn't run" wrapped around the grader's "couldn't".
         if let image, let cgImage = image {
+            if firstPicture { PageTurnTrace.mark("render") }
             rendered = cgImage
+            if firstPicture {
+                // The pager hands over on it; with no pager (the Mac's item
+                // view) the turn's trace ends here.
+                if let paging { paging.onPicture(captureID) } else { PageTurnTrace.finish("picture") }
+            }
             reconcileAspect(with: cgImage)
+            // The readouts' anchor for this frame — after the picture, which
+            // never needed it (the grader resolves the as-shot white itself).
+            await refreshAsShotAnchor(for: url)
             await locateDetail(in: cgImage, of: url)
         }
     }

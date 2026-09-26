@@ -1,5 +1,6 @@
 import Foundation
 #if os(iOS)
+import BackgroundTasks
 import UIKit
 #endif
 
@@ -105,41 +106,95 @@ enum PicPlaceTransfer {
 /// A little life after the app leaves the screen. iOS suspends an app a few
 /// seconds after it is backgrounded and a standard session's sockets die
 /// with it; a background task assertion buys about thirty seconds — enough
-/// for a look at another app, which is what lost the poster. A background
-/// `URLSession` for the long originals transfers is the durable answer and
-/// is owed (libraries plan, later). On the Mac the same object keeps App
-/// Nap off while a transfer runs.
+/// for a look at another app, which is what lost the poster. On the Mac the
+/// same object keeps App Nap off while a transfer runs.
+///
+/// A transfer a person started — a download, an upload job — asks for more
+/// (iOS 26+, 2026-09-25; docs/picplace-background-uploads-plan.md Stage 1,
+/// and its downloads twin, connected-asset-states plan §15): a *continued
+/// processing* task, which keeps LetsLapse running after it leaves the
+/// screen or the phone locks, for as long as iOS allows, with the transfer's
+/// title and progress on the Lock Screen. While one holds the app, the
+/// thirty seconds running out stops nothing; its own expiry is `onExpire`.
+/// The durable answer — a background `URLSession` doing the PUTs and GETs
+/// itself — is Stage 2 of that plan.
 @MainActor
 final class PicPlaceBackgroundActivity {
     let name: String
     #if os(iOS)
     private var identifier: UIBackgroundTaskIdentifier = .invalid
+    /// The continued task's handle (`PicPlaceContinuedTransfer`, iOS 26+).
+    private var continued: AnyObject?
     #else
     private var activity: NSObjectProtocol?
     #endif
 
+    /// What the Lock Screen says while a continued task holds the app.
+    struct Continued {
+        var title: String
+        var subtitle: String
+    }
+
     /// `onExpire` runs when iOS is about to suspend the app — an upload
-    /// stops between files there, keeping what reached PicPlace.
-    init(_ name: String, onExpire: (@MainActor () -> Void)? = nil) {
+    /// stops between files there, keeping what reached PicPlace. With
+    /// `continued`, only the continued task's own expiry runs it.
+    init(_ name: String, continued: Continued? = nil, onExpire: (@MainActor () -> Void)? = nil) {
         self.name = name
         #if os(iOS)
         identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
             MainActor.assumeIsolated {
+                if let self, self.isContinuing {
+                    // The continued task holds the app now: the thirty
+                    // seconds ending stops nothing.
+                    LLog("picplace: \(name) — carried on by the continued task")
+                    self.endBackgroundTask()
+                    return
+                }
                 LLog("picplace: background time for \(name) ran out — iOS suspends what is left; the retry finishes it in front")
                 onExpire?()
                 self?.end()
             }
+        }
+        if #available(iOS 26.0, *), let continued {
+            self.continued = PicPlaceContinuedTransfer.begin(
+                title: continued.title, subtitle: continued.subtitle, onExpire: onExpire)
         }
         #else
         activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated], reason: name)
         #endif
     }
 
-    func end() {
-        #if os(iOS)
+    #if os(iOS)
+    var isContinuing: Bool {
+        if #available(iOS 26.0, *) {
+            return (continued as? PicPlaceContinuedTransfer)?.isRunning == true
+        }
+        return false
+    }
+
+    private func endBackgroundTask() {
         guard identifier != .invalid else { return }
         UIApplication.shared.endBackgroundTask(identifier)
         identifier = .invalid
+    }
+    #endif
+
+    /// The transfer moved: the Lock Screen's progress follows.
+    func report(_ progress: PicPlaceSyncProgress) {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            (continued as? PicPlaceContinuedTransfer)?.update(progress)
+        }
+        #endif
+    }
+
+    func end(success: Bool = true) {
+        #if os(iOS)
+        endBackgroundTask()
+        if #available(iOS 26.0, *) {
+            (continued as? PicPlaceContinuedTransfer)?.finish(success: success)
+        }
+        continued = nil
         #else
         if let activity {
             ProcessInfo.processInfo.endActivity(activity)
@@ -148,3 +203,169 @@ final class PicPlaceBackgroundActivity {
         #endif
     }
 }
+
+#if DEBUG && os(iOS)
+extension PicPlaceBackgroundActivity {
+    /// `LL_CONTINUED_PROBE=<seconds>`: the transfers' own activity with a
+    /// continued task and nothing behind it — progress ticks once a second,
+    /// then it ends. Proves the register → submit → launch path on a device
+    /// without sending a byte (2026-09-25).
+    @available(iOS 26.0, *)
+    static func runProbe(seconds: Int) async {
+        LLog("probe: continued task — starting, \(seconds) s")
+        let activity = PicPlaceBackgroundActivity(
+            "continued-task probe",
+            continued: .init(title: "LetsLapse test task", subtitle: "Nothing is sent")
+        ) {
+            LLog("probe: continued task expired")
+        }
+        for tick in 0...max(1, seconds) {
+            var progress = PicPlaceSyncProgress()
+            progress.filesTotal = max(1, seconds)
+            progress.filesDone = tick
+            progress.bytesTotal = Int64(max(1, seconds))
+            progress.bytesDone = Int64(tick)
+            activity.report(progress)
+            LLog("probe: tick \(tick) — \(activity.isContinuing ? "the continued task holds the app" : "no continued task")")
+            try? await Task.sleep(for: .seconds(1))
+        }
+        activity.end()
+        LLog("probe: continued task — done")
+    }
+}
+#endif
+
+#if os(iOS)
+/// One continued-processing task for a transfer a person started (iOS 26+).
+/// iOS launches it at once, or never when the system cannot; progress must
+/// keep moving or iOS ends a task it thinks has stalled, so the transfers
+/// report bytes as they go.
+///
+/// Apple's rules, learned by a crash (2026-09-25 — the iPad aborted at every
+/// launch): each request registers a handler for **its own identifier** just
+/// before it is submitted. The wildcard in `BGTaskSchedulerPermittedIdentifiers`
+/// only permits identifiers made at run time; one handler registered for the
+/// wildcard is refused by design (Apple DTS, developer forums thread 799126),
+/// and a request submitted with no handler is not an error `submit` returns —
+/// BackgroundTasks asserts and the app aborts. So: no registration, no
+/// request. And only for a press (Apple: *"in response to someone's
+/// action"*) — never a job resumed at launch or a retry.
+@available(iOS 26.0, *)
+@MainActor
+final class PicPlaceContinuedTransfer {
+    static let prefix = "com.regularsteven.letslapse.transfer"
+    private static var handles: [String: PicPlaceContinuedTransfer] = [:]
+
+    let identifier: String
+    private var title: String
+    private var task: BGContinuedProcessingTask?
+    private var onExpire: (@MainActor () -> Void)?
+    private var lastFiles = -1
+    private var done = false
+
+    /// True while iOS runs the task — the app is held by it.
+    var isRunning: Bool { task != nil && !done }
+
+    private init(identifier: String, title: String, onExpire: (@MainActor () -> Void)?) {
+        self.identifier = identifier
+        self.title = title
+        self.onExpire = onExpire
+    }
+
+    /// Registers this transfer's handler, then submits its request; nil
+    /// when iOS will not run one (the thirty seconds still stand).
+    static func begin(title: String, subtitle: String, onExpire: (@MainActor () -> Void)?) -> PicPlaceContinuedTransfer? {
+        // A fresh identifier every time: registering one twice aborts too.
+        let identifier = "\(prefix).\(UUID().uuidString.lowercased())"
+        let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) { task in
+            MainActor.assumeIsolated { launched(task) }
+        }
+        guard registered else {
+            LLog("picplace: continued task unavailable for \(title) — iOS refused its handler; the transfer keeps the thirty seconds")
+            return nil
+        }
+        let handle = PicPlaceContinuedTransfer(identifier: identifier, title: title, onExpire: onExpire)
+        handles[identifier] = handle
+        // Fail rather than queue: a transfer that cannot be held now runs
+        // in front as it always did, and a queued one would start later on
+        // its own, after the person has moved on.
+        if #available(iOS 27.0, *) {
+            // iOS 27's form reports every refusal (the old one could not),
+            // and is not for the main thread.
+            Task.detached(priority: .userInitiated) {
+                let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: title, subtitle: subtitle)
+                request.strategy = .fail
+                do {
+                    try await BGTaskScheduler.shared.submitTaskRequest(request)
+                } catch {
+                    await handle.refused(error)
+                }
+            }
+        } else {
+            let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: title, subtitle: subtitle)
+            request.strategy = .fail
+            do {
+                try BGTaskScheduler.shared.submit(request)
+            } catch {
+                handle.refused(error)
+                return nil
+            }
+        }
+        LLog("picplace: continued task asked for — \(title)")
+        return handle
+    }
+
+    private func refused(_ error: Error) {
+        guard !done else { return }
+        LLog("picplace: continued task refused for \(title): \(error.localizedDescription)")
+        done = true
+        Self.handles[identifier] = nil
+    }
+
+    private static func launched(_ task: BGTask) {
+        guard let task = task as? BGContinuedProcessingTask,
+              let handle = handles[task.identifier], !handle.done else {
+            task.setTaskCompleted(success: false)
+            return
+        }
+        handle.attach(task)
+    }
+
+    private func attach(_ task: BGContinuedProcessingTask) {
+        self.task = task
+        task.progress.totalUnitCount = 100
+        task.expirationHandler = { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.done else { return }
+                LLog("picplace: continued task for \(self.title) expired — the transfer stops between files and carries on in front")
+                self.onExpire?()
+                self.finish(success: false)
+            }
+        }
+        LLog("picplace: continued task running — \(title)")
+    }
+
+    func update(_ progress: PicPlaceSyncProgress) {
+        guard let task, !done else { return }
+        if progress.bytesTotal > 0 {
+            task.progress.totalUnitCount = progress.bytesTotal
+            task.progress.completedUnitCount = min(progress.bytesDone, progress.bytesTotal)
+        }
+        if progress.filesTotal > 0, progress.filesDone != lastFiles {
+            lastFiles = progress.filesDone
+            task.updateTitle(title, subtitle: "\(progress.filesDone.formatted()) of \(progress.filesTotal.formatted()) files")
+        }
+    }
+
+    func finish(success: Bool) {
+        guard !done else { return }
+        done = true
+        Self.handles[identifier] = nil
+        if let task {
+            task.progress.completedUnitCount = task.progress.totalUnitCount
+            task.setTaskCompleted(success: success)
+        }
+        task = nil
+    }
+}
+#endif

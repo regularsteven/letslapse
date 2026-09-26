@@ -156,10 +156,8 @@ final class CollectionExportController: ObservableObject {
         var instructions: [AVMutableVideoCompositionInstruction] = []
         clipBoundaries = []
 
-        for entry in collection.entries {
-            guard let url = model.blendMediaURL(for: entry.blendID) else {
-                throw ExportError.missingClip
-            }
+        for (index, entry) in collection.entries.enumerated() {
+            let url = try await mediaURL(for: entry, in: collection, seconds: model.entrySeconds(entry))
             let asset = AVURLAsset(url: url)
             guard let assetTrack = try await asset.loadTracks(withMediaType: .video).first else {
                 throw ExportError.missingClip
@@ -183,6 +181,33 @@ final class CollectionExportController: ObservableObject {
             // Land the oriented picture at the origin before crop/scale math.
             let oriented = preferred.concatenating(
                 CGAffineTransform(translationX: -orientedRect.minX, y: -orientedRect.minY))
+
+            // A still carries its own gentle move even here (D4): the Ken
+            // Burns ramp between its two framings over its span.
+            if model.isStill(entry) {
+                let base = CollectionMath.kenBurnsUnitBase(
+                    clipAspect: Double(orientedSize.width / max(1, orientedSize.height)),
+                    canvasAspect: ratio.aspect,
+                    offset: model.resolvedCropOffset(entry: entry, in: collection) ?? 0.5)
+                let move = entry.kenBurns ?? CollectionMath.kenBurnsDefaultMove(forClipIndex: index, base: base)
+                let from = canvasTransform(
+                    oriented: oriented,
+                    rect: pixelRect(unit: CollectionMath.kenBurnsUnitRect(base: base, framing: move.start), clipSize: orientedSize),
+                    renderWidth: renderSize.width)
+                let to = canvasTransform(
+                    oriented: oriented,
+                    rect: pixelRect(unit: CollectionMath.kenBurnsUnitRect(base: base, framing: move.end), clipSize: orientedSize),
+                    renderWidth: renderSize.width)
+                let instruction = AVMutableVideoCompositionInstruction()
+                instruction.timeRange = CMTimeRange(start: cursor, duration: range.duration)
+                let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
+                layer.setTransformRamp(fromStart: from, toEnd: to, timeRange: instruction.timeRange)
+                instruction.layerInstructions = [layer]
+                instructions.append(instruction)
+                cursor = CMTimeAdd(cursor, range.duration)
+                clipBoundaries.append(cursor.seconds)
+                continue
+            }
 
             let transform: CGAffineTransform
             if let offset = model.resolvedCropOffset(entry: entry, in: collection),
@@ -261,9 +286,8 @@ final class CollectionExportController: ObservableObject {
         var cursor = 0.0
 
         for (index, entry) in collection.entries.enumerated() {
-            guard let url = model.blendMediaURL(for: entry.blendID) else {
-                throw ExportError.missingClip
-            }
+            let url = try await mediaURL(
+                for: entry, in: collection, seconds: model.entryOutputSeconds(entry, in: collection))
             let asset = AVURLAsset(url: url)
             guard let assetTrack = try await asset.loadTracks(withMediaType: .video).first else {
                 throw ExportError.missingClip
@@ -418,6 +442,15 @@ final class CollectionExportController: ObservableObject {
         videoComposition.frameDuration = CMTime(
             value: 1, timescale: CMTimeScale(model.collectionExportFPS(collection)))
         return (composition, videoComposition)
+    }
+
+    /// The movie a member is cut from: the clip's own file, or — for a
+    /// still (D4) — its picture as a movie of `seconds`.
+    private func mediaURL(for entry: LapseCollection.Entry, in collection: LapseCollection, seconds: Double) async throws -> URL {
+        guard let url = model.blendMediaURL(for: entry.blendID) else { throw ExportError.missingClip }
+        guard model.isStill(entry) else { return url }
+        return try await StillClipMaker.movie(
+            for: url, seconds: max(0.5, seconds), fps: model.collectionExportFPS(collection))
     }
 
     private func pixelRect(unit: CGRect, clipSize: CGSize) -> CGRect {

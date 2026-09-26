@@ -114,9 +114,6 @@ final class PicPlaceController: ObservableObject {
         case failed(PicPlaceSyncRecord)
     }
 
-    /// What the Projects-list pill shows; nil keeps the card quiet.
-    enum ListState { case synced, syncing, failed, previewOnly }
-
     /// The cached profiles, per account — shown offline until the server
     /// says otherwise, and what "Sign in as @user" offers a signed-out
     /// library. `profileKey` is the single-profile key from before.
@@ -142,6 +139,9 @@ final class PicPlaceController: ObservableObject {
     /// The server's heavy assets per project from the last fresh read this
     /// session, keyed by origin id — the card's per-file truth.
     @Published internal(set) var serverHeavy: [UUID: [PicPlaceOriginalsCheck.RemoteAsset]] = [:]
+    /// When a view last asked for a project's list (`askForListing`), by
+    /// origin id — a screen of rows asks once.
+    var listingAskedAt: [UUID: Date] = [:]
     /// This device's heavy files per project (paths and sizes, no hashes)
     /// from the last folder walk, keyed by capture id.
     @Published internal(set) var heavyListings: [UUID: [PicPlaceOriginalsCheck.LocalFile]] = [:]
@@ -181,6 +181,11 @@ final class PicPlaceController: ObservableObject {
     @Published private(set) var serverLibraries: [PPLibrary] = []
     /// Whether the server answers `POST /projects/assets` (2026-09-24).
     private(set) var serverListsAssetsInBatches = false
+    /// PicPlace keeps each library's collections (`features["collections"]`,
+    /// docs/picplace-collections-ask.md) — the collections sync's switch.
+    private(set) var serverSyncsCollections = false
+    /// The push a few seconds after a collection changes here.
+    var collectionsPushTask: Task<Void, Never>?
     /// The first connection's progress while it runs (§4.1 step 4).
     @Published internal(set) var initialSyncProgress: InitialSyncProgress?
     var initialSyncTask: Task<Void, Never>?
@@ -206,6 +211,11 @@ final class PicPlaceController: ObservableObject {
     @Published var autoOriginalsEnabled: Bool = PicPlaceController.librarySettings.autoOriginals {
         didSet { saveLibrarySettings(); autoSyncSettingChanged() }
     }
+    /// Blends go up on their own as they are rendered, under the same rules
+    /// as every automatic send (D1, 2026-09-25) — on by default.
+    @Published var autoBlendsEnabled: Bool = PicPlaceController.librarySettings.autoBlends ?? true {
+        didSet { saveLibrarySettings(); autoSyncSettingChanged() }
+    }
     @Published var wifiOnly: Bool = UserDefaults.standard.object(forKey: PicPlaceController.wifiOnlyKey) as? Bool ?? true {
         didSet { UserDefaults.standard.set(wifiOnly, forKey: Self.wifiOnlyKey); autoSyncSettingChanged() }
     }
@@ -215,7 +225,8 @@ final class PicPlaceController: ObservableObject {
     }
     private func saveLibrarySettings() {
         do {
-            try PicPlaceLibrarySettings.save(.init(autoSync: autoSyncEnabled, autoOriginals: autoOriginalsEnabled), root: root, device: DeviceIdentity.id)
+            try PicPlaceLibrarySettings.save(.init(autoSync: autoSyncEnabled, autoOriginals: autoOriginalsEnabled,
+                                                   autoBlends: autoBlendsEnabled), root: root, device: DeviceIdentity.id)
         } catch {
             LLog("picplace: could not write the library's settings: \(error)")
         }
@@ -282,6 +293,17 @@ final class PicPlaceController: ObservableObject {
     /// Stood down for a library switch (L22): nothing re-arms, nothing runs.
     private(set) var isShutDown = false
     var originalsQueueTask: Task<Void, Never>?
+    /// The walk that sends blends on their own (D1, `runBlendsQueue`).
+    var blendsQueueTask: Task<Void, Never>?
+    /// A running transfer's background activity, by project — its progress
+    /// goes to the Lock Screen when a continued task holds the app.
+    var transferActivities: [UUID: PicPlaceBackgroundActivity] = [:]
+    /// The walk again once PicPlace has read back what an upload left it
+    /// checking (`scheduleHeavyRecheck`).
+    var heavyRecheckTask: Task<Void, Never>?
+    /// Heavy sets (by digest) the blends queue found incomplete for want of
+    /// something it does not send — not read again until the set moves.
+    var heavySetMissing: [UUID: String] = [:]
     var pathMonitorBox: AnyObject?
     /// One usage refresh for a whole run of syncs, not two requests per project.
     var usageRefreshTask: Task<Void, Never>?
@@ -745,6 +767,7 @@ final class PicPlaceController: ObservableObject {
         // projects' asset lists in one request — what the check asks when a
         // filing (or a pull) left posters unnoted (`settlePosters`).
         serverListsAssetsInBatches = status.features["asset_lists_batch"] == true
+        serverSyncsCollections = status.features["collections"] == true
         #if DEBUG
         // `LL_PICPLACE_NO_BATCH=1`: behave as a server without the batched
         // read — every unnoted poster goes through the push queue (how the
@@ -1458,6 +1481,8 @@ final class PicPlaceController: ObservableObject {
         initialSyncTask?.cancel(); initialSyncTask = nil
         pushQueueTask?.cancel(); pushQueueTask = nil
         originalsQueueTask?.cancel(); originalsQueueTask = nil
+        blendsQueueTask?.cancel(); blendsQueueTask = nil
+        heavyRecheckTask?.cancel(); heavyRecheckTask = nil
         usageRefreshTask?.cancel(); usageRefreshTask = nil
         for task in pendingPushes.values { task.cancel() }
         pendingPushes.removeAll()
@@ -1526,6 +1551,10 @@ final class PicPlaceController: ObservableObject {
         // A removal shows as its progress to the end, even once the sources
         // it is removing have started to go.
         if removingProjects.contains(capture.id), let progress = progress[capture.id] { return .syncing(progress) }
+        // A preview whose originals are coming down shows them coming — it
+        // read "Preview only" with a greyed button until the last file
+        // landed (2026-09-25).
+        if let progress = progress[capture.id], progress.phase == .downloading { return .syncing(progress) }
         if isPreviewOnly(capture) { return .previewOnly(records[model.originID(of: capture)]) }
         guard isSignedIn else { return .signedOut }
         guard canSync else { return .notConnected }
@@ -1535,26 +1564,6 @@ final class PicPlaceController: ObservableObject {
         if record.lastError != nil { return .failed(record) }
         if model.lastEdited(capture) > record.syncedAt { return .changes(record) }
         return .synced(record)
-    }
-
-    func listState(for captureID: UUID) -> ListState? {
-        #if DEBUG
-        if let stagedState {
-            switch stagedState {
-            case .syncing: return .syncing
-            case .synced, .changes: return .synced
-            case .failed: return .failed
-            default: return nil
-            }
-        }
-        #endif
-        guard let capture = model.capture(id: captureID) else { return nil }
-        if conflicts.contains(where: { $0.originID == model.originID(of: capture) }) { return .failed }
-        if isPreviewOnly(capture) { return .previewOnly }
-        guard canSync else { return nil }
-        if progress[captureID] != nil { return .syncing }
-        guard let record = records[model.originID(of: capture)] else { return nil }
-        return record.lastError == nil ? .synced : .failed
     }
 
     /// Re-read the server's view of a project the card is showing: the
@@ -1575,6 +1584,14 @@ final class PicPlaceController: ObservableObject {
                 let heavy = (detail.assets ?? []).filter { $0.status == "confirmed" && PicPlaceSyncInventory.isHeavy($0.name) }
                 record.serverHeavyFiles = heavy.count
                 record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }
+                record.serverSourceFiles = heavy.filter { PicPlaceSyncInventory.heavyKind($0.name) == .source }.count
+                // A download refused because PicPlace held nothing was
+                // recorded as a failure before 2026-09-26 — never this
+                // device's: cleared once PicPlace's list is read.
+                if record.failedPolicy == PicPlaceSyncPolicy.originals.rawValue, let caption = record.lastError,
+                   PicPlaceDownloadRun.NotThere.captions.contains(caption) {
+                    record.clearFailure()
+                }
                 records[key] = record
                 saveSyncState()
                 // The per-file truth the Originals and Blends rows read.
@@ -1620,12 +1637,12 @@ final class PicPlaceController: ObservableObject {
 
     /// An upload job's run: the originals, stopped between files by the
     /// job's Pause and the Wi-Fi rule. False when it could not start.
-    func syncUploadJob(_ capture: AppModel.CaptureProject) -> Bool {
-        sync(capture, policy: .originals, retriedLibrary: false, job: true)
+    func syncUploadJob(_ capture: AppModel.CaptureProject, pressed: Bool) -> Bool {
+        sync(capture, policy: .originals, retriedLibrary: false, job: true, pressed: pressed)
     }
 
     @discardableResult
-    private func sync(_ capture: AppModel.CaptureProject, policy override: PicPlaceSyncPolicy?, retriedLibrary: Bool, job: Bool = false) -> Bool {
+    private func sync(_ capture: AppModel.CaptureProject, policy override: PicPlaceSyncPolicy?, retriedLibrary: Bool, job: Bool = false, pressed: Bool = false) -> Bool {
         // Filed in another library of the account on PicPlace (stage C):
         // this library neither pushes nor pulls it. The card says where it is.
         if let other = records[model.originID(of: capture)]?.elsewhereLibrary {
@@ -1656,6 +1673,7 @@ final class PicPlaceController: ObservableObject {
         let stop = policy.sendsHeavy ? PicPlaceStopSignal() : nil
         let run = PicPlaceSyncRun(client: client, project: project, thisDeviceID: profile?.deviceID, assetStore: model.assetStore, stop: stop) { [weak self] progress in
             self?.progress[capture.id] = progress
+            self?.transferActivities[capture.id]?.report(progress)
         }
         uploadStops[capture.id] = stop
         progress[capture.id] = PicPlaceSyncProgress()
@@ -1670,7 +1688,14 @@ final class PicPlaceController: ObservableObject {
         let posterKind = model.mediaKind(for: capture)
         let lastPosterToken = records[key]?.posterToken
         syncTasks[capture.id] = Task {
-            let activity = PicPlaceBackgroundActivity("PicPlace sync of \(capture.displayTitle)") { [weak self] in
+            // A job a person just started — Upload, Resume, Use mobile data —
+            // asks iOS to hold the app while it runs. Everything else keeps
+            // the thirty seconds: an automatic sync, and a job going again on
+            // its own (at launch, on a network change, a retry), which iOS
+            // does not allow to ask (`PicPlaceContinuedTransfer`).
+            let continued = job && pressed ? PicPlaceBackgroundActivity.Continued(
+                title: "Uploading “\(capture.displayTitle)” to PicPlace", subtitle: "Starting") : nil
+            let activity = PicPlaceBackgroundActivity("PicPlace sync of \(capture.displayTitle)", continued: continued) { [weak self] in
                 // iOS suspends the app in a moment: an upload stops between
                 // files now, keeping what reached PicPlace, and a job goes
                 // again when the app is in front (background transfers: TODO).
@@ -1681,7 +1706,11 @@ final class PicPlaceController: ObservableObject {
                 }
                 stop.request()
             }
-            defer { activity.end() }
+            transferActivities[capture.id] = activity
+            defer {
+                activity.end()
+                transferActivities[capture.id] = nil
+            }
             do {
                 // A preview-only project's "source" IS its poster: nothing to
                 // render, the file it has is the one that goes.
@@ -1689,28 +1718,54 @@ final class PicPlaceController: ObservableObject {
                     _ = await PicPlacePoster.ensure(sourceURL: posterSource, kind: posterKind, grade: grade, token: posterToken,
                                                     lastToken: lastPosterToken, in: folder)
                 }
+                // Each blend here gets its still (`posters/<id>.jpg`, in the
+                // records bundle) before the records go, so a device that
+                // pulls the project shows every blend row with a picture —
+                // until 2026-09-25 a still was made only when a blend left
+                // this device, and a pulled row was a placeholder (D1).
+                if policy.sendsRecords {
+                    let here = model.blends(for: capture).filter { !model.blendFileMissing($0) }.map(\.outputFileName)
+                    if !here.isEmpty { _ = await model.ensureBlendPosters(for: capture, fileNames: Set(here)) }
+                }
                 var record = try await run.run()
                 let verifiedDigest = record.heavyDigest
                 let divergent = record.divergentFiles
                 let changed = record.changedFiles
                 record.posterToken = posterToken
-                if let previous = records[key] {
+                let previousRecord = records[key]
+                if let previous = previousRecord {
                     // A push of one policy keeps what the other recorded.
                     record.serverHeavyFiles = previous.serverHeavyFiles
                     record.serverHeavyBytes = previous.serverHeavyBytes
+                    record.serverSourceFiles = previous.serverSourceFiles
                     record.originalsMovedAt = previous.originalsMovedAt
                     record.serverConfirmedSeen = previous.serverConfirmedSeen
                     record.heavyDigest = previous.heavyDigest
                     record.removedAt = previous.removedAt
                     record.divergentFiles = previous.divergentFiles
                     record.changedFiles = previous.changedFiles
+                    record.blendsDigest = previous.blendsDigest
                     if policy == .minimal { record.posterToken = posterToken }
                 }
                 record.clearFailure()
-                if policy.sendsHeavy {
+                if policy == .blends {
+                    // The blends alone (D1): their own marker, and nothing of
+                    // the originals' — the removal gate (`heavyDigest`), the
+                    // counts of what stays here, a pull's own policy — moves.
+                    record.blendsDigest = verifiedDigest
+                    record.policy = previousRecord?.policy ?? record.policy
+                    record.heavyFiles = previousRecord?.heavyFiles
+                    record.heavyBytes = previousRecord?.heavyBytes
+                    record.posterToken = previousRecord?.posterToken ?? record.posterToken
+                    serverHeavy[key] = nil
+                    refreshHeavyListing(for: capture)
+                } else if policy.sendsHeavy {
                     record.originalsMovedAt = Date()
                     record.serverHeavyFiles = record.files
                     record.serverHeavyBytes = record.bytes
+                    // Every source went; the count is PicPlace's to say at
+                    // the next read (the marker answers meanwhile).
+                    record.serverSourceFiles = nil
                     record.heavyFiles = 0
                     record.heavyBytes = 0
                     record.heavyDigest = verifiedDigest
@@ -1721,6 +1776,10 @@ final class PicPlaceController: ObservableObject {
                     refreshHeavyListing(for: capture)
                 }
                 records[key] = record
+                // PicPlace reads what it received back within a minute or
+                // two: the set's marker — the holdings pill's green tick —
+                // is written by the blends queue's look after that.
+                if policy.sendsHeavy, verifiedDigest == nil { scheduleHeavyRecheck() }
                 if job { noteUploadRunEnded(capture.id, outcome: .done) }
             } catch is PicPlaceSyncRun.Paused {
                 // Stopped between files on request: what finished is on
@@ -1822,20 +1881,36 @@ final class PicPlaceController: ObservableObject {
     /// Blends row the blends (free up space removes them separately).
     func downloadOriginals(_ capture: AppModel.CaptureProject,
                            kinds: Set<PicPlaceOriginalsCheck.Kind> = Set(PicPlaceOriginalsCheck.Kind.allCases),
-                           replacing: Set<String> = []) {
+                           replacing: Set<String> = [],
+                           only: Set<String>? = nil) {
         guard canSync, syncTasks[capture.id] == nil, !removingProjects.contains(capture.id) else { return }
         let key = model.originID(of: capture)
         let folder = model.projectFolderURL(for: capture)
         removalNotes[capture.id] = nil
-        let run = PicPlaceDownloadRun(client: client, projectUUID: key.uuidString.lowercased(), folder: folder, kinds: kinds,
+        var run = PicPlaceDownloadRun(client: client, projectUUID: key.uuidString.lowercased(), folder: folder, kinds: kinds,
                                       replacing: replacing, assetStore: model.assetStore) { [weak self] progress in
             self?.progress[capture.id] = progress
+            self?.transferActivities[capture.id]?.report(progress)
         }
+        run.only = only
         progress[capture.id] = PicPlaceSyncProgress(phase: .downloading)
         let server = profile?.server ?? serverString
         syncTasks[capture.id] = Task {
-            let activity = PicPlaceBackgroundActivity("PicPlace download of \(capture.displayTitle)")
-            defer { activity.end() }
+            var readListAgain = false
+            // Every download is a person's: iOS is asked to hold the app
+            // while it runs. When it cannot any longer, the download stops —
+            // what landed stays, the rest comes at the next press.
+            let activity = PicPlaceBackgroundActivity(
+                "PicPlace download of \(capture.displayTitle)",
+                continued: .init(title: "Downloading “\(capture.displayTitle)”", subtitle: "From PicPlace")
+            ) { [weak self] in
+                self?.syncTasks[capture.id]?.cancel()
+            }
+            transferActivities[capture.id] = activity
+            defer {
+                activity.end()
+                transferActivities[capture.id] = nil
+            }
             do {
                 let got = try await run.run()
                 var record = records[key] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: revision(of: capture), files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: "pull")
@@ -1857,6 +1932,14 @@ final class PicPlaceController: ObservableObject {
                 LLog("picplace: downloaded the \(kinds == [.blend] ? "blends" : kinds == [.source] ? "originals" : "originals and blends") of \(capture.displayTitle): \(got.files) file(s), \(got.bytes) bytes")
             } catch is CancellationError {
                 model.noteOriginalsArrived(for: capture.id)
+            } catch let notThere as PicPlaceDownloadRun.NotThere {
+                // Nothing on PicPlace to bring — not this device's failure:
+                // no error on the record. PicPlace's list is read again (below)
+                // so the rows stop offering it.
+                LLog("picplace: download of \(capture.displayTitle) — \(notThere.caption) Nothing to bring; not recorded as a failure")
+                listingAskedAt[key] = nil
+                readListAgain = true
+                model.noteOriginalsArrived(for: capture.id)
             } catch {
                 LLog("picplace: download of \(capture.displayTitle)'s originals failed: \(error)")
                 var record = records[key] ?? PicPlaceSyncRecord(syncedAt: .distantPast, revision: 0, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: server, lastError: nil, policy: "pull")
@@ -1867,6 +1950,7 @@ final class PicPlaceController: ObservableObject {
             saveSyncState()
             progress[capture.id] = nil
             syncTasks[capture.id] = nil
+            if readListAgain { askForListing(capture.id) }
         }
     }
 

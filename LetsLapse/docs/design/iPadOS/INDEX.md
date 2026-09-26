@@ -2,6 +2,19 @@
 
 Canvas 820×1180 pt (iPad 10th gen class), portrait + landscape where bespoke.
 
+🟡 **2026-09-25, connected asset states — the Gallery's PicPlace filters — code first, mirrors OWED after sign-off**
+(plan §14): the iPad's Gallery sidebar gains the phone's and Mac's PicPlace section; nothing iPad-specific.
+
+🟡 **2026-09-25, connected asset states — the holdings pill (Direction B) — code first, mirrors OWED after sign-off**
+(plan §12): the iPhone's pill on the iPad's Gallery tiles and Projects cards; nothing iPad-specific. Not yet run on an
+iPad simulator — it goes to the iPad Air M3 with stage 3.
+
+🟡 **2026-09-25, connected asset states, stage 1 — code first, mirrors OWED after sign-off** (plan
+`docs/connected-asset-states-plan.md` §4.1): the editor's **preview page** has the iPad's two dressings — landscape
+floats (the picture top-left, the chrome row, the status card where the timeline capsule sits beside the greyed buttons
+pill), portrait takes the dark rail. To draw after sign-off: `project-photo.viewer.preview.landscape.svg`. Not yet run on
+an iPad simulator.
+
 ⚠️ **2026-09-13, editor controls redesign (section 6 lock-in) — code first, landscape mirrors DRAWN the same day:** iPad
 landscape (a regular-width window wider than tall) gets board 5a / 6b — picture anchored top-left, back + INTERVAL chip
 and the tab pill in the top corners, the timeline capsule and the six-button pill along the foot, the open group as a

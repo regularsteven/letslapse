@@ -27,6 +27,10 @@ enum PicPlaceSyncState {
         /// id (2026-09-24, `PicPlaceUploadJob`): paused, waiting for Wi-Fi,
         /// interrupted — or running when the app last stopped.
         var uploadJobs: [String: PicPlaceUploadJob]?
+        /// PicPlace's revision of this library's collections document, as
+        /// last read or written (D3, 2026-09-25) — what a push is sent
+        /// against.
+        var collectionsRevision: Int?
     }
 
     private struct File: Codable {

@@ -229,6 +229,7 @@ extension PicPlaceController {
         }
         releaseHeldPushes()
         scheduleOriginalsQueue()
+        scheduleBlendsQueue()
     }
 
     /// The pushes a hold kept, back into the queue with the reasons they
@@ -271,6 +272,7 @@ extension PicPlaceController {
         releaseHeldPushes(manual: true)
         resumePausedUploadJobs()
         scheduleOriginalsQueue()
+        scheduleBlendsQueue()
         if !wasHolding { checkForChanges(reason: "manual") }
     }
 
@@ -432,7 +434,7 @@ extension PicPlaceController {
             LLog("picplace: push queue — \(sent) sent, \(failed) failed\(pushQueue.isEmpty && heldPushes.isEmpty ? "" : ", \(pushQueue.count + heldPushes.count) held")\(sendsPaused ? " (paused)" : "")")
         }
         updateAutoError()
-        if sent > 0 { scheduleOriginalsQueue() }
+        if sent > 0 { scheduleOriginalsQueue(); scheduleBlendsQueue() }
     }
 
     private enum PushOutcome { case sent, failed, nothing }
@@ -608,6 +610,164 @@ extension PicPlaceController {
             updateAutoError()
         }
         if autoStatus?.hasPrefix("Uploading originals") == true { autoStatus = nil }
+    }
+
+    // MARK: The blends queue (D1, 2026-09-25)
+
+    /// Whether blends may go up on their own right now: every rule an
+    /// automatic send keeps — auto-sync, the session, *Only on Wi-Fi*, Low
+    /// Power Mode, a shoot being written, the drawer's Pause — and the
+    /// library's *Upload blends automatically*.
+    var blendsAllowed: Bool {
+        heavyChecksAllowed && autoBlendsEnabled
+    }
+
+    /// Whether the queue may walk at all — its reads of PicPlace's lists,
+    /// which keep the holdings pill's green tick true, run under every rule
+    /// but *Upload blends automatically*, which only holds the uploads.
+    var heavyChecksAllowed: Bool {
+        autoAllowed && model.stage != .processing && !sendsPaused
+    }
+
+    func scheduleBlendsQueue() {
+        guard heavyChecksAllowed, blendsQueueTask == nil else { return }
+        blendsQueueTask = Task { [weak self] in
+            guard let self else { return }
+            await runBlendsQueue()
+            blendsQueueTask = nil
+        }
+    }
+
+    /// A walk once PicPlace has had time to read back what an upload left
+    /// it checking ("within a minute or two") — so the pill turns green
+    /// then, not at the next check.
+    func scheduleHeavyRecheck() {
+        heavyRecheckTask?.cancel()
+        heavyRecheckTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(90))
+            guard !Task.isCancelled, let self else { return }
+            heavyRecheckTask = nil
+            scheduleBlendsQueue()
+        }
+    }
+
+    /// Every project holding a blend PicPlace lacks sends its blends —
+    /// newest project first (the blend just rendered is the one somebody is
+    /// waiting for on another device), one project at a time, while the
+    /// rules hold (docs/connected-asset-states-plan.md D1). A project is
+    /// skipped when its whole heavy set is verified there (`heavyDigest`, an
+    /// originals upload) or its blends were seen there last time
+    /// (`blendsDigest`); otherwise one read of PicPlace's list decides, and
+    /// only what is missing goes (negotiated by hash). The records go first:
+    /// a project that moved since its last push is the push queue's, and
+    /// its blends follow the push. A Photo capture's stack is its picture —
+    /// it travels with the originals (plan T3), never on its own.
+    ///
+    /// A project whose originals went up (or were seen there) is checked
+    /// WHOLE: its `heavyDigest` is what the holdings pill's green tick
+    /// reads (plan §4.3), so a set that only gained a blend — sent here —
+    /// or that PicPlace was still reading back when its upload ended is
+    /// marked backed up again once PicPlace holds all of it, whether or not
+    /// the originals queue is on. So is a set another device sent, once
+    /// PicPlace's count of its heavy files covers what is here. A set found
+    /// incomplete for want of something this queue does not send is not
+    /// read again until it changes (`heavySetMissing`).
+    private func runBlendsQueue() async {
+        guard let libraryIndex = model.libraryIndex else { return }
+        var query = LibraryIndex.ProjectQuery()
+        query.limit = 100_000
+        query.sort = .created
+        query.ascending = false
+        let rows = (try? libraryIndex.projects(query).rows) ?? []
+        let now = Date()
+        for row in rows {
+            guard heavyChecksAllowed, !Task.isCancelled else { break }
+            guard let capture = model.capture(id: row.id) else { continue }
+            let origin = model.originID(of: capture)
+            guard let record = records[origin], record.recordsReachedServer, record.elsewhereLibrary == nil,
+                  record.revision == revision(of: capture) else { continue }
+            // A set this device sent or fetched is checked whole. So is one
+            // another device sent — the iPad's upload of a project that is
+            // here too: PicPlace holds at least as many heavy files of it as
+            // this device had at its last push, and one read settles the
+            // rest (2026-09-25: the 16 Pro called three projects the iPad had
+            // backed up "not backed up" and listed them under Needs
+            // uploading). Fewer there means something here is missing: no read.
+            let ownSet = record.heavyDigest != nil || record.originalsMovedAt != nil
+            let serverHeavyFiles = record.serverHeavyFiles ?? 0
+            let sentElsewhere = !ownSet && serverHeavyFiles > 0 && serverHeavyFiles >= (record.heavyFiles ?? 0)
+            let sendsBlends = !capture.isPhotoCapture && autoBlendsEnabled
+            guard ownSet || sentElsewhere
+                    || (sendsBlends && model.blends(for: capture).contains(where: { !model.blendFileMissing($0) })) else { continue }
+            if let due = record.retryDueAt, due > now { continue }
+            guard syncTasks[capture.id] == nil, !removingProjects.contains(capture.id), uploadJobs[capture.id] == nil else { continue }
+            let folder = model.projectFolderURL(for: capture)
+            let listing = await Task.detached(priority: .utility) { Self.heavyFiles(in: folder) }.value
+            guard !listing.isEmpty else { continue }
+            let wholeDigest = PicPlaceOriginalsCheck.digest(listing)
+            if record.heavyDigest == wholeDigest { continue }
+            // Another device's set, counted against what is here now.
+            let wholeSet = ownSet || (sentElsewhere && serverHeavyFiles >= listing.count)
+            let blendListing = sendsBlends ? listing.filter { $0.kind == .blend } : []
+            let digest = PicPlaceOriginalsCheck.digest(blendListing)
+            let blendsThere = blendListing.isEmpty || record.blendsDigest == digest
+            if wholeSet {
+                if blendsThere, heavySetMissing[origin] == wholeDigest { continue }
+                switch await heavySetOnPicPlace(listing, origin: origin, folder: folder) {
+                case .verified:
+                    records[origin]?.heavyDigest = wholeDigest
+                    if !blendListing.isEmpty { records[origin]?.blendsDigest = digest }
+                    heavySetMissing[origin] = nil
+                    saveSyncState()
+                    LLog("picplace: \(capture.displayTitle) — all \(listing.count) heavy file(s) here verified on PicPlace\(ownSet ? "" : " (sent from another device)"): backed up")
+                    continue
+                case .checking:
+                    continue
+                case .missing:
+                    // Not for want of a blend: the originals queue's, or a
+                    // person's Upload — not read again until the set moves.
+                    if blendsThere {
+                        heavySetMissing[origin] = wholeDigest
+                        continue
+                    }
+                }
+            } else {
+                guard !blendsThere else { continue }
+                switch await heavySetOnPicPlace(blendListing, origin: origin, folder: folder) {
+                case .verified:
+                    records[origin]?.blendsDigest = digest
+                    saveSyncState()
+                    continue
+                case .checking:
+                    continue
+                case .missing:
+                    break
+                }
+            }
+            guard blendsAllowed else { continue }
+            let bytes = blendListing.reduce(Int64(0)) { $0 + $1.bytes }
+            autoStatus = "Uploading blends · \(capture.displayTitle) · \(blendListing.count.formatted()) · \(LLFormat.bytes(bytes))"
+            LLog("picplace: blends queue — \(capture.displayTitle): \(blendListing.count) blend(s), \(bytes) bytes")
+            originalsRunPaused = false
+            await syncAndWait(capture, policy: .blends)
+            if originalsRunPaused {
+                originalsRunPaused = false
+                LLog("picplace: blends queue — stopped with \(capture.displayTitle) part-way; the next walk carries on")
+                break
+            }
+            if records[origin]?.lastError != nil {
+                updateAutoError()
+                break
+            }
+            // The set was whole before the blend: with the blend there it is
+            // whole again — the green tick now, not at the next check. One
+            // PicPlace is still reading back waits for `scheduleHeavyRecheck`.
+            if wholeSet, case .verified = await heavySetOnPicPlace(listing, origin: origin, folder: folder) {
+                records[origin]?.heavyDigest = wholeDigest
+                saveSyncState()
+            }
+        }
+        if autoStatus?.hasPrefix("Uploading blends") == true { autoStatus = nil }
     }
 
     /// Where PicPlace stands with a project's heavy files.

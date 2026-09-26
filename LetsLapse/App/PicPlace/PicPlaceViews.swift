@@ -485,7 +485,8 @@ struct PicPlaceStatusCard: View {
             case .deletedHereEditedThere: return "Deleted here, changed on PicPlace"
             default: return "Needs your decision"
             }
-        case .previewOnly: return "Preview only"
+        // A blend still here says so, as the holdings pill's layers do.
+        case .previewOnly: return model.shownHoldings(for: captureID)?.tier == .blends ? "Blends here" : "Preview only"
         case .elsewhere(let name): return name.map { "In “\($0)” on PicPlace" } ?? "In another library on PicPlace"
         case .signedOut: return "Keep a copy on PicPlace"
         case .notConnected: return "Library not connected"
@@ -615,7 +616,7 @@ struct PicPlaceStatusCard: View {
         return Button {
             switch state {
             case .conflict: picplace.isReviewingConflicts = true
-            case .previewOnly: picplace.downloadOriginals(capture, kinds: [.source])
+            case .previewOnly: picplace.downloadOriginals(capture, kinds: picplace.originalsDownloadKinds(for: capture))
             case .signedOut: picplace.signIn()
             case .notConnected: if picplace.libraryLink == .unbound || picplace.libraryLink == .needsLibrary { picplace.offerConnect() } else { model.requestedTab = .settings }
             case .syncing:
@@ -917,6 +918,10 @@ struct PicPlaceSettingsCard: View {
             LLRow(title: "Only on Wi-Fi",
                   subtitle: "Auto-sync and uploads of originals wait for Wi-Fi or Ethernet — a personal hotspot counts as mobile data. An upload can use mobile data if you say so on its card, for that upload only. Syncing a project's changes yourself works on any connection.") {
                 Toggle("", isOn: $picplace.wifiOnly).labelsHidden()
+            }
+            LLRow(title: "Upload blends automatically",
+                  subtitle: "Every blended clip and image goes to PicPlace as it is made, so your other devices can play it and use it in collections without the originals.") {
+                Toggle("", isOn: $picplace.autoBlendsEnabled).labelsHidden().disabled(!picplace.autoSyncEnabled)
             }
             LLRow(title: "Upload originals automatically",
                   subtitle: "Source photos, videos and blends of every project, one project at a time. Nothing is ever removed from this device on its own.") {
@@ -1340,48 +1345,5 @@ struct PicPlaceConnectSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-}
-
-// MARK: - List pill (components/picplace-pill.<state>.svg)
-
-/// The 22×18 media pill on a Projects-list thumbnail: synced, syncing or failed.
-struct PicPlacePill: View {
-    let state: PicPlaceController.ListState
-
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundStyle(tint)
-            .frame(width: 22, height: 18)
-            .background(Color.black.opacity(0.5), in: Capsule())
-            .accessibilityLabel(label)
-    }
-
-    private var symbol: String {
-        switch state {
-        case .synced: return "checkmark.icloud.fill"
-        case .syncing: return "icloud.and.arrow.up"
-        case .failed: return "exclamationmark.icloud.fill"
-        case .previewOnly: return "icloud"
-        }
-    }
-
-    private var tint: Color {
-        switch state {
-        case .synced: return .green
-        case .syncing: return LL.amber
-        case .failed: return LL.levelOff
-        case .previewOnly: return .secondary
-        }
-    }
-
-    private var label: String {
-        switch state {
-        case .previewOnly: return "Preview only — originals on PicPlace"
-        case .synced: return "On PicPlace"
-        case .syncing: return "Syncing to PicPlace"
-        case .failed: return "PicPlace sync failed"
-        }
     }
 }

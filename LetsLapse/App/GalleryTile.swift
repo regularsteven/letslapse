@@ -7,6 +7,9 @@ import SwiftUI
 /// Badges:
 /// - Bottom-left: shoot type (Photos / Interval / Video) — always shown
 /// - Top-right: amber "N clips" badge — only when the project has ≥ 2 blended clips
+/// - Bottom-right: the holdings pill (`HoldingsPill`) — what this device
+///   holds (camera · layers · both · a ring while downloading) | PicPlace
+///   (cloud · green cloud-check when backed up), 2026-09-25
 ///
 /// Interaction:
 /// - Single tap → `onTap` (selection → preview panel on the wide layouts;
@@ -60,6 +63,10 @@ struct GalleryTile: View {
 
             // Shoot-type badge (bottom-left)
             MediaBadge(text: typeBadge)
+                .padding(6)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            HoldingsPill(captureID: capture.id)
                 .padding(6)
         }
         .overlay(alignment: .topTrailing) {

@@ -27,6 +27,9 @@ struct RailTabBar: View {
     /// Label color over the selected fill — black on the editors' amber, white
     /// on the Mac's accent, the same pair the preset chips use.
     var onAccent: Color = .white
+    /// Pages drawn greyed in place — they need the originals (`EditorPreviewPage`).
+    /// A tap still reaches the selection, whose owner asks whether to fetch them.
+    var locked: Set<RailTab> = []
 
     var body: some View {
         HStack(spacing: 2) {
@@ -47,7 +50,7 @@ struct RailTabBar: View {
         } label: {
             Text(tab.rawValue)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(selected ? onAccent : accent)
+                .foregroundStyle(selected ? onAccent : locked.contains(tab) ? accent.opacity(0.38) : accent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
                 .background(Capsule().fill(selected ? accent : Color.clear))
@@ -56,5 +59,6 @@ struct RailTabBar: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .accessibilityLabel("\(tab.rawValue) controls")
+        .accessibilityHint(locked.contains(tab) ? "Needs the originals" : "")
     }
 }

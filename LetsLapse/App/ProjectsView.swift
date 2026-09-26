@@ -617,10 +617,11 @@ private struct ProjectCard: View {
                             .scaleEffect(0.82, anchor: .bottomTrailing)
                             .padding(4)
                     }
-                    // Synced / syncing / failed on PicPlace, top-right, 4pt in;
-                    // nothing for a project never synced (picplace-pill.*.svg).
+                    // The holdings pill, top-right, 4pt in: what this device
+                    // holds | PicPlace (docs/connected-asset-states-plan.md
+                    // §4.3 — the Gallery tile's, in the old PicPlace seat).
                     .overlay(alignment: .topTrailing) {
-                        PicPlaceThumbnailPill(picplace: model.picplace, captureID: capture.id)
+                        HoldingsPill(captureID: capture.id)
                             .padding(4)
                     }
 
@@ -828,17 +829,3 @@ private struct SourceFormatPill: View {
     }
 }
 
-
-/// The PicPlace pill a card wears once its project has been synced — its own
-/// view so the card re-renders on the controller's changes without the whole
-/// list observing it.
-private struct PicPlaceThumbnailPill: View {
-    @ObservedObject var picplace: PicPlaceController
-    let captureID: UUID
-
-    var body: some View {
-        if let state = picplace.listState(for: captureID) {
-            PicPlacePill(state: state)
-        }
-    }
-}

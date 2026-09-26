@@ -11,6 +11,12 @@ import SwiftUI
 /// - **Shapes**: Ellipse / Rectangle / Square / No Shapes, from each project's
 ///   `shapes.json` register (Find shapes, or drawn in the Masks tab)
 ///
+/// With the library connected to PicPlace, a **PicPlace** section under
+/// Library (2026-09-25, the brief's "Gallery library filters" — plan §1b,
+/// §14): All · On this device · Download available · Not available to
+/// download · Needs uploading · Has blends · Syncing / Needs attention, each
+/// with its count. None of it on a device that is not connected.
+///
 /// And on the phone, where it is a sheet, a fifth on top — **View**, the
 /// Timeline switch: the portrait header gave the Timeline glyph's seat to
 /// the sync pill (2026-09-15), and the mode is remembered, so this is where
@@ -26,6 +32,12 @@ struct GallerySidebar: View {
     var presentTags: [String]
     /// The Timeline switch, when this sidebar is the only place it lives.
     var timelineMode: Binding<Bool>? = nil
+    /// The PicPlace section's selection — nil in a library not connected to
+    /// PicPlace, which shows no section at all.
+    var picplaceFilter: Binding<PicPlaceFilter>? = nil
+    var picplaceCounts: [PicPlaceFilter: Int] = [:]
+    /// The status sweep's progress while it runs.
+    var picplaceProgress: (done: Int, total: Int)? = nil
 
     var body: some View {
         ScrollView {
@@ -35,6 +47,10 @@ struct GallerySidebar: View {
                     Divider().padding(.horizontal, 12)
                 }
                 librarySection
+                if let picplaceFilter {
+                    Divider().padding(.horizontal, 12)
+                    picplaceSection(picplaceFilter)
+                }
                 if !presentTags.isEmpty {
                     Divider().padding(.horizontal, 12)
                     tagsSection
@@ -95,6 +111,38 @@ struct GallerySidebar: View {
                     )
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: PicPlace
+
+    private func picplaceSection(_ selection: Binding<PicPlaceFilter>) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            LLSectionHeader("PicPlace")
+                .padding(.horizontal, 14)
+
+            ForEach(PicPlaceFilter.allCases) { f in
+                Button {
+                    selection.wrappedValue = f
+                } label: {
+                    LibraryFilterRow(
+                        label: f.label,
+                        icon: f.systemImage,
+                        isSelected: selection.wrappedValue == f,
+                        count: f == .all ? nil : picplaceCounts[f]
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            if let progress = picplaceProgress {
+                // The first look at a library walks every project once;
+                // later looks check what moved.
+                Text("Checking \(progress.done.formatted()) of \(progress.total.formatted()) projects…")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 4)
             }
         }
     }
@@ -227,19 +275,32 @@ private struct LibraryFilterRow: View {
     var label: String
     var icon: String
     var isSelected: Bool
+    /// How many projects the row keeps, where the section shows numbers.
+    var count: Int? = nil
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(isSelected ? LL.accent : .secondary)
                 .frame(width: 20, alignment: .center)
 
+            // The PicPlace section's names are the brief's, in full: a
+            // narrow sidebar wraps "Not available to download" rather than
+            // cutting it (they are the pill's VoiceOver words too).
             Text(label)
                 .font(.system(size: 14))
                 .foregroundStyle(isSelected ? LL.accent : .primary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 0)
+
+            if let count {
+                Text(count.formatted())
+                    .font(.system(size: 12).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)

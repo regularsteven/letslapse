@@ -329,6 +329,7 @@ struct ProjectSyncSheet: View {
                 statusLine
                 sendBlock
                 uploadsBlock
+                downloadsBlock
                 checkButton
                 settingsLink
             }
@@ -416,6 +417,56 @@ struct ProjectSyncSheet: View {
                             }
                             uploadButton(row)
                         }
+                    }
+                }
+            }
+            .padding(12)
+            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    /// Originals and blends coming down (2026-09-25): a person browses on
+    /// while they come — from a greyed control's *Download and Continue*,
+    /// the project card, a blend row — and this is where to find them all,
+    /// each with how far it got and Stop.
+    @ViewBuilder
+    private var downloadsBlock: some View {
+        let rows = picplace.progress
+            .filter { $0.value.phase == .downloading }
+            .map { (id: $0.key, progress: $0.value, title: picplace.model.capture(id: $0.key)?.displayTitle ?? "A project") }
+            .sorted { $0.title < $1.title }
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(rows, id: \.id) { row in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .center, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Downloading from PicPlace")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .lineLimit(1)
+                                Text(row.title)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 8)
+                            Button {
+                                picplace.cancelSync(row.id)
+                            } label: {
+                                Text("Stop")
+                                    .font(.system(size: 13.5, weight: .semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.secondary)
+                        }
+                        ProgressView(value: row.progress.fraction)
+                            .tint(LL.accent)
+                        Text(row.progress.filesTotal == 0
+                             ? "Asking PicPlace for the files…"
+                             : "\(row.progress.filesDone.formatted()) of \(row.progress.filesTotal.formatted()) file\(row.progress.filesTotal == 1 ? "" : "s") · \(LLFormat.bytes(row.progress.bytesDone)) of \(LLFormat.bytes(row.progress.bytesTotal))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }

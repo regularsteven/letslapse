@@ -64,6 +64,12 @@ struct CollectionDetailView: View {
     @State private var renameDraft = ""
     @State private var confirmingDelete = false
     @State private var exportController: CollectionExportController?
+    /// Clips on PicPlace, not here — the question before a play, a trim or
+    /// an export (CollectionAvailability.swift).
+    @State private var clipsPrompt: ClipsPrompt?
+    /// *Download and Continue* was pressed for an export: it starts once
+    /// the last clip lands, while this screen is up.
+    @State private var exportWhenClipsArrive = false
     @State private var fullscreenRequest: FullscreenMediaRequest?
 
     private struct CropDrag: Equatable {
@@ -143,6 +149,15 @@ struct CollectionDetailView: View {
             }
         }
         .llToast($toast)
+        .alert(clipsPrompt?.title ?? "", isPresented: Binding(
+            get: { clipsPrompt != nil }, set: { if !$0 { clipsPrompt = nil } }), presenting: clipsPrompt) { prompt in
+            clipsPromptActions(prompt)
+        } message: { prompt in
+            Text(prompt.message)
+        }
+        // `$progress` publishes before it changes: the value handed over is
+        // the one to read.
+        .onReceive(model.picplace.$progress) { progress in exportIfClipsArrived(progress) }
         .onChange(of: selectedBlendID) { _, _ in
             kenBurnsEnd = .start
             moveEdit = nil
@@ -251,6 +266,9 @@ struct CollectionDetailView: View {
                 if collection.entries.isEmpty {
                     emptyTimeline
                 } else {
+                    MissingClipsBanner(picplace: model.picplace, collectionID: collectionID) { blends in
+                        askForClips(blends, subject: "This collection", thenExport: false)
+                    }
                     timelineCard(collection)
 
                     addClipsButton(height: 52)
@@ -330,6 +348,9 @@ struct CollectionDetailView: View {
                             }
                             .buttonStyle(.plain)
                         } else {
+                            MissingClipsBanner(picplace: model.picplace, collectionID: collectionID) { blends in
+                                askForClips(blends, subject: "This collection", thenExport: false)
+                            }
                             timelineCard(collection)
                         }
                         Spacer(minLength: 8)
@@ -388,7 +409,8 @@ struct CollectionDetailView: View {
                     Color.black
 
                     ZStack(alignment: .topLeading) {
-                        ProjectThumbnailView(url: model.mediaURL(for: blend), kind: .video)
+                        let picture = model.blendPicture(blend)
+                        ProjectThumbnailView(url: picture.url, kind: picture.kind)
                             .frame(width: clipSize.width, height: clipSize.height)
                             .clipped()
 
@@ -1402,11 +1424,15 @@ struct CollectionDetailView: View {
         let selected = entry.blendID == selectedEntry(collection)?.blendID
         let isDraggedRow = reorder?.blendID == entry.blendID
 
+        let picture = blend.map(model.blendPicture)
+        let missing = blend.map(model.blendFileMissing) ?? false
         HStack(spacing: 10) {
             ZStack {
-                ProjectThumbnailView(url: blend.map(model.mediaURL(for:)), kind: .video)
+                ProjectThumbnailView(url: picture?.url, kind: picture?.kind ?? .video)
                     .frame(width: 58, height: 42)
-                Image(systemName: "play.fill")
+                // On PicPlace, not here: its still, and a cloud where the
+                // play glyph would be (the tap asks before it plays).
+                Image(systemName: missing ? "icloud" : (blend?.kind == .image ? "photo" : "play.fill"))
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.8))
             }
@@ -1444,18 +1470,48 @@ struct CollectionDetailView: View {
             }
             Spacer(minLength: 0)
 
-            Button {
-                trimEntry = entry
-            } label: {
-                Image(systemName: "timeline.selection")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(LL.accent)
-                    .frame(width: 34, height: 34)
-                    .background(LL.accent.opacity(0.1), in: Circle())
+            if blend?.kind == .image {
+                // A still has no in or out point — only a length (D4).
+                Menu {
+                    ForEach(LapseCollection.stillSecondsChoices, id: \.self) { seconds in
+                        Button {
+                            model.setStillSeconds(seconds, blendID: entry.blendID, in: collection.id)
+                        } label: {
+                            if abs((entry.stillSeconds ?? LapseCollection.defaultStillSeconds) - seconds) < 0.01 {
+                                Label("\(Int(seconds)) seconds", systemImage: "checkmark")
+                            } else {
+                                Text("\(Int(seconds)) seconds")
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "timer")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(LL.accent)
+                        .frame(width: 34, height: 34)
+                        .background(LL.accent.opacity(0.1), in: Circle())
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .accessibilityLabel("The still's length")
+            } else {
+                Button {
+                    if let blend, missing {
+                        askForClips([blend], subject: collection.kenBurnsUsesWindows ? "Setting the start point" : "Trimming the clip", thenExport: false)
+                    } else {
+                        trimEntry = entry
+                    }
+                } label: {
+                    Image(systemName: "timeline.selection")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(LL.accent)
+                        .frame(width: 34, height: 34)
+                        .background(LL.accent.opacity(0.1), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(collection.kenBurnsUsesWindows
+                    ? "Set the clip's start point" : "Trim in and out points")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(collection.kenBurnsUsesWindows
-                ? "Set the clip's start point" : "Trim in and out points")
 
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 15))
@@ -1613,9 +1669,56 @@ struct CollectionDetailView: View {
     private func startExport() {
         guard let collection = model.collection(withID: collectionID),
               !collection.entries.isEmpty else { return }
+        // Every clip's file has to be here (rule 4): ask for the missing
+        // ones first — the export failed whole on the first one, late.
+        let missing = model.missingBlends(in: collection)
+        guard missing.isEmpty else {
+            askForClips(missing, subject: "Exporting", thenExport: true)
+            return
+        }
         let controller = CollectionExportController(model: model, collectionID: collectionID)
         exportController = controller
         controller.start()
+    }
+
+    /// The question about `blends`, worded for what asked.
+    private func askForClips(_ blends: [AppModel.BlendProject], subject: String, thenExport: Bool) {
+        clipsPrompt = ClipsPrompt(
+            subject: subject, blendIDs: blends.map(\.id), bytes: model.picplace.bytes(of: blends),
+            offer: model.picplace.fetchOffer(forBlends: blends), thenExport: thenExport)
+    }
+
+    @ViewBuilder private func clipsPromptActions(_ prompt: ClipsPrompt) -> some View {
+        switch prompt.offer {
+        case .download:
+            Button("Download and Continue") {
+                let blends = prompt.blendIDs.compactMap { model.blend(id: $0) }
+                if model.picplace.fetchBlends(blends) > 0, prompt.thenExport { exportWhenClipsArrive = true }
+            }
+            Button("Stay as Is", role: .cancel) {}
+        case .downloading:
+            Button("Continue When Ready") { if prompt.thenExport { exportWhenClipsArrive = true } }
+            Button("Stay as Is", role: .cancel) {}
+        case .signIn:
+            Button("Sign In") { model.picplace.signIn() }
+            Button("Stay as Is", role: .cancel) {}
+        case .connect, .notUploaded, .unavailable:
+            Button("OK", role: .cancel) {}
+        }
+    }
+
+    /// The export a *Download and Continue* was pressed for, once no clip is
+    /// missing and nothing is still coming down.
+    private func exportIfClipsArrived(_ progress: [UUID: PicPlaceSyncProgress]) {
+        guard exportWhenClipsArrive, let collection = model.collection(withID: collectionID) else { return }
+        let members = collection.entries.compactMap { model.blend(id: $0.blendID) }
+        guard !Set(members.map(\.captureID)).contains(where: { progress[$0]?.phase == .downloading }) else { return }
+        // The landing is noted a beat after the progress clears.
+        DispatchQueue.main.async {
+            guard exportWhenClipsArrive, model.missingBlends(in: collection).isEmpty else { return }
+            exportWhenClipsArrive = false
+            startExport()
+        }
     }
 
     // MARK: - Small helpers
@@ -1632,6 +1735,11 @@ struct CollectionDetailView: View {
         _ entry: LapseCollection.Entry, blend: AppModel.BlendProject?, in collection: LapseCollection
     ) -> String {
         guard let blend else { return "" }
+        // A still (D4): its length, and that it moves.
+        if blend.kind == .image {
+            let plays = model.entryOutputSeconds(entry, in: collection)
+            return "Still · \(SpeedMath.clipLengthCompact(plays)) · gentle move"
+        }
         if let kenBurns = collection.kenBurns, kenBurns.enabled, kenBurns.consistentDurations {
             let plays = model.entryOutputSeconds(entry, in: collection)
             var text = "\(blend.speedLabel) · plays \(SpeedMath.clipLengthCompact(plays))"
@@ -1693,8 +1801,13 @@ struct CollectionDetailView: View {
     }
 
     private func playSelected(_ blend: AppModel.BlendProject, title: String) {
+        guard !model.blendFileMissing(blend) else {
+            askForClips([blend], subject: "Playing the clip", thenExport: false)
+            return
+        }
+        // A still member (D4) shows its picture; a clip plays.
         fullscreenRequest = FullscreenMediaRequest(
-            .video(url: model.mediaURL(for: blend), grade: nil),
+            blend.kind == .image ? .photo(url: model.mediaURL(for: blend)) : .video(url: model.mediaURL(for: blend), grade: nil),
             title: title)
     }
 
@@ -1736,5 +1849,60 @@ extension View {
             content().frame(minWidth: 560, minHeight: 480)
         }
         #endif
+    }
+}
+
+// MARK: - Clips on PicPlace
+
+/// Over the timeline while some clips' files are on PicPlace, not here: how
+/// many and what they weigh, with Download — or how far the downloads have
+/// got. Its own view so it follows the downloads, which the model does not
+/// publish.
+private struct MissingClipsBanner: View {
+    @EnvironmentObject private var model: AppModel
+    @ObservedObject var picplace: PicPlaceController
+    let collectionID: UUID
+    var onDownload: ([AppModel.BlendProject]) -> Void
+
+    var body: some View {
+        if let collection = model.collection(withID: collectionID) {
+            let missing = model.missingBlends(in: collection)
+            if !missing.isEmpty {
+                let downloading = picplace.isDownloading(missing)
+                HStack(spacing: 10) {
+                    Image(systemName: downloading ? "arrow.down.circle" : "icloud")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(missing.count == 1 ? "1 clip isn't on \(PicPlaceController.deviceWord)"
+                             : "\(missing.count) clips aren't on \(PicPlaceController.deviceWord)")
+                            .font(.system(size: 13.5, weight: .semibold))
+                        let bytes = picplace.bytes(of: missing)
+                        Text(downloading ? "Downloading from PicPlace…"
+                             : "Playing, trimming and exporting need them here" + (bytes > 0 ? " · \(LLFormat.bytes(bytes))" : ""))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 8)
+                    if downloading {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Download") { onDownload(missing) }
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(LL.accent)
+                            .buttonStyle(.plain)
+                    }
+                }
+                .padding(12)
+                .llCard()
+                .padding(.bottom, 10)
+                // PicPlace's list of each project's files: the size of a
+                // blend `assets.ndjson` never recorded.
+                .task(id: Set(missing.map(\.captureID))) {
+                    for id in Set(missing.map(\.captureID)) { picplace.refreshProject(id) }
+                }
+            }
+        }
     }
 }

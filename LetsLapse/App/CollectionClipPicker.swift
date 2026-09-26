@@ -5,8 +5,10 @@ import LetsLapseKit
 /// By project (sections with horizontal reels) or All clips (one flat grid).
 ///
 /// A clip already in this collection shows ADDED and won't select — once per
-/// collection, though other collections may reuse it freely. Long-exposure
-/// stills are visible but locked: collections are video-only in v1.
+/// collection, though other collections may reuse it freely. Stills join too
+/// (D4, 2026-09-25): a long-exposure still, a Photo capture's picture, and —
+/// Steven: *any photo* — a photo without one, whose still is made when it is
+/// picked (on a device holding its original).
 struct CollectionClipPicker: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -24,6 +26,13 @@ struct CollectionClipPicker: View {
     /// Selection in tap order — the order the clips join the timeline.
     @State private var selection: [UUID] = []
     @State private var toast: String?
+    /// A clip whose file is on PicPlace, tapped: the question before it
+    /// joins (rule 4 — a collection is made of blends' files).
+    @State private var fetchRequest: FetchPromptRequest?
+    /// Photos whose still is being made.
+    @State private var makingStills: Set<UUID> = []
+    /// The library's photos (`photoQuery`), read as the sheet opens.
+    @State private var photoIDs: [UUID] = []
 
     private let disabledCTA = Color(red: 200 / 255, green: 200 / 255, blue: 205 / 255)
 
@@ -46,6 +55,8 @@ struct CollectionClipPicker: View {
         }
         .background(LL.screenBackground)
         .llToast($toast)
+        .fetchPrompt($fetchRequest)
+        .task { photoIDs = model.liveProjectIDs(Self.photoQuery) }
         #if os(iOS)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
@@ -108,16 +119,34 @@ struct CollectionClipPicker: View {
                         .padding(.bottom, 2)
                     }
 
-                    if section.blends.contains(where: { $0.kind == .image }) {
-                        Text("Long-exposure stills can’t join a collection — v1 is video-only.")
-                            .font(.system(size: 11))
+                }
+            }
+
+            if !photoIDs.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Photos")
+                            .font(.system(size: 15, weight: .semibold))
+                        Spacer()
+                        Text("\(photoIDs.count) photo\(photoIDs.count == 1 ? "" : "s") · each joins as a still")
+                            .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 2)
+                    }
+                    .padding(.horizontal, 2)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 8) {
+                            ForEach(photoIDs, id: \.self) { id in
+                                if let capture = model.capture(id: id) {
+                                    photoItem(capture, width: 96, height: 54)
+                                }
+                            }
+                        }
+                        .padding(.bottom, 2)
                     }
                 }
             }
 
-            if sectionedCaptures.isEmpty {
+            if sectionedCaptures.isEmpty && photoIDs.isEmpty {
                 noClipsCard
             }
         }
@@ -136,9 +165,20 @@ struct CollectionClipPicker: View {
                         .lineLimit(1)
                 }
             }
+            ForEach(photoIDs, id: \.self) { id in
+                if let capture = model.capture(id: id) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        photoItem(capture, width: nil, height: 64)
+                        Text(capture.displayTitle)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
         }
         .overlay {
-            if allBlends.isEmpty { noClipsCard }
+            if allBlends.isEmpty && photoIDs.isEmpty { noClipsCard }
         }
     }
 
@@ -158,12 +198,16 @@ struct CollectionClipPicker: View {
         let added = collection?.entry(for: blend.id) != nil
         let still = blend.kind == .image
         let selected = selection.contains(blend.id) && !added
+        // Not here: its still, badged by what PicPlace is known to hold, and
+        // a tap asks first.
+        let missing = model.blendFileMissing(blend)
+        let picture = model.blendPicture(blend)
 
         Button {
             tap(blend, added: added, still: still)
         } label: {
             ZStack(alignment: .bottomLeading) {
-                ProjectThumbnailView(url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
+                ProjectThumbnailView(url: picture.url, kind: picture.kind)
                     .frame(width: width, height: height)
                     .frame(maxWidth: width == nil ? .infinity : nil)
 
@@ -177,9 +221,7 @@ struct CollectionClipPicker: View {
             }
             .overlay(alignment: .topTrailing) {
                 if added {
-                    cornerBadge("ADDED", background: .green.opacity(0.9), foreground: .white)
-                } else if still {
-                    cornerBadge("STILL", background: .black.opacity(0.55), foreground: .white.opacity(0.8))
+                    Self.cornerBadge("ADDED", background: .green.opacity(0.9), foreground: .white)
                 } else if selected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 9, weight: .bold))
@@ -187,9 +229,13 @@ struct CollectionClipPicker: View {
                         .frame(width: 18, height: 18)
                         .background(LL.amber, in: Circle())
                         .padding(4)
+                } else if missing, let capture = model.capture(for: blend) {
+                    MissingClipBadge(picplace: model.picplace, capture: capture, blend: blend)
+                } else if still {
+                    Self.cornerBadge("STILL", background: .black.opacity(0.55), foreground: .white.opacity(0.85))
                 }
             }
-            .opacity(added || still ? 0.45 : 1)
+            .opacity(added ? 0.45 : 1)
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .strokeBorder(selected ? LL.amber : .clear, lineWidth: 2.5)
@@ -199,7 +245,67 @@ struct CollectionClipPicker: View {
         .buttonStyle(.plain)
     }
 
-    private func cornerBadge(_ text: String, background: Color, foreground: Color) -> some View {
+    /// A photo in the Photos group: its still's tile once it has one, else
+    /// the photo itself — a tap makes its still, then picks it.
+    @ViewBuilder
+    private func photoItem(_ capture: AppModel.CaptureProject, width: CGFloat?, height: CGFloat) -> some View {
+        if let still = model.collectionStill(for: capture) {
+            tile(still, width: width, height: height)
+        } else {
+            let making = makingStills.contains(capture.id)
+            Button {
+                makeStill(for: capture)
+            } label: {
+                ProjectThumbnailView(url: model.thumbnailURL(for: capture), kind: .image, grade: {
+                    let grade = model.photoGrade(for: capture)
+                    return grade.isIdentity ? nil : grade
+                }())
+                .frame(width: width, height: height)
+                .frame(maxWidth: width == nil ? .infinity : nil)
+                .overlay(alignment: .topTrailing) {
+                    Self.cornerBadge("PHOTO", background: .black.opacity(0.55), foreground: .white.opacity(0.85))
+                }
+                .overlay {
+                    if making {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                            .padding(6)
+                            .background(.black.opacity(0.45), in: Circle())
+                    }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(making)
+            .accessibilityLabel("\(capture.displayTitle), photo — joins as a still")
+        }
+    }
+
+    /// Makes a photo's still (its picture through its grade, a blend of its
+    /// project) and picks it — or, where the photo's original is not on this
+    /// device, asks to bring it down first.
+    private func makeStill(for capture: AppModel.CaptureProject) {
+        guard !makingStills.contains(capture.id) else { return }
+        if !model.isAvailable(.pixelEdit, for: capture) {
+            fetchRequest = model.request(.pixelEdit, for: capture, subject: "Making a still for the collection") {
+                makeStill(for: capture)
+            }
+            return
+        }
+        makingStills.insert(capture.id)
+        Task {
+            defer { makingStills.remove(capture.id) }
+            do {
+                let still = try await model.makeStillBlend(for: capture)
+                if !selection.contains(still.id) { selection.append(still.id) }
+            } catch {
+                toast = error.localizedDescription
+            }
+        }
+    }
+
+    fileprivate static func cornerBadge(_ text: String, background: Color, foreground: Color) -> some View {
         Text(text)
             .font(.system(size: 8.5, weight: .bold))
             .foregroundStyle(foreground)
@@ -210,12 +316,16 @@ struct CollectionClipPicker: View {
     }
 
     private func tap(_ blend: AppModel.BlendProject, added: Bool, still: Bool) {
-        if still {
-            toast = "Stills can’t join a collection — v1 is video-only"
-            return
-        }
         if added {
             toast = "Already in \(collection?.name ?? "this collection") — one appearance per collection"
+            return
+        }
+        // A collection is built from the clip's file: one on PicPlace comes
+        // down first, and is picked once it is here.
+        if !selection.contains(blend.id), model.blendFileMissing(blend), let capture = model.capture(for: blend) {
+            fetchRequest = model.request(.blend(blend.id), for: capture, subject: "Adding it to a collection") {
+                if !selection.contains(blend.id) { selection.append(blend.id) }
+            }
             return
         }
         if let index = selection.firstIndex(of: blend.id) {
@@ -285,6 +395,15 @@ struct CollectionClipPicker: View {
         }
     }
 
+    /// Photo captures, newest first — each joins as its still (D4). Ids
+    /// from the index, read once as the sheet opens; each tile reads its own
+    /// record as it scrolls in (a phone holds hundreds of photos).
+    private static var photoQuery: LibraryIndex.ProjectQuery {
+        var query = LibraryIndex.ProjectQuery()
+        query.category = .photo
+        return query
+    }
+
     private var candidateCaptures: [AppModel.CaptureProject] {
         var query = LibraryIndex.ProjectQuery()
         query.withBlends = true
@@ -307,5 +426,26 @@ struct CollectionClipPicker: View {
             return "\(kind) · \(stills) still\(stills == 1 ? "" : "s")"
         }
         return "\(kind) · \(clips) blended clip\(clips == 1 ? "" : "s")"
+    }
+}
+
+/// A clip that is not here, badged by what PicPlace is known to hold: ON
+/// PICPLACE once its list says so, NOT AVAILABLE when its list or count says
+/// not, NOT HERE before either is known — a picker of every project asks
+/// PicPlace nothing (2026-09-26: every missing clip read ON PICPLACE, and
+/// one never uploaded could not come down). Interim words: the copy pass
+/// comes later (Steven).
+private struct MissingClipBadge: View {
+    @ObservedObject var picplace: PicPlaceController
+    let capture: AppModel.CaptureProject
+    let blend: AppModel.BlendProject
+
+    var body: some View {
+        let text: String = switch picplace.blendAvailability(blend, of: capture) {
+        case .onPicPlace: "ON PICPLACE"
+        case .notOnPicPlace: "NOT AVAILABLE"
+        case .unknown: "NOT HERE"
+        }
+        CollectionClipPicker.cornerBadge(text, background: .black.opacity(0.55), foreground: .white.opacity(0.85))
     }
 }
