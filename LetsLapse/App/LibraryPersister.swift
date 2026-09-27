@@ -204,6 +204,8 @@ final class LibraryPersister: @unchecked Sendable {
             guard refuseWrites == nil else { return }
             do {
                 let started = Date()
+                let signpost = LLPerf.begin("library export")
+                defer { LLPerf.end("library export", signpost) }
                 let data = try LibraryIndexRebuild.rebuiltManifest(root: projectsRoot)
                 try data.write(to: exportURL, options: .atomic)
                 onManifestWritten?((try? URL(fileURLWithPath: exportURL.path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate)

@@ -162,6 +162,8 @@ extension PicPlaceController {
     private func runCheck(reason: String) async {
         isChecking = true
         defer { isChecking = false }
+        let signpost = LLPerf.begin("picplace check")
+        defer { LLPerf.end("picplace check", signpost) }
         var outcome = CheckOutcome()
         // What the check finds to send goes to the push queue, which sends
         // it after the check — one project at a time, paced, pausable, with

@@ -1606,7 +1606,7 @@ final class CameraController: NSObject, ObservableObject {
                 self.intervalWriter?.close()
                 self.intervalWriter = nil
                 self.releaseRunFocusLock()
-                DispatchQueue.main.async { self.isIntervalRunning = false }
+                DispatchQueue.main.async { self.isIntervalRunning = false; LLPerf.event("run flag off", "abandoned") }
             }
             if self.movieOutput.isRecording {
                 self.isDiscardingSequence = true
@@ -2642,6 +2642,8 @@ final class CameraController: NSObject, ObservableObject {
         // the same glass — it is the one already driving this preview — but it
         // arrives in continuous auto-focus and hunts as it joins.
         let focusBeforeSwap = captureFocusState()
+        let pinSignpost = LLPerf.begin("lens pin")
+        defer { LLPerf.end("lens pin", pinSignpost) }
         session.beginConfiguration()
         let previousInput = videoInput
         if let previousInput { session.removeInput(previousInput) }
@@ -2673,6 +2675,8 @@ final class CameraController: NSObject, ObservableObject {
     private func releaseSequenceLensPin() {
         guard sequenceLensPin != nil else { return }
         sequenceLensPin = nil
+        let releaseSignpost = LLPerf.begin("lens pin release")
+        defer { LLPerf.end("lens pin release", releaseSignpost) }
         restoreOpticsInputIfNeeded()
         _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
         LLog("optics: run lens pin released")
@@ -3717,6 +3721,8 @@ final class CameraController: NSObject, ObservableObject {
     @discardableResult
     private func applyCaptureFormat(resolution: CaptureResolution, fps: Int) -> Bool {
         guard let device = videoDevice else { return false }
+        let formatSignpost = LLPerf.begin("applyCaptureFormat")
+        defer { LLPerf.end("applyCaptureFormat", formatSignpost) }
         let stills = photoViewfinderActive || stillsCaptureActive
         guard let match = captureFormatMatch(for: device, resolution: resolution, fps: fps, stills: stills) else {
             #if os(iOS)
@@ -5378,6 +5384,8 @@ final class CameraController: NSObject, ObservableObject {
         startingFromLocked: Bool = false,
         timeout: TimeInterval = 1.5
     ) -> Bool {
+        let settleSignpost = LLPerf.begin("focus settle")
+        defer { LLPerf.end("focus settle", settleSignpost) }
         var huntSeen = !expectStart
         if expectStart {
             // Coming out of a hard lock the ISP takes appreciably longer to
@@ -5423,6 +5431,8 @@ final class CameraController: NSObject, ObservableObject {
         on device: AVCaptureDevice,
         timeout: TimeInterval = 2.0
     ) {
+        let settleSignpost = LLPerf.begin("AE settle")
+        defer { LLPerf.end("AE settle", settleSignpost) }
         let deadline = Date().addingTimeInterval(timeout)
         var logged = false
         while (device.isAdjustingExposure || device.isAdjustingWhiteBalance),
@@ -5945,6 +5955,7 @@ final class CameraController: NSObject, ObservableObject {
         guard !isRecording, !isIntervalRunning, !isLiveBlendRunning else { return false }
         let devicePoint = layer.captureDevicePointConverted(fromLayerPoint: point)
         guard (0...1).contains(devicePoint.x), (0...1).contains(devicePoint.y) else { return false }
+        LLPerf.event("focus tap")
         sessionQueue.async {
             // The authority, on the queue that owns the device.
             guard !self.captureIsRunning else { return }
@@ -7060,6 +7071,7 @@ final class CameraController: NSObject, ObservableObject {
         shapeSearchTokenForNextRun = nil
         sessionQueue.async {
             guard self.intervalTimer == nil else { return }
+            LLPerf.event("run start", frameCap != nil ? "photo" : "interval")
             if Self.stopsAtThermalCritical, ProcessInfo.processInfo.thermalState == .critical {
                 LLog("capture: refused to start at thermal critical — the lens stabiliser parks there; let the device cool")
                 CaptureSessionLogger.shared.log("capture_refused", ["kind": "interval", "reason": "tooHot"])
@@ -7122,6 +7134,7 @@ final class CameraController: NSObject, ObservableObject {
             self.plainRunLog = PlainRunLog(
                 sessionID: projectID.uuidString, conditions: conditions,
                 isPhoto: frameCap != nil, intervalSeconds: seconds)
+            LLPerf.event("capture fire", frameCap != nil ? "photo" : "interval")
             LLog("capture: \(frameCap != nil ? "photo" : "interval") — \(conditions.summary)")
             self.intervalFrameCap = frameCap
             self.intervalFramesRequested = 0
@@ -7145,6 +7158,7 @@ final class CameraController: NSObject, ObservableObject {
                 self.captureRunStartedAt = Date()
                 self.liveExposure = nil
                 self.isIntervalRunning = true
+                LLPerf.event("run flag on", frameCap != nil ? "photo" : "interval")
             }
             let period = frameCap != nil ? max(0.05, seconds) : max(0.5, seconds)
             #if os(iOS)
@@ -7475,6 +7489,7 @@ final class CameraController: NSObject, ObservableObject {
         self.intervalFramesRequested = 0
         DispatchQueue.main.async {
             self.isIntervalRunning = false
+            LLPerf.event("run flag off", "interval finished")
             if urls.count >= 1 {
                 self.onFinishPhotos?(urls)
             }
@@ -9463,6 +9478,7 @@ final class CameraController: NSObject, ObservableObject {
         releaseRunFocusLock()
         DispatchQueue.main.async {
             self.isIntervalRunning = false
+            LLPerf.event("run flag off", "scanner finished")
             self.scannerState = nil
             if !urls.isEmpty {
                 self.onFinishPhotos?(urls)

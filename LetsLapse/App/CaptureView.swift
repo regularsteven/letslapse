@@ -4503,6 +4503,7 @@ struct CaptureView: View {
     /// during the countdown cancels it). Stops are always immediate, and the
     /// Watch remote calls `shutterAction()` directly — no delay on the wrist.
     private func shutterTapped() {
+        LLPerf.event("shutter tap", mode.rawValue)
         if delayedStartAt != nil {
             delayedStartAt = nil
             return
@@ -4635,6 +4636,7 @@ struct CaptureView: View {
     }
 
     private func shutterAction() {
+        LLPerf.event("shutter press", mode.rawValue)
         switch mode {
         case .video:
             if camera.isRecording {
@@ -7450,6 +7452,7 @@ struct CameraPreview: UIViewRepresentable {
     func makeUIView(context: Context) -> PreviewView {
         Self.makeCount += 1
         LLog("CameraPreview.makeUIView #\(Self.makeCount) (preview view CREATED)")
+        LLPerf.event("capture preview created")
         let view = PreviewView()
         view.previewLayer.session = session
         view.previewLayer.videoGravity = videoGravity

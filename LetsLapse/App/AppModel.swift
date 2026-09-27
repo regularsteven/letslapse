@@ -1342,6 +1342,10 @@ final class AppModel: ObservableObject {
     @Published var requestedEditorPage: EditorPageRequest?
 
     private var blendTask: Task<Void, Never>?
+    /// Thermal state, logged at launch and on every change — the console log
+    /// then carries the state a run was measured under (2026-09-27: three
+    /// shots at `serious` with nothing in the log until the capture line).
+    private var thermalObserver: NSObjectProtocol?
 
     /// The per-asset records (`assets.ndjson`) and project-level metadata
     /// (`metadata.json`) of every project — see `AppModel+Metadata.swift`.
@@ -1354,6 +1358,15 @@ final class AppModel: ObservableObject {
         // Minted on the first launch of every install and never changed;
         // read here so it exists before any record could name it (W2).
         LLog("device id \(DeviceIdentity.id.uuidString)")
+        LLog("thermal: \(LLPerf.thermalName(ProcessInfo.processInfo.thermalState)) at launch")
+        LLPerf.event("thermal", LLPerf.thermalName(ProcessInfo.processInfo.thermalState))
+        thermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main
+        ) { _ in
+            let name = LLPerf.thermalName(ProcessInfo.processInfo.thermalState)
+            LLog("thermal: → \(name)")
+            LLPerf.event("thermal", name)
+        }
         acquireLibraryLock()
         loadLibrary()
         refreshShapeSummaries()
@@ -8774,6 +8787,7 @@ final class AppModel: ObservableObject {
                 loadCollections(export: export)
                 let outcome = LibraryReconciler.Outcome()
                 let steps = LibraryReconciler.steps(projectsRoot: projectsRootURL, index: libraryIndex, writer: persister.writer, outcome: outcome)
+                LLPerf.beginKeyed("library walk")
                 persister.enqueueWalk(steps) { [weak self] in
                     Task { @MainActor in self?.finishWalk(outcome, export: export) }
                 }
@@ -8955,6 +8969,7 @@ final class AppModel: ObservableObject {
             let names = outcome.unreadable.map { String($0.folder.prefix(8)) }.joined(separator: ", ")
             errorMessage = "\(outcome.unreadable.count) project record\(outcome.unreadable.count == 1 ? "" : "s") couldn't be read and \(outcome.unreadable.count == 1 ? "was" : "were") left alone: \(names). See the console log."
         }
+        LLPerf.endKeyed("library walk")
         LLog(String(format: "library: walked %d documents in %.3f s — %d current · %d read and indexed · %d rewritten by a rule · %d rows dropped%@ · %d asset files and %d shape registers re-indexed",
                     outcome.walked, outcome.seconds, outcome.current, outcome.indexed, outcome.rewritten, outcome.removed,
                     outcome.indexRebuilt ? " · index rebuilt whole" : "", outcome.sidecars.assetsReindexed, outcome.sidecars.shapesReindexed))

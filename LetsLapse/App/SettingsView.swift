@@ -210,6 +210,9 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 16)
         }
+        // The baseline plan's scenario B starts here: tap → this flag → the
+        // first frame the list scrolls under a finger.
+        .onAppear { LLPerf.event("settings appear") }
         #if DEBUG
         // `LL_SCROLL=picplace` lands the list on a card below the fold — how a
         // headless screenshot reaches the PICPLACE card on the Mac without a

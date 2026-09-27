@@ -527,6 +527,11 @@ extension PicPlaceController {
     /// "About": the run checks every project file by file.
     func refreshFreeUpEstimate() {
         guard canSync, freeUpTask == nil, freeUpEstimateTask == nil, let libraryIndex = model.libraryIndex else { return }
+        // Timed in three phases — the candidate list (main), the folder
+        // listings (off main), the judgement (main) — for the baseline plan's
+        // scenario B; the two main-thread phases are what a scroll waits on.
+        let candidatesStarted = Date()
+        let candidatesSignpost = LLPerf.begin("free-up candidates")
         var query = LibraryIndex.ProjectQuery()
         query.limit = 100_000
         let rows = (try? libraryIndex.projects(query).rows) ?? []
@@ -536,12 +541,20 @@ extension PicPlaceController {
             else { return nil }
             return (row.id, model.projectFolderURL(for: capture))
         }
+        LLPerf.end("free-up candidates", candidatesSignpost)
+        let candidatesSeconds = Date().timeIntervalSince(candidatesStarted)
         freeUp.isEstimating = true
         freeUpEstimateTask = Task { [weak self] in
+            let listingsStarted = Date()
+            let listingsSignpost = LLPerf.begin("free-up listings")
             let listings = await Task.detached(priority: .utility) { () -> [(UUID, [PicPlaceOriginalsCheck.LocalFile])] in
                 candidates.map { ($0.id, Self.heavyFiles(in: $0.folder)) }
             }.value
+            LLPerf.end("free-up listings", listingsSignpost)
+            let listingsSeconds = Date().timeIntervalSince(listingsStarted)
             guard let self else { return }
+            let judgeStarted = Date()
+            let judgeSignpost = LLPerf.begin("free-up judge")
             var estimate = FreeUpState.Estimate()
             for (id, listing) in listings {
                 self.heavyListings[id] = listing
@@ -559,6 +572,10 @@ extension PicPlaceController {
                     estimate.notUpIDs.append(id)
                 }
             }
+            LLPerf.end("free-up judge", judgeSignpost)
+            LLog(String(format: "picplace: free-up estimate — %d of %d project(s) candidates in %.2f s on main, listed in %.2f s off main, judged in %.2f s on main: %d on PicPlace, %d queued, %d not up",
+                        candidates.count, rows.count, candidatesSeconds, listingsSeconds, Date().timeIntervalSince(judgeStarted),
+                        estimate.projects, estimate.queuedProjects, estimate.notUpProjects))
             self.freeUp.estimate = estimate
             self.freeUp.isEstimating = false
             self.freeUpEstimateTask = nil

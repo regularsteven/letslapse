@@ -307,6 +307,7 @@ final class AssetRecordStore: @unchecked Sendable {
                 }
             }
             if recorded > 0 || projectImported != nil {
+                LLPerf.event("assets recorded", String(folder.lastPathComponent.prefix(8)))
                 LLog("assets: \(folder.lastPathComponent.prefix(8)) recorded \(recorded) of \(pending.count) pending (\(names.count) assets)")
                 // Once per job, not per line: a 5,000-frame walk re-reads
                 // its record file once at the end.

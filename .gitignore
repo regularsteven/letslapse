@@ -23,3 +23,6 @@ xcuserdata/
 
 # Stage-3 CLI prover binary (built on demand, see remote_probe.swift header)
 LetsLapse/tools/remote_probe
+
+# Instruments traces from the performance baseline plan (tens to hundreds of MB each)
+LetsLapse/docs/traces/
