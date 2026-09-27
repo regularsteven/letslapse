@@ -454,7 +454,7 @@ extension PicPlaceController {
                 }
                 if environment["LL_PICPLACE_UPLOAD_ALL"] != nil {
                     LLog("picplace hook: upload the originals not on PicPlace yet")
-                    uploadRemainingOriginals()
+                    queueRemainingOriginalsUploads()
                 }
                 if environment["LL_PICPLACE_FREEUP"] != nil {
                     LLog("picplace hook: remove originals already on PicPlace")

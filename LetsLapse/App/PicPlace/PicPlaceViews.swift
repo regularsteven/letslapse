@@ -1001,20 +1001,25 @@ struct PicPlaceSettingsCard: View {
                         ProgressView().controlSize(.small)
                     }
                 }
+                // Not a run any more (2026-09-27): a job per project, each
+                // a row in Project Syncing with Pause / Resume, one at a time.
                 if let estimate = state.estimate, estimate.notUpProjects > 0 {
-                    LLRow(title: "\(estimate.notUpProjects) project\(estimate.notUpProjects == 1 ? "'s" : "s'") originals aren't on PicPlace yet",
-                          subtitle: "\(LLFormat.bytes(estimate.notUpBytes)) · upload them, and they can be removed here too"
-                            + (picplace.manualOriginalsWaiting ? " · waiting for Wi-Fi" : "")) {
-                        Button {
-                            picplace.uploadRemainingOriginals()
-                        } label: {
-                            Text(picplace.autoStatus?.hasPrefix("Uploading originals") == true ? "Uploading…"
-                                 : picplace.manualOriginalsWaiting ? "Waiting…" : "Upload")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(LL.accent)
+                    Button {
+                        picplace.queueRemainingOriginalsUploads()
+                    } label: {
+                        LLRow(title: "Queue upload for \(estimate.notUpProjects) project\(estimate.notUpProjects == 1 ? "" : "s")",
+                              subtitle: "\(estimate.notUpProjects == 1 ? "Its originals aren't" : "Their originals aren't") on PicPlace yet — \(LLFormat.bytes(estimate.notUpBytes)). Each becomes an upload in Project Syncing, where you can pause it; they go one at a time, and can be removed here once they're up.",
+                              titleColor: LL.accent) {
+                            EmptyView()
                         }
-                        .buttonStyle(.plain)
-                        .disabled(picplace.autoStatus?.hasPrefix("Uploading originals") == true || picplace.manualOriginalsWaiting)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                if let estimate = state.estimate, estimate.queuedProjects > 0 {
+                    LLRow(title: "\(estimate.queuedProjects) upload\(estimate.queuedProjects == 1 ? "" : "s") queued",
+                          subtitle: "Follow \(estimate.queuedProjects == 1 ? "it" : "them") in Project Syncing — pause, resume or cancel each there.") {
+                        EmptyView()
                     }
                 }
             }

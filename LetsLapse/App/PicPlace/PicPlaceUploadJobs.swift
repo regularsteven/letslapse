@@ -1,5 +1,8 @@
 import Foundation
 import LetsLapseKit
+#if os(iOS)
+import UIKit
+#endif
 
 /// A person's Upload of one project's originals, kept as a job
 /// (2026-09-24). Before it, an upload was one run that confirmed every file
@@ -79,6 +82,20 @@ extension PicPlaceController {
             }
         }
         .sorted { $0.job.startedAt < $1.job.startedAt }
+    }
+
+    /// How many upload jobs send at once (2026-09-27). One: Settings'
+    /// *Queue upload* makes a job per project, and a job that started as
+    /// soon as it was made would put every project on the wire together —
+    /// eight files each, the 2026-09-15 storm again. The rest wait their turn
+    /// ("Upload waiting") and go oldest first as each one ends. A person's
+    /// own press (Upload, Resume, *Use mobile data* on one project) is not
+    /// held back: they asked for that project now.
+    static let uploadJobLimit = 1
+
+    /// Jobs whose run is in flight.
+    var runningUploadJobs: Int {
+        uploadJobs.keys.reduce(0) { $0 + (syncTasks[$1] != nil ? 1 : 0) }
     }
 
     func isUploading(_ id: UUID) -> Bool {
@@ -162,6 +179,9 @@ extension PicPlaceController {
             return
         }
         guard canSync else { return }
+        // Waits its turn behind the jobs already sending; the one ending
+        // starts it (`startNextUploadJob`).
+        if !pressed, runningUploadJobs >= Self.uploadJobLimit { return }
         if networkHolds(job) {
             if job.hold != .waitingForWiFi {
                 job.hold = .waitingForWiFi
@@ -205,6 +225,8 @@ extension PicPlaceController {
             LLog("picplace: upload of \(title(of: id)) finished — \(job.filesTotal) files")
             uploadRetryCounts[id] = nil
             setJob(nil, for: id)
+            // Settings' counts (not on PicPlace yet / queued) move on.
+            if freeUp.estimate != nil { refreshFreeUpEstimate() }
             return
         case .paused:
             // The hold is whoever asked: the person, the Wi-Fi rule, iOS.
@@ -244,7 +266,9 @@ extension PicPlaceController {
     /// person; Pause for all sending holds every one.
     func resumeUploadJobs(reason: String) {
         guard !isShutDown, canSync, !sendsPaused else { return }
-        for (id, job) in uploadJobs where syncTasks[id] == nil {
+        // Oldest first, so the job that has waited longest takes the free
+        // slot; the limit holds the rest.
+        for (id, job) in uploadJobs.sorted(by: { $0.value.startedAt < $1.value.startedAt }) where syncTasks[id] == nil {
             switch job.hold {
             case nil, .interrupted?, .waitingForWiFi?:
                 startUploadJob(id, reason: reason)
@@ -293,9 +317,65 @@ extension PicPlaceController {
         for stop in uploadStops.values { stop.request() }
     }
 
-    /// Resume for all sending: every paused job, as a person's press.
+    /// Resume for all sending: every paused job goes back in line, and the
+    /// oldest starts as a person's press. Not every job at once as a press
+    /// each — that would bypass the limit.
     func resumePausedUploadJobs() {
-        for (id, job) in uploadJobs where job.hold == .paused { resumeUpload(id) }
+        for (id, job) in uploadJobs where job.hold == .paused {
+            uploadJobs[id]?.hold = nil
+            uploadJobs[id]?.lastError = nil
+        }
+        saveUploadJobs()
+        startNextUploadJob(pressed: true)
+    }
+
+    /// Settings' *Queue upload for N projects*: a job for each project, as
+    /// the card's Upload makes one — oldest first, so they go in the order
+    /// they were shot — skipping any project that already has a job or is
+    /// being moved right now (a download, a sync, a removal). The first
+    /// starts as the person's press; the rest wait their turn. Returns how
+    /// many were queued.
+    @discardableResult
+    func queueUploadJobs(for captures: [AppModel.CaptureProject]) -> Int {
+        let base = Date()
+        var queued = 0
+        for capture in captures.sorted(by: { $0.createdAt < $1.createdAt }) {
+            let id = capture.id
+            guard uploadJobs[id] == nil, syncTasks[id] == nil, !removingProjects.contains(id),
+                  capture.deletedAt == nil, records[model.originID(of: capture)]?.elsewhereLibrary == nil else { continue }
+            var job = PicPlaceUploadJob()
+            // Distinct start times keep the queue's order stable.
+            job.startedAt = base.addingTimeInterval(Double(queued) * 0.001)
+            uploadJobs[id] = job
+            queued += 1
+        }
+        guard queued > 0 else { return 0 }
+        saveUploadJobs()
+        LLog("picplace: queued the originals of \(queued) project(s) — one at a time")
+        startNextUploadJob(pressed: true)
+        return queued
+    }
+
+    /// A slot is free: the oldest job waiting its turn starts — one never
+    /// run, or an interrupted one whose retry is not already timed. Called
+    /// when a job's run ends and when Resume for all sending lets them go.
+    ///
+    /// Not while the app is in the background: iOS gives a job started there
+    /// seconds at most (only a person's press may ask for a continued task),
+    /// so a queue walked there would start and stop every job in turn. The
+    /// app coming to the front resumes the line (`resumeUploadJobs`).
+    func startNextUploadJob(pressed: Bool = false) {
+        guard !isShutDown, canSync, !sendsPaused, runningUploadJobs < Self.uploadJobLimit else { return }
+        #if os(iOS)
+        guard UIApplication.shared.applicationState != .background else { return }
+        #endif
+        let next = uploadJobs
+            .filter { id, job in
+                syncTasks[id] == nil && (job.hold == nil || (job.hold == .interrupted && uploadRetryTasks[id] == nil))
+            }
+            .min { $0.value.startedAt < $1.value.startedAt }
+        guard let id = next?.key else { return }
+        startUploadJob(id, reason: "next in line", pressed: pressed)
     }
 
     /// The originals queue's run in flight, if any, stops between files.

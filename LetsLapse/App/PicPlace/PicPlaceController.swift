@@ -274,9 +274,14 @@ final class PicPlaceController: ObservableObject {
     /// An interrupted job's next try, and how many in a row got nowhere.
     var uploadRetryTasks: [UUID: Task<Void, Never>] = [:]
     var uploadRetryCounts: [UUID: Int] = [:]
-    /// The originals queue running is a person's (Settings' Upload), and
-    /// whether the Wi-Fi rule stopped it — it carries on when Wi-Fi is back.
+    /// The originals queue running is a person's (`runOriginalsQueueManually`),
+    /// and whether the Wi-Fi rule stopped it — it carries on when Wi-Fi is
+    /// back. Settings' button no longer runs it (2026-09-27: it queues upload
+    /// jobs); the path is up for removal — TODO.md.
     var originalsQueueManual = false
+    /// Settings' *Queue upload* was pressed before the estimate it reads
+    /// existed (the launch hook): queue once the estimate lands.
+    var queueUploadsAfterEstimate = false
     /// The originals queue's last run was stopped between files (Pause, the
     /// Wi-Fi rule, iOS suspending the app): the walk stops too, rather than
     /// start the next project into the same stop.
@@ -1862,7 +1867,10 @@ final class PicPlaceController: ObservableObject {
             syncTasks[capture.id] = nil
             uploadStops[capture.id] = nil
             scheduleUsageRefresh()
-            if job { followUpUploadJob(capture.id) }
+            if job {
+                followUpUploadJob(capture.id)
+                startNextUploadJob()
+            }
         }
         return true
     }

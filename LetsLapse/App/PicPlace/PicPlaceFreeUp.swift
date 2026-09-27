@@ -131,6 +131,11 @@ extension PicPlaceController {
             /// Projects on PicPlace whose originals are not (all) there yet.
             var notUpProjects = 0
             var notUpBytes: Int64 = 0
+            /// Which projects those are — what *Queue upload* makes jobs for.
+            var notUpIDs: [UUID] = []
+            /// Projects not on PicPlace yet that already have an upload job
+            /// (Project Syncing shows them); left out of `notUpProjects`.
+            var queuedProjects = 0
             var measuredAt = Date()
         }
 
@@ -546,14 +551,21 @@ extension PicPlaceController {
                 if self.looksOnPicPlace(capture, source: source, listing: listing) {
                     estimate.projects += 1
                     estimate.bytes += bytes
+                } else if self.uploadJobs[id] != nil {
+                    estimate.queuedProjects += 1
                 } else {
                     estimate.notUpProjects += 1
                     estimate.notUpBytes += bytes
+                    estimate.notUpIDs.append(id)
                 }
             }
             self.freeUp.estimate = estimate
             self.freeUp.isEstimating = false
             self.freeUpEstimateTask = nil
+            if self.queueUploadsAfterEstimate {
+                self.queueUploadsAfterEstimate = false
+                self.queueRemainingOriginalsUploads()
+            }
         }
     }
 
@@ -632,10 +644,25 @@ extension PicPlaceController {
         freeUpTask?.cancel()
     }
 
-    /// *Upload now* beside the estimate: the originals queue once, by a
-    /// person's press — whatever the automatic switch says, on any network.
-    func uploadRemainingOriginals() {
-        runOriginalsQueueManually()
+    /// *Queue upload for N projects* beside the estimate (2026-09-27): an
+    /// upload job for each project the estimate found not on PicPlace yet —
+    /// what the card's Upload makes — so each has a row in Project Syncing
+    /// with Pause / Resume, obeys *Only on Wi-Fi* with *Use mobile data*,
+    /// survives a relaunch and asks iOS for time as a person's press. They
+    /// send one at a time (`uploadJobLimit`). Until now this ran the
+    /// originals queue's walk once (`runOriginalsQueueManually`), which had
+    /// none of that and stopped for good ~30 s after the app left the screen.
+    /// With no estimate yet (the launch hook) it works one out first.
+    func queueRemainingOriginalsUploads() {
+        guard canSync else { return }
+        guard let estimate = freeUp.estimate, freeUpEstimateTask == nil else {
+            queueUploadsAfterEstimate = true
+            refreshFreeUpEstimate()
+            return
+        }
+        let captures = estimate.notUpIDs.compactMap { model.capture(id: $0) }
+        queueUploadJobs(for: captures)
+        refreshFreeUpEstimate()
     }
 
     // MARK: Deleting a project whose files are only on PicPlace

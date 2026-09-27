@@ -11,6 +11,35 @@ live inline.
 
 ## Open
 
+### PicPlace: retire the manual originals walk; a queue that keeps going in the background
+
+Settings' *Queue upload for N projects* (2026-09-27) makes an upload job per
+project (`queueRemainingOriginalsUploads` → `queueUploadJobs`) instead of
+running `runOriginalsQueueManually()` — so nothing presses the manual walk
+any more. Left in place on purpose; review for removal once we're sure
+nothing else needs it: `runOriginalsQueueManually`, `runOriginalsQueue`'s
+`manual:` branches, `originalsQueueManual`, `manualOriginalsWaiting` (still
+`@Published`, no view reads it now) and `uploadConditionsChanged`'s
+Wi-Fi-back restart of the walk. The automatic queue (`scheduleOriginalsQueue`)
+stays.
+
+Also owed, not done in that change:
+- **Background.** Jobs now go one at a time (`uploadJobLimit` = 1) and the
+  next starts only while the app is in front — only a person's press may ask
+  iOS for a continued task, so the first job of a queue gets one and the
+  rest do not. A queue left in the background finishes its current project
+  and waits for the app to come back. Carrying one continued task across
+  the whole queue (or background `URLSession` transfers,
+  `picplace-background-uploads-plan.md`) is the fix.
+- **Not bench-tested.** Built for Mac and iOS only — no bound-library run
+  yet: queue a few throwaway projects on picplace.test (`LL_PICPLACE_UPLOAD_ALL=1`,
+  `LL_PICPLACE_TOKENS`), check one runs at a time in Project Syncing, Pause
+  one (the next starts), Pause for all sending then Resume (only the oldest
+  starts), relaunch mid-queue (it carries on), background mid-queue on a
+  phone.
+- The drawer's waiting row reads *Upload waiting* with an empty detail line;
+  a queued job could say it waits its turn.
+
 ### Gallery preview panel — sign off the new order, then redraw its mirrors
 
 `GalleryPreviewPanel` (2026-09-27) takes one section order in both dresses:
