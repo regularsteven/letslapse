@@ -785,7 +785,15 @@ AUDIT_PATTERNS = [
     ("request corrected", "capture: still size —", "warn"),
     ("still refused", "capture: still refused —", "warn"),
     ("stills fallback", "stills fall back to", "warn"),
+    # One lens per shoot: a run whose lens declined the pin ran on the combined
+    # camera with its switching locked instead — worth a look every time.
+    ("pin declined", "stays on the optics device", "warn"),
+    # The photo or movie connection was asked before the first frame and was
+    # dark: the run stepped down a size (and, when that lit, an ALARM says the
+    # format was learned), or found no format to blame.
+    ("connection check", "connection stayed inactive", "warn"),
     ("menu substitution", "is not a size", "info"),
+    ("lens-only size", "runs shoot it there", "info"),
 ]
 
 
@@ -855,10 +863,30 @@ def cmd_audit(args):
         data = json.loads(report.read_text())
         print(f"\n  stills self-test ({data.get('date', '?')}, {data.get('model')}, {data.get('os')},"
               f" app {data.get('app')})")
-        print(f"    stills camera   {data.get('stillsCamera')}")
-        print(f"    deliverable     {', '.join(data.get('deliverable', [])) or 'NONE'}")
-        for size, lenses in sorted((data.get("keptOffTheMenu") or {}).items()):
-            print(f"    kept off menu   {size} (offered by {', '.join(lenses)})")
+        print(f"    session camera  {data.get('sessionCamera') or data.get('stillsCamera')}")
+        for name, camera in sorted((data.get("cameras") or {}).items()):
+            # `stillsSizes` since 2026-09-27: the sizes whose formats feed the
+            # photo output and the blend tap. Older reports listed every size.
+            stills = camera.get("stillsSizes")
+            sizes = stills if stills is not None else (camera.get("sizes") or [])
+            photos = [p for ps in (camera.get("photoSizes") or {}).values() for p in ps]
+            largest = max(photos, key=lambda s: int(s.split("×")[0]) * int(s.split("×")[1]), default="none")
+            line = (f"    {name:<24} {len(sizes)} {'stills ' if stills is not None else ''}size(s) to"
+                    f" {sizes[0] if sizes else 'none'}, photos to {largest}")
+            sensor = camera.get("sensorDataSizes") or []
+            if sensor:
+                line += f"; sensor data, never offered: {', '.join(sensor)}"
+            print(line)
+        if data.get("deliverable"):  # a report from before the per-lens self-test
+            print(f"    deliverable     {', '.join(data['deliverable'])}")
+        # Formats that promised an output and left its connection dark on this
+        # phone and OS (FormatOutputLedger): model|os|device type|size|pixel
+        # type|max fps|output.
+        for key, when in sorted((data.get("learnedRefusals") or {}).items()):
+            parts = key.split("|")
+            if len(parts) >= 7:
+                lens = parts[2].replace("AVCaptureDeviceTypeBuiltIn", "")
+                print(f"    ✗ learned       {lens} {parts[3]} ({parts[4]}) left {parts[-1]} dark — {when}")
         for short in data.get("shortSizes") or []:
             print(f"    ✗ short         {short}")
     worst = "pass"
@@ -952,9 +980,12 @@ def resolve_identifier(alias):
                     "--json-output", str(out)],
                    capture_output=True, text=True, timeout=90)
     devices = json.loads(out.read_text())["result"]["devices"]
+    # Physical devices only: every Simulator of the same model carries the
+    # same marketingName, and "iPhone 16 Pro" matched five (2026-09-27).
     matches = [d for d in devices
                if d.get("hardwareProperties", {}).get("marketingName")
-               == row["marketingName"]]
+               == row["marketingName"]
+               and d.get("hardwareProperties", {}).get("reality", "physical") == "physical"]
     if len(matches) != 1:
         die(f"{row['marketingName']!r} matched {len(matches)} devices",
             "connect it over USB and unlock it (Auto-Lock → Never for the session)")
