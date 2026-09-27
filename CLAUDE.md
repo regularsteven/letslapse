@@ -71,6 +71,22 @@ camera-configuration code: **no silent `return false` or empty `catch`** — log
 the reason. Proof that the alarm rings: a DEBUG-hooks build with
 `LL_STILLS_FAULT=1080p`.
 
+**One lens per shoot, capabilities per lens (Steven, 2026-09-27 — nothing per
+model).** Menus describe the stop's own physical lens; every Photo, Interval,
+blend and Video run pins that lens for the whole shoot (a low-light hand-off
+may never reframe a timelapse — only ISO and shutter move). A format is offered
+only if it feeds the mode's outputs (photo + blend tap for stills, movie for
+Video) by its own word — **never a sensor-data format** (`isSensorDataFormat`:
+`kCVPixelFormatContainsSenselArray`; the 18 Pro's 4224×3024 is ProRes RAW, which
+crashed Video and left Photo's connection dark) and never against
+`unsupportedCaptureOutputClasses` — and, for stills, only if it reaches the
+stop's zoom on that lens. The connection itself is asked before a run's first
+frame; a proven refusal is learned per model + OS build in `FormatOutputLedger`.
+A substitution is shown, never saved over the stored choice. **Bench trap:**
+settings passed as launch arguments get re-saved into the real preferences by
+the app's own menus — copy `Library/Preferences/com.regularsteven.letslapse.plist`
+off the device before and after a bench run, and restore anything that moved.
+
 ## Strategy field-testing & the remote bench (holy grail)
 
 The blend-strategy work (Zone / Latitude / Lumen behind BLEND=Auto) is

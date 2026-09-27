@@ -31,7 +31,7 @@ console lines plus `capture_alarm` session events, read by `shoot.py audit`.
 
 | Layer | What it catches | Where |
 |---|---|---|
-| Honest stills menu | Photo/Interval list only what the session's own camera can deliver (stills rules, no ProRes); a stored size it cannot shoot is substituted by the nearest same shape, shown and shot, never saved over the stored choice | `refreshCaptureOptions`, `stillsFrameRatesByResolution` |
+| Honest stills menu | Photo/Interval list what the stop's own lens can shoot as stills (since the afternoon of 09-27 — see *One lens per shoot* below; the morning's version listed the Triple Camera's); a stored size that lens cannot shoot is substituted by the nearest same shape, shown and shot, never saved over the stored choice | `refreshCaptureOptions`, `stillsFrameRatesByResolution` |
 | Delivered-size check | **Any** still that comes out < 90 % of the chosen pixels — measured from the file, whatever the cause | `checkDeliveredStill` → `ALARM capture:` + a `resolution` issue in `capture_log.json` |
 | Pre-shot canary | A stills format whose own photo sizes fall short of its size | `applyCaptureFormat` → `ALARM format:` |
 | Self-test, every camera set-up | What each lens offers vs what the stills camera can deliver, the photo each size makes; alarms when stills fall short of the lenses or a size cannot make its own photo | `runStillsSelfTest` → `Logs/stills-selftest-<model>.json`, `ALARM selftest:` |
@@ -44,6 +44,59 @@ console lines plus `capture_alarm` session events, read by `shoot.py audit`.
 chose 4032×3024 (Back Triple Camera, format 1920×1080)` and the run's summary alarm; `audit` → **FAIL**, exit 1. The
 Release build: the menu reads `4032×3024 · JPEG`, the self-test keeps `4224×3024` and `4224×2240` off it, Photos at
 4× (telephoto 16.891 mm, daylight) / 1× / 0.5× are all 3024×4032 with no alarm; `audit --latest` → **PASS**, exit 0.
+
+## One lens per shoot, and what 4224×3024 really is (2026-09-27, afternoon)
+
+Steven, on the morning's menu (which offered only the Triple Camera's sizes): capabilities belong to lenses; offer
+each lens's own, never lens X's on lens Y, and *"a shoot must never change lenses mid-shoot, even when switching to
+low light"* — only ISO and shutter may move. Nothing per iPhone model.
+
+**Built — the video structure, for stills.** The stills menus read the stop's own physical lens
+(`effectiveRecordingDevice`); every Photo, Interval and blend run pins that lens for the whole shoot
+(`pinLensForSequence(stills:)`, released at the run's end), so no low-light hand-off can reframe it; a lens that
+declines the pin says so and the combined camera's switching is locked for the run instead. A size one lens has and
+the next lacks is substituted on the second only, never saved over the stored choice — in Video too now, where a
+fallback used to be saved and would have reached Photo. A stills format must also *reach the stop's zoom* on its
+lens (`videoMaxZoomFactor`): the pinned lens arrives at zoom 1, and the morning's 2× and 8× would have shot 1× and 4×.
+
+**What 4224×3024 is.** Found in the order it gave itself away, all on the 18 Pro:
+1. With the pin, every still on it was refused — the photo output's connection inactive (`active false`) at 0.5×,
+   1× and 4× — while 4032×3024 on the same lens and the same pin shot. The format lists only
+   `AVCaptureBroadcastVideoOutput` and `AVCaptureDepthDataOutput` as unsupported.
+2. Its zoom ceiling is 1.0 (4032×3024: 189), and its field of view is ~2.5 % wider (ultra-wide 106.2° vs 103.6°).
+3. A Video take on it (stabilization off, which offers it) aborted: *"-[AVCaptureMovieFileOutput
+   startRecordingToOutputFileURL:recordingDelegate:] Capturing ProRes Raw codec is supported only on external storage
+   device."* The report symbolicates the throw as `-[AVCaptureOutput liveConnections]` — the same symbol as the
+   09-20 Video abort on `4224x3024@10`, which was therefore this exception, not a lost connection.
+4. Its pixel type is `btp2` — `kCVPixelFormatType_96VersatileBayerPacked12`, which CoreVideo describes as sensor
+   data (`kCVPixelFormatContainsSenselArray`). **It is the lenses' ProRes RAW format** (4224×2240 too): no photo
+   pipeline, no zoom, no Metal texture (the Holy Grail blends' `-6684`), and movies only to external storage.
+
+**The rules now, none of them per model:** a format whose pixel type is sensor data is never offered or matched
+(`CameraController.isSensorDataFormat`); a format's `unsupportedCaptureOutputClasses` is respected for the outputs a
+mode uses (photo + blend tap for stills, movie for Video); the photo or movie connection itself is asked before a
+run's first still or segment, and a dark one is stepped down a size — when another size on the same lens lights it,
+the refusal is learned for this model and OS build (`FormatOutputLedger`, one `ALARM format:`), the menus drop it, and
+an OS update tries again. The capability matrix cache moved to `.v4`. The self-test reports each size's pixel types,
+zoom ceiling, refused outputs and the learned refusals; `shoot.py audit` prints them. `BlendCore` copies any buffer
+Metal will not wrap into a Metal-compatible one rather than dropping the frame.
+
+**On the devices (Release builds, over the Camera remote):**
+
+| Device | Run | Result |
+|---|---|---|
+| 18 Pro | Photo 0.5× / 1× / 2× / 4× / 8× | each pinned to its lens (UW, main, main at 2.0, tele, tele at 2.0), 4032×3024, 103.6° / 70.7° / 39.1° / 19.0° / 9.6°, no refusal, no alarm; pin→photo 8 ms–1 s (the AE settle) |
+| 18 Pro | Holy Grail, 3-frame blends every 2 s at 8× | pinned to the telephoto at zoom 2.0, 8 windows (7 × 3/3, last 2/3 at the stop), ~85 ms blends, 8 frames saved, no lens change in the run — the 09-26 zero-frame run's stop |
+| 18 Pro | Video at 1× | records on the pinned main lens (4032×3024@25; with stabilization off, 1080p@25 — the stored 4224×3024 is no longer offered); the connection check adds no delay |
+| 18 Pro | self-test, `audit --latest` | every lens "11 stills size(s) to 4032×3024, photos to 8064×6048; sensor data, never offered: 4224×3024, 4224×2240"; no alarm in the session |
+| 16 Pro (iOS 26.6) | Photo 0.5× / 1× / 2× / 5× / 10× | each pinned to its lens, 4032×3024, 103.6° / 72.0° / 40.0° / 16.4° / 8.2°; no sensor-data formats; `audit --latest` → **PASS** |
+
+Along the way, before the sensor-data rule existed: the learning build's first Photo per lens found the connection
+dark, stepped to 4032×3024 and learned the refusal (three `ALARM format:` lines, still in the phone's ledger —
+harmless now); and the Video test above crashed the app once (08:21:35) — a bench crash, nothing recording. The bench
+also taught one trap: settings passed as launch arguments (`-letslapse.capture.resolutionWidth …`) are re-saved by the
+app's own menus into the real preferences; the 18 Pro's resolution, burst resolution, Interval blend depth and mode
+were put back afterwards (stabilization was left as found), and the 16 Pro was checked unchanged.
 
 ## Evidence, and how it was pulled without touching the app
 

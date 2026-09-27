@@ -123,9 +123,8 @@ behaviour or don't show the state).
 
 **Detail:** [fieldtests/2026-09-26-18pro-crash-triage.md](fieldtests/2026-09-26-18pro-crash-triage.md) (the
 resolution finding, every crash report, the on-device verification table, the offline reason-decoding recipe) ·
-**Found:** 2026-09-26 · **Status:** Photo resolution and the Photo abort **fixed on branch `claude/photo-preflight`
-and verified on the 18 Pro** (2026-09-26 evening; the phone runs that build) — **not in `ios-app` yet** (merge is
-Steven's call); the rest below owed
+**Found:** 2026-09-26 · **Status:** Photo resolution, the Photo abort, the alarms and the per-lens stills (one lens
+per shoot) **merged and verified on the 18 Pro and the 16 Pro** (2026-09-27); the list at the end owed
 
 **Photo resolution (the headline):** 351 of the 18 Pro's 371 JPEG projects since 09-18 are 1920×1080 under a menu
 that said 4224×3024 — unrecoverable. The menu comes from the telephoto's own formats; the Triple Camera has no
@@ -149,18 +148,28 @@ set-up writes `Logs/stills-selftest-<model>.json` — all as `ALARM` log lines (
 (`StillsSizingTests`). Proved on the 18 Pro with `LL_STILLS_FAULT=1080p` (FAIL) and the Release build (PASS) — the
 report's *Never silent again* section.
 
+**Done 2026-09-27 afternoon (Steven's three rules: each lens's own capabilities, never lens X's on lens Y, one lens
+per shoot even in low light — nothing per model):** stills menus read the stop's own lens and every Photo, Interval
+and blend run pins it for the whole shoot; substitutions are never saved over the stored choice in either mode; a
+stills format must reach the stop's zoom on its lens. **4224×3024 turned out to be the lenses' ProRes RAW format**
+(`btp2`, sensor data: no photo pipeline, zoom ceiling 1.0, no Metal texture, movies only to external storage) — it
+explains the refused stills, the blends' `-6684` and the 09-20 Video abort. Sensor-data formats are never offered;
+`unsupportedCaptureOutputClasses` is respected; the photo/movie connection is asked before a run's first frame and a
+proven refusal is learned per model and OS build (`FormatOutputLedger`). Verified on the 18 Pro and the 16 Pro — the
+report's *One lens per shoot* section.
+
 Owed:
-1. **Check the 16 Pro and an iPad on it** — the stills menu and the format layer change what Photo/Interval apply
-   on every device (expected: nothing where the chosen size exists); `shoot.py audit --device <alias>` after.
-2. **Pin the physical lens for stills?** The only way to shoot 4224×3024 on the 18 Pro, and to force the real
-   telephoto at 4× in low light (the Triple Camera picks main + digital zoom in dim light). Design question for Steven.
-3. **The JPEG live blend on the pinned telephoto at 4224×3024** — every frame `-6684`, 0 saved; copy a
-   non-Metal-compatible buffer before wrapping it, or refuse the run at arm time. Re-test first: with the stills size
-   in effect now 4032×3024, the pin may no longer land on 4224×3024 at all.
-4. The request check for the Scanner shot, the DNG fire/bracket paths and the blend-depth probe (connection check
-   only — they set no `maxPhotoDimensions`); the Video abort (*iOS 27 exposure follow-ups* #1).
-5. **The delivered-size check for the other still paths** — the live blends (JPEG and DNG) and the Scanner write
+1. **Check an iPad on it** (the 16 Pro passed 2026-09-27) — `shoot.py audit --device <alias>` after a Photo per
+   stop.
+2. **Offer the lenses' 48 MP photos?** Each physical lens's 4032×3024 format delivers 8064×6048 photos
+   (`supportedMaxPhotoDimensions`; the 18 Pro's telephoto too, the 16 Pro's tele 12 MP only); Photo asks for the
+   format's own 12 MP. A photo-size choice beside the resolution — a design question for Steven.
+3. The request check for the Scanner shot, the DNG fire/bracket paths and the blend-depth probe (connection check
+   only — they set no `maxPhotoDimensions`).
+4. **The delivered-size check for the other still paths** — the live blends (JPEG and DNG) and the Scanner write
    their own outputs; measure those against the chosen size too.
+5. **Photo's per-shot pin costs two input swaps a press** (pin→photo measured 8 ms–1 s, mostly the AE settle; the
+   release after). If Photo feels slow, keep Photo's viewfinder on the stop's lens instead of swapping per shot.
 
 ### Capture observers registered more than once — every optics and lifecycle line logged ×5
 
@@ -401,17 +410,14 @@ foot, and a tap on the picture opens clear preview; the touch video editor draws
 Three jobs left over from the iPhone 18 Pro / iOS 27 crash pull, in the order
 they matter:
 
-1. **A Video ramp take can abort in `startNextSegment`.** One report in the
-   same pull (`LetsLapse-2026-09-20-111526.ips`, 18 Pro): Video mode at 0.5×,
-   burst ramp 10→60 fps, resolution `4224x3024`, right after the lens pin had
-   swapped the input to the ultra-wide (`focus_carry inputSwap:true`), the
-   first segment's `startRecording` raised from `-[AVCaptureOutput
-   liveConnections]` — the movie output had no live video connection when the
-   segment started. Reproduce on the 18 Pro with that dial (the `4224x3024`
-   4:3 video format is new to this chassis), read the connection state after
-   the pin's `commitConfiguration` and the segment's `applyCaptureFormat`, and
-   guard the start on `movieOutput.connection(with: .video)?.isActive` with a
-   loud refusal rather than a crash. Small once reproduced.
+1. ~~**A Video ramp take can abort in `startNextSegment`.**~~ **Done 2026-09-27.**
+   Reproduced on the 18 Pro: the exception is *"Capturing ProRes Raw codec is
+   supported only on external storage device"* (the report symbolicates the
+   throw as `-[AVCaptureOutput liveConnections]`) — `4224x3024` is the lenses'
+   ProRes RAW format, offered to Video whenever stabilization is off. Sensor-data
+   formats are never offered now, and a segment whose movie connection is dark
+   is refused rather than started (`refuseDarkSegment`). See the 18 Pro entry
+   above and `fieldtests/2026-09-26-18pro-crash-triage.md`.
 2. **Aperture priority for AE-driven modes on a variable-aperture lens.** The
    18 Pro main camera's iris is under AE in Basic interval, Video and the
    preview — a mid-run iris move is a depth-of-field and brightness step a
