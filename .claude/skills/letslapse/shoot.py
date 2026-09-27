@@ -1833,9 +1833,10 @@ def main():
     p.add_argument("--every", default="2",
                    help=f"Interval spacing: auto, or one of {INTERVAL_EVERY}")
     p.add_argument("--strategy", choices=STRATEGIES, help="Auto-blend decision logic")
-    p.add_argument("--output-format", choices=["jpeg", "dng"],
+    p.add_argument("--output-format", choices=["jpeg", "heic", "dng"],
                    help="the still modes' Output picker (Photo and Interval); "
-                        "DNG is refused on a source without Bayer RAW")
+                        "DNG is refused on a source without Bayer RAW, HEIC "
+                        "without the HEVC stills codec")
     p.add_argument("--dim", choices=["on", "off"],
                    help="set 'Dim screen during shoot' before firing "
                         "(display-only; accepted mid-run too)")

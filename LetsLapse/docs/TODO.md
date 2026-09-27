@@ -20,10 +20,16 @@ under the same key, resolved per run (`runStillsHEIC`) — plain stills via
 `AVCapturePhotoSettings(format: [AVVideoCodecKey: .hevc])`, blended windows
 via `ImageExporter` `.heic`; Capture Flat writes HEIC too; the remote takes
 `setOutputFormat:heic`. Owed:
-- **Device run** (the 18 Pro, over the remote): `setOutputFormat:heic`, a
-  Photo shot, an Interval run with blend 1 and with a blend depth, Capture
-  Flat on and off — check `.heic` in `source/`, the pill / Watch line read
-  HEIC, `checkDeliveredStill` is quiet, and the capture log says `heic`.
+- **Device run — done in part (2026-09-27, 18 Pro, Release `06c5d3d`, over
+  the remote with `shoot.py --output-format heic`).** 3 Photo shots and a
+  Basic Interval run (2 s, blend 1, 6 of 6 frames) all landed as real HEIC
+  (`ftypheic`, HEVC; 0.76–1.4 MB, 3024×4032, EXIF + GPS carried); the format
+  line read `4032×3024 · HEIC` throughout; capture logs say `heic-flat`
+  (Capture Flat was on, so the flat HEIC write is proved); `shoot.py audit`
+  PASS, no alarms, no crash reports. **Still owed:** the blended-window path
+  (an Interval run with a blend depth > 1 — Photo's `--blend 3` delivered one
+  frame, so it never reached `LiveBlendController`), and a run with Capture
+  Flat off.
 - **PicPlace content type.** `.heic` uploads omit `content_type` (nil in
   `PicPlaceSyncRun.contentType`, as Scanner siblings always have). Confirm
   the server takes `image/heic`, then add it.
