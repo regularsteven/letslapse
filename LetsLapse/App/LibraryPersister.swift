@@ -199,9 +199,18 @@ final class LibraryPersister: @unchecked Sendable {
     /// compatibility export, M3's cadence: at launch when stale, at quit
     /// and background). Queued behind whatever is waiting, so it describes
     /// what is on disk; `waiting` for the quit path.
-    func regenerateExport(waiting: Bool = false) {
+    ///
+    /// `reconcilingBlends` is the launch's answer to an export whose counts
+    /// and the index's disagree: before the export is written, every
+    /// document's blend entries are checked against the rows under its id,
+    /// the difference is logged blend by blend, and the documents that
+    /// differ are re-indexed as they are on disk — so the next launch finds
+    /// the two agreeing instead of regenerating again (2026-09-27: six
+    /// blends the documents held and the index did not, at every launch).
+    func regenerateExport(waiting: Bool = false, reconcilingBlends: Bool = false) {
         let body = { [self] in
             guard refuseWrites == nil else { return }
+            if reconcilingBlends { reconcileBlends() }
             do {
                 let started = Date()
                 let signpost = LLPerf.begin("library export")
@@ -215,6 +224,42 @@ final class LibraryPersister: @unchecked Sendable {
             }
         }
         if waiting { queue.sync(execute: body) } else { queue.async(execute: body) }
+    }
+
+    /// On the queue: the documents' blend entries against the index's
+    /// rows, named and repaired (`LibraryIndex.reconcileBlends`).
+    private func reconcileBlends() {
+        guard let index else { return }
+        func named(_ entries: [LibraryIndex.BlendEntry]) -> String {
+            entries.prefix(6).map(\.description).joined(separator: ", ") + (entries.count > 6 ? ", … and \(entries.count - 6) more" : "")
+        }
+        do {
+            let outcome = try index.reconcileBlends(fromProjectsFolder: projectsRoot)
+            if !outcome.missingBlends.isEmpty {
+                LLog("library: \(outcome.missingBlends.count) blend(s) in the documents but not the index: \(named(outcome.missingBlends))")
+            }
+            if !outcome.staleBlends.isEmpty {
+                LLog("library: \(outcome.staleBlends.count) blend row(s) in the index that their documents do not list: \(named(outcome.staleBlends))")
+            }
+            if !outcome.duplicatedBlends.isEmpty {
+                LLog("library: \(outcome.duplicatedBlends.count) blend(s) listed twice by their own document: \(named(outcome.duplicatedBlends))")
+            }
+            if !outcome.missingProjects.isEmpty {
+                LLog("library: \(outcome.missingProjects.count) document(s) with no index row — the walk's to index: \(outcome.missingProjects.prefix(6).map { String($0.uuidString.prefix(8)) }.joined(separator: ", "))")
+            }
+            if !outcome.staleProjects.isEmpty {
+                LLog("library: \(outcome.staleProjects.count) index row(s) with no document — the walk's to drop: \(outcome.staleProjects.prefix(6).map { String($0.uuidString.prefix(8)) }.joined(separator: ", "))")
+            }
+            if outcome.reindexed.isEmpty {
+                LLog(String(format: "library: the documents and the index agree on every blend (checked in %.2f s) — the export's counts were stale", outcome.seconds))
+            } else {
+                LLog(String(format: "library: re-indexed %d document(s) from their files in %.2f s: %@", outcome.reindexed.count, outcome.seconds,
+                            outcome.reindexed.prefix(6).map { String($0.uuidString.prefix(8)) }.joined(separator: ", ")))
+                onIndexChanged?()
+            }
+        } catch {
+            LLog("library: could not check the blend rows against the documents: \(error)")
+        }
     }
 
     // MARK: - On the queue

@@ -602,9 +602,15 @@ do {
             consistent = verification.consistent
             payload["verify"] = ["documents": verification.documents, "indexed": verification.indexed,
                                  "missing": verification.missing.map(\.uuidString), "stale": verification.stale.map(\.uuidString),
+                                 "missingBlends": verification.missingBlends.map { ["project": $0.project.uuidString, "blend": $0.blend.uuidString] },
+                                 "staleBlends": verification.staleBlends.map { ["project": $0.project.uuidString, "blend": $0.blend.uuidString] },
+                                 "duplicatedBlends": verification.duplicatedBlends.map { ["project": $0.project.uuidString, "blend": $0.blend.uuidString] },
                                  "consistent": consistent]
             if !asJSON {
-                print("  verify: \(verification.documents) documents · \(verification.indexed) indexed · missing from index \(verification.missing.count) · stale in index \(verification.stale.count) → \(consistent ? "CONSISTENT" : "INCONSISTENT")")
+                print("  verify: \(verification.documents) documents · \(verification.indexed) indexed · missing from index \(verification.missing.count) · stale in index \(verification.stale.count) · blend entries missing \(verification.missingBlends.count) · blend rows stale \(verification.staleBlends.count) → \(consistent ? "CONSISTENT" : "INCONSISTENT")")
+                for entry in verification.missingBlends.prefix(12) { print("    blend in the document, not the index: \(entry)") }
+                for entry in verification.staleBlends.prefix(12) { print("    blend row with no entry in the document: \(entry)") }
+                for entry in verification.duplicatedBlends.prefix(12) { print("    blend listed twice by its document: \(entry)") }
             }
         }
         if let searchText {

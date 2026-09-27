@@ -9063,16 +9063,29 @@ final class AppModel: ObservableObject {
         // dropped at the switch, a folder that arrived or went while the app
         // was not running, an export from before the counts — is regenerated
         // at the end of the launch rather than at the next quit, so the two
-        // agree whenever the app is up.
-        if !libraryExportStale, let exportCounts, let indexed = try? libraryIndex?.allIDs() {
-            if exportCounts.captures != indexed.projects.count || exportCounts.blends != indexed.blends.count {
+        // agree whenever the app is up. Both sides count rows: every
+        // document's capture and every document's blend entries. When they
+        // differ, the persister names the difference (which blends, which
+        // project) and re-indexes the documents concerned before it
+        // regenerates — a gap the walk cannot see (a document current by
+        // its date whose rows are not its entries) would otherwise come
+        // back at every launch, as six blends did on 2026-09-27.
+        if !libraryExportStale, let exportCounts, let indexed = try? libraryIndex?.recordCounts() {
+            if exportCounts.captures != indexed.projects || exportCounts.blends != indexed.blends {
                 libraryExportStale = true
-                LLog("library: library.json lists \(exportCounts.captures.map(String.init) ?? "?") captures and \(exportCounts.blends.map(String.init) ?? "?") blends, the index \(indexed.projects.count) and \(indexed.blends.count) — the export will be regenerated")
+                libraryExportCountsDiffered = true
+                LLog("library: library.json lists \(exportCounts.captures.map(String.init) ?? "?") captures and \(exportCounts.blends.map(String.init) ?? "?") blends, the index \(indexed.projects) and \(indexed.blends) — the documents will be checked against the index and the export regenerated")
             }
         }
         noteIndexChanged()
         finishLaunch()
     }
+
+    /// True between the launch check finding the export's counts and the
+    /// index's apart and the regeneration that follows: the persister then
+    /// reconciles the blend rows with the documents first and logs what
+    /// differed.
+    private var libraryExportCountsDiffered = false
 
     /// What every launch does once the index is current: the trash sweep
     /// and the purge, the export when it is stale (queued behind the walk,
@@ -9097,7 +9110,8 @@ final class AppModel: ObservableObject {
         sweepTrashAtLaunch()
         if libraryExportStale {
             libraryExportStale = false
-            persister.regenerateExport()
+            persister.regenerateExport(reconcilingBlends: libraryExportCountsDiffered)
+            libraryExportCountsDiffered = false
         }
         let needing = (try? libraryIndex?.projectsNeedingProbe()) ?? nil ?? ([], [])
         for id in needing.video {
@@ -10496,6 +10510,20 @@ final class AppModel: ObservableObject {
     /// naming where it came from — so the server's version can take the
     /// original's place. The folder is renamed (the originals move with the
     /// fork), the record re-keyed and inserted, the old id's row removed.
+    ///
+    /// Its blends become its own too (2026-09-27): a blend id names one
+    /// blend in one document — to the store's owner map, a collection's
+    /// entry, the index's row — and the server's version of the origin,
+    /// about to take the original's place, carries the very ids this
+    /// document holds. Until now the fork kept them, and two documents
+    /// naming one blend cost the index its row. Each blend gets a new id;
+    /// its file and its poster take the new name (as an import re-keys
+    /// what arrives), the asset records follow, and a collection entry made
+    /// here from the blend follows it into the fork — it names the file
+    /// this device rendered. A blend whose file is not on this device
+    /// (freed up, on PicPlace) keeps its record under the new id all the
+    /// same; one whose file will not move keeps its old id, as before, and
+    /// the log says so.
     /// Returns the fork's id.
     func forkProjectForKeepBoth(_ id: UUID) throws -> UUID {
         guard let document = store.document(id: id) else { throw ProjectStore.StoreError.noSuchProject(id) }
@@ -10511,20 +10539,89 @@ final class AppModel: ObservableObject {
         capture.importedFromID = nil
         capture.modifiedAt = Date()
         capture.modifiedBy = DeviceIdentity.id
-        let blends = document.blends.map { blend -> BlendProject in
-            var blend = blend
+
+        var blends: [BlendProject] = []
+        var blendRenames: [UUID: UUID] = [:]
+        var fileRenames: [String: String] = [:]
+        let blendsFolder = to.appendingPathComponent("blends", isDirectory: true)
+        let posters = to.appendingPathComponent(ProjectFileRegistry.blendPostersFolder, isDirectory: true)
+        for var blend in document.blends {
             blend.captureID = newID
-            return blend
+            let newBlendID = UUID()
+            let fileExtension = (blend.outputFileName as NSString).pathExtension
+            let newFileName = "blends/\(newBlendID.uuidString)" + (fileExtension.isEmpty ? "" : ".\(fileExtension)")
+            let file = to.appendingPathComponent(blend.outputFileName)
+            if FileManager.default.fileExists(atPath: file.path) {
+                do {
+                    try FileManager.default.createDirectory(at: blendsFolder, withIntermediateDirectories: true)
+                    try FileManager.default.moveItem(at: file, to: to.appendingPathComponent(newFileName))
+                } catch {
+                    LLog("fork: \(blend.outputFileName) of \(newID.uuidString.prefix(8)) would not take its new name — the blend keeps its id \(blend.id.uuidString.prefix(8)): \(error)")
+                    blends.append(blend)
+                    continue
+                }
+            }
+            let oldPoster = "\(ProjectFileRegistry.blendPostersFolder)/\(blend.id.uuidString).jpg"
+            let newPoster = "\(ProjectFileRegistry.blendPostersFolder)/\(newBlendID.uuidString).jpg"
+            if FileManager.default.fileExists(atPath: posters.appendingPathComponent("\(blend.id.uuidString).jpg").path) {
+                do {
+                    try FileManager.default.moveItem(at: to.appendingPathComponent(oldPoster), to: to.appendingPathComponent(newPoster))
+                    fileRenames[oldPoster] = newPoster
+                } catch {
+                    LLog("fork: the poster of blend \(blend.id.uuidString.prefix(8)) would not take its new name — remade when next needed: \(error)")
+                }
+            }
+            fileRenames[blend.outputFileName] = newFileName
+            blendRenames[blend.id] = newBlendID
+            blend.id = newBlendID
+            blend.outputFileName = newFileName
+            blends.append(blend)
         }
+        // The asset records name the files by their old names; the lines
+        // follow the files (as an import's do).
+        if !fileRenames.isEmpty, FileManager.default.fileExists(atPath: AssetRecords.url(inProjectFolder: to).path) {
+            assetStore.forget(projectFolder: to)
+            let records = assetStore.records(inProjectFolder: to)
+            var rekeyed = AssetRecords()
+            for record in records.ordered {
+                var moved = record
+                if let newName = fileRenames[record.name] { moved.name = newName }
+                rekeyed.put(moved)
+            }
+            do {
+                try assetStore.replace(inProjectFolder: to, with: rekeyed)
+            } catch {
+                LLog("fork: could not rename the asset records of \(newID.uuidString.prefix(8)): \(error)")
+            }
+        }
+
         store.remove(id: id)
         try store.insert(ProjectDocument(capture: capture, blends: blends))
+        // A collection entry made from one of these blends keeps naming the
+        // file this device rendered — now the fork's.
+        if !blendRenames.isEmpty {
+            var changed = false
+            collections = collections.map { collection in
+                var collection = collection
+                for i in collection.entries.indices {
+                    if let renamed = blendRenames[collection.entries[i].blendID] {
+                        collection.entries[i].blendID = renamed
+                        changed = true
+                    }
+                }
+                return collection
+            }
+            if changed { persistCollectionsQuietly() }
+        }
         validatedSourceFrames.remove(id)
         validatedSourceFrames.remove(newID)
         dropHoldings(for: id)
         dropHoldings(for: newID)
         assetStore.forget(projectFolder: from)
         assetStore.forget(projectFolder: to)
+        noteFilesChanged(for: newID)
         noteIndexChanged()
+        LLog("fork: \(id.uuidString.prefix(8)) → \(newID.uuidString.prefix(8)) — \(blendRenames.count) of \(document.blends.count) blend(s) re-keyed")
         return newID
     }
 

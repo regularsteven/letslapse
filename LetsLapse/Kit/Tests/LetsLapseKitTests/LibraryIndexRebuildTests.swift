@@ -134,6 +134,22 @@ final class LibraryIndexRebuildTests: XCTestCase {
         XCTAssertFalse(report.identical)
     }
 
+    /// A blend id two documents list (a keep-both fork beside its origin)
+    /// is one record to this diff and two entries to the rebuilt manifest:
+    /// the report names it rather than folding it away.
+    func testABlendListedByTwoDocumentsIsNamed() throws {
+        try writeAgreeingTree()
+        let fork = "77777777-7777-7777-7777-777777777777"
+        try writeDocument(capture: indexCapture(fork), blends: [indexBlend(blendA, capture: fork)])
+        let report = LibraryIndexRebuild.run(root: root)
+        XCTAssertEqual(report.rebuiltBlends, 2, "keyed by id, the shared blend is one record")
+        XCTAssertEqual(report.blendsInSeveralDocuments, ["\(blendA) in \(live), \(fork)"])
+        XCTAssertTrue(LibraryIndexRebuild.text(report).contains("blends listed by more than one document: 1"))
+        let manifest = try XCTUnwrap(JSONSerialization.jsonObject(with: LibraryIndexRebuild.rebuiltManifest(root: root)) as? [String: Any])
+        XCTAssertEqual((manifest["blends"] as? [[String: Any]])?.count, 3, "the export lists every document's entries")
+        XCTAssertEqual(manifest[LibraryExportFormat.generatedBlendsKey] as? Int, 3)
+    }
+
     func testFolderWithoutDocumentAndUnreadableDocumentAreReported() throws {
         try writeAgreeingTree()
         let bare = "44444444-4444-4444-4444-444444444444"

@@ -29,7 +29,17 @@ public final class LibraryIndex: @unchecked Sendable {
     /// 2 (M2): `category`, `scanner_sidecar`, `edited_at`, the shape counts
     /// and `shapes_indexed_at` on the project row; tag labels in the search
     /// table. A v1 database is dropped and rebuilt from the files.
-    public static let schemaVersion = 3
+    ///
+    /// 4 (2026-09-27): a blend row per document entry — `blends` keyed by
+    /// `(project_id, id)`, not `id` alone. Two documents can name one blend
+    /// id (a keep-both fork carried its origin's blend records verbatim, and
+    /// the server's version of the origin then came back with the same
+    /// ids); with `id` as the key, `INSERT OR REPLACE` moved the row to
+    /// whichever document was written last and `DELETE … WHERE project_id`
+    /// then lost it for good — six blends the documents held and the index
+    /// did not, the export regenerated at every launch. An older database
+    /// is dropped and rebuilt from the files.
+    public static let schemaVersion = 4
     public static let folderName = "Index"
     public static let fileName = "library.sqlite"
 
@@ -97,14 +107,16 @@ public final class LibraryIndex: @unchecked Sendable {
             CREATE INDEX IF NOT EXISTS projects_category ON projects(deleted_at, category);
             CREATE INDEX IF NOT EXISTS projects_origin ON projects(origin_id);
             CREATE TABLE IF NOT EXISTS blends (
-                id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
+                id TEXT NOT NULL, project_id TEXT NOT NULL,
                 kind TEXT NOT NULL, created_at REAL NOT NULL, modified_at REAL, deleted_at REAL,
                 output_file_name TEXT NOT NULL, summary TEXT NOT NULL,
                 width INTEGER, height INTEGER, output_fps INTEGER, input_frames INTEGER, output_frames INTEGER,
                 has_warp INTEGER NOT NULL DEFAULT 0, has_time_slice INTEGER NOT NULL DEFAULT 0,
-                has_reframe INTEGER NOT NULL DEFAULT 0
+                has_reframe INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (project_id, id)
             );
             CREATE INDEX IF NOT EXISTS blends_project ON blends(project_id, deleted_at, created_at);
+            CREATE INDEX IF NOT EXISTS blends_id ON blends(id);
             CREATE TABLE IF NOT EXISTS assets (
                 project_id TEXT NOT NULL, name TEXT NOT NULL,
                 bytes INTEGER, hash TEXT, hashed_at REAL,
@@ -785,10 +797,17 @@ public final class LibraryIndex: @unchecked Sendable {
     }
 
     /// The project a blend belongs to — a blend lives inside its project's
-    /// document — or nil when the blend is not indexed.
+    /// document — or nil when the blend is not indexed. Should two
+    /// documents name the id (schema 4), the live project's live entry
+    /// answers, then the newest.
     public func projectID(forBlend blendID: UUID) throws -> UUID? {
         lock.lock(); defer { lock.unlock() }
-        return try db.query("SELECT project_id FROM blends WHERE id = ?", [.text(blendID.uuidString.uppercased())]) {
+        return try db.query("""
+            SELECT b.project_id FROM blends b LEFT JOIN projects p ON p.id = b.project_id
+            WHERE b.id = ?
+            ORDER BY (p.deleted_at IS NOT NULL), (b.deleted_at IS NOT NULL), b.created_at DESC, b.project_id
+            LIMIT 1
+            """, [.text(blendID.uuidString.uppercased())]) {
             UUID(uuidString: $0.text(0) ?? "")
         }.first ?? nil
     }
@@ -807,13 +826,15 @@ public final class LibraryIndex: @unchecked Sendable {
         try db.run("UPDATE projects SET folder = ? WHERE id = ?", [.text(folder), .text(projectID.uuidString.uppercased())])
     }
 
-    /// Every project id and every blend id in the index, live and deleted
-    /// — what the launch compares the compatibility export against.
-    public func allIDs() throws -> (projects: Set<UUID>, blends: Set<UUID>) {
+    /// Every project row and every blend row, live and deleted — the
+    /// records the compatibility export lists (`generatedCaptures` /
+    /// `generatedBlends`, M3), which is what the launch compares its
+    /// trailer against. Rows, not distinct ids: the export lists a
+    /// document's blend entries, and so does the index (schema 4).
+    public func recordCounts() throws -> (projects: Int, blends: Int) {
         lock.lock(); defer { lock.unlock() }
-        let projects = Set(try db.query("SELECT id FROM projects") { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 })
-        let blends = Set(try db.query("SELECT id FROM blends") { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 })
-        return (projects, blends)
+        return (Int(try db.scalar("SELECT COUNT(*) FROM projects") ?? 0),
+                Int(try db.scalar("SELECT COUNT(*) FROM blends") ?? 0))
     }
 
     public struct StorageTotals: Equatable, Sendable {
@@ -966,6 +987,21 @@ public final class LibraryIndex: @unchecked Sendable {
             """) { UUID(uuidString: $0.text(0) ?? "") }.compactMap { $0 }
     }
 
+    /// One blend entry of one document — how the index and the documents
+    /// name a blend to each other (schema 4: a blend id alone need not be
+    /// unique across documents).
+    public struct BlendEntry: Hashable, Sendable, CustomStringConvertible {
+        public var project: UUID
+        public var blend: UUID
+
+        public init(project: UUID, blend: UUID) {
+            self.project = project
+            self.blend = blend
+        }
+
+        public var description: String { "\(blend.uuidString.prefix(8)) (in \(project.uuidString.prefix(8)))" }
+    }
+
     public struct Verification: Equatable {
         public var documents: Int
         public var indexed: Int
@@ -973,22 +1009,115 @@ public final class LibraryIndex: @unchecked Sendable {
         public var missing: [UUID]
         /// Rows with no document on disk.
         public var stale: [UUID]
-        public var consistent: Bool { missing.isEmpty && stale.isEmpty }
+        /// Blend entries the documents hold and the index does not — for a
+        /// project the index does know.
+        public var missingBlends: [BlendEntry] = []
+        /// Blend rows the index holds and the project's document does not.
+        public var staleBlends: [BlendEntry] = []
+        /// A blend id a single document lists twice — one row where the
+        /// export lists two entries; a flaw in the document, not the index.
+        public var duplicatedBlends: [BlendEntry] = []
+        public var consistent: Bool { missing.isEmpty && stale.isEmpty && missingBlends.isEmpty && staleBlends.isEmpty }
     }
 
     /// The index's project ids against the documents under `Projects/`
     /// (live and `.trash`) — the check that deleting and rebuilding the
-    /// database would change nothing.
+    /// database would change nothing. Since schema 4 the blend rows too:
+    /// every document's blend entries against the rows under its id.
     public func verify(againstProjectsFolder projects: URL) throws -> Verification {
         lock.lock(); defer { lock.unlock() }
         var report = LibraryIndexRebuild.Report(root: projects.path)
         let documents = LibraryIndexRebuild.readDocuments(in: projects, report: &report)
+        return try verification(of: documents)
+    }
+
+    private func verification(of documents: [LibraryIndexRebuild.Document]) throws -> Verification {
         let onDisk = Set(documents.compactMap { UUID(uuidString: $0.captureID) })
         let indexed = try projectIDs()
-        return Verification(
+        var verification = Verification(
             documents: onDisk.count, indexed: indexed.count,
             missing: onDisk.subtracting(indexed).sorted { $0.uuidString < $1.uuidString },
             stale: indexed.subtracting(onDisk).sorted { $0.uuidString < $1.uuidString })
+        var rows: [String: Set<String>] = [:]
+        let blendRows = try db.query("SELECT project_id, id FROM blends", [], { ($0.text(0) ?? "", $0.text(1) ?? "") })
+        for (project, blend) in blendRows {
+            rows[project, default: []].insert(blend)
+        }
+        // A document with no row at all is `missing` above; here the ones
+        // the index knows, entry by entry.
+        for document in documents {
+            guard let project = UUID(uuidString: document.captureID), indexed.contains(project) else { continue }
+            var listed = Set<String>()
+            for blend in document.blends {
+                guard let id = LibraryIndexRebuild.recordID(blend) else { continue }
+                if !listed.insert(id).inserted, let uuid = UUID(uuidString: id) {
+                    verification.duplicatedBlends.append(BlendEntry(project: project, blend: uuid))
+                }
+            }
+            let held = rows[document.captureID] ?? []
+            for id in listed.subtracting(held).sorted() {
+                if let uuid = UUID(uuidString: id) { verification.missingBlends.append(BlendEntry(project: project, blend: uuid)) }
+            }
+            for id in held.subtracting(listed).sorted() {
+                if let uuid = UUID(uuidString: id) { verification.staleBlends.append(BlendEntry(project: project, blend: uuid)) }
+            }
+        }
+        return verification
+    }
+
+    public struct BlendReconciliation: Equatable, Sendable {
+        /// What the documents and the rows disagreed on before the repair.
+        public var missingBlends: [BlendEntry] = []
+        public var staleBlends: [BlendEntry] = []
+        public var duplicatedBlends: [BlendEntry] = []
+        /// Projects with a document and no row at all — the walk's
+        /// business, named here so the launch log can say so.
+        public var missingProjects: [UUID] = []
+        /// Rows with no document — likewise.
+        public var staleProjects: [UUID] = []
+        /// Documents re-indexed from their files, as they are.
+        public var reindexed: [UUID] = []
+        public var seconds: Double = 0
+
+        public var agreed: Bool { missingBlends.isEmpty && staleBlends.isEmpty && missingProjects.isEmpty && staleProjects.isEmpty }
+    }
+
+    /// Every document's blend entries against the rows under its id, and
+    /// the documents that differ re-indexed from their files (`repair`) —
+    /// what the launch runs once its export-count check has found the
+    /// index and the export disagreeing, so the disagreement is named
+    /// (which blends, which project) and settled rather than regenerating
+    /// the export at every launch. A row whose folder has gone is the
+    /// launch walk's to drop; a document with no row at all is its to
+    /// index — both are only reported here. One read of every document,
+    /// the JSON-level way the rebuild reads them.
+    @discardableResult
+    public func reconcileBlends(fromProjectsFolder projects: URL, repair: Bool = true) throws -> BlendReconciliation {
+        lock.lock(); defer { lock.unlock() }
+        let started = Date()
+        var report = LibraryIndexRebuild.Report(root: projects.path)
+        let documents = LibraryIndexRebuild.readDocuments(in: projects, report: &report)
+        let verification = try verification(of: documents)
+        var outcome = BlendReconciliation(
+            missingBlends: verification.missingBlends, staleBlends: verification.staleBlends,
+            duplicatedBlends: verification.duplicatedBlends,
+            missingProjects: verification.missing, staleProjects: verification.stale)
+        if repair {
+            let differing = Set((verification.missingBlends + verification.staleBlends).map(\.project))
+            try db.transaction {
+                for document in documents {
+                    guard let id = UUID(uuidString: document.captureID), differing.contains(id) else { continue }
+                    let folderPath = document.inTrash ? ".trash/\(document.folder)" : document.folder
+                    let folderURL = projects.appendingPathComponent(folderPath, isDirectory: true)
+                    let documentURL = ProjectDocumentFormat.url(inProjectFolder: folderURL)
+                    let modified = (try? URL(fileURLWithPath: documentURL.path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                    try upsertProject(document.capture, blends: document.blends, folder: folderPath, documentModifiedAt: modified, projectFolderURL: folderURL)
+                    outcome.reindexed.append(id)
+                }
+            }
+        }
+        outcome.seconds = Date().timeIntervalSince(started)
+        return outcome
     }
 
     // MARK: - Helpers
