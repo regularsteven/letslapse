@@ -523,7 +523,7 @@ extension PicPlaceController {
             await runOriginalsQueue(manual: true)
             originalsQueueTask = nil
             originalsQueueManual = false
-            if freeUp.estimate != nil { refreshFreeUpEstimate() }
+            if freeUp.estimate != nil { refreshFreeUpEstimate(force: true) }
         }
     }
 
@@ -544,7 +544,13 @@ extension PicPlaceController {
         query.ascending = true
         let rows = (try? libraryIndex.projects(query).rows) ?? []
         let now = Date()
+        var visited = 0
         for row in rows {
+            // Every row reads its document on the main actor and most are
+            // passed over at once: a beat for the screen every few dozen
+            // rows, so a walk of a thousand is not one stall (2026-09-27).
+            visited += 1
+            if visited % 32 == 0 { await Task.yield() }
             guard manual ? canSync : originalsAllowed, !Task.isCancelled else { break }
             if manual, model.stage == .processing { break }
             if manual, wifiOnly, !isOnWiFi {
@@ -680,7 +686,12 @@ extension PicPlaceController {
         query.ascending = false
         let rows = (try? libraryIndex.projects(query).rows) ?? []
         let now = Date()
+        var visited = 0
         for row in rows {
+            // As in the originals queue: a beat for the screen every few
+            // dozen rows read on the main actor (2026-09-27).
+            visited += 1
+            if visited % 32 == 0 { await Task.yield() }
             guard heavyChecksAllowed, !Task.isCancelled else { break }
             guard let capture = model.capture(id: row.id) else { continue }
             let origin = model.originID(of: capture)

@@ -196,10 +196,21 @@ extension PicPlaceController {
             let index: PPProjectIndex = try await client.get("projects", query: ["include_deleted": "1"])
             guard let libraryIndex = model.libraryIndex else { throw PicPlaceSyncRun.Failed(caption: "The library index is not open.") }
 
+            // This library's side in one pass off the main actor
+            // (`LibraryPass`, 2026-09-27): every row, and of every readable
+            // document what the merge asks of it — its origin, its revision,
+            // whether its sources and its poster are here, its title. Until
+            // then each row read its document on the main actor here (a full
+            // decode each, the store's cache being smaller than the library)
+            // and walked its frames, which stopped the main thread for most
+            // of a second at launch. A row that acts — a pull, a delete, an
+            // eviction — reads its record live at that moment, as before.
+            guard let snapshot = await model.libraryPass(name: "picplace check pass") else {
+                throw PicPlaceSyncRun.Failed(caption: "The library index is not open.")
+            }
+            let local = snapshot.byID
             var localByOrigin: [UUID: UUID] = [:]
-            var listQuery = LibraryIndex.ProjectQuery()
-            listQuery.limit = 100_000
-            for row in (try libraryIndex.projects(listQuery)).rows { localByOrigin[row.originID ?? row.id] = row.id }
+            for row in snapshot.rows { localByOrigin[row.originID ?? row.id] = row.id }
             let localTombstones = Set((try? libraryIndex.deletedProjects().map(\.id)) ?? [])
 
             // Stage C: the account's whole index, scoped here — the exact
@@ -218,17 +229,17 @@ extension PicPlaceController {
                 // (read-only). Kept, and noted, when a person edited it since
                 // it was pulled (that edit would be lost) — and always when
                 // the originals are here: a departure a person decides.
-                if model.libraryReadOnly == nil, let capture = model.capture(id: localID), isPreviewOnly(capture) {
+                if model.libraryReadOnly == nil, let project = local[localID], isPreviewOnly(project) {
                     let record = records[origin]
-                    let edited = (record?.revision ?? 0) > 0 && model.lastEdited(capture) > (record?.syncedAt ?? .distantPast)
-                    if !edited {
+                    let edited = (record?.revision ?? 0) > 0 && project.lastEdited > (record?.syncedAt ?? .distantPast)
+                    if !edited, let capture = model.capture(id: localID) {
                         do {
                             try model.evictPreview(capture)
                             records[origin] = nil
                             outcome.evicted += 1
                             continue
                         } catch {
-                            outcome.failures.append("\(capture.displayTitle): \(Self.describe(error))")
+                            outcome.failures.append("\(project.displayTitle): \(Self.describe(error))")
                         }
                     }
                 }
@@ -248,25 +259,26 @@ extension PicPlaceController {
                 clearElsewhere(origin)
                 let base = records[origin]?.revision
                 if row.isTombstone {
-                    guard let localID = localByOrigin[origin], let capture = model.capture(id: localID) else { continue }
+                    guard let localID = localByOrigin[origin], let project = local[localID] else { continue }
                     // Deleted there, still here. A copy that never moved past
                     // the server's last revision loses nothing by going — to
                     // the trash, reversible — so it goes; a copy edited since
                     // is the person's to decide.
-                    let localRevision = revision(of: capture)
+                    let localRevision = project.revision
                     if localRevision == row.revision || localRevision == base {
+                        guard let capture = model.capture(id: localID) else { continue }
                         do {
                             try model.deleteCapture(capture)
                             records[origin] = nil
                             outcome.deletedHere += 1
-                            LLog("picplace: \(capture.displayTitle) was deleted on PicPlace\(row.deletedBy.map { " from \($0.name)" } ?? "") — moved to the trash here")
+                            LLog("picplace: \(project.displayTitle) was deleted on PicPlace\(row.deletedBy.map { " from \($0.name)" } ?? "") — moved to the trash here")
                         } catch {
-                            outcome.failures.append("\(capture.displayTitle): \(Self.describe(error))")
+                            outcome.failures.append("\(project.displayTitle): \(Self.describe(error))")
                         }
                         continue
                     }
-                    conflicts.append(Conflict(originID: origin, localID: localID, name: capture.displayTitle, kind: .deletedOnServer,
-                                              localEditedAt: model.lastEdited(capture), serverEditedAt: row.deletedAt,
+                    conflicts.append(Conflict(originID: origin, localID: localID, name: project.displayTitle, kind: .deletedOnServer,
+                                              localEditedAt: project.lastEdited, serverEditedAt: row.deletedAt,
                                               serverDevice: row.deletedBy?.name, serverRevision: row.revision,
                                               localRevision: localRevision))
                     continue
@@ -283,13 +295,13 @@ extension PicPlaceController {
                     }
                     continue
                 }
-                guard let localID = localByOrigin[origin], let capture = model.capture(id: localID) else {
+                guard let localID = localByOrigin[origin], let project = local[localID] else {
                     // New on the server.
                     do { try await pull(row); outcome.pulled += 1 }
                     catch { outcome.failures.append("\(row.name): \(Self.describe(error))") }
                     continue
                 }
-                let localRevision = revision(of: capture)
+                let localRevision = project.revision
                 // One edit, two clocks: a copy that arrived by a transfer
                 // before this library ever synced can carry its last edit to
                 // the whole second (…387000) where PicPlace has it to the
@@ -300,10 +312,11 @@ extension PicPlaceController {
                 // (2026-09-25: 23 of the iPad's 26 "different versions").
                 if base == nil, localRevision != row.revision, localRevision % 1000 == 0,
                    localRevision / 1000 == row.revision / 1000 {
+                    guard let capture = model.capture(id: localID) else { continue }
                     do {
                         try await pullUpdate(row, into: capture)
                         outcome.updated += 1
-                        LLog("picplace: \(capture.displayTitle) — the same edit here and on PicPlace (\(localRevision) vs \(row.revision)); took PicPlace's records")
+                        LLog("picplace: \(project.displayTitle) — the same edit here and on PicPlace (\(localRevision) vs \(row.revision)); took PicPlace's records")
                     } catch {
                         outcome.failures.append("\(row.name): \(Self.describe(error))")
                     }
@@ -317,7 +330,7 @@ extension PicPlaceController {
                     }
                     let record = records[origin]
                     let failedRecords = record?.lastError != nil && record?.failedHeavyOnly != true
-                    if failedRecords, syncTasks[capture.id] == nil {
+                    if failedRecords, syncTasks[localID] == nil {
                         // The manifest got through and the rest of the push
                         // did not (the bundle, the poster, the confirms):
                         // the same push again finishes it — a replay of the
@@ -326,7 +339,7 @@ extension PicPlaceController {
                         // retried the same way (L24: managing a library
                         // never needs the originals here).
                         if retryDue(record) {
-                            enqueuePush(capture.id, reason: .retry, manual: manual)
+                            enqueuePush(localID, reason: .retry, manual: manual)
                             outcome.queued += 1
                         } else {
                             outcome.waiting += 1
@@ -341,21 +354,23 @@ extension PicPlaceController {
                     // did (a push that finished after the pull, a poster
                     // that arrived), else asks for a poster it lacks once
                     // per change there.
-                    if !model.sourcesMissing(capture), record?.posterToken == nil, syncTasks[capture.id] == nil {
+                    if !project.sourcesMissing, record?.posterToken == nil, syncTasks[localID] == nil {
                         // Asked of PicPlace in one batch after the pass:
                         // most already have their poster there.
-                        posterCandidates.append((origin, capture.id))
-                    } else if model.sourcesMissing(capture), record?.policy == "pull" || record?.serverConfirmedSeen != nil,
+                        posterCandidates.append((origin, localID))
+                    } else if project.sourcesMissing, record?.policy == "pull" || record?.serverConfirmedSeen != nil,
                               record?.serverConfirmedSeen != row.assets.confirmed {
+                        guard let capture = model.capture(id: localID) else { continue }
                         do {
                             try await pullUpdate(row, into: capture)
                             outcome.updated += 1
-                            LLog("picplace: \(capture.displayTitle) — records fetched again (the server holds \(row.assets.confirmed) confirmed asset(s), this device had seen \(record?.serverConfirmedSeen.map(String.init) ?? "none"))")
+                            LLog("picplace: \(project.displayTitle) — records fetched again (the server holds \(row.assets.confirmed) confirmed asset(s), this device had seen \(record?.serverConfirmedSeen.map(String.init) ?? "none"))")
                         } catch {
                             outcome.failures.append("\(row.name): \(Self.describe(error))")
                         }
-                    } else if model.sourcesMissing(capture), model.posterURL(for: capture) == nil,
+                    } else if project.sourcesMissing, !project.hasPoster,
                               (record?.posterCheckedAt).map({ ($0 < (row.updatedAt ?? .distantFuture)) }) ?? true {
+                        guard let capture = model.capture(id: localID) else { continue }
                         do {
                             if try await fetchPoster(row, into: capture) { outcome.updated += 1 }
                         } catch {
@@ -370,15 +385,16 @@ extension PicPlaceController {
                 case (true, true, false):
                     if records[origin]?.lastError != nil, !retryDue(records[origin]) { outcome.waiting += 1; continue }
                     let wasFailed = records[origin]?.lastError != nil
-                    enqueuePush(capture.id, reason: wasFailed ? .retry : .edited, manual: manual)
+                    enqueuePush(localID, reason: wasFailed ? .retry : .edited, manual: manual)
                     outcome.queued += 1
                 case (true, false, true):
+                    guard let capture = model.capture(id: localID) else { continue }
                     do { try await pullUpdate(row, into: capture); outcome.updated += 1 }
                     catch { outcome.failures.append("\(row.name): \(Self.describe(error))") }
                 default:
-                    conflicts.append(Conflict(originID: origin, localID: localID, name: capture.displayTitle,
+                    conflicts.append(Conflict(originID: origin, localID: localID, name: project.displayTitle,
                                               kind: base == nil ? .unrelated : .bothEdited,
-                                              localEditedAt: model.lastEdited(capture), serverEditedAt: row.updatedAt,
+                                              localEditedAt: project.lastEdited, serverEditedAt: row.updatedAt,
                                               serverDevice: row.updatedBy?.name, serverRevision: row.revision, localRevision: localRevision))
                 }
             }
@@ -389,7 +405,7 @@ extension PicPlaceController {
             // A record whose every push failed is not a push: the project
             // is still new to the server, and goes when its backoff allows.
             for (origin, localID) in localByOrigin where !seen.contains(origin) && !elsewhere.contains(origin) {
-                guard let capture = model.capture(id: localID) else { continue }
+                guard local[localID] != nil else { continue }
                 if let record = records[origin] {
                     if record.recordsReachedServer || record.policy == "pull" {
                         // Pushed (or pulled) before, gone from the server without a tombstone (purged): leave it be.
@@ -398,7 +414,7 @@ extension PicPlaceController {
                     if !retryDue(record) { outcome.waiting += 1; continue }
                 }
                 let wasFailed = records[origin]?.lastError != nil
-                enqueuePush(capture.id, reason: wasFailed ? .retry : .new, manual: manual)
+                enqueuePush(localID, reason: wasFailed ? .retry : .new, manual: manual)
                 outcome.queued += 1
             }
 

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Network
 import SwiftUI
@@ -157,6 +158,34 @@ final class PicPlaceController: ObservableObject {
     @Published internal(set) var freeUp = FreeUpState()
     var freeUpTask: Task<Void, Never>?
     var freeUpEstimateTask: Task<Void, Never>?
+    /// What the library, its files and the sync records were when the
+    /// estimate was last worked out (`freeUpEstimateKey`): the card's
+    /// appearances reuse it until one of them moves (2026-09-27).
+    var freeUpEstimateKeySeen: [Int]?
+    /// Moves whenever the sync records, the server's heavy lists or the
+    /// upload jobs change — one of the keys the free-up estimate is
+    /// remembered under (`armSyncFactsRevision`).
+    private(set) var syncFactsRevision = 0
+    private var syncFactsObservers: Set<AnyCancellable> = []
+    /// The tally's one pass in flight and whether another was asked for
+    /// meanwhile (`updateTally`).
+    private var tallyTask: Task<Void, Never>?
+    private var tallyRequested = false
+
+    /// What a disconnect leaves (libraries plan L23): the previews pulled
+    /// from PicPlace, which stay but cannot download until the library
+    /// connects again, and the projects with their originals here.
+    struct DisconnectSummary: Equatable {
+        var previews: Int
+        var originals: Int
+    }
+    /// Counted off the main actor as the confirm opens
+    /// (`prepareDisconnectSummary`) — never in a view body, where it read
+    /// every document of the library on each redraw (2026-09-27: thirteen
+    /// hangs in Settings' first fourteen seconds). Nil until the first count
+    /// lands; the last count stands while a newer one is made.
+    @Published private(set) var disconnectSummary: DisconnectSummary?
+    private var disconnectSummaryTask: Task<Void, Never>?
     /// A person's removal from the card, per project (Cancel stops it).
     var removalTasks: [UUID: Task<Void, Never>] = [:]
     @Published private(set) var isSigningIn = false
@@ -555,6 +584,23 @@ final class PicPlaceController: ObservableObject {
         // only launch and hand-pressed ones — while the Debug Simulator did.
         armChangeChecks()
         armAutoSync()
+        armSyncFactsRevision()
+    }
+
+    /// `syncFactsRevision` follows the records, the server's heavy lists and
+    /// the upload jobs — what the free-up estimate's judgement reads — so a
+    /// remembered estimate is known to be current or not without comparing
+    /// the dictionaries themselves.
+    private func armSyncFactsRevision() {
+        $records.dropFirst().removeDuplicates()
+            .sink { [weak self] _ in self?.syncFactsRevision &+= 1 }
+            .store(in: &syncFactsObservers)
+        $serverHeavy.dropFirst().removeDuplicates()
+            .sink { [weak self] _ in self?.syncFactsRevision &+= 1 }
+            .store(in: &syncFactsObservers)
+        $uploadJobs.dropFirst().map { Set($0.keys) }.removeDuplicates()
+            .sink { [weak self] _ in self?.syncFactsRevision &+= 1 }
+            .store(in: &syncFactsObservers)
     }
 
     // MARK: The library
@@ -930,20 +976,41 @@ final class PicPlaceController: ObservableObject {
     }
 
     /// The tally from this library's rows and records, after every usage
-    /// refresh (which follows every check and the first pass).
+    /// refresh (which follows every check and the first pass). Every
+    /// project's document is read for it, so it is read off the main actor
+    /// (`LibraryPass`) a second after the last request — the check, the
+    /// card's appearance and a photo's registration ask within a beat of
+    /// each other, and one pass answers them all (2026-09-27: on the main
+    /// actor it stopped the app for half a second after every photo).
     func updateTally() {
-        guard let usage, let libraryIndex = model.libraryIndex else { tally = nil; return }
-        var query = LibraryIndex.ProjectQuery()
-        query.limit = 100_000
-        let rows = (try? libraryIndex.projects(query))?.rows ?? []
-        var t = LibraryTally(here: rows.count, onPicPlace: usage.projects)
-        for row in rows {
-            guard let capture = model.capture(id: row.id) else { continue }
-            let record = records[model.originID(of: capture)]
+        guard usage != nil, model.libraryIndex != nil else {
+            tally = nil
+            tallyRequested = false
+            return
+        }
+        tallyRequested = true
+        guard tallyTask == nil else { return }
+        tallyTask = Task { [weak self] in
+            defer { self?.tallyTask = nil }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            while self.tallyRequested, !self.isShutDown {
+                self.tallyRequested = false
+                await self.computeTally()
+            }
+        }
+    }
+
+    /// One pass, and the counts from it against the records as they are now.
+    private func computeTally() async {
+        guard let snapshot = await model.libraryPass(name: "picplace tally"), let usage else { tally = nil; return }
+        var t = LibraryTally(here: snapshot.rows.count, onPicPlace: usage.projects)
+        for project in snapshot.projects {
+            let record = records[project.originID]
             if let record, record.elsewhereLibrary != nil { t.elsewhere += 1; continue }
             if let record, record.recordsReachedServer {
                 if (record.serverHeavyFiles ?? 0) > 0 || record.originalsMovedAt != nil { t.originalsOnPicPlace += 1 }
-            } else if !model.sourcesMissing(capture) {
+            } else if !project.sourcesMissing {
                 t.notYet += 1
             }
         }
@@ -1129,15 +1196,12 @@ final class PicPlaceController: ObservableObject {
         // can go up). A project whose files simply went missing is neither.
         var originalsHere = Set<UUID>()
         var previewsHere = Set<UUID>()
-        if let libraryIndex = model.libraryIndex {
-            var query = LibraryIndex.ProjectQuery()
-            query.limit = 100_000
-            for row in (try? libraryIndex.projects(query))?.rows ?? [] {
-                guard let capture = model.capture(id: row.id) else { continue }
-                if isPreviewOnly(capture) {
-                    previewsHere.insert(model.originID(of: capture))
-                } else if !model.sourcesMissing(capture) {
-                    originalsHere.insert(model.originID(of: capture))
+        if let snapshot = await model.libraryPass(name: "picplace connect offer") {
+            for project in snapshot.projects {
+                if isPreviewOnly(project) {
+                    previewsHere.insert(project.originID)
+                } else if !project.sourcesMissing {
+                    originalsHere.insert(project.originID)
                 }
             }
         }
@@ -1227,7 +1291,11 @@ final class PicPlaceController: ObservableObject {
                         }
                         let created = try await createServerLibrary(uuid: identity.id, name: identity.displayName, adoptDefault: target == .adoptDefault)
                         library = .init(uuid: created.uuid, name: identity.displayName)
-                        initialCase = created.adopted > 0 ? (localCountNow() == 0 ? .fresh : .merge) : .clean
+                        if created.adopted > 0 {
+                            initialCase = await localCountNow() == 0 ? .fresh : .merge
+                        } else {
+                            initialCase = .clean
+                        }
                     case .link(let server):
                         guard let uuid = server.libraryUUID else { throw PicPlaceSyncRun.Failed(caption: "That library has no id.") }
                         if let other = Self.otherLibraryBound(toServerLibrary: uuid) {
@@ -1237,7 +1305,7 @@ final class PicPlaceController: ObservableObject {
                         // identity takes the server library's uuid and name.
                         try StorageRoot.adoptIdentity(id: uuid, name: server.displayName)
                         library = .init(uuid: uuid, name: server.displayName)
-                        initialCase = localCountNow() == 0 ? .fresh : .merge
+                        initialCase = await localCountNow() == 0 ? .fresh : .merge
                     }
                 }
                 var record = binding ?? PicPlaceBindingRecord(
@@ -1270,12 +1338,9 @@ final class PicPlaceController: ObservableObject {
 
     /// The projects here that can go up — those with their originals here
     /// (L24): a preview came from PicPlace and never goes up as new.
-    private func localCountNow() -> Int {
-        guard let libraryIndex = model.libraryIndex else { return 0 }
-        var query = LibraryIndex.ProjectQuery()
-        query.limit = 100_000
-        let rows = (try? libraryIndex.projects(query))?.rows ?? []
-        return rows.filter { row in model.capture(id: row.id).map { !model.sourcesMissing($0) } ?? false }.count
+    private func localCountNow() async -> Int {
+        guard let snapshot = await model.libraryPass(name: "picplace local count") else { return 0 }
+        return snapshot.projects.filter { !$0.sourcesMissing }.count
     }
 
     /// `PUT /libraries/{uuid}` — create (or rename) the server library this
@@ -1332,8 +1397,15 @@ final class PicPlaceController: ObservableObject {
     /// The account's libraries that no library on this device is a copy
     /// of — what "Add Library from PicPlace…" offers (stage C, §3.7).
     var librariesNotOnThisDevice: [PPLibrary] {
+        librariesNotOnThisDevice(heldElsewhere: Set(Self.serverLibrariesHeldElsewhere().map(\.uuid)))
+    }
+
+    /// The same with the other folders' bindings already read — the phone's
+    /// Libraries card reads them off the main actor with the folders
+    /// (`refreshPhoneLibraries`), not in its body (2026-09-27).
+    func librariesNotOnThisDevice(heldElsewhere: Set<UUID>) -> [PPLibrary] {
         guard isSignedIn, serverHasLibraries else { return [] }
-        var held = Set(Self.serverLibrariesHeldElsewhere().map(\.uuid))
+        var held = heldElsewhere
         if let scope { held.insert(scope) }
         return serverLibraries.filter { !$0.isDefault && !$0.isTombstone && $0.libraryUUID.map { !held.contains($0) } == true }
     }
@@ -1445,31 +1517,38 @@ final class PicPlaceController: ObservableObject {
         #endif
     }
 
-    /// What a disconnect leaves (libraries plan L23): the previews pulled
-    /// from PicPlace, which stay but cannot download until the library
-    /// connects again, and the projects with their originals here.
-    func disconnectSummary() -> (previews: Int, originals: Int) {
-        guard let libraryIndex = model.libraryIndex else { return (0, 0) }
-        var query = LibraryIndex.ProjectQuery()
-        query.limit = 100_000
-        var previews = 0
-        var originals = 0
-        for row in (try? libraryIndex.projects(query))?.rows ?? [] {
-            guard let capture = model.capture(id: row.id) else { continue }
-            if isPreviewOnly(capture) { previews += 1 } else if !model.sourcesMissing(capture) { originals += 1 }
+    /// Counts what a disconnect leaves (`DisconnectSummary`) off the main
+    /// actor — the press that opens the confirm calls it, and the message
+    /// fills in when the count lands.
+    func prepareDisconnectSummary() {
+        disconnectSummaryTask?.cancel()
+        disconnectSummaryTask = Task { [weak self] in
+            guard let self, let snapshot = await self.model.libraryPass(name: "picplace disconnect count") else { return }
+            guard !Task.isCancelled else { return }
+            var previews = 0
+            var originals = 0
+            for project in snapshot.projects {
+                if self.isPreviewOnly(project) { previews += 1 } else if !project.sourcesMissing { originals += 1 }
+            }
+            self.disconnectSummary = DisconnectSummary(previews: previews, originals: originals)
+            self.disconnectSummaryTask = nil
         }
-        return (previews, originals)
     }
 
-    /// The disconnect confirm's copy, with the numbers.
+    /// The disconnect confirm's copy, with the numbers — the last count
+    /// (`prepareDisconnectSummary`); while none has landed, it says so.
+    /// Cheap: a view body builds it on every pass.
     func disconnectMessage() -> String {
-        let n = disconnectSummary()
         var parts = ["The library stops syncing and forgets its account and what it has synced."]
-        if n.previews > 0 {
-            parts.append("\(n.previews) \(n.previews == 1 ? "preview" : "previews") pulled from PicPlace \(n.previews == 1 ? "stays" : "stay") on \(Self.deviceWord) but cannot download until you connect it again.")
-        }
-        if n.originals > 0 {
-            parts.append("\(n.originals) \(n.originals == 1 ? "project" : "projects") with originals here \(n.originals == 1 ? "stays as it is" : "stay as they are").")
+        if let n = disconnectSummary {
+            if n.previews > 0 {
+                parts.append("\(n.previews) \(n.previews == 1 ? "preview" : "previews") pulled from PicPlace \(n.previews == 1 ? "stays" : "stay") on \(Self.deviceWord) but cannot download until you connect it again.")
+            }
+            if n.originals > 0 {
+                parts.append("\(n.originals) \(n.originals == 1 ? "project" : "projects") with originals here \(n.originals == 1 ? "stays as it is" : "stay as they are").")
+            }
+        } else {
+            parts.append("Counting the library's projects…")
         }
         parts.append("Nothing changes on PicPlace. Switching libraries never needs this.")
         return parts.joined(separator: " ")
@@ -1494,6 +1573,10 @@ final class PicPlaceController: ObservableObject {
         for task in verifyTasks.values { task.cancel() }
         verifyTasks = [:]
         usageRefreshTask?.cancel(); usageRefreshTask = nil
+        tallyTask?.cancel(); tallyTask = nil
+        tallyRequested = false
+        disconnectSummaryTask?.cancel(); disconnectSummaryTask = nil
+        syncFactsObservers.removeAll()
         for task in pendingPushes.values { task.cancel() }
         pendingPushes.removeAll()
         for task in syncTasks.values { task.cancel() }
@@ -1551,6 +1634,13 @@ final class PicPlaceController: ObservableObject {
         guard model.sourcesMissing(capture) else { return false }
         if model.posterURL(for: capture) != nil { return true }
         return records[model.originID(of: capture)]?.policy == "pull"
+    }
+
+    /// The same from a pass's facts (`LibraryPass`) — the records read now.
+    func isPreviewOnly(_ project: LibraryPassProject) -> Bool {
+        guard project.sourcesMissing else { return false }
+        if project.hasPoster { return true }
+        return records[project.originID]?.policy == "pull"
     }
 
     func state(for capture: AppModel.CaptureProject) -> ProjectState {

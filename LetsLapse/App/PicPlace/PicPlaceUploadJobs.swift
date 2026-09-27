@@ -226,7 +226,7 @@ extension PicPlaceController {
             uploadRetryCounts[id] = nil
             setJob(nil, for: id)
             // Settings' counts (not on PicPlace yet / queued) move on.
-            if freeUp.estimate != nil { refreshFreeUpEstimate() }
+            if freeUp.estimate != nil { refreshFreeUpEstimate(force: true) }
             return
         case .paused:
             // The hold is whoever asked: the person, the Wi-Fi rule, iOS.

@@ -44,8 +44,14 @@ extension AppModel {
     /// Every asset a project lists: its frames (never the sidecars) and its
     /// blend outputs — the names `assets.ndjson` is keyed by.
     func assetNames(for capture: CaptureProject) -> [String] {
+        Self.assetNames(capture: capture, blends: blends(for: capture))
+    }
+
+    /// The same from a document read anywhere — the backfill's scan, off
+    /// the main actor. `blends` are the live ones, newest first.
+    nonisolated static func assetNames(capture: CaptureProject, blends: [BlendProject]) -> [String] {
         capture.sourceFileNames.filter { !$0.hasSuffix(".json") }
-            + blends(for: capture).map(\.outputFileName)
+            + blends.map(\.outputFileName)
     }
 
     /// The frames the panel can scope to, in shoot order.
@@ -259,32 +265,48 @@ extension AppModel {
     func scheduleAssetBackfill(after delay: TimeInterval = 20) {
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            guard let self else { return }
-            // The manifest is read on the main actor; the walk that decides
-            // which projects need work stats every asset of every project
-            // and reads every `assets.ndjson`, so it runs off it.
-            // Most recently added first — the index's Added sort (M3); each
-            // project's names come from its document, read once here.
-            let projects = self.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.sort = .added; return q }())
-                .map { ($0.id, self.projectFolderURL(for: $0), self.assetNames(for: $0)) }
-            let store = self.assetStore
-            let needing = await Task.detached(priority: .background) { () -> [UUID] in
+            guard let self, let index = self.libraryIndex else { return }
+            // Everything the scan needs is read off the main actor: the ids
+            // from the index (most recently added first — its Added sort,
+            // M3), each project's document once through the store (a peek,
+            // which leaves the cache as the screens made it), its names
+            // from that document, and every asset stat and `assets.ndjson`.
+            // Until 2026-09-27 the documents were read on the main actor
+            // first — one decode per project, 0.6 s twenty seconds into
+            // every launch of a 1,335-project library.
+            let store = self.store
+            let assetStore = self.assetStore
+            let root = self.projectsFolderURL
+            let started = Date()
+            let signpost = LLPerf.begin("asset backfill scan")
+            let scanned = await Task.detached(priority: .background) { () -> (needing: [UUID], projects: Int) in
+                var query = LibraryIndex.ProjectQuery()
+                query.sort = .added
+                let ids = (try? index.projectIDs(query)) ?? []
                 var needing: [UUID] = []
-                for (id, folder, names) in projects where !names.isEmpty {
-                    let records = store.records(inProjectFolder: folder)
+                for id in ids {
+                    guard let document = autoreleasepool(invoking: { store.peekDocument(id: id) }) else { continue }
+                    let live = document.blends.filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
+                    let names = AppModel.assetNames(capture: document.capture, blends: live)
+                    guard !names.isEmpty else { continue }
+                    let folder = root.appendingPathComponent(id.uuidString, isDirectory: true)
+                    let records = assetStore.records(inProjectFolder: folder)
                     let needsHash = !records.namesNeedingHash(among: names, in: folder).isEmpty
                     let needsMetadata = names.contains { AssetRecordStore.isSourceStill($0) && records[$0]?.imported == nil }
-                        && store.projectMetadata(inProjectFolder: folder)?.imported == nil
+                        && assetStore.projectMetadata(inProjectFolder: folder)?.imported == nil
                     if needsHash || needsMetadata {
                         needing.append(id)
                     } else {
-                        store.compactIfNeeded(inProjectFolder: folder)
+                        assetStore.compactIfNeeded(inProjectFolder: folder)
                     }
                 }
-                return needing
+                return (needing, ids.count)
             }.value
+            LLPerf.end("asset backfill scan", signpost)
+            LLog(String(format: "assets: backfill scan — %d of %d project(s) need work, %.2f s off main",
+                        scanned.needing.count, scanned.projects, Date().timeIntervalSince(started)))
             var queued = 0
-            for id in needing {
+            for id in scanned.needing {
                 guard let capture = self.capture(id: id) else { continue }
                 self.recordAssets(for: capture, extractMetadata: true, priority: .background, pausable: true)
                 queued += 1
