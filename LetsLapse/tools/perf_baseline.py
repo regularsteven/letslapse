@@ -29,6 +29,7 @@ DEBUG hooks answers (`SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG $(inherited)'`
 on a Release build); it measures Settings' own work, not a finger's scroll.
 """
 import argparse
+import collections
 import datetime as dt
 import glob
 import hashlib
@@ -151,7 +152,7 @@ def trace_path(scenario, tag, suffix):
     return os.path.join(TRACES, f"baseline-{scenario}-{day}-{git_sha()}-{tag}-{suffix}.trace")
 
 
-def record(udid, template, output, seconds, env=None, extra_instruments=("os_signpost",)):
+def record(udid, template, output, seconds, env=None, extra_instruments=("os_signpost",), app_args=(), attach_pid=None):
     if os.path.exists(output):
         shutil.rmtree(output)
     cmd = ["xcrun", "xctrace", "record", "--device", udid, "--template", template,
@@ -160,16 +161,20 @@ def record(udid, template, output, seconds, env=None, extra_instruments=("os_sig
         cmd += ["--instrument", name]
     for k, v in (env or {}).items():
         cmd += ["--env", f"{k}={v}"]
-    cmd += ["--launch", "--", BUNDLE]
+    if attach_pid:
+        cmd += ["--attach", str(attach_pid)]
+    else:
+        cmd += ["--launch", "--", BUNDLE, *app_args]
     print(f"▶ {template} {seconds}s → {os.path.basename(output)}")
     started = time.time()
-    r = subprocess.run(cmd, text=True, capture_output=True, timeout=seconds + 120)
+    # App Launch recordings take 60–90 s past their limit to save on a phone.
+    r = subprocess.run(cmd, text=True, capture_output=True, timeout=seconds + 360)
     tail = (r.stdout + r.stderr).strip().splitlines()[-3:]
     print("  " + " | ".join(t.strip() for t in tail), f"({time.time() - started:.0f}s)")
     if (r.returncode != 0 or not os.path.exists(output)) and extra_instruments:
         # A template that already carries the instrument refuses a second copy.
         print("  retrying without the extra instrument(s)")
-        return record(udid, template, output, seconds, env=env, extra_instruments=())
+        return record(udid, template, output, seconds, env=env, extra_instruments=(), app_args=app_args, attach_pid=attach_pid)
     if r.returncode != 0 or not os.path.exists(output):
         raise SystemExit("xctrace failed")
     return output
@@ -187,83 +192,141 @@ def toc(trace):
     return r.stdout or ""
 
 
-class Rows:
-    """One exported table, with xctrace's id/ref de-duplication resolved."""
+def trace_start(trace):
+    """The wall-clock instant of the trace's t = 0, from its table of contents."""
+    m = re.search(r"<start-date>([^<]+)</start-date>", toc(trace))
+    if not m:
+        return None
+    return dt.datetime.fromisoformat(m.group(1))
 
-    def __init__(self, xml_text):
-        self.refs = {}
-        self.rows = []
-        if not xml_text.strip():
-            return
-        root = ET.fromstring(xml_text)
-        for row in root.iter("row"):
-            cells = []
+
+def log_seconds_of_day(stamp):
+    h, m, x = stamp.split(":")
+    return int(h) * 3600 + int(m) * 60 + float(x)
+
+
+def trace_time(trace_start_dt, stamp):
+    """A console-log stamp (HH:MM:SS.mmm, the phone's clock) as seconds into the trace."""
+    if trace_start_dt is None:
+        return None
+    start = trace_start_dt.hour * 3600 + trace_start_dt.minute * 60 + trace_start_dt.second + trace_start_dt.microsecond / 1e6
+    return log_seconds_of_day(stamp) - start
+
+
+def table_rows(trace, schema):
+    """Every row of every table of that schema, as {tag: (fmt-or-text, raw-text)},
+    with xctrace's id/ref de-duplication resolved per exported node."""
+    xml_text = xctrace_export(trace, f'/trace-toc/run[@number="1"]/data/table[@schema="{schema}"]')
+    if not xml_text.strip():
+        return []
+    rows = []
+    root = ET.fromstring(xml_text)
+    refs = {}
+    for node in root.findall("node"):
+
+        def resolve(el):
+            ref = el.get("ref")
+            if ref is not None and ref in refs:
+                return refs[ref]
+            fmt = el.get("fmt")
+            raw = (el.text or "").strip()
+            value = (el.tag, fmt if fmt is not None else raw, raw)
+            if el.get("id") is not None:
+                refs[el.get("id")] = value
+            # Children carry ids of their own (a thread's tid and process).
+            for child in el:
+                resolve(child)
+            return value
+
+        for row in node.iter("row"):
+            d = {}
             for cell in row:
-                cells.append(self._resolve(cell))
-            self.rows.append(cells)
-
-    def _resolve(self, el):
-        ref = el.get("ref")
-        if ref is not None and ref in self.refs:
-            return self.refs[ref]
-        text = el.get("fmt") if el.get("fmt") is not None else (el.text or "").strip()
-        value = (el.tag, text, el)
-        if el.get("id") is not None:
-            self.refs[el.get("id")] = value
-        return value
+                tag, fmt, raw = resolve(cell)
+                d.setdefault(tag, (fmt, raw))
+            rows.append(d)
+    return rows
 
 
-def signposts(trace):
-    """Intervals and events of the app's own signposter, seconds from trace start."""
-    xml_text = xctrace_export(trace, '/trace-toc/run[@number="1"]/data/table[@schema="os-signpost"]')
+def _ns(d, tag):
+    v = d.get(tag)
+    if not v:
+        return None
+    try:
+        return float(v[1]) / 1e9
+    except (TypeError, ValueError):
+        return None
+
+
+def signposts(trace, subsystem_filter=None):
+    """Intervals (Begin/End paired by identifier) and events, seconds from the
+    trace start. Apple's launch and hang signposts come with the app's own."""
+    open_intervals = {}
     out = []
-    for cells in Rows(xml_text).rows:
-        d = {}
-        for tag, text, el in cells:
-            d.setdefault(tag, text)
-        name = d.get("name", "")
-        if "com.regularsteven" not in d.get("subsystem", "") and "letslapse" not in d.get("subsystem", "").lower():
+    for d in table_rows(trace, "os-signpost"):
+        name = d.get("signpost-name", ("", ""))[0]
+        subsystem = d.get("subsystem", ("", ""))[0]
+        kind = d.get("event-type", ("", ""))[0]
+        ident = d.get("os-signpost-identifier", ("", ""))[1]
+        t = _ns(d, "event-time")
+        msg = d.get("message", ("", ""))[0]
+        if t is None or not name:
             continue
-        start = _ns(cells, "start-time") if any(t == "start-time" for t, _, _ in cells) else _ns(cells, "event-time")
-        dur = _ns(cells, "duration")
-        out.append({"name": name, "kind": d.get("signpost-type", d.get("event-type", "")),
-                    "t": start / 1e9 if start is not None else None,
-                    "dur": dur / 1e9 if dur is not None else None,
-                    "msg": d.get("message", "")})
-    out.sort(key=lambda s: (s["t"] or 0))
+        key = (subsystem, name, ident)
+        if kind == "Begin":
+            open_intervals[key] = (t, msg)
+        elif kind == "End":
+            t0, msg0 = open_intervals.pop(key, (None, ""))
+            if t0 is None:
+                # An End whose Begin was not recorded (tracing joined late).
+                continue
+            if t0 is not None:
+                out.append({"name": name, "subsystem": subsystem, "kind": "interval", "t": t0, "dur": t - t0, "msg": msg0 or msg})
+        else:
+            out.append({"name": name, "subsystem": subsystem, "kind": "event", "t": t, "dur": None, "msg": msg})
+    for (subsystem, name, ident), (t0, msg0) in open_intervals.items():
+        out.append({"name": name, "subsystem": subsystem, "kind": "open", "t": t0, "dur": None, "msg": msg0})
+    seen = set()
+    unique = []
+    for p in out:
+        key = (p["subsystem"], p["name"], p["kind"], round(p["t"], 4), p["msg"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(p)
+    out = unique
+    out.sort(key=lambda s: s["t"])
+    if subsystem_filter:
+        out = [s for s in out if subsystem_filter in s["subsystem"]]
     return out
-
-
-def _ns(cells, tag):
-    for t, text, el in cells:
-        if t == tag:
-            raw = el.text if el.text is not None else text
-            try:
-                return float(raw)
-            except (TypeError, ValueError):
-                m = re.match(r"([\d.]+)", text or "")
-                return float(m.group(1)) * 1e9 if m else None
-    return None
 
 
 def main_thread_samples(trace):
     """(t seconds, weight ms) of every main-thread sample of the app."""
-    xml_text = xctrace_export(trace, '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]')
     samples = []
-    for cells in Rows(xml_text).rows:
-        d = {t: text for t, text, _ in cells}
-        if "LetsLapse" not in d.get("process", "") or "Main Thread" not in d.get("thread", ""):
+    for d in table_rows(trace, "time-profile"):
+        if "LetsLapse" not in d.get("process", ("", ""))[0] or "Main Thread" not in d.get("thread", ("", ""))[0]:
             continue
-        t = _ns(cells, "sample-time")
-        w = _ns(cells, "weight")
+        if d.get("thread-state", ("Running", ""))[0] != "Running":
+            continue
+        t = _ns(d, "sample-time")
+        w = _ns(d, "weight")
         if t is not None:
-            samples.append((t / 1e9, (w or 1e6) / 1e6))
+            samples.append((t, (w or 0.001) * 1000))
     samples.sort()
     return samples
 
 
+def thermal_intervals(trace):
+    out = []
+    for d in table_rows(trace, "device-thermal-state-intervals"):
+        out.append((_ns(d, "start-time"), _ns(d, "duration"), d.get("thermal-state", ("", ""))[0]))
+    return out
+
+
 def busy(samples, t0, t1):
     return sum(w for t, w in samples if t0 <= t < t1) / 1000.0
+
+
+OURS = "regularsteven"
 
 
 def parse_trace(trace):
@@ -274,21 +337,28 @@ def parse_trace(trace):
     by = {}
     for p in posts:
         by.setdefault(p["name"], []).append(p)
+    for start, dur, state in thermal_intervals(trace):
+        if start is not None:
+            print(f"  thermal {state} from {start:.1f}s for {dur or 0:.1f}s")
+    for name in ("AppLaunch", "ApplicationFirstFramePresentation", "ApplicationLaunchExtendedResponsive", "HangInterval"):
+        for p in by.get(name, []):
+            print(f"  {name:36s} at {p['t']:7.2f}s  {(p['dur'] or 0)*1000:8.0f} ms  {p['msg'][:80]}")
     for name in ("library walk", "library export", "picplace check", "free-up candidates",
                  "free-up listings", "free-up judge", "lens pin", "lens pin release",
                  "applyCaptureFormat", "AE settle", "focus settle"):
         for p in by.get(name, []):
-            if p["dur"] is not None:
+            if OURS in p["subsystem"] and p["dur"] is not None:
                 print(f"  {name:22s} at {p['t']:7.2f}s  {p['dur']*1000:8.0f} ms")
-    for name in ("thermal", "capture preview created", "settings appear", "focus tap"):
+    for name in ("thermal", "capture preview created", "settings appear", "focus tap", "shutter tap"):
         for p in by.get(name, []):
-            print(f"  {name:22s} at {p['t']:7.2f}s  {p['msg']}")
-    # Photo phases: press → run start → fire → run flag off → recorded.
-    presses = [p for p in by.get("shutter press", [])]
+            if OURS in p["subsystem"]:
+                print(f"  {name:22s} at {p['t']:7.2f}s  {p['msg']}")
+    presses = [p for p in by.get("shutter press", []) if OURS in p["subsystem"]]
     for i, press in enumerate(presses, 1):
         nxt = presses[i]["t"] if i < len(presses) else float("inf")
+
         def after(name):
-            xs = [p for p in by.get(name, []) if press["t"] <= p["t"] < nxt]
+            xs = [p for p in by.get(name, []) if OURS in p["subsystem"] and press["t"] <= p["t"] < nxt]
             return xs[0]["t"] if xs else None
         fire, flag_on, flag_off, rec = after("capture fire"), after("run flag on"), after("run flag off"), after("assets recorded")
         cells = [f"shot {i} {press['msg']:8s} press {press['t']:7.2f}s"]
@@ -301,10 +371,83 @@ def parse_trace(trace):
         print(f"  main thread: first sample {first:.2f}s; busy 0–5 s {busy(samples, first, first + 5)*1000:.0f} ms, "
               f"5–10 s {busy(samples, first + 5, first + 10)*1000:.0f} ms, samples {len(samples)}")
     for p in by.get("settings appear", []):
-        print(f"  settings: main busy in the 3 s after appear {busy(samples, p['t'], p['t'] + 3)*1000:.0f} ms")
-    if not posts:
-        print("  (no app signposts in this trace — TOC follows)")
-        print("  " + "\n  ".join(toc(trace).splitlines()[:40]))
+        if OURS in p["subsystem"]:
+            print(f"  settings: main busy in the 3 s after appear {busy(samples, p['t'], p['t'] + 3)*1000:.0f} ms")
+    if not any(OURS in p["subsystem"] for p in posts):
+        print("  (no app signposts in this trace)")
+
+
+# ---------------------------------------------------------------- hangs
+
+APP_FRAME_HINTS = ("LetsLapse", "PicPlace", "Library", "Settings", "AppModel", "Capture", "Gallery", "Camera", "Photo", "Editor", "Shape")
+
+
+def main_thread_stacks(trace):
+    """(t seconds, [frame names leaf-first]) of every running main-thread sample."""
+    xml_text = xctrace_export(trace, '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]')
+    if not xml_text.strip():
+        return []
+    root = ET.fromstring(xml_text)
+    refs = {}
+
+    def resolve(el):
+        ref = el.get("ref")
+        if ref is not None and ref in refs:
+            return refs[ref]
+        v = (el.tag, el.get("fmt") if el.get("fmt") is not None else (el.text or "").strip(), el)
+        if el.get("id") is not None:
+            refs[el.get("id")] = v
+        for c in el:
+            resolve(c)
+        return v
+
+    out = []
+    for row in root.iter("row"):
+        d, frames = {}, []
+        for cell in row:
+            tag, fmt, el = resolve(cell)
+            d.setdefault(tag, fmt)
+            if tag == "tagged-backtrace":
+                frames = [resolve(f)[2].get("name") or "" for f in el.iter("frame")]
+        if "Main Thread" not in d.get("thread", "") or "LetsLapse" not in d.get("process", ""):
+            continue
+        if d.get("thread-state", "Running") != "Running":
+            continue
+        st = row.find("sample-time")
+        raw = st.text if st is not None and st.text else (refs.get(st.get("ref"), (None, None, None))[2].text if st is not None else None)
+        try:
+            out.append((float(raw) / 1e9, frames))
+        except (TypeError, ValueError):
+            continue
+    out.sort(key=lambda s: s[0])
+    return out
+
+
+def app_frame(frames):
+    """The deepest frame that reads as the app's own code, else the leaf."""
+    for f in frames:
+        if f and any(h in f for h in APP_FRAME_HINTS) and "UIKit" not in f and "SwiftUI" not in f:
+            return f
+    return frames[0] if frames else "?"
+
+
+def hang_report(trace, top=4):
+    """What the main thread was running during each hang the Hangs instrument saw."""
+    print(f"\n== hangs in {os.path.basename(trace)}")
+    posts = signposts(trace)
+    hangs = [(p["t"], p["dur"]) for p in posts if p["name"] == "HangInterval" and p["dur"]]
+    stacks = main_thread_stacks(trace)
+    if not hangs:
+        print("  no HangInterval signposts (the Hangs instrument is in the Time Profiler template)")
+    total = sum(d for _, d in hangs)
+    print(f"  {len(hangs)} hang(s), {total:.2f} s in total; {len(stacks)} running main-thread samples in the trace")
+    for t0, dur in hangs:
+        win = [fr for t, fr in stacks if t0 <= t < t0 + dur]
+        c = collections.Counter(app_frame(fr)[:100] for fr in win)
+        state = "busy" if len(win) > dur * 400 else ("mostly waiting" if len(win) < dur * 100 else "mixed")
+        print(f"  hang at {t0:6.2f}s for {dur*1000:5.0f} ms — {len(win)} running samples ({state})")
+        for name, n in c.most_common(top):
+            print(f"      {n:5d}  {name}")
 
 
 # ---------------------------------------------------------------- the console log
@@ -399,32 +542,49 @@ def scenario_B(udid, tag):
         parse_trace(o)
 
 
+def launch_with_arguments(udid, *args):
+    """A plain launch with app arguments — UserDefaults reads them ahead of the
+    saved settings for this process only, and nothing writes them back unless a
+    menu re-saves the key (CLAUDE.md's bench trap: check the plist after)."""
+    sh(["xcrun", "devicectl", "device", "process", "launch", "--device", udid, "--terminate-existing",
+        BUNDLE, "--", *args])
+    for _ in range(20):
+        time.sleep(1)
+        pid = app_pid(udid)
+        if pid:
+            return pid
+    raise SystemExit("the app did not start")
+
+
 def scenario_C(udid, tag, tele, template):
     probe = os.path.join(HERE, "remote_probe")
     if not os.access(probe, os.X_OK):
         raise SystemExit("build tools/remote_probe first (see the header of remote_probe.swift)")
     terminate(udid)
+    # The capture screen opens itself only when Create's "Open Camera on Create
+    # tab" is on, and the remote listens only with "Allow remote access" on;
+    # both arrive as launch arguments, for this process only.
+    pid = launch_with_arguments(udid, "-letslapse.create.opensCamera", "YES", "-remote.allowRemoteAccess", "YES")
+    code, name = pairing_code(udid)
+    if not code:
+        raise SystemExit("no pairing code in the console log — did the capture screen open?")
+    print(f"  pid {pid}, pairing code {code} ({name})")
     out = trace_path("C", tag, template.lower().replace(" ", "-"))
     result = {}
 
     def drive():
-        time.sleep(8)
-        code, name = pairing_code(udid)
-        if not code:
-            result["error"] = "no pairing code in the console log — did the capture screen open?"
-            return
-        print(f"  pairing code {code} ({name}); driving {PHOTO_SCRIPT.format(tele=tele)}")
+        time.sleep(10)
+        print(f"  driving {PHOTO_SCRIPT.format(tele=tele)}")
         r = subprocess.run([probe, code, PHOTO_SCRIPT.format(tele=tele)], text=True, capture_output=True, timeout=140)
         result["probe"] = (r.stdout + r.stderr)[-1500:]
 
     th = threading.Thread(target=drive, daemon=True)
     th.start()
-    record(udid, template, out, 105)
+    record(udid, template, out, 100, attach_pid=pid)
     th.join(timeout=30)
-    if "error" in result:
-        print("  " + result["error"])
-    elif "probe" in result:
-        print("  probe: " + " | ".join(l for l in result["probe"].splitlines() if l.strip())[-600:])
+    if "probe" in result:
+        lines = [l for l in result["probe"].splitlines() if l.strip()]
+        print("  probe: " + " | ".join(lines[-3:])[-400:])
     logs = pull_logs(udid, f"/tmp/ll-logs-{tag}-C")
     rows = photo_phases(logs)
     newest = sorted(glob.glob(os.path.join(logs, "console-*.log")))[-1:]
@@ -464,12 +624,16 @@ def main():
     ap.add_argument("--tele", default="4", help="C: the tele stop's display factor (18 Pro 4, 16 Pro 5, 12 Pro 2)")
     ap.add_argument("--template", default="Time Profiler", help="C: the template (Time Profiler, Animation Hitches, SwiftUI)")
     ap.add_argument("--app", help="install: the .app to install")
-    ap.add_argument("command", choices=["A", "B", "C", "logs", "library", "install", "parse"])
+    ap.add_argument("command", choices=["A", "B", "C", "logs", "library", "install", "parse", "hangs"])
     ap.add_argument("paths", nargs="*", help="parse: trace files")
     args = ap.parse_args()
     if args.command == "parse":
         for p in args.paths:
             parse_trace(p)
+        return
+    if args.command == "hangs":
+        for p in args.paths:
+            hang_report(p)
         return
     udid = resolve_device(args.device or "")
     if args.command == "A":

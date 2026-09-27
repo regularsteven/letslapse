@@ -4637,6 +4637,9 @@ struct CaptureView: View {
 
     private func shutterAction() {
         LLPerf.event("shutter press", mode.rawValue)
+        // The press itself in the console log — the start of press → fire →
+        // recorded, which the run's own lines (pin, fire, recorded) then time.
+        LLog("shutter: press \(mode.rawValue)")
         switch mode {
         case .video:
             if camera.isRecording {
