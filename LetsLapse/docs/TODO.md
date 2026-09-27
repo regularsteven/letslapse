@@ -11,6 +11,32 @@ live inline.
 
 ## Open
 
+### Performance baseline — measure before and after every perf fix
+
+Performance baseline: run docs/performance-baseline-plan.md before and after each perf fix — iPhone 18 Pro, USB, Release build.
+
+### Library export rebuilt every launch: 6 blends not in the index
+
+Every launch on the 18 Pro (2026-09-27) logs *library.json lists 1325
+captures and 298 blends, the index 1325 and 292 — the export will be
+regenerated*, rebuilds the export in 1.2–1.5 s on the persister's serial
+queue, and the next launch finds the same gap — the rebuild writes 298 again.
+Find the six blends the documents hold and the index does not (tombstoned?
+parent missing? a kind the index skips?), fix whichever side is wrong, and
+check the line is gone from launch. Measure with
+`performance-baseline-plan.md` scenario A.
+
+### Settings: the free-up estimate re-runs on every open
+
+The Settings PicPlace card calls `refreshFreeUpEstimate()` from
+`.task(id: picplace.canSync)` (`App/PicPlace/PicPlaceViews.swift`) each time it
+appears: an index query over all 1,325 projects and a record lookup each on
+main, a folder listing of every project off main, then `looksOnPicPlace`
+(digest / coverage over every file — Stacks hold 650–1,500) back on main. It
+logs no timing. Add a timing line (or a signpost), measure with scenario B,
+then move the per-project work off main and/or keep the estimate between
+opens (re-run on a change, not on every appearance).
+
 ### PicPlace: retire the manual originals walk; a queue that keeps going in the background
 
 Settings' *Queue upload for N projects* (2026-09-27) makes an upload job per
