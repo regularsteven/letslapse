@@ -357,11 +357,38 @@ after the tap; the tele joined the session on 1920×1080 and needed 0.44 +
 | photo 1× / 0.5× press → recorded | 0.59–0.67 s / 0.79–0.89 s (camera 0.41–0.45 s, registration 0.18–0.22 s) |
 | photo at 5× | not measured: the last four shots were refused at **thermal critical** (by design) |
 | Settings (B, at thermal **critical**) | hangs 4.7–18 s: **5, 2.67 s together** (was 20, 13.6 s); main busy in the 3 s after appear **0.59 s** (was 2.6 s); free-up estimate `candidates 1.67 s, listed 4.80 s, judged 0.05 s, all off main` |
-| Settings (B): what the five hangs were | one ~0.4 s wait, four busy in `LibraryIndex.projectID(originID:)` from `PicPlaceController.refreshUsage(status:rows:)` — one index query per server row on main; moved off main after this run (not yet re-measured) |
+| Settings (B): what the five hangs were | one ~0.4 s wait, four busy in `LibraryIndex.projectID(originID:)` from `PicPlaceController.refreshUsage(status:rows:)` — one index query per server row on main; moved off main in b9fbc6e |
 
-### Simulator
+### iPhone 16 Pro — committed build b9fbc6e (+ the usage refresh off main), nominal
 
-Launch and Settings only (no camera, no Vision); see the dispatch log.
+| Metric | Before (485fcd9) | b9fbc6e |
+|---|---|---|
+| Settings from launch: hangs in the window | 20, 13.6 s | **1, 0.44 s** |
+| main thread busy in the 3 s after `settings appear` | 2.6 s | **0.23 s** |
+| main thread busy 0–5 s / 5–10 s | 4.1 s / 4.5 s | **0.64 s / 1.0 s** |
+| free-up estimate | 0.49 s + 0.61 s on main | `candidates 1.44 s, listed 2.84 s, judged 0.03 s, all off main` |
+| library walk / export | 1.9–3.3 s / 1.9 s every launch | 2.4 s / 1.66 s once (the library had grown) |
+
+### Simulator (iPhone 16 Pro simulator, 164 projects, no PicPlace binding, no camera)
+
+| Metric | Value |
+|---|---|
+| `library walk` | 0.08 s (log) / 0.47–0.73 s on the queue |
+| export regenerated / PicPlace check | none (not bound) |
+| `settings appear` after launch | 1.16 s |
+| main thread busy in the 3 s after appear / hangs | 0.26 s / none |
+
+The simulator does not reproduce the phones' problems — they are the library's
+size and PicPlace's bookkeeping, and the camera pipeline — so it serves as a
+tooling check only.
+
+### Traces kept in `docs/traces/` (git-ignored; the rest were deleted for disk space on the 27th)
+
+18 Pro before: `A…3eaad79-before-launch1` (App Launch), `A…-profile`,
+`B-hook…3eaad79-before-profile`; 16 Pro: `B-hook…485fcd9-before-profile`,
+`B-hook…485fcd9-after-profile`, `B-hook…908a2d1-final-profile`. The 18 Pro's
+two attached photo traces (10 shots, 3 shots) went with the clean-up; their
+phases are the C rows above. Regenerate any other with the harness.
 
 ## 6. Known suspects (from the 2026-09-27 audit)
 

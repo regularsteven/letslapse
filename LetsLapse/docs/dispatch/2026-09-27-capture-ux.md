@@ -119,3 +119,11 @@ How it works:
   usage refresh asking the index about each of 1,388 server rows on the main
   thread — moved off main, rebuilding, one more Settings run once the phone
   has cooled. The app is closed on the 16 Pro meanwhile.
+- [21:36] Committed build b9fbc6e on the 16 Pro at thermal nominal, Settings
+  from launch: 1 hang of 0.44 s (was 20, 13.6 s); main-thread work in the 3 s
+  after Settings appears 0.23 s (was 2.6 s); 0–10 s busy 1.6 s (was 8.6 s).
+  The 16 Pro now carries the committed Release build (b9fbc6e) with the app
+  closed. Everything is in `docs/fieldtests/2026-09-27-capture-ux-performance.md`
+  and the plan's §5. Owed: the 18 Pro's after-run (first launch rebuilds the
+  index once, ~18 s), your feel-check of the photo flow, a screen recording of
+  the after state. This log is no longer watched now that you are back.

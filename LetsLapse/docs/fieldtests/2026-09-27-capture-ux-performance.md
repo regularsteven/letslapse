@@ -194,7 +194,8 @@ against 1.0 s).
 | launch: index rebuild (schema 4) | — | 18.3 s, once, on the first launch of the build |
 | launch: PicPlace check's merge loop | on main (the 0.9 s hang) | `picplace check pass: … read in 0.6–2.0 s off main` |
 | Settings from launch: hangs | 20 hangs, 13.6 s (nominal) | **5 hangs, 2.7 s** (at thermal critical); main busy in the 3 s after Settings appears 2.6 s → **0.59 s**; the free-up estimate entirely off main |
-| the five that remain | — | four busy ones are `LibraryIndex.projectID(originID:)` under `PicPlaceController.refreshUsage` — one index query per server row on main; moved off main after this run, not yet re-measured |
+| the five that remain | — | four busy ones are `LibraryIndex.projectID(originID:)` under `PicPlaceController.refreshUsage` — one index query per server row on main; moved off main in b9fbc6e |
+| **b9fbc6e, nominal: Settings hangs / main busy in the 3 s after appear / busy 0–10 s** | 20, 13.6 s / 2.6 s / 8.6 s | **1, 0.44 s / 0.23 s / 1.6 s** |
 
 The last four remote shots of the merged run were refused at thermal
 critical (`capture: refused to start at thermal critical — the lens stabiliser
