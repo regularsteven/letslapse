@@ -49,14 +49,11 @@ extension PicPlaceController {
     /// server cannot be reached or nobody is signed in.
     func describeConnectCase() async -> ConnectCase? {
         guard isSignedIn else { return nil }
-        // Only what can go up counts (L24): the projects with originals here.
+        // Only what can go up counts (L24): the projects with originals here
+        // — every document, read off the main actor (`LibraryPass`).
         var localCount = 0
-        if let libraryIndex = model.libraryIndex {
-            var query = LibraryIndex.ProjectQuery()
-            query.limit = 100_000
-            for row in (try? libraryIndex.projects(query))?.rows ?? [] {
-                if let capture = model.capture(id: row.id), !model.sourcesMissing(capture) { localCount += 1 }
-            }
+        if let snapshot = await model.libraryPass(name: "picplace connect case") {
+            localCount = snapshot.projects.filter { !$0.sourcesMissing }.count
         }
         guard let status: PPStatus = try? await client.get("status") else { return nil }
         return ConnectCase(serverCount: status.projects?.count ?? 0, localCount: localCount)

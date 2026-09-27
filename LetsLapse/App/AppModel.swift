@@ -4667,6 +4667,28 @@ final class AppModel: ObservableObject {
     /// file-mutating persists invalidate both.
     private var validatedSourceFrames: Set<UUID> = []
 
+    /// Moves whenever a project's files are said to have changed
+    /// (`noteFilesChanged(for:)`, `invalidateStorageCache(for:)`) — what a
+    /// pass off the main actor compares before handing its own frame walks
+    /// back as tickets (`noteSourceFramesValidated`), and one of the keys
+    /// the free-up estimate is remembered under.
+    private(set) var filesRevision = 0
+
+    /// The tickets as they stand, for a pass off the main actor
+    /// (`LibraryPass`): a project in the set has had every listed frame
+    /// found this session, so the pass need not walk it again.
+    var validatedSourceFramesSnapshot: Set<UUID> { validatedSourceFrames }
+
+    /// A pass off the main actor walked these projects' frames and found
+    /// them all — the same check `source(for:)` makes — so they become
+    /// tickets, unless a file changed anywhere since the pass took its
+    /// snapshot (`filesRevision` moved): then the walk may predate the
+    /// change and nothing is kept.
+    func noteSourceFramesValidated(_ ids: Set<UUID>, filesRevision seen: Int) {
+        guard seen == filesRevision, !ids.isEmpty else { return }
+        validatedSourceFrames.formUnion(ids)
+    }
+
     /// What this device holds of each project, as far as it has been asked
     /// (`ProjectAvailability.swift`) — one folder walk per project, dropped
     /// with the size cache by `noteFilesChanged(for:)`. Its own observable,
@@ -4682,6 +4704,7 @@ final class AppModel: ObservableObject {
     func invalidateStorageCache(for id: UUID) {
         projectStorageBytes[id] = nil
         validatedSourceFrames.remove(id)
+        filesRevision &+= 1
         dropHoldings(for: id)
     }
 
@@ -9352,6 +9375,7 @@ final class AppModel: ObservableObject {
     func noteFilesChanged(for captureID: UUID) {
         projectStorageBytes.removeValue(forKey: captureID)
         validatedSourceFrames.remove(captureID)
+        filesRevision &+= 1
         dropHoldings(for: captureID)
     }
 
@@ -10213,7 +10237,12 @@ final class AppModel: ObservableObject {
     /// `originID`, else the one-hop `importedFromID`, else the local `id` —
     /// the same derivation the v4 migration writes down, so a record that
     /// has not been persisted since still answers the same.
-    func originID(of capture: CaptureProject) -> UUID {
+    nonisolated func originID(of capture: CaptureProject) -> UUID {
+        Self.originID(of: capture)
+    }
+
+    /// The same derivation for a pass off the main actor (`LibraryPass`).
+    nonisolated static func originID(of capture: CaptureProject) -> UUID {
         capture.originID ?? capture.importedFromID ?? capture.id
     }
 
@@ -10625,7 +10654,10 @@ final class AppModel: ObservableObject {
 
     /// True for a project whose listed source frames are not on this device
     /// (v2 plan D7) — the file-side half of "preview only"; the PicPlace
-    /// controller adds whether it knows the project from the server.
+    /// controller adds whether it knows the project from the server. For
+    /// one project in hand; a pass over the library asks
+    /// `sourcesMissing(capture:folder:framesValidated:)` off the main actor
+    /// (`LibraryPass.swift`), which follows `source(for:)` step for step.
     func sourcesMissing(_ capture: CaptureProject) -> Bool {
         !capture.sourceFileNames.isEmpty && mediaURL(for: capture) == nil
     }

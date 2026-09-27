@@ -65,6 +65,23 @@ final class ProjectStore: @unchecked Sendable {
         document(id: id)?.capture
     }
 
+    /// The document for a pass over the WHOLE library (`LibraryPass`, any
+    /// thread): the cached copy when there is one — read, not touched — else
+    /// the file, decoded and not remembered. A sweep of 1,335 documents
+    /// through a cache of 512 evicted every document the screens were
+    /// looking at, so each tile decoded its own again on the main thread
+    /// (2026-09-27); a peek leaves the working set as the screens made it.
+    /// The lock covers the cache look-up only — the read is the file's.
+    func peekDocument(id: UUID) -> ProjectDocument? {
+        lock.lock()
+        let cached = cache[id]
+        let skip = unreadable.contains(id)
+        lock.unlock()
+        if let cached { return cached }
+        guard !skip else { return nil }
+        return read(id: id)
+    }
+
     /// The project's live blends, newest first — what `blends(for:)`
     /// always answered.
     func blends(for id: UUID) -> [AppModel.BlendProject] {

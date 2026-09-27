@@ -292,7 +292,7 @@ extension PicPlaceController {
             self.removalNotes[capture.id] = outcome.caption(scope)
             LLog("picplace: free up — \(capture.displayTitle) (\(scope.noun)): \(outcome.caption(scope))")
             self.removalTasks[capture.id] = nil
-            if self.freeUp.estimate != nil { self.refreshFreeUpEstimate() }
+            if self.freeUp.estimate != nil { self.refreshFreeUpEstimate(force: true) }
         }
     }
 
@@ -520,31 +520,49 @@ extension PicPlaceController {
 
     // MARK: Settings — every project's originals
 
-    /// The estimate behind *Remove originals already on PicPlace*: a folder
-    /// walk of every project whose records are on PicPlace (off the main
-    /// actor), judged with what this device knows — the server's list where
-    /// the card read it, the verified marker, else the record's counts.
+    /// What the estimate was worked out from: the library (the index), its
+    /// files and the sync facts (records, the server's lists, the jobs). A
+    /// card that appears while all three stand keeps the estimate it has.
+    private var freeUpEstimateKey: [Int] { [model.indexRevision, model.filesRevision, syncFactsRevision] }
+
+    /// The estimate behind *Remove originals already on PicPlace*: every
+    /// project whose records are on PicPlace, a folder walk of each, judged
+    /// with what this device knows — the server's list where the card read
+    /// it, the verified marker, else the record's counts. Every phase off
+    /// the main actor (2026-09-27: the candidates and the judgement read
+    /// every document on it, 0.3–0.9 s each while Settings was open), and
+    /// remembered between the card's appearances until the library, its
+    /// files or the sync records move (`freeUpEstimateKey`); `force` — a
+    /// removal, an upload, a queued job — works it out again regardless.
     /// "About": the run checks every project file by file.
-    func refreshFreeUpEstimate() {
-        guard canSync, freeUpTask == nil, freeUpEstimateTask == nil, let libraryIndex = model.libraryIndex else { return }
-        // Timed in three phases — the candidate list (main), the folder
-        // listings (off main), the judgement (main) — for the baseline plan's
-        // scenario B; the two main-thread phases are what a scroll waits on.
-        let candidatesStarted = Date()
-        let candidatesSignpost = LLPerf.begin("free-up candidates")
-        var query = LibraryIndex.ProjectQuery()
-        query.limit = 100_000
-        let rows = (try? libraryIndex.projects(query).rows) ?? []
-        let candidates: [(id: UUID, folder: URL)] = rows.compactMap { row in
-            guard let capture = model.capture(id: row.id), capture.deletedAt == nil,
-                  let record = records[model.originID(of: capture)], record.recordsReachedServer, record.elsewhereLibrary == nil
-            else { return nil }
-            return (row.id, model.projectFolderURL(for: capture))
-        }
-        LLPerf.end("free-up candidates", candidatesSignpost)
-        let candidatesSeconds = Date().timeIntervalSince(candidatesStarted)
+    func refreshFreeUpEstimate(force: Bool = false) {
+        guard canSync, freeUpTask == nil, freeUpEstimateTask == nil, model.libraryIndex != nil else { return }
+        let key = freeUpEstimateKey
+        if !force, freeUp.estimate != nil, freeUpEstimateKeySeen == key { return }
         freeUp.isEstimating = true
         freeUpEstimateTask = Task { [weak self] in
+            guard let self else { return }
+            // Timed in three phases for the baseline plan's scenario B: the
+            // candidates (one pass over the documents), the folder listings,
+            // the judgement — every one off the main actor now, which only
+            // copies its knowledge out and takes the answer back.
+            let candidatesStarted = Date()
+            let candidatesSignpost = LLPerf.begin("free-up candidates")
+            guard let snapshot = await self.model.libraryPass(name: "free-up pass") else {
+                LLPerf.end("free-up candidates", candidatesSignpost)
+                self.freeUp.isEstimating = false
+                self.freeUpEstimateTask = nil
+                return
+            }
+            let records = self.records
+            let candidates: [(id: UUID, origin: UUID, folder: URL)] = snapshot.projects.compactMap { project in
+                guard project.deletedAt == nil, let record = records[project.originID],
+                      record.recordsReachedServer, record.elsewhereLibrary == nil
+                else { return nil }
+                return (project.id, project.originID, project.folder)
+            }
+            LLPerf.end("free-up candidates", candidatesSignpost)
+            let candidatesSeconds = Date().timeIntervalSince(candidatesStarted)
             let listingsStarted = Date()
             let listingsSignpost = LLPerf.begin("free-up listings")
             let listings = await Task.detached(priority: .utility) { () -> [(UUID, [PicPlaceOriginalsCheck.LocalFile])] in
@@ -552,31 +570,21 @@ extension PicPlaceController {
             }.value
             LLPerf.end("free-up listings", listingsSignpost)
             let listingsSeconds = Date().timeIntervalSince(listingsStarted)
-            guard let self else { return }
             let judgeStarted = Date()
             let judgeSignpost = LLPerf.begin("free-up judge")
-            var estimate = FreeUpState.Estimate()
-            for (id, listing) in listings {
-                self.heavyListings[id] = listing
-                let source = listing.filter { $0.kind == .source }
-                guard !source.isEmpty, let capture = self.model.capture(id: id) else { continue }
-                let bytes = source.reduce(Int64(0)) { $0 + $1.bytes }
-                if self.looksOnPicPlace(capture, source: source, listing: listing) {
-                    estimate.projects += 1
-                    estimate.bytes += bytes
-                } else if self.uploadJobs[id] != nil {
-                    estimate.queuedProjects += 1
-                } else {
-                    estimate.notUpProjects += 1
-                    estimate.notUpBytes += bytes
-                    estimate.notUpIDs.append(id)
-                }
-            }
+            let origins = Dictionary(candidates.map { ($0.id, $0.origin) }, uniquingKeysWith: { first, _ in first })
+            let knowledge = FreeUpKnowledge(records: self.records, serverHeavy: self.serverHeavy, queued: Set(self.uploadJobs.keys))
+            let estimate = await Task.detached(priority: .utility) {
+                Self.judgeFreeUp(listings, origins: origins, knowledge: knowledge)
+            }.value
             LLPerf.end("free-up judge", judgeSignpost)
-            LLog(String(format: "picplace: free-up estimate — %d of %d project(s) candidates in %.2f s on main, listed in %.2f s off main, judged in %.2f s on main: %d on PicPlace, %d queued, %d not up",
-                        candidates.count, rows.count, candidatesSeconds, listingsSeconds, Date().timeIntervalSince(judgeStarted),
+            // One write, not one per project: every write publishes.
+            self.heavyListings.merge(listings) { _, new in new }
+            LLog(String(format: "picplace: free-up estimate — %d of %d project(s) candidates in %.2f s, listed in %.2f s, judged in %.2f s, all off main: %d on PicPlace, %d queued, %d not up",
+                        candidates.count, snapshot.rows.count, candidatesSeconds, listingsSeconds, Date().timeIntervalSince(judgeStarted),
                         estimate.projects, estimate.queuedProjects, estimate.notUpProjects))
             self.freeUp.estimate = estimate
+            self.freeUpEstimateKeySeen = key
             self.freeUp.isEstimating = false
             self.freeUpEstimateTask = nil
             if self.queueUploadsAfterEstimate {
@@ -586,13 +594,43 @@ extension PicPlaceController {
         }
     }
 
+    /// What the judgement reads of this device's knowledge — copied off the
+    /// main actor for one estimate.
+    struct FreeUpKnowledge: Sendable {
+        var records: [UUID: PicPlaceSyncRecord]
+        var serverHeavy: [UUID: [PicPlaceOriginalsCheck.RemoteAsset]]
+        /// Projects with an upload job.
+        var queued: Set<UUID>
+    }
+
+    /// The estimate from the listings — any thread.
+    nonisolated static func judgeFreeUp(_ listings: [(UUID, [PicPlaceOriginalsCheck.LocalFile])], origins: [UUID: UUID],
+                                        knowledge: FreeUpKnowledge) -> FreeUpState.Estimate {
+        var estimate = FreeUpState.Estimate()
+        for (id, listing) in listings {
+            let source = listing.filter { $0.kind == .source }
+            guard !source.isEmpty, let origin = origins[id] else { continue }
+            let bytes = source.reduce(Int64(0)) { $0 + $1.bytes }
+            if looksOnPicPlace(origin: origin, source: source, listing: listing, knowledge: knowledge) {
+                estimate.projects += 1
+                estimate.bytes += bytes
+            } else if knowledge.queued.contains(id) {
+                estimate.queuedProjects += 1
+            } else {
+                estimate.notUpProjects += 1
+                estimate.notUpBytes += bytes
+                estimate.notUpIDs.append(id)
+            }
+        }
+        return estimate
+    }
+
     /// Whether a project's source media look fully on PicPlace — the
     /// estimate's judgement, never the removal's.
-    private func looksOnPicPlace(_ capture: AppModel.CaptureProject, source: [PicPlaceOriginalsCheck.LocalFile],
-                                 listing: [PicPlaceOriginalsCheck.LocalFile]) -> Bool {
-        let key = model.originID(of: capture)
-        if let remote = serverHeavy[key] { return PicPlaceOriginalsCheck.notCovered(source, by: remote, verifiedOnly: true).isEmpty }
-        guard let record = records[key] else { return false }
+    nonisolated private static func looksOnPicPlace(origin key: UUID, source: [PicPlaceOriginalsCheck.LocalFile],
+                                                    listing: [PicPlaceOriginalsCheck.LocalFile], knowledge: FreeUpKnowledge) -> Bool {
+        if let remote = knowledge.serverHeavy[key] { return PicPlaceOriginalsCheck.notCovered(source, by: remote, verifiedOnly: true).isEmpty }
+        guard let record = knowledge.records[key] else { return false }
         if let digest = record.heavyDigest, digest == PicPlaceOriginalsCheck.digest(listing) { return true }
         guard let files = record.serverHeavyFiles, let bytes = record.serverHeavyBytes else { return false }
         return files >= source.count && bytes >= source.reduce(0) { $0 + $1.bytes }
@@ -653,7 +691,7 @@ extension PicPlaceController {
             self.freeUp.run = nil
             self.freeUp.result = result
             self.freeUpTask = nil
-            self.refreshFreeUpEstimate()
+            self.refreshFreeUpEstimate(force: true)
         }
     }
 
@@ -674,12 +712,12 @@ extension PicPlaceController {
         guard canSync else { return }
         guard let estimate = freeUp.estimate, freeUpEstimateTask == nil else {
             queueUploadsAfterEstimate = true
-            refreshFreeUpEstimate()
+            refreshFreeUpEstimate(force: true)
             return
         }
         let captures = estimate.notUpIDs.compactMap { model.capture(id: $0) }
         queueUploadJobs(for: captures)
-        refreshFreeUpEstimate()
+        refreshFreeUpEstimate(force: true)
     }
 
     // MARK: Deleting a project whose files are only on PicPlace

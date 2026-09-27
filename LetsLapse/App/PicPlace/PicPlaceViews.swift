@@ -1117,6 +1117,9 @@ struct PicPlaceSettingsCard: View {
 
     private var disconnectRow: some View {
         Button {
+            // The confirm's numbers are counted off the main actor as it
+            // opens; its message fills in when they land.
+            picplace.prepareDisconnectSummary()
             isConfirmingDisconnect = true
         } label: {
             LLRow(title: "Disconnect this library…", titleColor: .red) {

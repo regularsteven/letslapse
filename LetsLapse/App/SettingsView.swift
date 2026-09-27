@@ -100,6 +100,15 @@ struct SettingsView: View {
     @State private var phoneLibraries: [StorageRoot.LibraryFolder] = []
     @State private var phoneCounts: [String: Int] = [:]
     @State private var phoneOwners: [String: String] = [:]
+    /// The server libraries the OTHER folders on this phone are copies of
+    /// (`PicPlaceController.serverLibrariesHeldElsewhere`), read with the
+    /// folders off the main actor — the body used to read every folder's
+    /// binding on each redraw (2026-09-27).
+    @State private var phoneHeldElsewhere: Set<UUID> = []
+    /// The refresh a beat after the controller's last change: it publishes
+    /// many times a second while it syncs, and each publish re-read the
+    /// folders on the main actor (2026-09-27).
+    @State private var phoneRefresh: Task<Void, Never>?
     @State private var addingFromPicPlacePhone = false
     @State private var namingNewLibrary = false
     @State private var newLibraryName = ""
@@ -1116,7 +1125,10 @@ struct SettingsView: View {
                 // Visible, not only in the menu (Steven, 2026-09-16 evening:
                 // he looked for it on the card and could not find it).
                 if model.picplace.binding != nil {
-                    Button("Disconnect…") { confirmingDisconnect = true }
+                    Button("Disconnect…") {
+                        model.picplace.prepareDisconnectSummary()
+                        confirmingDisconnect = true
+                    }
                         .buttonStyle(.borderless)
                         .foregroundStyle(.red)
                         .help("Stop syncing this library with PicPlace; nothing is deleted")
@@ -1146,7 +1158,10 @@ struct SettingsView: View {
                 Divider()
                 // The rare act it is (libraries plan L14): switching never
                 // does this; it is for a library leaving its account.
-                Button("Disconnect from PicPlace…") { confirmingDisconnect = true }
+                Button("Disconnect from PicPlace…") {
+                    model.picplace.prepareDisconnectSummary()
+                    confirmingDisconnect = true
+                }
             }
             Divider()
             Button("Remove from List") {
@@ -1793,12 +1808,15 @@ private struct LargeOriginalsView: View {
     @State private var sizes: [UUID: Int64] = [:]
     @State private var pendingDelete: AppModel.CaptureProject?
     @State private var failure: String?
+    /// Every record, in the index's size order, read once off the main
+    /// actor when the screen opens (2026-09-27: the body read every
+    /// document of the library — a decode each — on each redraw).
+    @State private var captures: [AppModel.CaptureProject] = []
 
     /// The index's size order first (measured sizes), refined by the walks
     /// this screen does as they land (M3).
     private var sorted: [AppModel.CaptureProject] {
-        model.liveCaptures({ var q = LibraryIndex.ProjectQuery(); q.sort = .size; return q }())
-            .sorted { (sizes[$0.id] ?? 0) > (sizes[$1.id] ?? 0) }
+        captures.sorted { (sizes[$0.id] ?? 0) > (sizes[$1.id] ?? 0) }
     }
 
     var body: some View {
@@ -1861,7 +1879,17 @@ private struct LargeOriginalsView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task {
-            for capture in model.liveCaptures() {
+            // The records once, off the main actor: the ids in the index's
+            // size order, each document through the store's peek (the cache
+            // is left as the screens made it).
+            let ids = model.liveProjectIDs({ var q = LibraryIndex.ProjectQuery(); q.sort = .size; return q }())
+            let store = model.store
+            let read = await Task.detached(priority: .userInitiated) { () -> [AppModel.CaptureProject] in
+                ids.compactMap { id in autoreleasepool { store.peekDocument(id: id)?.capture } }
+            }.value
+            if Task.isCancelled { return }
+            captures = read
+            for capture in read {
                 // A library can hold hundreds of projects and each walk touches
                 // every file in one; stop the moment the screen is closed rather
                 // than working through the rest of the list unseen.
@@ -2913,7 +2941,7 @@ extension SettingsView {
                 }
             }
 
-            let remote = model.picplace.librariesNotOnThisDevice
+            let remote = model.picplace.librariesNotOnThisDevice(heldElsewhere: phoneHeldElsewhere)
             if !remote.isEmpty {
                 Button { addingFromPicPlacePhone = true } label: {
                     LLRow(title: "Add Library from PicPlace…",
@@ -2947,7 +2975,7 @@ extension SettingsView {
             await runPhoneLibraryHook()
             #endif
         }
-        .onReceive(model.picplace.objectWillChange) { _ in refreshPhoneLibraries() }
+        .onReceive(model.picplace.objectWillChange) { _ in schedulePhoneLibrariesRefresh() }
         .sheet(isPresented: $addingFromPicPlacePhone) {
             AddLibraryFromPicPlacePhoneSheet(picplace: model.picplace) { folder in switchPhoneLibrary(to: folder) }
         }
@@ -2997,14 +3025,31 @@ extension SettingsView {
         return parts.joined(separator: " ")
     }
 
-    /// The folders, their project counts (a listing of `Projects/`) and
-    /// owners, off the main actor.
+    /// The controller publishes on every progress tick while it syncs; the
+    /// folders are read once, half a second after the last change.
+    private func schedulePhoneLibrariesRefresh() {
+        guard phoneRefresh == nil else { return }
+        phoneRefresh = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            phoneRefresh = nil
+            refreshPhoneLibraries()
+        }
+    }
+
+    /// The folders, their project counts (a listing of `Projects/`), their
+    /// owners and which server libraries the other folders are copies of —
+    /// every read off the main actor, the folders' listing included
+    /// (2026-09-27: it read each folder's identity on the main actor first).
     func refreshPhoneLibraries() {
-        let folders = StorageRoot.libraryFolders()
         Task.detached(priority: .userInitiated) {
+            let folders = StorageRoot.libraryFolders()
+            // `PicPlaceController.serverLibrariesHeldElsewhere`'s rule: every
+            // folder but the open one, by its binding's library.
+            let current = StorageRoot.current.standardizedFileURL.resolvingSymlinksInPath().path
             let fileManager = FileManager.default
             var counts: [String: Int] = [:]
             var owners: [String: String] = [:]
+            var heldElsewhere = Set<UUID>()
             for folder in folders {
                 let projects = folder.url.appendingPathComponent("Projects", isDirectory: true)
                 if let names = try? fileManager.contentsOfDirectory(atPath: projects.path) {
@@ -3012,6 +3057,7 @@ extension SettingsView {
                 }
                 if let binding = PicPlaceBindingRecord.read(inRoot: folder.url) {
                     owners[folder.id] = "@\(binding.user.displayHandle) on \(binding.server.host)"
+                    if folder.url.path != current, let uuid = binding.library?.uuid { heldElsewhere.insert(uuid) }
                 }
             }
             let sorted = folders.sorted { a, b in
@@ -3022,6 +3068,7 @@ extension SettingsView {
                 phoneLibraries = sorted
                 phoneCounts = counts
                 phoneOwners = owners
+                phoneHeldElsewhere = heldElsewhere
             }
         }
     }
