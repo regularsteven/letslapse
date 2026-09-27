@@ -34,7 +34,19 @@ for the rendered two. Owed:
 
 ### Performance baseline — measure before and after every perf fix
 
-Performance baseline: run docs/performance-baseline-plan.md before and after each perf fix — iPhone 18 Pro, USB, Release build.
+Run `docs/performance-baseline-plan.md` before and after each perf fix, with
+`tools/perf_baseline.py --device "<18 Pro|16 Pro>" A|B|C|A-log|C-log` (the
+plan's §5 holds the 2026-09-27 rows; the write-up is
+`docs/fieldtests/2026-09-27-capture-ux-performance.md`). Taken 2026-09-27:
+18 Pro before (3eaad79), 16 Pro before/after (Photo change, then the merged
+library-pass and index fixes), Simulator launch + Settings. **Owed:** the
+18 Pro's after-run (launch, Settings, photos) on the merged build — its first
+launch rebuilds the index once; the design-sync pass for the Photo shot's new
+on-screen behaviour beyond the burst component (a single still's press dip and
+blink have no static mirror; capture-photo.portrait.svg stands); a look at
+`fire → recorded` (camera ≈0.43 s, registration ≈0.25 s — the UI could be
+ready at delivery, registration behind it); the Watch push now skipped
+without a paired Watch.
 
 ### Library export rebuilt every launch: 6 blends not in the index — fixed in code, device check owed
 
@@ -80,16 +92,21 @@ re-keying is untested on the two-device bench: run a keep-both conflict
 (`LL_PICPLACE_RESOLVE=both`) on throwaway projects and check the fork's
 blend rows, files under `blends/`, `posters/`, and any collection entry.
 
-### Settings: the free-up estimate re-runs on every open
+### Settings: whole-library passes on the main thread — moved off (2026-09-27), device confirmation owed
 
-The Settings PicPlace card calls `refreshFreeUpEstimate()` from
-`.task(id: picplace.canSync)` (`App/PicPlace/PicPlaceViews.swift`) each time it
-appears: an index query over all 1,325 projects and a record lookup each on
-main, a folder listing of every project off main, then `looksOnPicPlace`
-(digest / coverage over every file — Stacks hold 650–1,500) back on main. It
-logs no timing. Add a timing line (or a signpost), measure with scenario B,
-then move the per-project work off main and/or keep the estimate between
-opens (re-run on a change, not on every appearance).
+Measured 2026-09-27 (plan §5): 13–20 main-thread hangs of 0.5–1.5 s in the
+first 14–18 s after opening Settings, every one a whole-library pass decoding
+each project's document on main — `disconnectSummary()` from the PicPlace
+card's body, `updateTally()` (also after every photo: a 0.5 s hang per shot),
+the libraries card, `source(for:)`/`posterURL(for:)`, the free-up estimate
+(candidates 0.34–0.49 s + judge 0.55–0.93 s on main). Shipped in code
+(`App/LibraryPass.swift`, commit 32f5137 merged): one detached pass supplies
+the facts; the tally is coalesced, the disconnect count runs on the press, the
+estimate is cached by revision, the check loop, the backfill and the libraries
+card read from the pass. **Owed:** confirm on the phones with scenario B (the
+hang count must drop from 13–20 to none in the Settings window; the merged
+build's 16 Pro run is the first reading) and that the tally/estimate copy
+still reads right when it arrives a second later.
 
 ### PicPlace: retire the manual originals walk; a queue that keeps going in the background
 

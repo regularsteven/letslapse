@@ -122,10 +122,26 @@ interactive at ≈5.5 s.
    or the user's own unlock — not until the lens gives up a pin. **The tap also
    meters** where it points in Photo mode (unless exposure is locked).
 5. **The Photo viewfinder asks for 60 fps**; the format clamps it.
-6. **Library passes off the main thread** (tally, disconnect summary, free-up
-   estimate, libraries card, asset backfill, the launch `source(for:)` pass) —
-   see the merge notes below.
-7. **The export rebuilt every launch** — root cause and fix, see below.
+6. **Library passes off the main thread** (`App/LibraryPass.swift`): one
+   detached pass reads every project's facts (origin id, sources missing,
+   poster, last edit) through the document store's own lock and a
+   `peekDocument` that does not churn the LRU; `updateTally()` runs on it,
+   coalesced to one pass per second; `disconnectSummary()` is computed only
+   when the Disconnect button is pressed; the free-up estimate's candidates and
+   judge run off main and the result is cached by (index, files, records)
+   revision; the PicPlace check's merge loop, the asset backfill and the
+   libraries card read their facts from the pass; the originals/blends queues
+   yield every 32 rows.
+7. **The export rebuilt every launch** — root cause: keep-both forks copied the
+   origin's blend records with the same ids, and the index keyed blends by id
+   alone with `INSERT OR REPLACE`, so a blend two documents named had one row
+   that moved to whichever was written last and was then deleted by the
+   other's purge; the export counted every document's entries, the index had
+   lost rows, and the launch regenerated the export forever. Fix: index schema
+   4 keys blends per document (rebuilt once on first launch), forks are
+   re-keyed, `regenerateExport` reconciles first and the launch log names any
+   blend the index lacks (`library: N blend(s) in the documents but not the
+   index: …`); six Kit tests cover it.
 8. **Instrumentation**: signposts for every phase above, `thermal:` in the log,
    `shutter: press` in the log, a hands-free harness (`tools/perf_baseline.py`)
    with A/B/C scenarios, log-only variants, `parse` and `hangs`.
@@ -165,7 +181,25 @@ against 1.0 s).
 | press → fire at 5× | 0.35–1.49 s | 2.0 s ✗ — the exposure-settle wait ran its whole 2 s budget on the combined camera's tele (`AE/AWB still settling`); a single still's wait is now capped at 0.35 s and re-measured below |
 | launch (unchanged by WP1) | walk 2.0–2.2 s, export 1.75 s | same |
 
-_(the re-run with the capped wait and the merged library-pass changes follows below when it lands)_
+### iPhone 16 Pro — capped wait (f8284f4) and the merged build (908a2d1), serious → critical
+
+| Metric | Before | Merged build |
+|---|---|---|
+| press → fire, 1× / 0.5× / 5× | 0.15–0.47 s / 0.15–0.47 s / 0.35–1.49 s | **0.00–0.01 s / 0.00–0.01 s / 0.37 s** |
+| press → recorded, 1× / 0.5× / 5× | 1.6–1.8 s / 1.5–2.7 s / 1.5–2.9 s | **0.59–0.67 s / 0.79–0.89 s / 0.95–1.0 s** |
+| of which the camera / registration | — | 0.41–0.45 s / 0.18–0.22 s (`capture: still delivered`) |
+| lens swaps per shot | 2 | 0 |
+| main-thread pass after each shot (`updateTally`) | 0.5 s hang on main | `picplace tally: … 0.5–0.6 s off main` |
+| launch: export regenerated | every launch, 1.8–1.9 s | once after the index rebuild, then never (`library.json` counts agree) |
+| launch: index rebuild (schema 4) | — | 18.3 s, once, on the first launch of the build |
+| launch: PicPlace check's merge loop | on main (the 0.9 s hang) | `picplace check pass: … read in 0.6–2.0 s off main` |
+| Settings from launch: hangs | 20 hangs, 13.6 s (nominal) | **5 hangs, 2.7 s** (at thermal critical); main busy in the 3 s after Settings appears 2.6 s → **0.59 s**; the free-up estimate entirely off main |
+| the five that remain | — | four busy ones are `LibraryIndex.projectID(originID:)` under `PicPlaceController.refreshUsage` — one index query per server row on main; moved off main after this run, not yet re-measured |
+
+The last four remote shots of the merged run were refused at thermal
+critical (`capture: refused to start at thermal critical — the lens stabiliser
+parks there`): the phone had run its camera on USB for most of the day. The
+refusal is by design and the 5× figures are the capped-wait run's.
 
 ### Simulator (iPhone 16 Pro, 164 projects, no PicPlace, no camera)
 
@@ -217,3 +251,10 @@ PicPlace's bookkeeping, and the camera pipeline.
   the app's signposts in one launched run of five; attach captures them — the
   harness launches through `devicectl` and attaches for C.
 - The 18 Pro's after-run waits for the phone's return.
+- This session sat paused on the Mac from about 17:35 to 21:00 (the clock
+  jumped inside one tool call; nothing ran meanwhile), so the merged build's
+  final 16 Pro runs happened at 21:05–21:30 rather than 18:00.
+- A USB screenshot burst of the 16 Pro mid-shot (`idevicescreenshot`) produced
+  no frames on iOS 26.6 — the chrome's stillness is argued from the code and
+  the log, and left to Steven's eyes; a screen recording on the phone is the
+  honest check.

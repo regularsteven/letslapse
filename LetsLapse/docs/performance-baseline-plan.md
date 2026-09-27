@@ -336,6 +336,29 @@ after the tap; the tele joined the session on 1920×1080 and needed 0.44 +
 | lens swaps per shot (`optics: run pinned` / `released`) | 2 | **0** (switching locked 0.55 s, restored) |
 | press → fire at 5× | 0.35–1.49 s | 2.0 s ✗ — `exposure: still settling after 2.0s` on the combined camera's tele; the single-still wait is now capped at 0.35 s (next run) |
 
+### iPhone 16 Pro — after, with the single-still wait capped at 0.35 s (f8284f4), serious
+
+| Metric | Value |
+|---|---|
+| press → fire, 1× and 0.5× | 0.00–0.01 s |
+| press → fire at 5× | 0.37–0.38 s (the cap) |
+| fire → recorded | 0.55–0.69 s (first shot after launch 1.39 s) |
+| press → recorded, 1× / 0.5× / 5× | 0.69–0.70 s / 0.55–0.59 s / 0.95–1.00 s |
+| `capture: still delivered` splits fire → recorded | camera ≈0.43 s · registration ≈0.25 s |
+
+### iPhone 16 Pro — merged build (908a2d1: + library passes off main + index schema 4), serious → critical
+
+| Metric | Value |
+|---|---|
+| launch 1 | `index: rebuilt from the files — 1397 projects · 296 blends · 46630 assets in 18.34 s` (once, schema 4) |
+| launch 2 | walk 2.1 s; the export regenerated once (1.43 s) because the day's 14 new photos had left it stale |
+| launch 3 | walk 2.07 s; **no export regeneration** — the every-launch rebuild is gone |
+| launch: PicPlace check's merge pass / tally | `picplace check pass: 1388 … read in 0.6–2.0 s off main` / `picplace tally: … 0.5–0.6 s off main` |
+| photo 1× / 0.5× press → recorded | 0.59–0.67 s / 0.79–0.89 s (camera 0.41–0.45 s, registration 0.18–0.22 s) |
+| photo at 5× | not measured: the last four shots were refused at **thermal critical** (by design) |
+| Settings (B, at thermal **critical**) | hangs 4.7–18 s: **5, 2.67 s together** (was 20, 13.6 s); main busy in the 3 s after appear **0.59 s** (was 2.6 s); free-up estimate `candidates 1.67 s, listed 4.80 s, judged 0.05 s, all off main` |
+| Settings (B): what the five hangs were | one ~0.4 s wait, four busy in `LibraryIndex.projectID(originID:)` from `PicPlaceController.refreshUsage(status:rows:)` — one index query per server row on main; moved off main after this run (not yet re-measured) |
+
 ### Simulator
 
 Launch and Settings only (no camera, no Vision); see the dispatch log.

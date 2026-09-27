@@ -962,10 +962,17 @@ final class PicPlaceController: ObservableObject {
         let bytes = serverLibrary?.usedBytes ?? status.storage.usedBytes
         var missing: [PPProject] = []
         if let index = model.libraryIndex {
-            missing = scoped.filter { row in
-                guard let uuid = UUID(uuidString: row.uuid) else { return true }
-                return ((try? index.projectID(originID: uuid)) ?? nil) == nil
-            }
+            // One index query per server row — 1,388 of them took 0.4–0.9 s
+            // on the main thread after every check (2026-09-27, the last
+            // Settings hangs left once the other passes had moved). The index
+            // has its own lock, so the loop runs off the main actor.
+            let candidates = scoped
+            missing = await Task.detached(priority: .utility) {
+                candidates.filter { row in
+                    guard let uuid = UUID(uuidString: row.uuid) else { return true }
+                    return ((try? index.projectID(originID: uuid)) ?? nil) == nil
+                }
+            }.value
         }
         if !missing.isEmpty {
             LLog("picplace: \(missing.count) of the library's \(count) project(s) on PicPlace are not here: "

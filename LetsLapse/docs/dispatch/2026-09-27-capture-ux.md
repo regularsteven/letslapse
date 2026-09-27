@@ -84,3 +84,38 @@ How it works:
   locked for 0.55 s per shot and restored. 5× regressed: 2.0 s before the fire
   on every tele shot — the exposure-settle wait hitting its 2 s timeout on the
   combined camera's tele. Confirming and capping that wait for single stills.
+- [21:05] (the Mac sat paused from ~17:35 to ~21:00; entries below carry the real clock) Capped wait verified on the 16 Pro: 5× now 0.37 s press → fire,
+  1.0 s press → recorded; 1×/0.5× 0.55–0.70 s. The still's delivery is logged:
+  the camera takes ≈0.43 s of that, registration ≈0.25 s. Committed as f8284f4.
+- [21:05] Merged the two agents' branches: (1) every whole-library pass off the
+  main thread — PicPlace tally (debounced), disconnect summary (on the press
+  only), free-up estimate (cached by revision), the launch check's merge loop,
+  the asset backfill, the libraries card; (2) the export rebuilt every launch:
+  keep-both forks copied blend records with the origin's ids and the index
+  keyed blends by id alone, so rows were lost and the counts never matched —
+  schema 4 keys blends per document, forks are re-keyed, the launch log names
+  any blend the index lacks. Note for the 18 Pro: the first launch of this
+  build rebuilds the index once (a few seconds, lists briefly empty).
+  Building the merged code; then the final 16 Pro runs.
+- [21:12] Merged build on the 16 Pro, three launches: the first rebuilt the
+  index once (18.3 s, `index: rebuilt from the files — 1397 projects · 296
+  blends · 46630 assets`); the second regenerated the export once because the
+  day's 14 new photos had left it stale; the third did not regenerate it at
+  all — the every-launch rebuild is gone. The PicPlace check's merge pass and
+  the tally now log `… read in 0.5–2.0 s off main`. Expect the same one-time
+  18 s on the 18 Pro's first launch of this build.
+- [21:15] Merged build, photos on the 16 Pro: 1× 0.59–0.67 s press → recorded
+  (camera 0.41–0.45 s, registration 0.18–0.22 s), 0.5× 0.79–0.89 s; the last
+  four shots were **refused at thermal critical** (`capture: refused to start
+  at thermal critical — the lens stabiliser parks there`) — the phone has had
+  the camera on USB for most of the afternoon and evening. That refusal is by
+  design; the 5× timing on the merged build stands from the previous run
+  (0.37 s to fire, 1.0 s to recorded). After the Settings run I am closing the
+  app so the phone can cool instead of parking it on the viewfinder.
+- [21:22] Merged build, Settings from launch on the 16 Pro (at thermal
+  critical): 5 hangs, 2.7 s together — was 20 hangs, 13.6 s; main-thread work
+  in the 3 s after Settings appears 2.6 s → 0.59 s; the free-up estimate now
+  runs entirely off main. Four of the five left are one loop: the PicPlace
+  usage refresh asking the index about each of 1,388 server rows on the main
+  thread — moved off main, rebuilding, one more Settings run once the phone
+  has cooled. The app is closed on the 16 Pro meanwhile.
