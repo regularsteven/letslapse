@@ -161,9 +161,10 @@ report's *One lens per shoot* section.
 Owed:
 1. **Check an iPad on it** (the 16 Pro passed 2026-09-27) — `shoot.py audit --device <alias>` after a Photo per
    stop.
-2. **Offer the lenses' 48 MP photos?** Each physical lens's 4032×3024 format delivers 8064×6048 photos
-   (`supportedMaxPhotoDimensions`; the 18 Pro's telephoto too, the 16 Pro's tele 12 MP only); Photo asks for the
-   format's own 12 MP. A photo-size choice beside the resolution — a design question for Steven.
+2. ~~**Offer the lenses' 48 MP photos?**~~ **Not now (Steven, 2026-09-27):** variable aperture on the 18 Pro's main
+   lens comes first (*iOS 27 exposure follow-ups* #2–#3). For when it returns: each physical lens's 4032×3024 format
+   delivers 8064×6048 photos (`supportedMaxPhotoDimensions`; the 18 Pro's telephoto too, the 16 Pro's tele 12 MP only);
+   Photo asks for the format's own 12 MP.
 3. The request check for the Scanner shot, the DNG fire/bracket paths and the blend-depth probe (connection check
    only — they set no `maxPhotoDimensions`).
 4. **The delivered-size check for the other still paths** — the live blends (JPEG and DNG) and the Scanner write
@@ -418,6 +419,9 @@ they matter:
    formats are never offered now, and a segment whose movie connection is dark
    is refused rather than started (`refuseDarkSegment`). See the 18 Pro entry
    above and `fieldtests/2026-09-26-18pro-crash-triage.md`.
+   **Priority (Steven, 2026-09-27):** variable-aperture support for the 18 Pro's
+   main lens — #2 and #3 below — is the next capability he wants for the new
+   hardware, ahead of 48 MP photos; not scheduled yet.
 2. **Aperture priority for AE-driven modes on a variable-aperture lens.** The
    18 Pro main camera's iris is under AE in Basic interval, Video and the
    preview — a mid-run iris move is a depth-of-field and brightness step a
