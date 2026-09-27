@@ -264,33 +264,81 @@ supporting evidence (right size, right lens), not the measure. The self-test too
 
 ## 5. Baseline numbers
 
-Commit `b2a1378` is the build installed on the 18 Pro on 2026-09-27; the log
-rows come from its launches that day and from the morning's build before it.
-Trace rows are blank until the first run.
+**How the rows were taken (2026-09-27, afternoon).** Commit `3eaad79` = the
+code of `67c8cdc` plus signposts, a `thermal:` log line and the shutter press
+in the log; the traces are in `docs/traces/` (git-ignored) and were recorded
+with `tools/perf_baseline.py`, hands-free: A is `xctrace --launch` (App Launch
+×3, Time Profiler ×1), B is the hooks build launched with `LL_TAB=settings`
+(Time Profiler, SwiftUI, Animation Hitches), C is the app launched through
+`devicectl` with the camera and remote-access launch arguments, Instruments
+attached, and ten Photo shots over the Camera remote (1× ×4, 0.5× ×3, tele
+×3, ~6 s apart). Library: 1,325–1,378 projects (it grew by the day's shots),
+PicPlace bound and online, Wi-Fi. Hangs are the Hangs instrument's
+`HangInterval`s (main thread unresponsive ≥ 250 ms); "busy" is running
+main-thread samples.
 
-| Date | Commit SHA | Scenario | Tool | Key metric | Value |
-|---|---|---|---|---|---|
-| 2026-09-27 | b2a1378 | A | console log | `library: walked 1325 documents` | 1.35–1.46 s (1.457 s at 14:22) |
-| 2026-09-27 | b2a1378 | A | console log | `library export: regenerated` at launch | 1.17–1.49 s (1.28 s at 14:22) — every launch |
-| 2026-09-27 | b2a1378 | A | console log | also on every trip to the background | 0.37–0.61 s |
-| 2026-09-27 | b2a1378 | A | console log | first log line → `picplace: check (foreground)` | ≈3.5 s (14:20:41.4 → 14:20:45.1; 14:22:00.7 → 14:22:04.5) |
-| 2026-09-27 | b2a1378 | A | App Launch | process start → first frame | |
-| 2026-09-27 | b2a1378 | A | Time Profiler | main-thread busy, first 5 s | |
-| 2026-09-27 | b2a1378 | B | Time Profiler | tap → first scroll frame | |
-| 2026-09-27 | b2a1378 | B | Time Profiler | main-thread time in `refreshFreeUpEstimate` | |
-| 2026-09-27 | b2a1378 | B | SwiftUI | `SettingsView.body` evaluations after the tap | |
-| 2026-09-27 | b2a1378 + morning build | C | console log (141 shots) | press → fire | median 0.37 s · 0.01–3.23 s |
-| 2026-09-27 | b2a1378 + morning build | C | console log (141 shots) | fire → recorded | median 1.19 s · floor 0.93 s · 3 shots ≈9.6 s |
-| 2026-09-27 | b2a1378 + morning build | C | console log (141 shots) | press → recorded | median 1.54 s · 1.12–10.65 s |
-| 2026-09-27 | b2a1378 | C | Time Profiler | fire → `didFinishProcessingPhoto` | |
-| 2026-09-27 | b2a1378 | C | Time Profiler | `didFinishProcessingPhoto` → UI confirmed | |
+### iPhone 18 Pro — before (3eaad79)
 
-The 141 shots were all JPEG (flat) Photo runs across 0.5×, 1× and 4×, most
-with auto-apply (Terra 4.1). The builds differ (08:03–11:39 and 14:10–14:12),
-so treat this row as a starting reference rather than a controlled baseline:
-the scene and the light weren't fixed.
+| Scenario | Metric | Value |
+|---|---|---|
+| A · launch (nominal) | process start → first frame (`ApplicationFirstFramePresentation`) | 1.00 s |
+| A | `library walk` | 1.33–1.70 s (persister queue) |
+| A | `library export` regenerated | 0.70–1.45 s — every launch (§6) |
+| A | `picplace check` (foreground) | 3.5–4.3 s to its log line |
+| A | main-thread hangs in the first 6 s | 3–4 hangs, 0.36–0.93 s each, ≈2.5 s together |
+| A | one more hang at +21 s | 0.6 s (`scheduleAssetBackfill`: `liveCaptures` + `assetNames` on main) |
+| A | main thread busy, first 5 s / next 5 s (Time Profiler run) | 1.9 s / 0.65 s |
+| B-hook · Settings (serious!) | `settings appear` after launch | 2.0–2.3 s |
+| B-hook | free-up estimate: candidates (main) / listings (off main) / judge (main) | 0.34–0.40 s / 2.2–4.8 s / 0.55–0.93 s |
+| B-hook | main thread busy in the 3 s after appear | 2.4–2.8 s |
+| B-hook | hangs from 3.5 s to 14 s | 13 hangs, ≈10 s together (0.28–1.5 s each) |
+| B-hook | what the hangs run | `CaptureProject.init(from:)` decodes under `PicPlaceController.disconnectSummary()`, `updateTally()` (+ `LibraryIndex.projectID(originID:)`), `SettingsView.librariesCardPhone`, `AppModel.source(for:)`/`posterURL(for:)`, `LibraryIndex.upsertAssets` |
+| C · photo (nominal → fair; 33 shots) | pin → fire, same lens / after a lens change | median 1.0 s / 1.4–1.8 s |
+| C | fire → recorded | median 1.02 s (0.87–1.24) |
+| C | press → fire → run flag on → run flag off → recorded (attached trace, 1× ×3) | 0 → 1.29–1.41 s → same → 2.27–2.40 s → 2.34–2.45 s |
+| C | `lens pin` (input swap in) / `lens pin release` (swap out) | 0.28–0.35 s / 0.53–0.62 s — both black out the viewfinder |
+| C | `AE settle` on the swapped-in lens | 0.56–1.17 s on every shot |
+| C | `applyCaptureFormat` after a lens change | 0.67–0.70 s + 0.17 s |
+| C | main thread busy per shot (press → recorded) | 107–150 ms |
+| C | main-thread hang after every shot | 0.47–0.63 s — `PicPlaceController.updateTally()` walking the library |
+| video 15:23 (serious) | Settings scroll: smooth / frozen / one-frame jump / frozen / smooth | 0.3 s / 0.9 s / — / 0.85 s / rest |
+| video 15:23 | photo: press → chrome collapses → chrome back with progress row → row gone | 1.2 s → 2.2 s → 3.7 s |
 
----
+### iPhone 16 Pro — before (485fcd9 = 3eaad79 + harness)
+
+Instruments on this phone (iOS 26.6 from Xcode 27.0): the App Launch template
+hangs and attach is refused, Time Profiler launches work — so C and A are
+log-based here (`C-log`, `A-log`), B is a trace.
+
+| Scenario | Metric | Value |
+|---|---|---|
+| A-log · launch (serious) | `library walk` | 2.0 s (log); 1.87 s cool |
+| A-log | `library export` regenerated | 1.94 s — every launch |
+| A-log | first line → `picplace: check (foreground)` | 2.7–2.9 s |
+| A-log | first line → capture preview created (Open Camera on Create tab ON here) | 2.85–3.7 s |
+| B-hook · Settings (nominal) | free-up estimate: candidates / listings / judge | 0.49 s main / 4.37 s off main / 0.61 s main |
+| B-hook | hangs from 4.7 s to 18.3 s | 20 hangs, 13.6 s together (0.5–1.3 s each): `disconnectSummary`, `source(for:)`/`posterURL`, `updateTally`, libraries card, every one decoding all 1,363 project documents on main |
+| C-log · photo (nominal → fair; 10 shots) | pin → fire, same lens / after a lens change | 0.15–0.47 s / 1.13–1.49 s |
+| C-log | fire → recorded | median 1.41 s (1.05–1.55) |
+| C-log | pin → recorded | median 1.62 s (1.49–2.87) |
+
+From the 15:44 recording (thermal fair): Settings did not move for ≈6 s
+after the tap; the tele joined the session on 1920×1080 and needed 0.44 +
+0.16 s of format work before its still.
+
+### iPhone 16 Pro — after the Photo change (WP1: combined camera + locked switching, no run focus pin, chrome stays), serious
+
+| Metric | Before | After |
+|---|---|---|
+| press → fire, 1× and 0.5× (same lens) | 0.15–0.47 s | **0.00–0.01 s** |
+| fire → recorded | 1.05–1.55 s | **0.58–0.70 s** |
+| press → recorded, 1× and 0.5× | 1.5–1.8 s | **0.58–0.71 s** |
+| lens swaps per shot (`optics: run pinned` / `released`) | 2 | **0** (switching locked 0.55 s, restored) |
+| press → fire at 5× | 0.35–1.49 s | 2.0 s ✗ — `exposure: still settling after 2.0s` on the combined camera's tele; the single-still wait is now capped at 0.35 s (next run) |
+
+### Simulator
+
+Launch and Settings only (no camera, no Vision); see the dispatch log.
 
 ## 6. Known suspects (from the 2026-09-27 audit)
 
@@ -302,11 +350,23 @@ the scene and the light weren't fixed.
   queue at every launch, on top of the walk: about 2.7 s in which any waiting
   write stalls. TODO: *Library export rebuilt every launch: 6 blends not in the
   index*.
-- **`refreshFreeUpEstimate()` on every Settings open.** It queries all 1,325
-  projects and lists every project folder. The listing is off main; the
-  candidate list and the per-project `looksOnPicPlace` are on main. It logs no
-  timing today. TODO: *Settings: the free-up estimate re-runs on every open*.
-- **Photo capture delay.** The cause is unknown; the logs give three leads:
+- **`refreshFreeUpEstimate()` on every Settings open** — measured: candidates
+  0.34–0.40 s on main, listings 2.2–4.8 s off main, judge 0.55–0.93 s on main
+  (it logs `picplace: free-up estimate — …` since 3eaad79). It is not alone:
+  `disconnectSummary()`, `updateTally()` and the libraries card each walk
+  the whole library on the main thread while Settings is open, decoding every
+  project's document — the 13 hangs of §5. TODO: *Settings: the free-up
+  estimate re-runs on every open* (now: every whole-library pass off main).
+- **Photo capture delay — found (2026-09-27, traces).** Every Photo shot
+  pins the stop's physical lens (an input swap, 0.3 s, viewfinder blacks
+  out), waits for that lens's exposure to settle from scratch (0.6–1.2 s),
+  fires, then swaps the combined camera back (0.6 s, second blackout); the
+  run flag lifts ~1 s after the fire and the chrome follows it. Main-thread
+  work is ~120 ms a shot. After every shot `updateTally()` walks the library
+  on the main thread for 0.5 s. Fix (this branch): Photo shoots from the
+  combined camera with constituent switching locked; chrome stays put; press
+  acknowledged at once; the tally moves off main. The earlier leads, kept
+  for the record:
   - **Changing lens adds 0.8–1.2 s before the shot.** Every shot where press →
     AE wait is non-zero is a lens join: the photo run pins the stop's physical
     lens (the one-lens-per-shoot rule, 2026-09-27), reapplies the format, then

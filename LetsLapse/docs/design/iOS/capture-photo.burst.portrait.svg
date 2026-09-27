@@ -89,9 +89,9 @@
           </g>
           <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
         </g>
-        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.portrait.svg,
+        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.photo-burst.portrait.svg,
              not this file; placement = ring centre (196.5, 758) minus (90, 50). Contract: components/README.md -->
-        <image id="shutter-cluster" href="../components/shutter-cluster.running.portrait.svg" x="106.5" y="708" width="180" height="100"/>
+        <image id="shutter-cluster" href="../components/shutter-cluster.photo-burst.portrait.svg" x="106.5" y="708" width="180" height="100"/>
       </g>
 
       <!-- hardware -->

@@ -465,8 +465,13 @@ def photo_phases(log_dir):
             if not m:
                 continue
             ts, msg = t(m.group(1)), m.group(2)
-            if msg.startswith("optics: run pinned to") or msg.startswith("optics: run already on"):
-                cur = {"press": ts, "file": os.path.basename(f), "at": m.group(1)}
+            if msg.lower().startswith("shutter: press photo"):
+                cur = {"press": ts, "file": os.path.basename(f), "at": m.group(1), "pressed": True}
+            elif (msg.startswith("optics: run pinned to") or msg.startswith("optics: run already on")
+                  or msg.startswith("optics: constituent switching locked")):
+                if cur is None or "fire" in cur or not cur.get("pressed"):
+                    cur = {"press": ts, "file": os.path.basename(f), "at": m.group(1)}
+                cur.setdefault("pin", ts)
             elif cur is not None:
                 if msg.startswith("exposure: AE/AWB still settling") and "wait" not in cur:
                     cur["wait"] = ts
@@ -486,11 +491,12 @@ def print_photo_phases(rows):
     if not rows:
         print("no Photo shots in these logs")
         return
-    print(f"{'at':>12s} {'lens':12s} {'pin→fire':>9s} {'fire→rec':>9s} {'pin→rec':>8s}  thermal")
+    start = "press" if any(r.get("pressed") for r in rows) else "pin"
+    print(f"{'at':>12s} {'lens':12s} {start + '→fire':>10s} {'fire→rec':>9s} {start + '→rec':>9s}  thermal")
     for r in rows:
-        print(f"{r['at']:>12s} {r['lens']:12s} {r['fire']-r['press']:9.2f} {r['rec']-r['fire']:9.2f} {r['rec']-r['press']:8.2f}  {r['thermal']}")
-    for name, fn in (("pin→fire", lambda r: r["fire"] - r["press"]), ("fire→recorded", lambda r: r["rec"] - r["fire"]),
-                     ("pin→recorded", lambda r: r["rec"] - r["press"])):
+        print(f"{r['at']:>12s} {r['lens']:12s} {r['fire']-r['press']:10.2f} {r['rec']-r['fire']:9.2f} {r['rec']-r['press']:9.2f}  {r['thermal']}")
+    for name, fn in ((start + "→fire", lambda r: r["fire"] - r["press"]), ("fire→recorded", lambda r: r["rec"] - r["fire"]),
+                     (start + "→recorded", lambda r: r["rec"] - r["press"])):
         v = [fn(r) for r in rows]
         print(f"{name}: n={len(v)} median={statistics.median(v):.2f}s min={min(v):.2f}s max={max(v):.2f}s")
 
@@ -592,6 +598,58 @@ def scenario_C(udid, tag, tele, template):
     parse_trace(out)
 
 
+def park(udid):
+    """Leave the phone on the capture screen, which holds the idle timer — a
+    phone without Auto-Lock → Never locks itself between runs otherwise."""
+    pid = launch_with_arguments(udid, "-letslapse.create.opensCamera", "YES")
+    print(f"parked on the capture screen (pid {pid})")
+
+
+def scenario_A_log(udid, tag, repeat):
+    """Launch without Instruments, `repeat` times, and read the launch phases
+    from the console log — for a phone Instruments cannot drive (the 16 Pro on
+    iOS 26.6 hung every App Launch recording and refused to attach)."""
+    for i in range(1, repeat + 1):
+        terminate(udid)
+        sh(["xcrun", "devicectl", "device", "process", "launch", "--device", udid, "--terminate-existing", BUNDLE])
+        print(f"  launch {i}: sitting 20 s")
+        time.sleep(20)
+    logs = pull_logs(udid, f"/tmp/ll-logs-{tag}-A")
+    files = sorted(glob.glob(os.path.join(logs, "console-*.log")))[-repeat:]
+    for f in files:
+        print(f"-- {os.path.basename(f)}")
+        first = None
+        for line in open(f, errors="replace"):
+            m = re.match(r"(\d\d:\d\d:\d\d\.\d+) \S+ +[\d.]+ (.*)", line)
+            if not m:
+                continue
+            if first is None:
+                first = log_seconds_of_day(m.group(1))
+            msg = m.group(2)
+            if re.match(r"(thermal:|library: walked|library export:|picplace: check \(|picplace: free-up estimate|picplace: tally|CameraPreview.makeUIView #1|shutter: press)", msg):
+                print(f"   +{log_seconds_of_day(m.group(1)) - first:6.2f}s  {msg[:120]}")
+
+
+def scenario_C_log(udid, tag, tele):
+    """The photo run over the remote with no Instruments: the console log's
+    press → pin → fire → recorded per shot (see `photo_phases`)."""
+    probe = os.path.join(HERE, "remote_probe")
+    terminate(udid)
+    pid = launch_with_arguments(udid, "-letslapse.create.opensCamera", "YES", "-remote.allowRemoteAccess", "YES")
+    code, name = pairing_code(udid)
+    if not code:
+        raise SystemExit("no pairing code in the console log — did the capture screen open?")
+    print(f"  pid {pid}, pairing code {code} ({name}); driving the photo script")
+    time.sleep(6)
+    r = subprocess.run([probe, code, PHOTO_SCRIPT.format(tele=tele)], text=True, capture_output=True, timeout=140)
+    lines = [l for l in (r.stdout + r.stderr).splitlines() if l.strip()]
+    print("  probe: " + " | ".join(lines[-2:])[-300:])
+    time.sleep(4)
+    logs = pull_logs(udid, f"/tmp/ll-logs-{tag}-C")
+    rows = photo_phases(logs)
+    print_photo_phases([row for row in rows if row["file"] == name])
+
+
 def library_snapshot(udid):
     r = sh(["xcrun", "devicectl", "device", "info", "files", "--device", udid, *CONTAINER,
             "--subdirectory", "Library/Application Support/LetsLapse/Libraries", "--username", "mobile"], check=False)
@@ -624,7 +682,7 @@ def main():
     ap.add_argument("--tele", default="4", help="C: the tele stop's display factor (18 Pro 4, 16 Pro 5, 12 Pro 2)")
     ap.add_argument("--template", default="Time Profiler", help="C: the template (Time Profiler, Animation Hitches, SwiftUI)")
     ap.add_argument("--app", help="install: the .app to install")
-    ap.add_argument("command", choices=["A", "B", "C", "logs", "library", "install", "parse", "hangs"])
+    ap.add_argument("command", choices=["A", "B", "C", "A-log", "C-log", "logs", "library", "install", "parse", "hangs", "park"])
     ap.add_argument("paths", nargs="*", help="parse: trace files")
     args = ap.parse_args()
     if args.command == "parse":
@@ -638,6 +696,10 @@ def main():
     udid = resolve_device(args.device or "")
     if args.command == "A":
         scenario_A(udid, args.tag, args.repeat)
+    elif args.command == "A-log":
+        scenario_A_log(udid, args.tag, args.repeat)
+    elif args.command == "C-log":
+        scenario_C_log(udid, args.tag, args.tele)
     elif args.command == "B":
         scenario_B(udid, args.tag)
     elif args.command == "C":
@@ -650,6 +712,8 @@ def main():
         library_snapshot(udid)
     elif args.command == "install":
         install(udid, args.app)
+    elif args.command == "park":
+        park(udid)
 
 
 if __name__ == "__main__":

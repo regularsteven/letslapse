@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-90 -50 180 100" width="180" height="100" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Shutter cluster · Photo burst running · portrait</title>
+  <desc>A Photo burst or Bulb window under way (2026-09-27): the disc becomes the stop square — a second press really does end these — but the four Photo controls STAY, inert at 55 % (grid · delay · M · shapes): chrome that left for the seconds a burst took and came back with a jolt read as the app losing its footing. A single still never reaches this state at all: its disc dips at the press and the viewfinder blinks, and everything else stays exactly as idle (capture-photo.portrait.svg).</desc>
+<!-- LetsLapse design component · shutter cluster · portrait.
+     Coordinate contract: origin (0,0) is the CENTRE of the shutter ring; viewBox -90 -50 180 100, 1 unit = 1 pt.
+     Place from a screen mirror with
+       <image href="../components/shutter-cluster.<state>.portrait.svg" x="cx-90" y="cy-50" width="180" height="100"/>
+     Slots (portrait offsets): 1 grid (-66,-26) · 2 delay (+66,-26) · 3 M (-66,+26) · 4 shapes (+66,+26).
+     Mirrors App/CaptureView.swift: shutterButton (isCapturing && !photoOneShotInFlight → stop square), clusterSlot (Photo keeps its idle slots, .disabled(isCapturing)). -->
+  <style>text{font-family:inherit}.b{font-weight:700}</style>
+  <g id="shutter-cluster" data-state="photo-burst" data-orientation="portrait">
+    <g id="shutter" data-symbol="stop button"><circle r="38" fill="none" stroke="#FFF" stroke-width="4"/><rect x="-16" y="-16" width="32" height="32" rx="8" fill="#FF3B30"/></g>
+    <g id="slots" opacity="0.55">
+      <g id="grid-toggle" data-symbol="grid.circle" transform="translate(-66,-26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><circle r="10" fill="none" stroke="#FFF" stroke-width="1.6"/><path d="M-6.5 -3.3 h13 M-6.5 3.3 h13 M-3.3 -6.5 v13 M3.3 -6.5 v13" stroke="#FFF" stroke-width="1.2"/></g>
+      <g id="delay-toggle" data-symbol="timer" transform="translate(66,-26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><circle cy="1" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/><path d="M0 1 v-6 M-3 -9 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/></g>
+      <g id="manual-toggle" data-symbol="m.circle" transform="translate(-66,26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><text x="0" y="0.5" text-anchor="middle" dominant-baseline="central" font-size="15" class="b" fill="#FFF">M</text></g>
+      <g id="shapes-toggle" data-symbol="square.on.circle" transform="translate(66,26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><circle cx="2.5" cy="2.5" r="7.5" fill="none" stroke="#FFF" stroke-width="1.6"/><rect x="-9.5" y="-9.5" width="11" height="11" rx="1.5" fill="none" stroke="#FFF" stroke-width="1.6"/></g>
+    </g>
+  </g>
+</svg>

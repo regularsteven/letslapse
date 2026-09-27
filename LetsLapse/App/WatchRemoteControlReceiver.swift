@@ -681,6 +681,12 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
                 LLog("watch-link publish dropped, session not activated yet")
                 return
             }
+            #if os(iOS)
+            // A phone with no Watch has nowhere to push to: every push failed
+            // "Device is not paired" — twenty XPC round trips and log lines
+            // a session on the 18 Pro (2026-09-27).
+            guard session.isPaired else { return }
+            #endif
             do {
                 try session.updateApplicationContext(payload)
             } catch {

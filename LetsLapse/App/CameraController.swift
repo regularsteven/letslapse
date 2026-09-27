@@ -2682,6 +2682,18 @@ final class CameraController: NSObject, ObservableObject {
         LLog("optics: run lens pin released")
     }
 
+    /// sessionQueue-confined. Whether a Photo run can shoot from the combined
+    /// camera it is previewing on: the session is on the optics device, that
+    /// device lists the chosen size for stills at the stop's zoom (the stills
+    /// rules of `captureFormatMatch(stills:)`), and no other world — DNG, a
+    /// manual exposure — holds a physical lens. Otherwise the run pins the
+    /// stop's own lens as every other stills run does.
+    private func photoRunStaysOnOptics(resolution: CaptureResolution) -> Bool {
+        guard let device = videoDevice, let optics = opticsDevice, device === optics, optics.isVirtualDevice,
+              !dngWorldActive, !physicalWorldActive else { return false }
+        return captureFormatMatch(for: device, resolution: resolution, fps: selectedFrameRate, stills: true) != nil
+    }
+
     /// sessionQueue-confined. Bounded wait for a virtual device to finish
     /// handing the framing to the constituent the stop belongs on.
     ///
@@ -3770,10 +3782,11 @@ final class CameraController: NSObject, ObservableObject {
                 device.activeFormat = match.format
             }
             // Asked of the format being landed on, not the one still active.
-            // Photo's viewfinder asks for the format's own rate (≤ 30) and
-            // keeps the format the stored rate chose, so the stills path
-            // sees the same format either way.
-            let nominal = photoViewfinderActive ? max(fps, 30) : fps
+            // Photo's viewfinder asks for the format's own rate (up to 60 —
+            // the system camera's viewfinder rate on a ProMotion display; the
+            // format clamps it) and keeps the format the stored rate chose,
+            // so the stills path sees the same format either way.
+            let nominal = photoViewfinderActive ? max(fps, 60) : fps
             let duration = Self.frameDuration(forNominal: nominal, in: match.format)
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
@@ -5444,7 +5457,9 @@ final class CameraController: NSObject, ObservableObject {
             Thread.sleep(forTimeInterval: 0.02)
         }
         if device.isAdjustingExposure || device.isAdjustingWhiteBalance {
-            LLog(String(format: "exposure: still settling after %.1fs — shooting anyway", timeout))
+            LLog(String(format: "exposure: still settling after %.2fs — shooting anyway (AE %@, AWB %@)", timeout,
+                        device.isAdjustingExposure ? "adjusting" : "settled",
+                        device.isAdjustingWhiteBalance ? "adjusting" : "settled"))
         } else if logged {
             LLog("exposure: settled — firing first interval frame")
         }
@@ -5810,6 +5825,14 @@ final class CameraController: NSObject, ObservableObject {
             }
             if device.isFocusModeSupported(.autoFocus) {
                 device.focusMode = .autoFocus
+            }
+            // Photo mode: the tap meters there too, the way the system
+            // camera's does — unless the user holds the exposure themselves.
+            if photoViewfinderActive, !exposureLocked, device.isExposurePointOfInterestSupported {
+                device.exposurePointOfInterest = point
+                if device.isExposureModeSupported(.continuousAutoExposure) {
+                    device.exposureMode = .continuousAutoExposure
+                }
             }
         } catch {
             LLog("focus tap: lockForConfiguration failed — \(error.localizedDescription)")
@@ -7092,11 +7115,25 @@ final class CameraController: NSObject, ObservableObject {
             let deviceBeforePin = self.videoDevice
             #if os(iOS)
             let pinnedBefore = self.sequenceLensPin != nil
-            self.pinLensForSequence(
-                configurations: [(self.stillsResolutionInEffect ?? self.selectedResolution, self.selectedFrameRate)],
-                stills: true)
-            self.stillsRunHoldsLensPin = !pinnedBefore && self.sequenceLensPin != nil
-            if self.sequenceLensPin == nil { self.lockConstituentSwitchingForRun() }
+            let chosenSize = self.stillsResolutionInEffect ?? self.selectedResolution
+            if frameCap != nil, self.photoRunStaysOnOptics(resolution: chosenSize) {
+                // A Photo shot (2026-09-27, measured on the 18 Pro): swapping the
+                // stop's physical lens in for one still cost 0.3 s, a second of
+                // that lens's exposure settling from scratch, and 0.6 s swapping
+                // it back — two blackouts of the viewfinder per photo. The shot
+                // is taken from the combined camera it is previewing on, with
+                // its lens switching locked for the run: the still comes off the
+                // constituent the preview shows, at the size the menu names,
+                // and nothing reframes. The pin below stays for a size only that
+                // lens has, and for every Interval and blend run.
+                self.lockConstituentSwitchingForRun()
+            } else {
+                self.pinLensForSequence(
+                    configurations: [(chosenSize, self.selectedFrameRate)],
+                    stills: true)
+                self.stillsRunHoldsLensPin = !pinnedBefore && self.sequenceLensPin != nil
+                if self.sequenceLensPin == nil { self.lockConstituentSwitchingForRun() }
+            }
             #endif
             // A lens that arrived comes up on the session's preset at zoom 1:
             // the run's size, its photo size and the stop's crop (2×, 8×) go
@@ -7104,11 +7141,20 @@ final class CameraController: NSObject, ObservableObject {
             self.assertStillsFormat(lensArrived: self.videoDevice !== deviceBeforePin)
             // The connection itself, not the format's word — see there.
             self.ensureStillsConnection()
-            // Same rule as a video take: the shot is in focus when the user
-            // presses the shutter, so the lens stops there for the whole run.
-            // An interval shoot is the least forgiving of the three — a hunt
-            // three frames in is baked into the finished timelapse for good.
-            self.lockFocusForRun(deviceChanged: self.videoDevice !== deviceBeforePin)
+            if frameCap == 1, let device = self.videoDevice {
+                // One still: a hunt in flight is allowed to land, and nothing is
+                // pinned — a lock taken and released around a single frame moved
+                // the lens twice for no frame that could tell the difference.
+                // Briefly: the combined camera's tele can report itself
+                // adjusting for as long as anyone waits (2026-09-27, 16 Pro).
+                self.awaitFocusSettle(on: device, timeout: 0.35)
+            } else {
+                // Same rule as a video take: the shot is in focus when the user
+                // presses the shutter, so the lens stops there for the whole run.
+                // An interval shoot is the least forgiving of the three — a hunt
+                // three frames in is baked into the finished timelapse for good.
+                self.lockFocusForRun(deviceChanged: self.videoDevice !== deviceBeforePin)
+            }
             self.installRunThermalGuard()
             // Wait for AE/AWB to converge before the first shutter: the timer
             // fires at .now() so frame 0 is otherwise shot with whatever
@@ -7119,7 +7165,12 @@ final class CameraController: NSObject, ObservableObject {
             // exactly where they want it, and there's nothing for AE to do.
             #if os(iOS)
             if !self.exposureLocked, let device = self.videoDevice {
-                self.awaitExposureSettle(on: device)
+                // A single still waits a third of a second at most: its
+                // preview has been metering the scene all along, and the
+                // combined camera's tele reported "still settling" for the
+                // whole 2 s budget on every shot (2026-09-27, 16 Pro) — the
+                // system camera does not wait at all.
+                self.awaitExposureSettle(on: device, timeout: frameCap == 1 ? 0.35 : 2.0)
             }
             #endif
             let directory = FileManager.default.temporaryDirectory
@@ -11171,6 +11222,10 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
             }
             #endif
             guard let data = photo.fileDataRepresentation() else { return }
+            // The camera's half of fire → recorded ends here; what follows —
+            // the write, the finish, registration — is the app's.
+            LLPerf.event("photo delivered", "\(data.count) bytes")
+            LLog("capture: still delivered — \(data.count) bytes")
             guard let directory = self.photoDirectory else { return }
             let url = directory.appendingPathComponent(
                 String(format: "frame-%05d.jpg", self.photoURLs.count))

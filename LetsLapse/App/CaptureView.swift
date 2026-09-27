@@ -269,6 +269,9 @@ struct CaptureView: View {
     /// The last accepted tap-to-focus, in viewfinder coordinates. Set only when
     /// the camera took the tap, and cleared when the pin behind it is given up.
     @State private var focusReticle: FocusReticle?
+    /// The shutter's press, as the screen shows it — see `acknowledgePhotoPress`.
+    @State private var photoShotPulse = false
+    @State private var shutterBlink = false
     /// Names the stage ZStack, which the preview layer fills exactly — the one
     /// hop tap-to-focus needs between a touch and the layer's own space.
     private static let stageSpace = "captureStage"
@@ -744,7 +747,7 @@ struct CaptureView: View {
         // is the pill's per-frame truth for both the capped fill and Bulb's
         // zebra. Single-window runs only, so the count never moves backwards.
         .onChange(of: camera.liveBlendDiagnostics) { diagnostics in
-            guard mode == .photo, camera.isLiveBlendRunning,
+            guard mode == .photo, camera.isLiveBlendRunning, photoBulbMode || photoBlendDepth > 1,
                   let frames = diagnostics?.currentWindowSelectedFrames, frames >= 1 else { return }
             if burstPillPhase == .running {
                 burstPillCount = max(burstPillCount, frames)
@@ -762,7 +765,9 @@ struct CaptureView: View {
             // idle before frame one); an Interval run's pill is already
             // mounted, so its ticks just feed it.
             if camera.isIntervalRunning {
-                if mode == .photo, count >= 1 {
+                // A single still mounts no pill: "1/1" for a second was one
+                // more thing arriving and leaving for a shot that is over.
+                if mode == .photo, count >= 1, photoBulbMode || photoBlendDepth > 1 {
                     if burstPillPhase == .running {
                         burstPillCount = count
                     } else {
@@ -1773,19 +1778,22 @@ struct CaptureView: View {
             } else if mode == .photo {
                 if burstPillPhase != .hidden && burstPillMode == .photo {
                     burstStatusPill
-                } else if !isCapturing {
+                } else {
+                    // Through a shot too, inert: the row only ever left for
+                    // the second the still took, and came back with a jolt.
                     photoControlsRow
+                        .disabled(isCapturing)
                 }
             } else {
                 intervalStatusRow
             }
 
-            if !isCapturing || (burstPillPhase != .hidden && burstPillMode == .photo) {
+            if !isCapturing || mode == .photo {
                 modeRow
-                    // The design keeps the mode row on screen under a running
-                    // Photo burst, but inert — mid-run mode or lens switches
-                    // are the shutter's call, not a tap's. (Interval runs
-                    // keep hiding it, as before.)
+                    // The mode row stays on screen under a running Photo
+                    // shot or burst, but inert — mid-run mode or lens
+                    // switches are the shutter's call, not a tap's. (Interval
+                    // runs keep hiding it, as before.)
                     .disabled(isCapturing)
             }
 
@@ -1850,8 +1858,9 @@ struct CaptureView: View {
                         } else if mode == .photo {
                             if burstPillPhase != .hidden && burstPillMode == .photo {
                                 burstStatusPill
-                            } else if !isCapturing {
+                            } else {
                                 photoControlsRow
+                                    .disabled(isCapturing)
                             }
                         } else {
                             landscapeIntervalRow
@@ -2098,6 +2107,13 @@ struct CaptureView: View {
                     Color.black.opacity(0.85)
                         .allowsHitTesting(false)
                 }
+                // The shutter's blink: a short dip at the press, the way a
+                // camera's own shutter reads — the one thing that moves on
+                // screen for a single still.
+                Color.black
+                    .opacity(shutterBlink ? 0.5 : 0)
+                    .allowsHitTesting(false)
+                    .animation(.easeOut(duration: 0.11), value: shutterBlink)
                 if let reticle = focusReticle {
                     FocusReticleView()
                         .position(reticle.point)
@@ -2151,10 +2167,16 @@ struct CaptureView: View {
         .contentShape(Rectangle())
         .simultaneousGesture(modeSwipeGesture)
         .simultaneousGesture(lensPinchGesture)
-        // A pin the user gave up on (either unlock button, the focus slider)
-        // takes its reticle with it.
-        .onChange(of: camera.isFocusPinnedByTap) { pinned in
-            if !pinned { focusReticle = nil }
+        // The reticle is the tap's own mark: it stays until the next tap, a
+        // lens change or a mode change replaces it — not until the lens gives
+        // up a pin. A tap that finds the subject already in focus never pins,
+        // and a finished shot releases every pin; neither undoes the tap
+        // (2026-09-27: the square was gone 120 ms after every tap, and after
+        // every photo).
+        .onChange(of: camera.selectedStop) { _ in focusReticle = nil }
+        .onChange(of: mode) { _ in focusReticle = nil }
+        .onChange(of: camera.isFocusLocked) { locked in
+            if !locked { focusReticle = nil }
         }
     }
 
@@ -4441,7 +4463,7 @@ struct CaptureView: View {
                         .frame(width: 76, height: 76)
                 }
 
-                if isCapturing {
+                if isCapturing && !photoOneShotInFlight {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color.red)
                         .frame(width: 32, height: 32)
@@ -4449,6 +4471,12 @@ struct CaptureView: View {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 60, height: 60)
+                        // The press itself: the disc dips and springs back
+                        // the instant the shutter is touched, before the
+                        // camera has done anything — the acknowledgement a
+                        // one-second still never had.
+                        .scaleEffect(photoShotPulse ? 0.84 : 1)
+                        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: photoShotPulse)
                     shutterBadge
                 }
             }
@@ -4456,7 +4484,29 @@ struct CaptureView: View {
         }
         .buttonStyle(.plain)
         .disabled(camera.isAuthorized != true)
-        .accessibilityLabel(isCapturing ? "Stop" : "Record")
+        .accessibilityLabel(isCapturing && !photoOneShotInFlight ? "Stop" : "Record")
+    }
+
+    /// A single still on its way — the one run that is not a shoot to stop.
+    /// Its chrome stays put and its shutter shows a press, not a stop square;
+    /// a burst or a Bulb window keeps the square, because a second press
+    /// really does end those.
+    private var photoOneShotInFlight: Bool {
+        mode == .photo && isCapturing && !photoBulbMode && photoBlendDepth <= 1
+    }
+
+    /// The press acknowledgement of a Photo shot: the shutter's dip and the
+    /// viewfinder's blink, both from the press itself and over in under a
+    /// second, whatever the camera does afterwards.
+    private func acknowledgePhotoPress() {
+        photoShotPulse = true
+        shutterBlink = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 110_000_000)
+            shutterBlink = false
+            try? await Task.sleep(nanoseconds: 260_000_000)
+            photoShotPulse = false
+        }
     }
 
     /// How full the shutter's target ring is, or nil when no target is running.
@@ -4728,6 +4778,7 @@ struct CaptureView: View {
     /// stack into one long exposure in post.
     private func startPhotoCapture() {
         framingStartedAt = Date()
+        acknowledgePhotoPress()
         dismissBurstPill()  // re-appears on the first shot
         takeViewfinderShapes()
         // DNG: run the live-blend RAW pipeline for a single window — it blends
@@ -5209,34 +5260,38 @@ struct CaptureView: View {
             case 3: liveMomentTrigger
             default: rampIntervalCountBadge
             }
-        } else if isCapturing {
-            if mode != .photo {
-                if slot == 1 {
-                    dimToggleCircle
-                } else if slot == 2 {
-                    runInfoToggleCircle
-                }
+        } else if isCapturing, mode != .photo {
+            if slot == 1 {
+                dimToggleCircle
+            } else if slot == 2 {
+                runInfoToggleCircle
             }
         } else {
-            switch slot {
-            case 1: gridToggleCircle
-            case 2: shutterDelayCircle
-            case 3:
-                // `|| photoManualExposure`: once manual is actually engaged,
-                // keep showing M even if `supportsManualExposure` later reads
-                // false (a lens switched mid-session, or the DEBUG hook
-                // forcing the panel open on the simulator's cameraless
-                // device) — the alternative is a padlock glyph sitting next
-                // to an open manual-exposure panel, which is worse than
-                // showing M for a control that would no-op.
-                if mode == .photo, camera.supportsManualExposure || photoManualExposure {
-                    manualExposureCircle
-                } else {
-                    exposureLockCircle
+            // Photo keeps its four idle controls through a shot (inert while
+            // it lasts): a still is over in a second, and chrome that leaves
+            // and comes back for it reads as the app losing its footing.
+            Group {
+                switch slot {
+                case 1: gridToggleCircle
+                case 2: shutterDelayCircle
+                case 3:
+                    // `|| photoManualExposure`: once manual is actually engaged,
+                    // keep showing M even if `supportsManualExposure` later reads
+                    // false (a lens switched mid-session, or the DEBUG hook
+                    // forcing the panel open on the simulator's cameraless
+                    // device) — the alternative is a padlock glyph sitting next
+                    // to an open manual-exposure panel, which is worse than
+                    // showing M for a control that would no-op.
+                    if mode == .photo, camera.supportsManualExposure || photoManualExposure {
+                        manualExposureCircle
+                    } else {
+                        exposureLockCircle
+                    }
+                default:
+                    if mode == .photo { autoShapesToggleCircle }
                 }
-            default:
-                if mode == .photo { autoShapesToggleCircle }
             }
+            .disabled(isCapturing)
         }
     }
 
