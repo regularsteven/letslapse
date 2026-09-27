@@ -23,6 +23,28 @@ Holy Grail/Ladder run left the session on another format with `selectedPhotoDime
 pinned telephoto: **that mismatch is the Photo abort** (below). A second, smaller gate would have bitten even with a
 matching size: stills formats had to satisfy the video stabilization request, on by default.
 
+## Never silent again — the alarms (2026-09-27)
+
+Steven: *"ensure there's no silent fail, or at least put something in place that can raise the alarm … with some new
+lens or firmware or resolution yet to be tested."* Alarms go to logs and reports only (his choice); `ALARM <kind>:`
+console lines plus `capture_alarm` session events, read by `shoot.py audit`.
+
+| Layer | What it catches | Where |
+|---|---|---|
+| Honest stills menu | Photo/Interval list only what the session's own camera can deliver (stills rules, no ProRes); a stored size it cannot shoot is substituted by the nearest same shape, shown and shot, never saved over the stored choice | `refreshCaptureOptions`, `stillsFrameRatesByResolution` |
+| Delivered-size check | **Any** still that comes out < 90 % of the chosen pixels — measured from the file, whatever the cause | `checkDeliveredStill` → `ALARM capture:` + a `resolution` issue in `capture_log.json` |
+| Pre-shot canary | A stills format whose own photo sizes fall short of its size | `applyCaptureFormat` → `ALARM format:` |
+| Self-test, every camera set-up | What each lens offers vs what the stills camera can deliver, the photo each size makes; alarms when stills fall short of the lenses or a size cannot make its own photo | `runStillsSelfTest` → `Logs/stills-selftest-<model>.json`, `ALARM selftest:` |
+| No silent configuration failures | Format misses, fallbacks, lock failures, a lens that cannot be opened — all logged (11 empty `catch {}` gone) | `CameraController` |
+| Tested rules | Shortfall, substitute, request size | `Kit/…/StillsSizing.swift`, 15 `StillsSizingTests` |
+| The reader | PASS / WARN / FAIL (exit 1) over console logs, the self-test and crash reports; `--latest` for the running session | `shoot.py audit --device <alias>` |
+
+**Proved on the 18 Pro, 2026-09-27 morning:** a DEBUG-hooks build with `LL_STILLS_FAULT=1080p` (the camera put on
+1920×1080 behind the stills code's back) — one Photo logged `ALARM capture: a still came out 1920×1080 — the run
+chose 4032×3024 (Back Triple Camera, format 1920×1080)` and the run's summary alarm; `audit` → **FAIL**, exit 1. The
+Release build: the menu reads `4032×3024 · JPEG`, the self-test keeps `4224×3024` and `4224×2240` off it, Photos at
+4× (telephoto 16.891 mm, daylight) / 1× / 0.5× are all 3024×4032 with no alarm; `audit --latest` → **PASS**, exit 0.
+
 ## Evidence, and how it was pulled without touching the app
 
 ```

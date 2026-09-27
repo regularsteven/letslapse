@@ -27,6 +27,7 @@ the run before the shutter, and each phase is separately reportable.
 from __future__ import annotations
 
 import argparse
+import calendar
 import concurrent.futures
 import json
 import os
@@ -761,6 +762,127 @@ def cmd_logs(args):
     if encodes and max(encodes) > 1000:
         print(f"\n    ⚠ encode peaked at {max(encodes) / 1000:.1f}s per window — at this "
               f"format the\n      shoot is encode-bound, not capture-bound.")
+
+
+# ---------------------------------------------------------------- audit
+
+# The capture alarms live in logs and reports, not on screen (Steven,
+# 2026-09-26, after the 18 Pro shot 1920×1080 for a week under a 4224×3024
+# menu). This is where they are read: the app writes "ALARM <kind>: …" lines
+# to its console log and Logs/stills-selftest-<model>.json every time the
+# camera is set up; iOS writes crash reports. Only small files are pulled,
+# one by one, and nothing on the device is touched — safe beside a live shoot
+# or upload.
+
+AUDIT_PATTERNS = [
+    # (label, substring, severity): "fail" fails the audit, "warn" warns,
+    # "info" is shown and changes nothing — the honest menu substituting a
+    # stored size the camera cannot shoot is expected, every launch, until a
+    # size is picked again, and an always-on warning is one nobody reads.
+    ("alarm", " ALARM ", "fail"),
+    ("format miss", "applyCaptureFormat: no ", "warn"),
+    ("lock failure", "could not lock", "warn"),
+    ("request corrected", "capture: still size —", "warn"),
+    ("still refused", "capture: still refused —", "warn"),
+    ("stills fallback", "stills fall back to", "warn"),
+    ("menu substitution", "is not a size", "info"),
+]
+
+
+def device_files(device, domain, identifier=None, subdirectory=None):
+    """One devicectl listing → [(relativePath, size, lastModDate)]."""
+    out = STATE_DIR / "audit-listing.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    command = ["xcrun", "devicectl", "device", "info", "files", "--device", device,
+               "--domain-type", domain, "--json-output", str(out)]
+    if identifier:
+        command += ["--domain-identifier", identifier]
+    if subdirectory:
+        command += ["--subdirectory", subdirectory]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=120)
+    if result.returncode != 0 or not out.exists():
+        die(f"could not list {domain} on {device}",
+            "is the device unlocked and reachable (`xcrun devicectl list devices`)?")
+    files = json.loads(out.read_text()).get("result", {}).get("files", [])
+    return [(f.get("relativePath", ""), f.get("metadata", {}).get("size", 0),
+             f.get("metadata", {}).get("lastModDate", "")) for f in files]
+
+
+def cmd_audit(args):
+    device = args.device
+    if not device:
+        die("--device is required", "a registry alias (iphone-18) or a devicectl identifier")
+    if not re.fullmatch(r"[0-9A-Fa-f-]{20,}", device):
+        device = resolve_identifier(device)
+    since = time.time() - args.hours * 3600
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    out = STATE_DIR / f"audit-{stamp}"
+    out.mkdir(parents=True, exist_ok=True)
+    logs_dir = "Library/Application Support/LetsLapse/Logs"
+
+    def recent(iso):
+        # devicectl stamps are UTC ("2026-09-26T15:21:48.000Z").
+        try:
+            return calendar.timegm(time.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S")) >= since
+        except ValueError:
+            return False
+
+    listing = device_files(device, "appDataContainer", BUNDLE_ID, logs_dir)
+    consoles = sorted(p for p, _, m in listing
+                      if p.startswith("console-") and p.endswith(".log") and recent(m))
+    if args.latest:
+        # The current session only: console logs are named by launch time.
+        consoles = consoles[-1:]
+    wanted = [(p, s, m) for p, s, m in listing
+              if p in consoles or (p.startswith("stills-selftest-") and p.endswith(".json"))]
+    for path, _, _ in wanted:
+        subprocess.run(
+            ["xcrun", "devicectl", "device", "copy", "from", "--device", device,
+             "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+             "--source", f"{logs_dir}/{path}", "--destination", str(out / path), "-q"],
+            capture_output=True, timeout=180)
+    crashes = sorted(p for p, _, m in device_files(device, "systemCrashLogs")
+                     if p.startswith("LetsLapse-") and p.endswith(".ips") and recent(m))
+
+    print(f"audit of {device} — the last {args.hours:g} h → {out}")
+    findings = {label: [] for label, _, _ in AUDIT_PATTERNS}
+    for log in sorted(out.glob("console-*.log")):
+        for line in log.read_text(errors="replace").splitlines():
+            for label, needle, _ in AUDIT_PATTERNS:
+                if needle in line:
+                    findings[label].append(f"{log.name}: {line.strip()}")
+    for report in sorted(out.glob("stills-selftest-*.json")):
+        data = json.loads(report.read_text())
+        print(f"\n  stills self-test ({data.get('date', '?')}, {data.get('model')}, {data.get('os')},"
+              f" app {data.get('app')})")
+        print(f"    stills camera   {data.get('stillsCamera')}")
+        print(f"    deliverable     {', '.join(data.get('deliverable', [])) or 'NONE'}")
+        for size, lenses in sorted((data.get("keptOffTheMenu") or {}).items()):
+            print(f"    kept off menu   {size} (offered by {', '.join(lenses)})")
+        for short in data.get("shortSizes") or []:
+            print(f"    ✗ short         {short}")
+    worst = "pass"
+    for label, _, severity in AUDIT_PATTERNS:
+        lines = findings[label]
+        if not lines:
+            continue
+        if severity == "fail":
+            worst = "fail"
+        elif severity == "warn" and worst == "pass":
+            worst = "warn"
+        mark = {"fail": "✗", "warn": "⚠"}.get(severity, "·")
+        print(f"\n  {mark} {label} ({len(lines)})")
+        for line in lines[-args.show:]:
+            print(f"    {line[:220]}")
+    if crashes:
+        worst = "fail"
+        print(f"\n  ✗ crash reports ({len(crashes)})")
+        for name in crashes:
+            print(f"    {name}")
+    print(f"\n  {'FAIL' if worst == 'fail' else 'WARN' if worst == 'warn' else 'PASS'}"
+          f" — {sum(1 for _ in out.glob('console-*.log'))} console log(s),"
+          f" {len(crashes)} crash report(s) in the window")
+    sys.exit(1 if worst == "fail" else 0)
 
 
 # ---------------------------------------------------------------- fleet
@@ -1751,6 +1873,14 @@ def main():
     p.add_argument("--device")
     p.add_argument("--out")
     p.set_defaults(func=cmd_logs)
+
+    p = sub.add_parser("audit", help="read a device's capture alarms, self-test and crash reports")
+    p.add_argument("--device", help="registry alias (iphone-18) or devicectl identifier")
+    p.add_argument("--hours", type=float, default=48, help="how far back to look (default 48)")
+    p.add_argument("--show", type=int, default=6, help="lines to show per finding (default 6)")
+    p.add_argument("--latest", action="store_true",
+                   help="only the newest console log — the session running now")
+    p.set_defaults(func=cmd_audit)
 
     args = parser.parse_args()
     if args.command == "run":

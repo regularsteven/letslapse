@@ -54,6 +54,23 @@ Repeatable ground truth for on-device capture timing. Full spec:
   a card never arms), the countdown is visible and cancellable, and finished
   runs cool down 20 s before re-arming.
 
+## Capture alarms (logs and reports only — Steven, 2026-09-26)
+
+After the 18 Pro shot Photo at 1920×1080 for a week under a 4224×3024 menu (a
+format miss that returned without a word — `LetsLapse/docs/fieldtests/2026-09-26-18pro-crash-triage.md`):
+every Photo/Interval still is measured against the chosen size
+(`checkDeliveredStill`), stills formats are checked before the shot, and each
+camera set-up writes `Logs/stills-selftest-<model>.json` (lens sizes vs what the
+stills camera can deliver). Anything wrong is an `ALARM <kind>:` console line
+plus a `capture_alarm` session event — nothing on screen, by decision. Read
+them with `python3 .claude/skills/letslapse/shoot.py audit --device <alias>`
+(PASS/WARN/FAIL; FAIL on any ALARM or crash report). Run it after field
+sessions and on any new device, iOS build or resolution. The size rules are
+pure and tested (`Kit/…/StillsSizing.swift`, `StillsSizingTests`). Rule for
+camera-configuration code: **no silent `return false` or empty `catch`** — log
+the reason. Proof that the alarm rings: a DEBUG-hooks build with
+`LL_STILLS_FAULT=1080p`.
+
 ## Strategy field-testing & the remote bench (holy grail)
 
 The blend-strategy work (Zone / Latitude / Lumen behind BLEND=Auto) is

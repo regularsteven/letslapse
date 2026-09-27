@@ -115,6 +115,39 @@ python3 .claude/skills/letslapse/shoot.py release
 
 ---
 
+## Audit a device — the capture alarms
+
+The app raises its capture alarms in logs and reports, never on screen
+(Steven's choice, 2026-09-26, after the 18 Pro shot 1920×1080 for a week under
+a 4224×3024 menu — `LetsLapse/docs/fieldtests/2026-09-26-18pro-crash-triage.md`).
+`audit` is where they are read. It pulls only the recent console logs and the
+stills self-test report, one small file at a time, and lists crash reports —
+safe beside a live shoot or upload:
+
+```bash
+python3 .claude/skills/letslapse/shoot.py audit --device iphone-18 --hours 24
+```
+
+- **FAIL** — an `ALARM` line (a still that came out short of the chosen size, a
+  stills format that cannot make its own size, a self-test finding) or a
+  LetsLapse crash report in the window. Exit code 1.
+- **WARN** — a format miss, a request the preflight corrected, a refused still,
+  a stills fallback, a device-lock failure.
+- **Info only** — the stills menu substituting a stored size the camera cannot
+  shoot (expected every launch until a size is picked again).
+- **The self-test** (`Logs/stills-selftest-<model>.json`, rewritten every time
+  the camera is set up): the stills camera, the sizes it can deliver, each
+  lens's sizes, what was kept off the menu and why. On a new device or iOS
+  release, read this before the first field shoot.
+
+Run it after every field session and after any new device, iOS build or
+resolution. To prove the alarm still rings, a DEBUG-hooks build launched with
+`LL_STILLS_FAULT=1080p` puts the camera on 1920×1080 behind the stills code's
+back; any Photo then logs `ALARM capture: a still came out 1920×1080 — the run
+chose …`.
+
+---
+
 ## Import shoots off a device
 
 Pulls whole projects from a phone or iPad straight into this Mac's LetsLapse

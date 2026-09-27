@@ -141,18 +141,26 @@ logged misses, 4224×3024 → 4032×3024 fallback, a format check at every Photo
 error shown. Their frames come from the video data output (32BGRA), not the photo output, so this is its own fix. DNG on `4224×3024@25` is fine (the 4,908-window shoot of 09-23). The Video abort owed below
 (*iOS 27 exposure follow-ups* #1) was on `4224x3024@10`.
 
+**Done 2026-09-27 (Steven: "ensure there's no silent fail … raise the alarm"):** merged; the stills menu lists only
+what Photo/Interval's camera can deliver (a stored size it cannot shoot is substituted, shown, never saved over);
+every still is measured against the chosen size, stills formats are checked before the shot, and each camera
+set-up writes `Logs/stills-selftest-<model>.json` — all as `ALARM` log lines (no UI, by decision), read by
+`shoot.py audit`; 11 silent `catch {}` in camera configuration now log; the size rules tested in the Kit
+(`StillsSizingTests`). Proved on the 18 Pro with `LL_STILLS_FAULT=1080p` (FAIL) and the Release build (PASS) — the
+report's *Never silent again* section.
+
 Owed:
-1. **Merge `claude/photo-preflight` into `ios-app`** once Steven says so; check the 16 Pro and an iPad on it (the
-   format layer changes what Photo/Interval apply at launch on every device — expected: nothing, where the chosen
-   size exists).
-2. **An honest menu** — Photo offers 4224×3024, which its camera cannot shoot; it now shoots 4032×3024 and says so only
-   in the log. Either list the Triple Camera's sizes for stills, or pin the physical lens for stills (which is also
-   the only way to force the telephoto at 4× in low light). Design question for Steven.
+1. **Check the 16 Pro and an iPad on it** — the stills menu and the format layer change what Photo/Interval apply
+   on every device (expected: nothing where the chosen size exists); `shoot.py audit --device <alias>` after.
+2. **Pin the physical lens for stills?** The only way to shoot 4224×3024 on the 18 Pro, and to force the real
+   telephoto at 4× in low light (the Triple Camera picks main + digital zoom in dim light). Design question for Steven.
 3. **The JPEG live blend on the pinned telephoto at 4224×3024** — every frame `-6684`, 0 saved; copy a
-   non-Metal-compatible buffer before wrapping it, or refuse the run at arm time.
+   non-Metal-compatible buffer before wrapping it, or refuse the run at arm time. Re-test first: with the stills size
+   in effect now 4032×3024, the pin may no longer land on 4224×3024 at all.
 4. The request check for the Scanner shot, the DNG fire/bracket paths and the blend-depth probe (connection check
    only — they set no `maxPhotoDimensions`); the Video abort (*iOS 27 exposure follow-ups* #1).
-5. A capture-time size check: a still smaller than the chosen size should never pass silently again.
+5. **The delivered-size check for the other still paths** — the live blends (JPEG and DNG) and the Scanner write
+   their own outputs; measure those against the chosen size too.
 
 ### Capture observers registered more than once — every optics and lifecycle line logged ×5
 
