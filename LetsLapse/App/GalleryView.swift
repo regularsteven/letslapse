@@ -504,16 +504,6 @@ struct GalleryView: View {
         #endif
     }
 
-    /// The pane's Edit / Text / Shapes (and, on iOS, its Open): the item
-    /// view on the Mac, the pager on the iPad.
-    private func paneEditHandler(for capture: AppModel.CaptureProject) -> ((RailTab) -> Void)? {
-        #if os(macOS)
-        return { page in enterItem(capture, page: page) }
-        #else
-        return { page in openPager(capture, page: page) }
-        #endif
-    }
-
     /// The pane: the batch panel over more than one project, the preview
     /// panel over exactly one, nothing over none.
     @ViewBuilder
@@ -533,8 +523,7 @@ struct GalleryView: View {
                 capture: capture,
                 onOpen:    { open(capture.id) },
                 onNewClip: { model.openCapture(capture) },
-                onDelete:  { delete(capture) },
-                onEdit:    paneEditHandler(for: capture)
+                onDelete:  { delete(capture) }
             )
             .frame(width: GalleryColumns.pane)
         }

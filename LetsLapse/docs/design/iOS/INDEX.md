@@ -2,6 +2,8 @@
 
 Canvas 393×852 pt (iPhone 16/17 class). One file per screen per orientation; variants in the filename. Status: ✅ Synced · ⚠️ Stale · 🟡 Planned (not yet drawn).
 
+⚠️ **2026-09-27, `GalleryPreviewPanel` reordered — code first, mirrors STALE until Steven signs off the layout** (the iPad pane and the phone's ⓘ sheet draw it): one order for both dresses — thumbnail (pane) · title/date/size · **Open alone** (pane; Edit / Text / Shapes / New clip removed — Open already lands in the editor) · Auto rename & tag (now in the inspector too) · Tags · Presets (pane) · **PicPlace** (now in the pane too, once the library is bound; above the management rows in both) · In frame / Storage / Here / Field notes · Rename / Share / Finder / Delete · **then** Info + Metadata (moved down) · blended clips / OUTPUT. Stale: [gallery.preview.portrait.svg](gallery.preview.portrait.svg), [gallery.preview.presets.portrait.svg](gallery.preview.presets.portrait.svg).
+
 ✅ **2026-09-26, connected asset states + status glyphs — the owed mirrors DRAWN** (Steven: "do the mirrors"; plan
 `docs/connected-asset-states-plan.md` §9–§16, the glyph rule §16; code 0917df0 + b559c96, and the Project Syncing
 account line the same day — `person.crop.circle`, secondary, not a green tick). Every pill is a

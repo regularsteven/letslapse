@@ -11,6 +11,19 @@ live inline.
 
 ## Open
 
+### Gallery preview panel — sign off the new order, then redraw its mirrors
+
+`GalleryPreviewPanel` (2026-09-27) takes one section order in both dresses:
+Open alone in the pane, Auto rename & tag in the inspector too, PicPlace in
+the pane (bound libraries only) and above the management rows, and the
+management block (Storage / Here / Rename / Share / Finder / Delete) above
+Info + Metadata. Code first: Steven signs off the layout, then the stale
+mirrors listed at the top of `design/macOS/INDEX.md` and `design/iOS/INDEX.md`
+are redrawn. Not yet seen: the pane's PicPlace card on a *bound* library (the
+scratch-root check could only show it hidden). The larger consolidation —
+`ProjectDetailView` rebuilding the same content in its own code — is a
+separate job.
+
 ### LetsLapse Appearance — the fixed-colour token pass (Light / Dark on demand)
 
 Settings ▸ Advanced ▸ Layout ▸ **LetsLapse Appearance** (Light · Dark · Auto,

@@ -11,30 +11,32 @@ import SwiftUI
 /// tap on a tile opens the editor, so the panel comes to the picture rather
 /// than standing between the grid and it.
 ///
-/// Contains (`.pane`):
-/// - Thumbnail (150pt height)
+/// One order for both dresses (Steven, 2026-09-27) — what a person manages
+/// first, what the files said last:
+/// - Thumbnail (150pt height) — `.pane` only; the inspector's picture is on
+///   screen beside it
 /// - Title, date, size
-/// - Actions: Open, then Edit / Text / Shapes / New clip (see `actionGrid`)
-/// - Tags: the project's keywords in the shared tag editor (`TagField`) —
-///   first, above everything the files said, because they are the metadata
-///   a person actually manages (Steven, 2026-09-13)
-/// - Presets: a collapsed row that opens into the editor's own Presets
-///   grid, so a look goes on a project without opening the editor
-/// - Info: what the files said — camera, lens, exposure, captured, GPS, size
-/// - Metadata: the editable IPTC Core record; an interval project scopes
-///   Info and Metadata to the whole shoot or one frame
-///   (`MetadataPanelSections.swift`)
-/// - Metadata rows: In frame, Storage, Field notes
-/// - Footer: Rename, Share, Show in Finder, Delete…
+/// - Open — `.pane` only, and alone: it already lands in the editor (the
+///   item view on the Mac, the pager on iOS), so the Edit / Text / Shapes /
+///   New clip row that sat under it is gone; New clip lives with the
+///   blended clips
+/// - Auto rename & tag
+/// - Tags: the project's keywords in the shared tag editor (`TagField`)
+/// - Presets — `.pane` only: a collapsed row that opens into the editor's
+///   own Presets grid; the inspector sits beside the editor, which has them
+/// - PicPlace: the project's copy there (`PicPlaceStatusCard`, `.narrow`) —
+///   in the pane only once the library is bound to PicPlace
+/// - Management: In frame, Storage, Here, Field notes, then the button row —
+///   Rename, Share (`.pane`), Finder (Mac), Delete…
+/// - Info and Metadata: what the files said (camera, lens, exposure, GPS…)
+///   and the editable IPTC Core record, with an interval project's
+///   shoot/frame scope (`MetadataPanelSections.swift`)
+/// - Blended clips (`.pane`), or the inspector's OUTPUT group: New clip,
+///   Share project and the blended-clips list
 ///
-/// `.inspector` reads top to bottom as the project's life: no thumbnail (the
-/// picture is on screen), no action grid and no Presets (the editor is right
-/// there) — title and date, then Tags, Info and Metadata, the footer with
-/// Rename / Finder / Delete, and an OUTPUT group at the foot: New clip, Share
-/// project and the blended-clips list. Steven's three phases (2026-09-13):
-/// tags / titles / metadata are management, the editor is craft, blends /
-/// export / share are what comes next — phases one and three share this
-/// column, in that order.
+/// Steven's three phases (2026-09-13) still hold: tags / titles / metadata
+/// are management, the editor is craft, blends / export / share are what
+/// comes next.
 struct GalleryPreviewPanel: View {
     enum Style {
         /// The Gallery's right-hand pane over a selected tile.
@@ -45,9 +47,7 @@ struct GalleryPreviewPanel: View {
 
     @EnvironmentObject var model: AppModel
     @ObservedObject private var presetStore = CustomPresetStore.shared
-    #if os(macOS)
-    @Environment(\.openWindow) private var openWindow
-    #else
+    #if os(iOS)
     /// Compact is the iPhone's sheet, where the Presets group is the
     /// editor's horizontal strip; regular is the iPad's pane, which takes
     /// the Mac's grid (its column is the Mac's 272 pt).
@@ -62,23 +62,14 @@ struct GalleryPreviewPanel: View {
     var onNewClip: () -> Void
     var onDelete: () -> Void
     var style: Style = .pane
-    /// Edit / Text / Shapes, when the host has a place of its own for the
-    /// editor (the Gallery's item view on the Mac); nil opens the editor the
-    /// way the panel always did — a window on the Mac, a cover on iOS.
-    var onEdit: ((RailTab) -> Void)? = nil
 
     // Async loads
     @State private var storageBytes: Int64?
-    #if os(iOS)
-    /// The editor Edit / Text / Shapes present — a full-screen cover from
-    /// this very view, so it lands above the panel even when the panel is a
-    /// sheet. On the Mac the editor is a window instead.
-    @State private var editorRequest: EditorOpenRequest?
-    #endif
     @State private var isRenaming = false
     @State private var renameText = ""
     /// Auto rename & tag on this one project (2026-09-16): the same sheet the
-    /// project screen presents, from the row above TAGS.
+    /// project screen presents, from the row above TAGS — in both dresses
+    /// since 2026-09-27.
     @StateObject private var autoName = AutoNameController()
     @ObservedObject private var models = ModelManager.shared
     @State private var previewItem: MediaPreviewItem?
@@ -148,31 +139,31 @@ struct GalleryPreviewPanel: View {
                     .padding(.top, 16)
 
                 VStack(alignment: .leading, spacing: 14) {
-                    if style == .pane, !capture.isScannerCapture {
+                    if !capture.isScannerCapture {
                         autoRenameRow
                     }
                     tagsSection
                     if style == .pane, !capture.isScannerCapture {
                         presetsSection
                     }
-                    recordSections
+                    // The project's copy on PicPlace, above the management
+                    // rows (macOS/gallery.item.picplace.svg drew it below
+                    // them). The pane shows it only once the library is
+                    // bound; the inspector always has.
+                    if style == .inspector || model.picplace.binding != nil {
+                        VStack(alignment: .leading, spacing: 4) {
+                            LLSectionHeader("PicPlace")
+                            PicPlaceStatusCard(picplace: model.picplace, captureID: capture.id, style: .narrow)
+                        }
+                    }
                 }
                 .padding(.top, 12)
                 .padding(.horizontal, 14)
 
+                // Management before what the files said: the rows, then
+                // Rename / Share / Finder / Delete.
                 metadataSection
                     .padding(.horizontal, 14)
-
-                // The project's copy on PicPlace, between the info rows and
-                // the footer — inspector only (macOS/gallery.item.picplace.svg).
-                if style == .inspector {
-                    VStack(alignment: .leading, spacing: 4) {
-                        LLSectionHeader("PicPlace")
-                        PicPlaceStatusCard(picplace: model.picplace, captureID: capture.id, style: .narrow)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 14)
-                }
 
                 Divider()
                     .padding(.top, 4)
@@ -181,14 +172,22 @@ struct GalleryPreviewPanel: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
 
+                Divider()
+
+                recordSections
+                    .padding(.top, 12)
+                    .padding(.horizontal, 14)
+
                 if style == .inspector {
                     Divider()
+                        .padding(.top, 16)
 
                     outputSection
                         .padding(.horizontal, 14)
                         .padding(.top, 16)
                 } else if !blends.isEmpty {
                     Divider()
+                        .padding(.top, 16)
 
                     blendedClipsSection
                         .padding(.horizontal, 14)
@@ -200,9 +199,6 @@ struct GalleryPreviewPanel: View {
         }
         .scrollContentBackground(.hidden)
         .background(LL.cardBackground)
-        #if os(iOS)
-        .editorCover($editorRequest)
-        #endif
         .fetchPrompt($fetchRequest)
         .task(id: capture.id) {
             metadataScope = .project
@@ -291,61 +287,15 @@ struct GalleryPreviewPanel: View {
 
     // MARK: Actions
 
-    /// Open leads, full width. The row under it goes straight to the editor —
-    /// Edit on its grading page, Text on its Text page, Shapes on its Masks
-    /// page, where a project's shapes are drawn and managed — and New clip
-    /// starts a blend from the project. Two rows either way, so the panel
-    /// keeps the height the old 2×2 grid had. (Until 2026-09-11 Edit and Text
-    /// were wired to the New clip flow — see EditorLaunch.swift.)
-    ///
-    /// Shapes is left out for a video project: the movie editor has no Masks
-    /// page, and Find shapes skips movies. New clip is left out for a Photo
-    /// capture: it is one photo, with nothing to blend — the rule the project
-    /// screen and the tile menu already apply.
-    ///
-    /// Provisional layout (Steven, 2026-09-11): the five buttons are to become
-    /// a shared design component; the row here is what the code shows until
-    /// that component is drawn.
+    /// Open, full width and alone. It lands in the editor — the item view on
+    /// the Mac, the pager on iOS — so the Edit / Text / Shapes / New clip row
+    /// that sat under it until 2026-09-27 only repeated it, and those pages
+    /// are one tab away inside. New clip is with the blended clips. A project
+    /// whose picture is not here opens on the editor's preview page, as
+    /// everywhere else (docs/connected-asset-states-plan.md §4).
     private var actionGrid: some View {
-        // A project whose originals are not on this device (a preview, or
-        // originals removed to free space) keeps every button, greyed in
-        // place: Edit opens the editor's preview page like any other project,
-        // and the rest ask whether to fetch what they need — never a button
-        // that swallows the tap (docs/connected-asset-states-plan.md §4).
-        let editable = model.isAvailable(.pixelEdit, for: capture)
-        let blendable = model.isAvailable(.newBlend, for: capture)
-        return VStack(spacing: 8) {
-            actionButton("Open", icon: "arrow.up.forward.square", filled: true) {
-                onOpen()
-            }
-            HStack(spacing: 8) {
-                actionButton("Edit", icon: "pencil") {
-                    openEditor(page: .editor)
-                }
-                .opacity(editable ? 1 : 0.45)
-                actionButton("Text", icon: "textformat") {
-                    ask(.pixelEdit, "Text") { openEditor(page: .text) }
-                }
-                .opacity(editable ? 1 : 0.45)
-                if capture.kind == .photos {
-                    actionButton("Shapes", icon: "circle.square") {
-                        ask(.pixelEdit, "Shapes") { openEditor(page: .masks) }
-                    }
-                    .opacity(editable ? 1 : 0.45)
-                }
-                if !capture.isPhotoCapture {
-                    actionButton("New clip", icon: "plus.circle") {
-                        ask(.newBlend, "A new clip") { onNewClip() }
-                    }
-                    .opacity(blendable ? 1 : 0.45)
-                }
-            }
-            if !editable {
-                Text("\(model.shownHoldings(for: capture.id)?.tier.label ?? "Preview only") — editing needs the originals")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+        actionButton("Open", icon: "arrow.up.forward.square", filled: true) {
+            onOpen()
         }
     }
 
@@ -353,22 +303,6 @@ struct GalleryPreviewPanel: View {
     /// question — and `action` once the files are here.
     private func ask(_ capability: ProjectCapability, _ subject: String, then action: @escaping () -> Void) {
         fetchRequest = model.request(capability, for: capture, subject: subject, then: action)
-    }
-
-    /// The editor, straight from here, on the page named: the host's own
-    /// place for it when it has one (the item view), else a full-screen cover
-    /// on iOS/iPadOS, a window on the Mac (fronted if it is already open —
-    /// the page request moves it).
-    private func openEditor(page: RailTab) {
-        if let onEdit { onEdit(page); return }
-        // The Editor page opens on a project whose picture is not here too —
-        // as its preview page: a cover on iOS, a window on the Mac.
-        guard let request = model.stageEditor(for: capture, page: page, allowsPreview: page == .editor) else { return }
-        #if os(macOS)
-        request.open(with: openWindow)
-        #else
-        editorRequest = request
-        #endif
     }
 
     @ViewBuilder
