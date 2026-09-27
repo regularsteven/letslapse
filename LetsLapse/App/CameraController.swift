@@ -1441,6 +1441,16 @@ final class CameraController: NSObject, ObservableObject {
     /// format's job — see `captureFormatMatch(stills:)`. sessionQueue-confined;
     /// set through `setStillsCapture`.
     private var stillsCaptureActive = false
+    /// The stills size `refreshCaptureOptions` last put in effect, kept here
+    /// on the session queue: `selectedResolution` is published to the main
+    /// queue a beat later, so session-queue code reading it can see the size
+    /// the previous mode had.
+    private var stillsResolutionInEffect: CaptureResolution?
+    /// What the run's stills are measured against (`checkDeliveredStill`), and
+    /// how many came out short. sessionQueue-confined.
+    private var intervalStillExpected: StillsSizing.Size?
+    private var intervalStillsShort = 0
+    private var intervalStillShortDetail: String?
 
     /// What the session log should report as this session's frame count: the
     /// stills or blended outputs a run produced, else the recorded segment
@@ -1718,6 +1728,7 @@ final class CameraController: NSObject, ObservableObject {
         #endif
         deriveStops()
         refreshCaptureOptions()
+        if let device = videoDevice { runStillsSelfTest(on: device) }
         applyVideoStabilization()
         publishFormat()
         publishLiveBlendDNGSupport()
@@ -1963,16 +1974,19 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    /// Photo or Interval on or off — see `stillsCaptureActive`. Applies the
-    /// chosen size while idle when it turns on, so the viewfinder and the
-    /// stills are on it before the shutter rather than after.
+    /// Photo or Interval on or off — see `stillsCaptureActive`. Stills and
+    /// Video read different menus (`refreshCaptureOptions`), so the menu is
+    /// rebuilt for the mode now showing and its size applied while idle — the
+    /// viewfinder and the stills are on it before the shutter. Back to Video,
+    /// the stored choice is asked for again: a stills substitution never
+    /// overwrote it.
     func setStillsCapture(_ active: Bool) {
         sessionQueue.async {
             guard self.stillsCaptureActive != active else { return }
             self.stillsCaptureActive = active
-            guard active, !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive,
-                  self.photoAspectPreviousPreset == nil else { return }
-            _ = self.applyCaptureFormat(resolution: self.selectedResolution, fps: self.selectedFrameRate)
+            guard self.videoDevice != nil, !self.movieOutput.isRecording, self.intervalTimer == nil,
+                  !self.isLiveBlendActive, self.photoAspectPreviousPreset == nil else { return }
+            self.refreshCaptureOptions(preferredResolution: active ? nil : RecordingSettingsStore.resolution)
         }
     }
 
@@ -2511,7 +2525,10 @@ final class CameraController: NSObject, ObservableObject {
                  + " — run stays on the optics device, lens may change mid-shoot")
             return
         }
-        guard let input = try? AVCaptureDeviceInput(device: lens.device) else { return }
+        guard let input = try? AVCaptureDeviceInput(device: lens.device) else {
+            LLog("optics: could not open \(name) for the run — it stays on the optics device")
+            return
+        }
 
         // Where the lens is right now, before the swap takes the device that
         // knows it out of the session. The constituent arriving in its place is
@@ -2944,7 +2961,15 @@ final class CameraController: NSObject, ObservableObject {
         // A pinned run reads the pin's own lens (it IS the recording device),
         // which widens the menus rather than narrowing them.
         let listDevice = effectiveRecordingDevice(for: currentStop) ?? device
-        let supportedRates = supportedFrameRatesByResolution(for: listDevice)
+        // Photo and Interval list only what their own camera can deliver —
+        // the session's device, asked by the stills rules — so the menu and
+        // `applyCaptureFormat` read one truth. The pinned lens's list offered
+        // the 18 Pro's Photo mode a 4224×3024 it could not shoot. The rate
+        // memory and the burst menu keep reading `listDevice`.
+        let stills = photoViewfinderActive || stillsCaptureActive
+        let supportedRates = stills
+            ? stillsFrameRatesByResolution(for: device)
+            : supportedFrameRatesByResolution(for: listDevice)
         guard !supportedRates.isEmpty else {
             DispatchQueue.main.async {
                 self.availableResolutions = []
@@ -2962,9 +2987,42 @@ final class CameraController: NSObject, ObservableObject {
             return $0.pixelCount > $1.pixelCount
         }
         let desiredResolution = preferredResolution ?? selectedResolution
+        // A stills choice the camera cannot deliver falls to the nearest
+        // smaller size of its own shape (4224×3024 → 4032×3024) — never to
+        // the 1080p default below, which is exactly how the 18 Pro's week went.
+        let stillsSubstitute = stills
+            ? StillsSizing.substitute(for: Self.stillsSize(desiredResolution),
+                                      among: resolutions.map(Self.stillsSize))
+                .flatMap { size in resolutions.first { Self.stillsSize($0) == size } }
+            : nil
         let resolution = resolutions.first { $0 == desiredResolution }
+            // The stills list carries no ProRes: Video's ProRes choice of a
+            // size is the same size here.
+            ?? (stills ? resolutions.first {
+                $0.width == desiredResolution.width && $0.height == desiredResolution.height
+            } : nil)
+            ?? stillsSubstitute
             ?? resolutions.first { $0.width == 1920 && $0.height == 1080 }
             ?? resolutions[0]
+        // A substitution is what the camera can do, not what was chosen: it
+        // is shown and shot, never saved over the stored choice, which Video
+        // shares and asks for again when it comes back (`setStillsCapture`).
+        // Judged against the stored choice itself, not the size in effect:
+        // from the second refresh on, `selectedResolution` already holds the
+        // substitute, and saving then is how a test session overwrote a
+        // stored 4224×3024 (2026-09-27). Only a pick from the menu
+        // (`preferredResolution`) saves a stills size.
+        let stillsSubstituted = stills
+            && (resolution.width != desiredResolution.width || resolution.height != desiredResolution.height)
+        let keepsStoredChoice = stills && preferredResolution == nil
+            && (RecordingSettingsStore.resolution.map {
+                $0.width != resolution.width || $0.height != resolution.height
+            } ?? false)
+        if stills { stillsResolutionInEffect = resolution }
+        if stillsSubstituted {
+            LLog("stills: \(desiredResolution.width)×\(desiredResolution.height) is not a size \(device.localizedName)"
+                 + " can deliver — the menu offers \(resolution.width)×\(resolution.height) in its place")
+        }
         let rateSet = supportedRates[resolution] ?? [30]
         let frameRates = Array(rateSet).sorted()
         // The base rate is remembered PER LENS, keyed on the lens a run would
@@ -3012,10 +3070,10 @@ final class CameraController: NSObject, ObservableObject {
 
         _ = applyCaptureFormat(resolution: resolution, fps: frameRate)
         RecordingSettingsStore.save(
-            resolution: resolution,
+            resolution: keepsStoredChoice ? nil : resolution,
             frameRate: frameRateWasHonoured ? frameRate : nil,
-            rampFrameRate: rampFrameRate,
-            rampResolution: burstResolution
+            rampFrameRate: keepsStoredChoice ? nil : rampFrameRate,
+            rampResolution: keepsStoredChoice ? nil : burstResolution
         )
         if frameRateWasHonoured {
             RecordingSettingsStore.save(frameRate: frameRate, forLens: lensScope)
@@ -3172,14 +3230,122 @@ final class CameraController: NSObject, ObservableObject {
     /// camera only sets when it has ProRes formats of its own) is what unions
     /// a constituent's rates into the virtual device's buckets rather than
     /// spawning duplicate rows in the picker.
+    /// The stills menu: what the session's own camera — the one Photo and
+    /// Interval shoot through — can deliver, by the stills rules (no video
+    /// stabilization demand) and without ProRes. The lens-by-lens list the
+    /// video menus read offered the 18 Pro's Photo mode a 4224×3024 its Triple
+    /// Camera does not have, and it shot 1080p for a week.
+    private func stillsFrameRatesByResolution(for device: AVCaptureDevice) -> [CaptureResolution: Set<Int>] {
+        var rates: [CaptureResolution: Set<Int>] = [:]
+        accumulateFrameRates(from: device, candidates: Self.preferredFrameRates, into: &rates, stills: true)
+        return rates.filter { !$0.key.isProRes }
+    }
+
+    static func stillsSize(_ resolution: CaptureResolution) -> StillsSizing.Size {
+        StillsSizing.Size(width: Int(resolution.width), height: Int(resolution.height))
+    }
+
+    /// sessionQueue-confined, from `configureIfNeeded`. What this camera can
+    /// really shoot as stills, written down every time it is set up: each
+    /// lens's sizes, which of them the session's camera can deliver (the
+    /// stills menu), and the photo each deliverable size makes. A new lens, a
+    /// firmware or an iOS release is exactly what this code has not been
+    /// tested on — the report says what it found before the first shot
+    /// (Logs/stills-selftest-<model>.json), and raises an ALARM when the
+    /// camera cannot shoot stills near the size its lenses offer, or a
+    /// deliverable size cannot make a photo of its own size. Reads formats
+    /// only: no session change, no capture.
+    private func runStillsSelfTest(on device: AVCaptureDevice) {
+        func sizes(of camera: AVCaptureDevice) -> [StillsSizing.Size] {
+            Array(Set(camera.formats.compactMap { format -> StillsSizing.Size? in
+                guard !Self.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType(format.formatDescription))
+                else { return nil }
+                let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                // The menus' own floor (`accumulateFrameRates`): smaller sizes
+                // are never offered, so they are not "kept off" anything.
+                guard dims.width >= 640, dims.height >= 480 else { return nil }
+                return StillsSizing.Size(width: Int(dims.width), height: Int(dims.height))
+            })).sorted { $0.pixels > $1.pixels }
+        }
+        var lenses: [AVCaptureDevice] = []
+        #if os(iOS)
+        if device.isVirtualDevice { lenses = device.constituentDevices }
+        #endif
+        let deliverable = stillsFrameRatesByResolution(for: device).keys
+            .map(Self.stillsSize).sorted { $0.pixels > $1.pixels }
+        var lensSizes: [String: [String]] = [:]
+        var keptOff: [String: [String]] = [:]
+        for lens in lenses {
+            let theirs = sizes(of: lens)
+            lensSizes[lens.localizedName] = theirs.map(\.description)
+            for size in theirs where !deliverable.contains(size) {
+                keptOff[size.description, default: []].append(lens.localizedName)
+            }
+        }
+        var photoSizes: [String: String] = [:]
+        var shortSizes: [String] = []
+        for size in deliverable {
+            let resolution = CaptureResolution(width: Int32(size.width), height: Int32(size.height))
+            guard let match = captureFormatMatch(for: device, resolution: resolution, fps: 30, stills: true),
+                  let photo = match.photoDimensions else {
+                shortSizes.append("\(size): no photo size")
+                continue
+            }
+            let made = PhotoRequestPreflight.size(photo)
+            photoSizes[size.description] = made.description
+            if StillsSizing.isShort(delivered: made, expected: size) {
+                shortSizes.append("\(size): photos of \(made)")
+            }
+        }
+        let largestLens = lenses.flatMap { sizes(of: $0) }.max { $0.pixels < $1.pixels }
+        let largestStills = deliverable.first
+        let model = LiveBlendController.deviceModelIdentifier()
+        let info = Bundle.main.infoDictionary ?? [:]
+        let report: [String: Any] = [
+            "date": ISO8601DateFormatter().string(from: Date()),
+            "model": model,
+            "os": ProcessInfo.processInfo.operatingSystemVersionString,
+            "app": "\(info["CFBundleShortVersionString"] ?? "?") (\(info["CFBundleVersion"] ?? "?"))",
+            "stillsCamera": device.localizedName,
+            "deliverable": deliverable.map(\.description),
+            "photoSizes": photoSizes,
+            "lensSizes": lensSizes,
+            "keptOffTheMenu": keptOff,
+            "shortSizes": shortSizes,
+        ]
+        let url = StorageRoot.logsURL.appendingPathComponent("stills-selftest-\(model).json")
+        if let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]) {
+            try? FileManager.default.createDirectory(at: StorageRoot.logsURL, withIntermediateDirectories: true)
+            try? data.write(to: url, options: .atomic)
+        }
+        LLog("stills self-test: \(deliverable.count) size(s) on \(device.localizedName), largest"
+             + " \(largestStills?.description ?? "none"); "
+             + (keptOff.isEmpty ? "every lens size is deliverable"
+                : "kept off the menu: " + keptOff.keys.sorted().joined(separator: ", "))
+             + " — \(url.lastPathComponent)")
+        if let largestStills {
+            if let largestLens, StillsSizing.isShort(delivered: largestStills, expected: largestLens) {
+                captureAlarm("selftest", "the largest still \(device.localizedName) can shoot is \(largestStills);"
+                             + " its lenses offer \(largestLens)")
+            }
+        } else {
+            captureAlarm("selftest", "\(device.localizedName) offers no stills size at all")
+        }
+        if !shortSizes.isEmpty {
+            captureAlarm("selftest", "stills sizes that cannot make a photo of their own size: "
+                         + shortSizes.joined(separator: "; "))
+        }
+    }
+
     private func accumulateFrameRates(
         from device: AVCaptureDevice,
         candidates candidateFrameRates: [Int],
-        into supportedRates: inout [CaptureResolution: Set<Int>]
+        into supportedRates: inout [CaptureResolution: Set<Int>],
+        stills: Bool = false
     ) {
         for format in device.formats {
             #if os(iOS)
-            guard !videoStabilizationRequested || stabilizationMode(for: format) != nil else {
+            guard stills || !videoStabilizationRequested || stabilizationMode(for: format) != nil else {
                 continue
             }
             #endif
@@ -3427,6 +3593,24 @@ final class CameraController: NSObject, ObservableObject {
                !sameDimensions(photoOutput.maxPhotoDimensions, photoDimensions) {
                 photoOutput.maxPhotoDimensions = photoDimensions
             }
+            // Before the shot: a stills format whose own photo sizes fall short
+            // of its size can only deliver short stills — say so now, not after
+            // a week of them. A canary for a format or firmware this code has
+            // not met; the honest menu means it should never ring.
+            if stills {
+                let asked = Self.stillsSize(resolution)
+                let listed = match.format.supportedMaxPhotoDimensions
+                    .map { "\($0.width)×\($0.height)" }.joined(separator: ", ")
+                if let photo = match.photoDimensions {
+                    let deliverable = PhotoRequestPreflight.size(photo)
+                    if StillsSizing.isShort(delivered: deliverable, expected: asked) {
+                        captureAlarm("format", "\(asked) on \(device.localizedName) can deliver stills of at most"
+                                     + " \(deliverable) (its photo sizes: \(listed))")
+                    }
+                } else {
+                    captureAlarm("format", "\(asked) on \(device.localizedName) lists no photo size at all")
+                }
+            }
             // Both re-asserts run even on the fast path: a new frame interval
             // can force a shorter shutter than the held/locked one, and both
             // helpers clamp against it.
@@ -3473,6 +3657,8 @@ final class CameraController: NSObject, ObservableObject {
             publishLiveBlendDNGSupport()
             return true
         } catch {
+            LLog("applyCaptureFormat: could not lock \(device.localizedName) for"
+                 + " \(resolution.width)×\(resolution.height)@\(fps) — \(error.localizedDescription)")
             return false
         }
     }
@@ -3534,6 +3720,7 @@ final class CameraController: NSObject, ObservableObject {
             #endif
             return true
         } catch {
+            LLog("ramp: could not lock \(device.localizedName) for the \(fps) fps change — \(error.localizedDescription)")
             return false
         }
     }
@@ -3739,7 +3926,7 @@ final class CameraController: NSObject, ObservableObject {
                 guard let self else { return }
                 self.sessionQueue.async(execute: finish)
             }
-        } catch {}
+        } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
         sessionQueue.asyncAfter(deadline: .now() + 0.6, execute: finish)
         LLog(String(format: "switch exposure hold: 1/%.0fs ISO %.0f",
                     1 / max(hold.exposureDuration.seconds, 0.0001), hold.iso))
@@ -3752,7 +3939,7 @@ final class CameraController: NSObject, ObservableObject {
             defer { device.unlockForConfiguration() }
             if device.isExposureModeSupported(.locked) { device.exposureMode = .locked }
             if device.isWhiteBalanceModeSupported(.locked) { device.whiteBalanceMode = .locked }
-        } catch {}
+        } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
         LLog("switch exposure hold (locked modes)")
         #endif
     }
@@ -3830,7 +4017,7 @@ final class CameraController: NSObject, ObservableObject {
             if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                 device.whiteBalanceMode = .continuousAutoWhiteBalance
             }
-        } catch {}
+        } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
         LLog("switch exposure hold released")
     }
 
@@ -3985,18 +4172,15 @@ final class CameraController: NSObject, ObservableObject {
     /// Never the chosen size itself, so `applyCaptureFormat` cannot recurse
     /// on it; nil when nothing smaller exists.
     private func stillsFallback(on device: AVCaptureDevice, for resolution: CaptureResolution) -> CaptureResolution? {
-        let shape = Double(resolution.width) / Double(max(resolution.height, 1))
-        let sizes = Set(device.formats.compactMap { format -> CaptureResolution? in
+        let offered = Set(device.formats.compactMap { format -> StillsSizing.Size? in
             guard !Self.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType(format.formatDescription))
             else { return nil }
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            return CaptureResolution(width: dims.width, height: dims.height)
+            return StillsSizing.Size(width: Int(dims.width), height: Int(dims.height))
         })
-        let smaller = sizes.filter { $0.pixelCount < resolution.pixelCount }
-        let sameShape = smaller.filter {
-            abs(Double($0.width) / Double(max($0.height, 1)) - shape) < 0.1
-        }
-        return (sameShape.isEmpty ? smaller : sameShape).max { $0.pixelCount < $1.pixelCount }
+        // The rule is the Kit's, tested there (StillsSizingTests).
+        return StillsSizing.substitute(for: Self.stillsSize(resolution), among: Array(offered))
+            .map { CaptureResolution(width: Int32($0.width), height: Int32($0.height)) }
     }
 
     private func formatSupportsRates(_ format: AVCaptureDevice.Format, _ rates: [Int]) -> Bool {
@@ -4381,7 +4565,7 @@ final class CameraController: NSObject, ObservableObject {
                     self.isExposureLocked = true
                 }
                 #endif
-            } catch {}
+            } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
         }
     }
 
@@ -4413,7 +4597,7 @@ final class CameraController: NSObject, ObservableObject {
                 DispatchQueue.main.async {
                     self.isExposureLocked = false
                 }
-            } catch {}
+            } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
         }
     }
 
@@ -4441,7 +4625,7 @@ final class CameraController: NSObject, ObservableObject {
                     self.lockedISO = clamped
                     self.lockedShutterSeconds = duration.seconds
                 }
-            } catch {}
+            } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
         }
         #else
         _ = iso
@@ -4500,7 +4684,7 @@ final class CameraController: NSObject, ObservableObject {
                     self.lockedISO = iso
                     self.lockedShutterSeconds = seconds
                 }
-            } catch {}
+            } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
         }
         #else
         _ = stops
@@ -4710,7 +4894,7 @@ final class CameraController: NSObject, ObservableObject {
                 if device.isExposureModeSupported(.continuousAutoExposure) {
                     device.exposureMode = .continuousAutoExposure
                 }
-            } catch {}
+            } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
         }
     }
 
@@ -4794,7 +4978,7 @@ final class CameraController: NSObject, ObservableObject {
             if let refusal = writeCustomExposure(on: device, duration: duration, iso: iso).refusal {
                 LLog("manual exposure: refused — \(refusal)")
             }
-        } catch {}
+        } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
     }
 
     // MARK: - Custom exposure writes
@@ -4951,7 +5135,7 @@ final class CameraController: NSObject, ObservableObject {
                 DispatchQueue.main.async {
                     self.lockedLensPosition = applied
                 }
-            } catch {}
+            } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
         }
         #else
         _ = position
@@ -5438,7 +5622,7 @@ final class CameraController: NSObject, ObservableObject {
                 if device.isFocusModeSupported(.continuousAutoFocus) {
                     device.focusMode = .continuousAutoFocus
                 }
-            } catch {}
+            } catch { LLog("camera: \(#function) could not lock the device — \(error.localizedDescription)") }
             tapFocusLocked = false
             publishFocusHold()
             LLog("focus: tap left the lens on continuous auto-focus (no hunt to pin)")
@@ -6637,6 +6821,11 @@ final class CameraController: NSObject, ObservableObject {
             self.intervalStillSizeNoted = false
             self.intervalStillsRefused = 0
             self.intervalStillRefusal = nil
+            // What every still of this run is measured against: the size in
+            // effect, which the menu shows (`checkDeliveredStill`).
+            self.intervalStillExpected = Self.stillsSize(self.stillsResolutionInEffect ?? self.selectedResolution)
+            self.intervalStillsShort = 0
+            self.intervalStillShortDetail = nil
             self.intervalActive = true
             CaptureSessionLogger.shared.log("capture_start", [
                 "kind": "interval",
@@ -6729,7 +6918,10 @@ final class CameraController: NSObject, ObservableObject {
     /// focus lock and the exposure settle, which then work on the real format.
     private func assertStillsFormat() {
         guard let device = videoDevice, photoAspectPreviousPreset == nil else { return }
-        let chosen = selectedResolution
+        #if DEBUG
+        if injectStillsFaultIfAsked(on: device) { return }
+        #endif
+        let chosen = stillsResolutionInEffect ?? selectedResolution
         let target = captureFormatMatch(for: device, resolution: chosen, fps: selectedFrameRate, stills: true) != nil
             ? chosen
             : (stillsFallback(on: device, for: chosen) ?? chosen)
@@ -6741,6 +6933,82 @@ final class CameraController: NSObject, ObservableObject {
         stillsCaptureActive = true
         _ = applyCaptureFormat(resolution: chosen, fps: selectedFrameRate)
         stillsCaptureActive = wasStills
+    }
+
+    #if DEBUG
+    /// `LL_STILLS_FAULT=1080p` (DEBUG): the 18 Pro's week, on purpose — the
+    /// run's camera goes onto a 1920×1080 video format behind the stills
+    /// code's back, so `checkDeliveredStill` has a genuinely short still to
+    /// catch. The proof that the alarm rings; never in a shipping build.
+    private func injectStillsFaultIfAsked(on device: AVCaptureDevice) -> Bool {
+        guard ProcessInfo.processInfo.environment["LL_STILLS_FAULT"] == "1080p",
+              let format = device.formats.first(where: { format in
+                  let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                  return dims.width == 1920 && dims.height == 1080
+                      && !Self.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType(format.formatDescription))
+              })
+        else { return false }
+        do {
+            try device.lockForConfiguration()
+            device.activeFormat = format
+            device.unlockForConfiguration()
+        } catch {
+            LLog("LL_STILLS_FAULT: could not lock \(device.localizedName) — \(error.localizedDescription)")
+            return false
+        }
+        if let smallest = format.supportedMaxPhotoDimensions.min(by: { $0.width * $0.height < $1.width * $1.height }) {
+            photoOutput.maxPhotoDimensions = smallest
+        }
+        selectedPhotoDimensions = nil
+        LLog("LL_STILLS_FAULT: \(device.localizedName) put on 1920×1080 behind the stills code's back")
+        return true
+    }
+    #endif
+
+    /// Every alarm this controller raises goes through here: one word to grep
+    /// in the console ("ALARM"), one `capture_alarm` event in the session log.
+    /// Steven chose logs and reports over anything on screen (2026-09-26);
+    /// `shoot.py audit` pulls and reads both.
+    private func captureAlarm(_ kind: String, _ message: String, _ details: [String: Any] = [:]) {
+        LLog("ALARM \(kind): \(message)")
+        var fields = details
+        fields["kind"] = kind
+        fields["message"] = message
+        CaptureSessionLogger.shared.log("capture_alarm", fields)
+    }
+
+    /// sessionQueue-confined. Every Photo/Interval still, measured against the
+    /// size the run chose — from the file itself, not from what was asked for.
+    /// The check that would have caught the 18 Pro's week of 1080p on its
+    /// first frame, whatever the cause: a lens, a firmware, a format this code
+    /// has never met. Alarms once a run; `finishIntervalOnQueue` counts.
+    private func checkDeliveredStill(_ photo: AVCapturePhoto, data: Data) {
+        guard let expected = intervalStillExpected else { return }
+        let delivered: StillsSizing.Size
+        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           let width = properties[kCGImagePropertyPixelWidth] as? Int,
+           let height = properties[kCGImagePropertyPixelHeight] as? Int {
+            delivered = StillsSizing.Size(width: width, height: height)
+        } else {
+            let dims = photo.resolvedSettings.photoDimensions
+            delivered = StillsSizing.Size(width: Int(dims.width), height: Int(dims.height))
+        }
+        guard StillsSizing.isShort(delivered: delivered, expected: expected) else { return }
+        intervalStillsShort += 1
+        guard intervalStillsShort == 1 else { return }
+        let camera = videoDevice.map { "\($0.localizedName), format \(formatLabel($0.activeFormat))" } ?? "no camera"
+        let detail = "a still came out \(delivered) — the run chose \(expected) (\(camera))"
+        intervalStillShortDetail = detail
+        captureAlarm("capture", detail, ["delivered": delivered.description, "chosen": expected.description])
+        plainRunLog?.issues.append(CaptureExposureLog.Issue(
+            at: Date(), windowIndex: max(photoURLs.count - 1, 0), kind: "resolution", severity: "error",
+            detail: detail))
+    }
+
+    private func formatLabel(_ format: AVCaptureDevice.Format) -> String {
+        let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        return "\(dims.width)×\(dims.height)"
     }
 
     /// sessionQueue-confined. A still the photo output would refuse is not
@@ -6806,10 +7074,16 @@ final class CameraController: NSObject, ObservableObject {
             LLog("capture: \(self.intervalStillsRefused) still(s) refused this run — "
                  + (self.intervalStillRefusal ?? "?"))
         }
+        if self.intervalStillsShort > 0 {
+            self.captureAlarm("capture", "\(self.intervalStillsShort) of \(urls.count) still(s) came out short"
+                              + " this run — \(self.intervalStillShortDetail ?? "?")")
+        }
+        self.intervalStillExpected = nil
         CaptureSessionLogger.shared.log(
             "capture_end",
             ["kind": wasHolyGrail ? "holyGrail" : "interval", "frameCount": urls.count,
-             "endReason": reason, "stillsRefused": self.intervalStillsRefused])
+             "endReason": reason, "stillsRefused": self.intervalStillsRefused,
+             "stillsShort": self.intervalStillsShort])
         self.intervalFrameCap = nil
         self.intervalFramesRequested = 0
         DispatchQueue.main.async {
@@ -10493,6 +10767,7 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
                 String(format: "frame-%05d.jpg", self.photoURLs.count))
             if self.writeCapturedPhoto(data, to: url) {
                 self.photoURLs.append(url)
+                self.checkDeliveredStill(photo, data: data)
                 // One sidecar line per still that exists. macOS AVFoundation
                 // has no exposure introspection — the stamp still carries the
                 // clock, which is what the axis is built from.

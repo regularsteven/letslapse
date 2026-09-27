@@ -1,4 +1,5 @@
 import AVFoundation
+import LetsLapseKit
 
 /// The questions iOS 27 asks of a `capturePhoto(with:delegate:)` request,
 /// asked first.
@@ -47,15 +48,10 @@ enum PhotoRequestPreflight {
     ) -> (dimensions: CMVideoDimensions?, note: String?) {
         let ceiling = output.maxPhotoDimensions
         let listed = device?.activeFormat.supportedMaxPhotoDimensions ?? []
-        func takes(_ size: CMVideoDimensions) -> Bool {
-            size.width <= ceiling.width && size.height <= ceiling.height
-                && (device == nil || listed.contains { same($0, size) })
-        }
-        let chosen = takes(wanted)
-            ? wanted
-            : listed
-                .filter { pixels($0) < pixels(wanted) && takes($0) }
-                .max { pixels($0) < pixels($1) }
+        // The rule itself lives in the Kit, where it is tested (StillsSizingTests).
+        let chosen = StillsSizing.requestSize(
+            wanted: size(wanted), ceiling: size(ceiling), listed: device == nil ? nil : listed.map(size)
+        ).map { CMVideoDimensions(width: Int32($0.width), height: Int32($0.height)) }
         let asChosen = chosen.map { same($0, wanted) } ?? false
         let aside = constituentAside(wanted, device: device)
         if asChosen, aside == nil { return (wanted, nil) }
@@ -94,8 +90,8 @@ enum PhotoRequestPreflight {
         a.width == b.width && a.height == b.height
     }
 
-    private static func pixels(_ size: CMVideoDimensions) -> Int64 {
-        Int64(size.width) * Int64(size.height)
+    static func size(_ dimensions: CMVideoDimensions) -> StillsSizing.Size {
+        StillsSizing.Size(width: Int(dimensions.width), height: Int(dimensions.height))
     }
 
     private static func label(_ size: CMVideoDimensions) -> String {
