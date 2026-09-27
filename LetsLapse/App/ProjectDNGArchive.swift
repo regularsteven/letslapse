@@ -112,12 +112,18 @@ struct DNGArchiveOptions: Equatable {
     var size: Size = .keep
     var quality: Quality = .standard
     var stillQuality: StillQuality = .high
+    /// *Apply edits* — HEIC and JPEG only, on by default (Steven,
+    /// 2026-09-27): the project's colour grade baked into every frame. The
+    /// one switch stands where the finer choices will go (white balance only,
+    /// a low-contrast grade to edit from), each an `AppModel.CloneBake`.
+    var appliesEdits = true
 
     /// Rendered formats are raw no longer: a frame from raw is decoded the
     /// way the app shows it, then written processed.
     var output: AppModel.CloneCompressOutput {
         if let still = format.stillFormat {
-            return .still(still, megapixels: size.megapixels, quality: stillQuality.value)
+            return .still(still, megapixels: size.megapixels, quality: stillQuality.value,
+                          bake: appliesEdits ? .full : .none)
         }
         return .dng(strategy)
     }
@@ -179,11 +185,13 @@ final class DNGArchiveJob: ObservableObject {
         let output = options.output
         let suffix = options.nameSuffix
         // A rendered frame from a 48 MP raw is a few hundred MB while it is
-        // being written: one at a time on a phone, two on a Mac.
+        // being written: one at a time on a phone, two on a Mac. A baked one
+        // goes through the grade engine's shared decoder — one at a time
+        // everywhere.
         #if os(iOS)
         let inFlight = options.format == .dng ? 2 : 1
         #else
-        let inFlight = 2
+        let inFlight = options.format == .dng || !options.appliesEdits ? 2 : 1
         #endif
         task = Task { [weak self] in
             guard let self else { return }
@@ -264,7 +272,7 @@ struct DNGArchiveSheet: View {
         if options.format == .dng {
             return "A new project with every frame of “\(capture.displayTitle)” converted to a smaller, still-raw DNG. The original is not touched."
         }
-        return "A new project with every frame of “\(capture.displayTitle)” rendered as \(options.format.title). The edits carry across; from raw frames they re-apply to the processed pictures, so the look can shift. The original is not touched."
+        return "A new project with every frame of “\(capture.displayTitle)” rendered as \(options.format.title). The original is not touched."
     }
 
     var body: some View {
@@ -357,6 +365,13 @@ struct DNGArchiveSheet: View {
                     }
                 }
                 Text(options.stillQuality.detail(for: options.format))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle("Apply edits", isOn: $options.appliesEdits)
+                Text(options.appliesEdits
+                     ? "The grade is baked into every frame — the preset, the adjustments, the white balance, each moment of a keyframed grade. The level and the crop stay adjustable."
+                     : "Frames are rendered without the grade, which travels with the clone and is applied again on top.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

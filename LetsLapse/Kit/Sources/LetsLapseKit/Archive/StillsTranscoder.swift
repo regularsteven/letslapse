@@ -10,7 +10,9 @@ extension DNGArchive {
     /// shoot rendered and written as HEIC or JPEG, optionally resized — the
     /// processed siblings of the DNG archive (`Converter`), which stays raw.
     ///
-    /// A frame is read the way the app shows it: a raw file through
+    /// With a `Renderer` (Clone and compress's *Apply edits*, 2026-09-27) a
+    /// frame is the app's graded picture. Without one it is the file's own
+    /// default rendering: a raw file through
     /// `LossyLinearDNG.rawFilter` (Apple's default rendering, the camera's
     /// orientation and the project's quarter turns applied), anything else
     /// through `OrientedDecode` (the file's own orientation and the turns).
@@ -38,9 +40,21 @@ extension DNGArchive {
             }
         }
 
-        private let context = CIContext(options: [.cacheIntermediates: false])
+        /// Renders one frame the way its project shows it — the app's grade
+        /// engine, which the Kit cannot see — at no more than `maxLongEdge`
+        /// pixels on the long edge (nil: full size), upright. Handed in by
+        /// Clone and compress's *Apply edits*; without one a frame is the
+        /// file's own default rendering. A closure rather than a flag so the
+        /// finer bakes to come (white balance only, a flat grade for later
+        /// editing) are just other closures.
+        public typealias Renderer = @Sendable (_ input: URL, _ maxLongEdge: Int?) throws -> CGImage
 
-        public init() {}
+        private let context = CIContext(options: [.cacheIntermediates: false])
+        private let renderer: Renderer?
+
+        public init(renderer: Renderer? = nil) {
+            self.renderer = renderer
+        }
 
         /// What the ledger and the bench call a run.
         public static func label(format: Format, megapixels: Double?, quality: Double) -> String {
@@ -63,7 +77,42 @@ extension DNGArchive {
                 mark = now
             }
 
-            // Decode, shrinking at the source where the decoder can.
+            let rendered: CGImage
+            if let renderer {
+                var maxLongEdge: Int?
+                if let megapixels, let size = Self.pixelSize(of: input) {
+                    let scale = Self.scale(for: size, megapixels: megapixels)
+                    if scale < 1 { maxLongEdge = Int((max(size.width, size.height) * scale).rounded()) }
+                }
+                rendered = try renderer(input, maxLongEdge)
+                report.decodePath = "grade"
+            } else {
+                rendered = try decodeAndRender(input, megapixels: megapixels, report: &report)
+            }
+            stage("decode+render")
+
+            var properties = Self.metadata(of: input, width: rendered.width, height: rendered.height)
+            properties[kCGImageDestinationLossyCompressionQuality] = quality
+            guard let destination = CGImageDestinationCreateWithURL(output as CFURL, format.type.identifier as CFString, 1, nil) else {
+                throw ConversionError.encode("\(format.label) is not available on this device")
+            }
+            CGImageDestinationAddImage(destination, rendered, properties as CFDictionary)
+            guard CGImageDestinationFinalize(destination) else {
+                throw ConversionError.encode("\(output.lastPathComponent): the \(format.label) encoder failed")
+            }
+            stage("encode")
+
+            report.width = rendered.width
+            report.height = rendered.height
+            report.outputBytes = (try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            report.totalMilliseconds = (ProcessInfo.processInfo.systemUptime - started) * 1000
+            return report
+        }
+
+        /// The file's own default rendering: a raw file through
+        /// `LossyLinearDNG.rawFilter` (shrunk by the filter itself), anything
+        /// else through `OrientedDecode` and a Lanczos scale — Display P3.
+        private func decodeAndRender(_ input: URL, megapixels: Double?, report: inout ConversionReport) throws -> CGImage {
             var picture: CIImage
             if ImportedStills.isRaw(input) {
                 guard let filter = LossyLinearDNG.rawFilter(for: input) else {
@@ -100,24 +149,7 @@ extension DNGArchive {
                   let rendered = context.createCGImage(picture, from: extent, format: .RGBA8, colorSpace: colorSpace) else {
                 throw ConversionError.decode("\(input.lastPathComponent): could not render")
             }
-            stage("decode+render")
-
-            var properties = Self.metadata(of: input, width: rendered.width, height: rendered.height)
-            properties[kCGImageDestinationLossyCompressionQuality] = quality
-            guard let destination = CGImageDestinationCreateWithURL(output as CFURL, format.type.identifier as CFString, 1, nil) else {
-                throw ConversionError.encode("\(format.label) is not available on this device")
-            }
-            CGImageDestinationAddImage(destination, rendered, properties as CFDictionary)
-            guard CGImageDestinationFinalize(destination) else {
-                throw ConversionError.encode("\(output.lastPathComponent): the \(format.label) encoder failed")
-            }
-            stage("encode")
-
-            report.width = rendered.width
-            report.height = rendered.height
-            report.outputBytes = (try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            report.totalMilliseconds = (ProcessInfo.processInfo.systemUptime - started) * 1000
-            return report
+            return rendered
         }
 
         /// Converts `files` in order into `directory` (same base name, the
@@ -178,6 +210,16 @@ extension DNGArchive {
 
         /// The linear scale that brings `size` down to `megapixels`; 1 or
         /// more means no shrink.
+        /// The stored pixel size ImageIO reports, before orientation — the
+        /// same count either way round, which is all the scale needs.
+        static func pixelSize(of input: URL) -> CGSize? {
+            guard let source = CGImageSourceCreateWithURL(input as CFURL, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? Int,
+                  let height = properties[kCGImagePropertyPixelHeight] as? Int, width > 0, height > 0 else { return nil }
+            return CGSize(width: width, height: height)
+        }
+
         static func scale(for size: CGSize, megapixels: Double) -> Double {
             let pixels = Double(size.width * size.height)
             guard pixels > 0, megapixels > 0 else { return 1 }

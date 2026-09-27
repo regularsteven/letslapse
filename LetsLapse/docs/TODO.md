@@ -28,9 +28,19 @@ for the rendered two. Owed:
   LL_DNGARCHIVE_FORMAT=heic|jpeg [LL_DNGARCHIVE_MP=6]`): raw → HEIC, HEIC →
   JPEG resized, JPEG → HEIC resized, EXIF/GPS carried. On a phone a 48 MP raw
   renders one frame at a time (memory); time it on the 18 Pro.
-- **The look from raw.** The parent's edits re-apply to rendered pictures,
-  where they were made on the raw decode — a WB or exposure grade can shift.
-  Decide whether a rendered clone should bake the grade instead.
+- **Partial bakes (Steven, 2026-09-27 — not built, room left).** HEIC and
+  JPEG clones now bake the colour grade (*Apply edits*, on by default:
+  preset, sliders, keyframed look per frame, declared white; the level and
+  the crop stay on the record). The switch is to grow finer choices — *apply
+  the colour temperature only*, *apply a low-contrast grade for future
+  editing* (Capture Flat's idea after the fact). Each is a new
+  `AppModel.CloneBake` case and a renderer in `stillsRenderer(for:bake:)`;
+  the sheet's toggle becomes a picker. Also open: whether the baked-clone
+  corner cast seen on a lifted-shadows (Matte) spike DNG is in the source or
+  the bake — check on a real 18 Pro shoot.
+- **Masks are not baked.** Mask adjustment layers travel as overlays and
+  apply on top of the baked frame — right for now; a full bake would need
+  them flattened too.
 
 ### Performance baseline — measure before and after every perf fix
 

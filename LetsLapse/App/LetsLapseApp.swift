@@ -836,8 +836,9 @@ struct ContentView: View {
         // default keep), `LL_DNGARCHIVE_DISTANCE` (default 0.5, 0 = lossless),
         // `LL_DNGARCHIVE_LIMIT` (first N frames) shape the run.
         // `LL_DNGARCHIVE_FORMAT=heic|jpeg` runs Clone and compress's rendered
-        // outputs instead (`LL_DNGARCHIVE_QUALITY`, default 0.9) — on any
-        // stills project, raw or not.
+        // outputs instead (`LL_DNGARCHIVE_QUALITY`, default 0.9;
+        // `LL_DNGARCHIVE_BAKE=none` leaves the grade out of the pixels) — on
+        // any stills project, raw or not.
         if let hook = environment["LL_DNGARCHIVE"], hook != "0" {
             // stdout is a file when the Mac binary is launched from a shell
             // with a redirect, and then fully buffered — the last frames and
@@ -849,6 +850,7 @@ struct ContentView: View {
             let inFlight = environment["LL_DNGARCHIVE_INFLIGHT"].flatMap(Int.init) ?? 2
             let stillFormat = environment["LL_DNGARCHIVE_FORMAT"].flatMap(DNGArchive.StillsTranscoder.Format.init(rawValue:))
             let quality = environment["LL_DNGARCHIVE_QUALITY"].flatMap(Double.init) ?? 0.9
+            let bake = environment["LL_DNGARCHIVE_BAKE"].flatMap(AppModel.CloneBake.init(rawValue:)) ?? .full
             Task { @MainActor in
                 let eligible: (AppModel.CaptureProject) -> Bool = { stillFormat == nil ? model.canArchiveAsDNG($0) : model.canCloneAndCompress($0) }
                 let capture = hook == "latest"
@@ -858,7 +860,7 @@ struct ContentView: View {
                     print("LL_DNGARCHIVE: no archivable project matches \(hook)")
                     return
                 }
-                let output: AppModel.CloneCompressOutput = stillFormat.map { .still($0, megapixels: megapixels, quality: quality) }
+                let output: AppModel.CloneCompressOutput = stillFormat.map { .still($0, megapixels: megapixels, quality: quality, bake: bake) }
                     ?? .dng(DNGArchive.Strategy.archive(megapixels: megapixels, distance: distance))
                 print("LL_DNGARCHIVE: \(capture.displayTitle) [\(capture.id.uuidString)] → \(output.label)\(limit.map { " · first \($0) frames" } ?? "") · \(inFlight) in flight")
                 do {

@@ -8419,23 +8419,93 @@ final class AppModel: ObservableObject {
     enum CloneCompressOutput: Sendable {
         /// The DNG archive (docs/dng-archive-spike/): still raw, smaller.
         case dng(DNGArchive.Strategy)
-        /// Rendered, optionally resized, at an ImageIO quality (0…1).
-        case still(DNGArchive.StillsTranscoder.Format, megapixels: Double?, quality: Double)
+        /// Rendered, optionally resized, at an ImageIO quality (0…1), with
+        /// or without the project's edits baked in.
+        case still(DNGArchive.StillsTranscoder.Format, megapixels: Double?, quality: Double, bake: CloneBake = .full)
 
         var fileExtension: String {
             switch self {
             case .dng: return "dng"
-            case .still(let format, _, _): return format.fileExtension
+            case .still(let format, _, _, _): return format.fileExtension
             }
         }
 
         var label: String {
             switch self {
             case .dng(let strategy): return strategy.label
-            case .still(let format, let megapixels, let quality):
+            case .still(let format, let megapixels, let quality, let bake):
                 return DNGArchive.StillsTranscoder.label(format: format, megapixels: megapixels, quality: quality)
+                    + (bake == .none ? "" : " \(bake.rawValue)")
             }
         }
+    }
+
+    /// What of a project's edits a rendered clone carries in its pixels
+    /// (Steven, 2026-09-27: HEIC and JPEG clones bake the grade — the edits
+    /// were made on the original decode, and a processed picture read back
+    /// through them would drift).
+    ///
+    /// Only the colour is baked — preset, sliders, the keyframed look at each
+    /// frame's moment, the declared white. The level and the crop stay on
+    /// the clone as its record, so its text layers and masks, which are
+    /// placed on the whole frame, still line up.
+    ///
+    /// Room kept for the finer bakes Steven expects (not built): the white
+    /// balance only, or a low-contrast grade to edit from later — the Capture
+    /// Flat idea applied after the fact. Each is another case here and
+    /// another renderer in `stillsRenderer`.
+    enum CloneBake: String, Sendable {
+        /// Nothing baked: the file's default rendering, the edits carried as
+        /// the clone's record (what the first cut of Clone and compress did).
+        case none
+        /// The whole colour grade.
+        case full
+    }
+
+    /// The renderer that bakes `bake` into each frame of `capture`, or nil
+    /// for none. Frames are placed on the keyframed grade by their position
+    /// in the WHOLE shoot, so a `limit` run renders the moments it would in
+    /// the full one.
+    func stillsRenderer(for capture: CaptureProject, bake: CloneBake) -> DNGArchive.StillsTranscoder.Renderer? {
+        switch bake {
+        case .none:
+            return nil
+        case .full:
+            let grade = photoGrade(for: capture).withoutGeometry
+            let positions = Self.sourcePositions(of: sourceFrameURLs(for: capture))
+            return { url, maxLongEdge in
+                try PhotoGrader.engineRender(
+                    url: url, grade: grade.frozen(at: positions[url] ?? 0),
+                    maxDimension: maxLongEdge.map { CGFloat($0) }, cropped: false)
+            }
+        }
+    }
+
+    /// The clone's record after its colour went into its pixels: Original,
+    /// keeping only the level and the crop (at every keyframed moment), the
+    /// white back to as-shot.
+    private static func geometryOnlyRecord(_ capture: CaptureProject) -> CaptureProject {
+        func geometry(_ adjustments: PhotoAdjustments) -> PhotoAdjustments {
+            var neutral = PhotoAdjustments.neutral
+            neutral.rotationDegrees = adjustments.rotationDegrees
+            neutral.crop = adjustments.crop
+            return neutral
+        }
+        var clone = capture
+        clone.selectedPreset = PhotoPreset.original.rawValue
+        clone.presetState = .original
+        clone.whiteBalanceSource = nil
+        let adjustments = geometry(capture.adjustments ?? .neutral)
+        clone.adjustments = adjustments == .neutral ? nil : adjustments
+        if let timeline = capture.gradeTimeline, !timeline.isEmpty {
+            let moved = GradeTimeline(
+                keyframes: timeline.keyframes.map {
+                    GradeKeyframe(id: $0.id, position: $0.position, adjustments: geometry($0.adjustments))
+                },
+                baselineAnchor: timeline.baselineAnchor)
+            clone.gradeTimeline = moved.keyframes.allSatisfy({ $0.adjustments == adjustments }) ? nil : moved
+        }
+        return clone
     }
 
     /// Creates a new project beside `capture` whose frames are DNG archives of
@@ -8484,7 +8554,7 @@ final class AppModel: ObservableObject {
             guard canArchiveAsDNG(capture) else {
                 throw DNGArchive.ConversionError.unsupported("only a shoot of raw frames can be archived as DNG")
             }
-        case .still(let format, _, _):
+        case .still(let format, _, _, _):
             guard canCloneAndCompress(capture) else {
                 throw DNGArchive.ConversionError.unsupported("only a shoot of stills can be cloned and compressed")
             }
@@ -8523,6 +8593,8 @@ final class AppModel: ObservableObject {
             try Self.checkStorageHeadroom(for: max(rendersFromProcessed ? inputBytes : inputBytes / 4, 50_000_000), at: projectsRootURL)
 
             let files = inputs
+            var renderer: DNGArchive.StillsTranscoder.Renderer?
+            if case .still(_, _, _, let bake) = output { renderer = stillsRenderer(for: capture, bake: bake) }
             let result = await Task.detached(priority: .userInitiated) { () -> DNGArchive.Converter.SequenceResult in
                 let report: @Sendable (DNGArchive.Converter.SequenceProgress) -> Void = { snapshot in
                     Task { @MainActor in progress(snapshot) }
@@ -8531,8 +8603,8 @@ final class AppModel: ObservableObject {
                 case .dng(let strategy):
                     return DNGArchive.Converter().convert(files: files, to: sourceFolder, strategy: strategy, inFlight: max(1, inFlight),
                                                           shouldContinue: shouldContinue, progress: report)
-                case .still(let format, let megapixels, let quality):
-                    return DNGArchive.StillsTranscoder().convert(files: files, to: sourceFolder, format: format, megapixels: megapixels,
+                case .still(let format, let megapixels, let quality, _):
+                    return DNGArchive.StillsTranscoder(renderer: renderer).convert(files: files, to: sourceFolder, format: format, megapixels: megapixels,
                                                                  quality: quality, inFlight: max(1, inFlight),
                                                                  shouldContinue: shouldContinue, progress: report)
                 }
@@ -8609,7 +8681,9 @@ final class AppModel: ObservableObject {
             }
 
             try FileManager.default.moveItem(at: root, to: finalRoot)
-            var clone = capture
+            // A baked clone's colour is in its pixels; its record keeps only
+            // the geometry, or the grade would apply twice.
+            var clone = renderer == nil ? capture : Self.geometryOnlyRecord(capture)
             clone.id = id
             clone.name = "\(capture.displayTitle) · \(nameSuffix)"
             clone.sourceFileNames = inputs.map { "source/\($0.deletingPathExtension().lastPathComponent).\(outputExtension)" }
