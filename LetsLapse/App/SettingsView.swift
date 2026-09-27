@@ -1906,9 +1906,20 @@ private struct LayoutSettingsView: View {
     @AppStorage(LayoutSettings.scansMenuKey) private var scansMenuEnabled = true
     @AppStorage(LayoutSettings.projectCountsKey) private var showsCounts = false
     @AppStorage(LayoutSettings.editorPadsKey) private var usesPads = true
+    @AppStorage(LayoutSettings.appearanceKey) private var appearance: AppearancePreference = .auto
 
     var body: some View {
         Form {
+            Section {
+                Picker("LetsLapse Appearance", selection: $appearance) {
+                    ForEach(AppearancePreference.allCases) { choice in
+                        Text(choice.label).tag(choice)
+                    }
+                }
+            } footer: {
+                Text("Auto follows the system. The camera, the editor and the camera remote stay dark either way.")
+            }
+
             Section {
                 Toggle("Enable Scans menu", isOn: $scansMenuEnabled)
             } footer: {
@@ -1936,6 +1947,13 @@ private struct LayoutSettingsView: View {
                 Text("Applies to the Editor on iPhone, iPad and Mac. Grouping, presets and the timeline are unchanged either way.")
             }
         }
+        #if os(macOS)
+        // A bare Form on the Mac is the two-column style: section titles
+        // read as stray rows and footers don't wrap (see FormatSheet).
+        .formStyle(.grouped)
+        #endif
+        .scrollContentBackground(.hidden)
+        .background(LL.screenBackground)
         .navigationTitle("Layout")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -2023,6 +2041,13 @@ private struct PerformanceSettingsView: View {
             }
             #endif
         }
+        #if os(macOS)
+        // A bare Form on the Mac is the two-column style: section titles
+        // read as stray rows and footers don't wrap (see FormatSheet).
+        .formStyle(.grouped)
+        #endif
+        .scrollContentBackground(.hidden)
+        .background(LL.screenBackground)
         .navigationTitle("Performance")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -2091,6 +2116,13 @@ private struct BlendLearningView: View {
                 }
             }
         }
+        #if os(macOS)
+        // A bare Form on the Mac is the two-column style: section titles
+        // read as stray rows and footers don't wrap (see FormatSheet).
+        .formStyle(.grouped)
+        #endif
+        .scrollContentBackground(.hidden)
+        .background(LL.screenBackground)
         .navigationTitle("Blend learning")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -2373,6 +2405,13 @@ private struct DiagnosticsView: View {
                 }
             }
         }
+        #if os(macOS)
+        // A bare Form on the Mac is the two-column style: section titles
+        // read as stray rows and footers don't wrap (see FormatSheet).
+        .formStyle(.grouped)
+        #endif
+        .scrollContentBackground(.hidden)
+        .background(LL.screenBackground)
         .navigationTitle("Diagnostics")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

@@ -11,6 +11,21 @@ live inline.
 
 ## Open
 
+### LetsLapse Appearance — the fixed-colour token pass (Light / Dark on demand)
+
+Settings ▸ Advanced ▸ Layout ▸ **LetsLapse Appearance** (Light · Dark · Auto,
+`layout.appearance`, 2026-09-27) lets a person pin the app to the appearance
+the system is *not* in. The adaptive tokens (`LL.screenBackground`,
+`LL.cardBackground`, the editor-group colours) follow; the literal ones do
+not. `LL.ink` (#1C1C1E) and `LL.controlFill` (#E9E9EB) appear ~89 times across
+~30 files (Collections, Scans, Shape-mation, PicPlaceViews, Overlay/*,
+AdjustView, ManagePresetsView…) and will read wrong in Dark. Make them
+dynamic (`adaptive(light:dark:)`, as `EditorGroup` does) or swap call sites
+to semantic colours, then walk the main screens in both appearances on iPhone
+and Mac. Also check that no nested `.preferredColorScheme(.dark)` outside a
+presentation root (`StandbyOverlay`, `CaptureStandby.swift:92`; the view at
+`CaptureView.swift:7095`) fights the root's preference on iOS.
+
 ### Connected asset states — one app whatever the device holds; only capabilities change
 
 **Detail:** [connected-asset-states-plan.md](connected-asset-states-plan.md) (Steven's

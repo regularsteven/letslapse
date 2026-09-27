@@ -215,6 +215,8 @@ struct LetsLapseApp: App {
         ContentView()
             .environmentObject(model)
             .environmentObject(model.processingProgress)
+            // Settings ▸ Advanced ▸ Layout ▸ LetsLapse Appearance.
+            .letsLapseAppearance()
             // A `.lapse` double-clicked in Finder or opened from the Files
             // app. SwiftUI holds the URL until this view exists, so a file
             // that *launched* the app arrives here too rather than being

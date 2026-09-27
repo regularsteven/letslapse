@@ -4,7 +4,9 @@
 
 Drawn in the DEFAULT state of a library that has never scanned anything: Enable Scans menu ON, Display count in Projects OFF, Use Pads in Editor ON, and therefore a FIVE-tab bar. That pairing is the point of the first row — "on" does not mean "showing". The Scans tab appears once the library actually holds a scan (the setting AND AppModel.hasScanSessions), and it also stays put while you are standing on it, so deleting your last scan empties the screen you are looking at rather than pulling it out from under you. The first footer says which half of that rule is currently in force: setting on + no scans yet (drawn here) — "The Scans tab appears in the tab bar as soon as you have a scan. Turn this off to list scans in Projects instead, behind their own filter."; setting on + scans exist — "The Scans tab is in the tab bar. Turn this off to…"; setting off — "Scans are listed in Projects instead, behind their own filter between Photos and Interval." Turning the switch off while standing on the Scans tab moves the selection to Projects, which is where its contents have just gone. Display count in Projects is off by default: the counts are useful when auditing a library and noise the rest of the time.
 
-USE PADS IN EDITOR (new): `LayoutSettings.editorPadsKey` = "layout.editorPads", @AppStorage, default ON, read by PhotoAdjustmentsPanel on iPhone, iPad and Mac. The row carries its own 11.5 pt secondary subtitle in the label's VStack ("Paired adjustments share an XY pad. Off shows plain sliders."), which makes it a 71 pt card against the 44 pt of its neighbours, and the section's footer is the promise: "Applies to the Editor on iPhone, iPad and Mac. Grouping, presets and the timeline are unchanged either way." OFF renders every pad in every group as its two sliders, Y field first — project-photo.viewer.pads-off.portrait.svg. `LL_PADS=off` forces that rendering for a screenshot without touching this switch.
+LETSLAPSE APPEARANCE (new 2026-09-27, first section): `LayoutSettings.appearanceKey` = "layout.appearance", @AppStorage of AppearancePreference (light · dark · auto), default AUTO, drawn here. A menu Picker row — the value in the accent with chevron.up.chevron.down — and the footer "Auto follows the system. The camera, the editor and the camera remote stay dark either way." Applied once at the root by `.letsLapseAppearance()` (App/LayoutSettings.swift): `.preferredColorScheme` on iOS/iPadOS, `NSApp.appearance` on the Mac. The three switches below sit 110 pt lower than the 2026-09-13 drawing (one 44 pt card, a two-line footer, the 35 pt gap) and are otherwise unchanged.
+
+USE PADS IN EDITOR (2026-09-13): `LayoutSettings.editorPadsKey` = "layout.editorPads", @AppStorage, default ON, read by PhotoAdjustmentsPanel on iPhone, iPad and Mac. The row carries its own 11.5 pt secondary subtitle in the label's VStack ("Paired adjustments share an XY pad. Off shows plain sliders."), which makes it a 71 pt card against the 44 pt of its neighbours, and the section's footer is the promise: "Applies to the Editor on iPhone, iPad and Mac. Grouping, presets and the timeline are unchanged either way." OFF renders every pad in every group as its two sliders, Y field first — project-photo.viewer.pads-off.portrait.svg. `LL_PADS=off` forces that rendering for a screenshot without touching this switch.
 
 GEOMETRY as rendered (iOS 18 grouped Form, measured 2026-09-13 on the iPhone 16 Pro simulator and shifted onto this canvas): cards 20 pt in from either edge, radius ~11, rows 44 pt with the 17 pt label 16 pt in and the 51×31 toggle 18 pt from the card's trailing edge; footers 12.5 pt secondary at x = 36, 14 pt line pitch, the next card 35 pt under a footer's last line. All three switches take the app tint (LL.accent) rather than the green of Advanced's "Allow remote access", which sets its own — and rather than the green board 6d draws (⚠️ noted in INDEX.md, with the board's title case "Enable Scans Menu" against the app's "Enable Scans menu", and the board's LAYOUT header on an "Advanced" page against the app's pushed "Layout" page of separate cards with footers — the page's own idiom). Their effect on the list is drawn in projects.scans-filter.portrait.svg. Staged by LL_TAB=settings LL_PUSH=layout.</desc>
   <defs>
@@ -33,39 +35,53 @@ GEOMETRY as rendered (iOS 18 grouped Form, measured 2026-09-13 on the iPhone 16 
         <text x="196.5" y="81" font-size="17" class="sb" fill="#000" text-anchor="middle">Layout</text>
       </g>
 
-      <!-- section 1: the Scans tab (ON) -->
-      <g id="scans-row">
+      <!-- section 0: LetsLapse Appearance (Auto) — new 2026-09-27, a menu
+           Picker: the value and its up/down chevrons in the accent -->
+      <g id="appearance-row">
         <rect x="20" y="132" width="353" height="44" rx="11" fill="#FFF" filter="url(#soft)"/>
-        <text x="36" y="160" font-size="17" fill="#000">Enable Scans menu</text>
-        <rect x="304" y="138.5" width="51" height="31" rx="15.5" fill="#C36A00"/>
-        <circle cx="339.5" cy="154" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <text x="36" y="160" font-size="17" fill="#000">LetsLapse Appearance</text>
+        <text x="338" y="160" font-size="17" fill="#C36A00" text-anchor="end">Auto</text>
+        <path d="M343 151 l4.5 -4.5 4.5 4.5 M343 157 l4.5 4.5 4.5 -4.5" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
       </g>
-      <text x="36" y="193" font-size="12.5" fill="#6D6D72">The Scans tab appears in the tab bar as soon as you</text>
-      <text x="36" y="207" font-size="12.5" fill="#6D6D72">have a scan. Turn this off to list scans in Projects</text>
-      <text x="36" y="221" font-size="12.5" fill="#6D6D72">instead, behind their own filter.</text>
+      <text x="36" y="193" font-size="12.5" fill="#6D6D72">Auto follows the system. The camera, the editor and</text>
+      <text x="36" y="207" font-size="12.5" fill="#6D6D72">the camera remote stay dark either way.</text>
 
-      <!-- section 2: counts in the Projects filter bar (OFF) -->
-      <g id="counts-row">
-        <rect x="20" y="254" width="353" height="44" rx="11" fill="#FFF" filter="url(#soft)"/>
-        <text x="36" y="282" font-size="17" fill="#000">Display count in Projects</text>
-        <rect x="304" y="260.5" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
-        <circle cx="319.5" cy="276" r="13.5" fill="#FFF" filter="url(#soft)"/>
-      </g>
-      <text x="36" y="315" font-size="12.5" fill="#6D6D72">Spells out how many projects each filter holds — “All</text>
-      <text x="36" y="329" font-size="12.5" fill="#6D6D72">292”, “Photos 18”. The counts follow the search, so they</text>
-      <text x="36" y="343" font-size="12.5" fill="#6D6D72">always match what tapping a filter shows.</text>
+      <!-- the three switches, 110 pt lower under the new section -->
+      <g transform="translate(0,110)">
+        <!-- section 1: the Scans tab (ON) -->
+        <g id="scans-row">
+          <rect x="20" y="132" width="353" height="44" rx="11" fill="#FFF" filter="url(#soft)"/>
+          <text x="36" y="160" font-size="17" fill="#000">Enable Scans menu</text>
+          <rect x="304" y="138.5" width="51" height="31" rx="15.5" fill="#C36A00"/>
+          <circle cx="339.5" cy="154" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+        <text x="36" y="193" font-size="12.5" fill="#6D6D72">The Scans tab appears in the tab bar as soon as you</text>
+        <text x="36" y="207" font-size="12.5" fill="#6D6D72">have a scan. Turn this off to list scans in Projects</text>
+        <text x="36" y="221" font-size="12.5" fill="#6D6D72">instead, behind their own filter.</text>
 
-      <!-- section 3: Use Pads in Editor (ON) — board 6d; the row carries its own subtitle -->
-      <g id="pads-row">
-        <rect x="20" y="376" width="353" height="71" rx="11" fill="#FFF" filter="url(#soft)"/>
-        <text x="36" y="403" font-size="17" fill="#000">Use Pads in Editor</text>
-        <text x="36" y="419" font-size="11.5" fill="#6D6D72">Paired adjustments share an XY pad. Off shows</text>
-        <text x="36" y="433" font-size="11.5" fill="#6D6D72">plain sliders.</text>
-        <rect x="304" y="396" width="51" height="31" rx="15.5" fill="#C36A00"/>
-        <circle cx="339.5" cy="411.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <!-- section 2: counts in the Projects filter bar (OFF) -->
+        <g id="counts-row">
+          <rect x="20" y="254" width="353" height="44" rx="11" fill="#FFF" filter="url(#soft)"/>
+          <text x="36" y="282" font-size="17" fill="#000">Display count in Projects</text>
+          <rect x="304" y="260.5" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
+          <circle cx="319.5" cy="276" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+        <text x="36" y="315" font-size="12.5" fill="#6D6D72">Spells out how many projects each filter holds — “All</text>
+        <text x="36" y="329" font-size="12.5" fill="#6D6D72">292”, “Photos 18”. The counts follow the search, so they</text>
+        <text x="36" y="343" font-size="12.5" fill="#6D6D72">always match what tapping a filter shows.</text>
+
+        <!-- section 3: Use Pads in Editor (ON) — board 6d; the row carries its own subtitle -->
+        <g id="pads-row">
+          <rect x="20" y="376" width="353" height="71" rx="11" fill="#FFF" filter="url(#soft)"/>
+          <text x="36" y="403" font-size="17" fill="#000">Use Pads in Editor</text>
+          <text x="36" y="419" font-size="11.5" fill="#6D6D72">Paired adjustments share an XY pad. Off shows</text>
+          <text x="36" y="433" font-size="11.5" fill="#6D6D72">plain sliders.</text>
+          <rect x="304" y="396" width="51" height="31" rx="15.5" fill="#C36A00"/>
+          <circle cx="339.5" cy="411.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+        <text x="36" y="464" font-size="12.5" fill="#6D6D72">Applies to the Editor on iPhone, iPad and Mac. Grouping,</text>
+        <text x="36" y="478" font-size="12.5" fill="#6D6D72">presets and the timeline are unchanged either way.</text>
       </g>
-      <text x="36" y="464" font-size="12.5" fill="#6D6D72">Applies to the Editor on iPhone, iPad and Mac. Grouping,</text>
-      <text x="36" y="478" font-size="12.5" fill="#6D6D72">presets and the timeline are unchanged either way.</text>
 
       <!-- floating tab bar (Settings selected) — five tabs, because the
            library in this mock holds no scans -->
@@ -102,5 +118,5 @@ GEOMETRY as rendered (iOS 18 grouped Form, measured 2026-09-13 on the iPhone 16 
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Settings · Layout · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LayoutSettingsView in App/SettingsView.swift — the three Layout switches in their defaults, Use Pads in Editor new · LL_TAB=settings LL_PUSH=layout</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LayoutSettingsView in App/SettingsView.swift — the Appearance picker and the three Layout switches in their defaults · LL_TAB=settings LL_PUSH=layout</text>
 </svg>

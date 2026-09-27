@@ -81,6 +81,13 @@ struct ManageResolutionsView: View {
                 Text("Shows each resolution with its aspect ratio — 4032×3024 (4:3).")
             }
         }
+        #if os(macOS)
+        // A bare Form on the Mac is the two-column style: section titles
+        // read as stray rows and footers don't wrap (see FormatSheet).
+        .formStyle(.grouped)
+        #endif
+        .scrollContentBackground(.hidden)
+        .background(LL.screenBackground)
         .navigationTitle("Manage resolutions")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
