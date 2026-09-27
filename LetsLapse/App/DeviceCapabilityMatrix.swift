@@ -202,8 +202,17 @@ struct DeviceCapabilityMatrix: Codable {
     /// to `[BurstOption]`. A cached v1 payload cannot decode into the new
     /// shape, and `LL_RESET_CAPS` is DEBUG-only — so a shipped build has no
     /// other way to shed it. A new key is the migration.
-    private static let defaultsKey = "letslapse.deviceCapabilityMatrix.v2"
-    private static let legacyDefaultsKeys = ["letslapse.deviceCapabilityMatrix"]
+    ///
+    /// `.v4` on 2026-09-27: the probe stopped listing formats that cannot feed
+    /// the movie file output — sensor-data (ProRes RAW) formats, and those
+    /// `unsupportedCaptureOutputClasses` or `FormatOutputLedger` rule out —
+    /// and a cached older matrix still offers them for the rest of that OS
+    /// version. (`.v3` lived one afternoon on the bench.)
+    private static let defaultsKey = "letslapse.deviceCapabilityMatrix.v4"
+    private static let legacyDefaultsKeys = [
+        "letslapse.deviceCapabilityMatrix", "letslapse.deviceCapabilityMatrix.v2",
+        "letslapse.deviceCapabilityMatrix.v3",
+    ]
 
     /// The cached matrix when it was built by this device on this OS version,
     /// otherwise a fresh probe (stored on the way out). Synchronous and
@@ -297,6 +306,10 @@ struct DeviceCapabilityMatrix: Codable {
         var seenDevices = Set<String>()
         for device in devices where seenDevices.insert(device.uniqueID).inserted {
             for format in device.formats {
+                // A format the movie file output cannot take records nothing:
+                // its connection stays inactive and the take's start aborts.
+                guard CameraController.format(format, on: device, feeds: CameraController.outputsNeeded(stills: false))
+                else { continue }
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 guard dims.width >= 640, dims.height >= 480 else { continue }
                 let rates = CameraController.supportedFrameRates(

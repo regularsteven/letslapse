@@ -313,6 +313,12 @@ final class CameraController: NSObject, ObservableObject {
     /// pin above — its teardown releases it, the way a video take's does.
     /// sessionQueue-confined.
     private var rampRunHoldsLensPin = false
+    /// A Photo or Interval run (`startInterval`) took the stop's lens and gives
+    /// it back when it finishes. sessionQueue-confined.
+    private var stillsRunHoldsLensPin = false
+    /// A run proved a format refuses its output (`FormatOutputLedger`); the
+    /// menus are rebuilt without it once the run is over. sessionQueue-confined.
+    private var formatRefusalLearnedThisRun = false
     /// Stop factor to restore once stops are derived (remembered settings).
     private var preferredStopFactor: Double?
     /// Last-applied "Enhanced lenses" setting, so reconcile re-derives when
@@ -601,6 +607,71 @@ final class CameraController: NSObject, ObservableObject {
     static let proResFourCCs: Set<FourCharCode> = [
         0x6170636e, 0x61706368, 0x61706373, 0x6170636f, 0x61703468, 0x61703478,
     ]
+
+    /// Whether `format` can be the source of every output in `outputs`: by
+    /// the format's own word first (`unsupportedCaptureOutputClasses` names
+    /// the outputs it cannot feed; macOS keeps no such list), then by what
+    /// the camera did — a format that left an output's connection inactive
+    /// on this phone and OS is in `FormatOutputLedger`. On iOS 27 a photo
+    /// request on an inactive connection aborts ("No active and enabled video
+    /// connection"), and a movie started on one throws as well.
+    static func format(
+        _ format: AVCaptureDevice.Format, on device: AVCaptureDevice, feeds outputs: [AVCaptureOutput.Type]
+    ) -> Bool {
+        // Sensor data is not a picture: every output here wants one.
+        guard !isSensorDataFormat(format) else { return false }
+        #if os(iOS)
+        let refused = format.unsupportedCaptureOutputClasses
+        if outputs.contains(where: { output in refused.contains { output.isSubclass(of: $0) } }) { return false }
+        #endif
+        return !outputs.contains { FormatOutputLedger.refuses(format, on: device, output: $0) }
+    }
+
+    /// Whether `format` delivers sensor data rather than pictures — Bayer
+    /// sensels, as a ProRes RAW format does — by its pixel type's own
+    /// description (`kCVPixelFormatContainsSenselArray`), with the SDK's
+    /// Bayer types for a pixel type CoreVideo does not describe. Such a
+    /// format has no photo pipeline, no zoom and no Metal texture, and a movie
+    /// of it may only go to external storage: the iPhone 18 Pro's lenses list
+    /// one at 4224×3024, and a take on it aborted with "Capturing ProRes Raw
+    /// codec is supported only on external storage device" (2026-09-27), the
+    /// photo output's connection stayed inactive, and a blend on it saved
+    /// nothing (-6684). Nothing here uses sensor data as pictures, so no menu
+    /// offers such a format and no match picks one.
+    static func isSensorDataFormat(_ format: AVCaptureDevice.Format) -> Bool {
+        let pixelType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+        if let description = CVPixelFormatDescriptionCreateWithPixelFormatType(kCFAllocatorDefault, pixelType)
+            as? [String: Any],
+           let sensels = description[kCVPixelFormatContainsSenselArray as String] as? Bool {
+            return sensels
+        }
+        return sdkBayerPixelTypes.contains(pixelType)
+    }
+
+    private static let sdkBayerPixelTypes: Set<OSType> = [
+        kCVPixelFormatType_14Bayer_GRBG, kCVPixelFormatType_14Bayer_RGGB,
+        kCVPixelFormatType_14Bayer_BGGR, kCVPixelFormatType_14Bayer_GBRG,
+        kCVPixelFormatType_16VersatileBayer, kCVPixelFormatType_96VersatileBayerPacked12,
+        kCVPixelFormatType_64RGBA_DownscaledProResRAW,
+    ]
+
+    /// The outputs a mode's format must feed: a still is the photo output's
+    /// and a blend is built from the video-data tap; a take is the movie
+    /// file output's.
+    static func outputsNeeded(stills: Bool) -> [AVCaptureOutput.Type] {
+        stills ? [AVCapturePhotoOutput.self, AVCaptureVideoDataOutput.self] : [AVCaptureMovieFileOutput.self]
+    }
+
+    /// Whether `format` can zoom to `factor` (nil: no demand) — its own
+    /// `videoMaxZoomFactor`, which differs between formats of one lens.
+    static func format(_ format: AVCaptureDevice.Format, reaches factor: CGFloat?) -> Bool {
+        #if os(iOS)
+        guard let factor else { return true }
+        return format.videoMaxZoomFactor + 0.01 >= factor
+        #else
+        return true
+        #endif
+    }
     private var activeSequence: LiveCaptureSequence?
     private var activeSequenceDirectory: URL?
     private var activeSequenceStartedAt: Date?
@@ -2445,6 +2516,20 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// The zoom factor `device` must reach to frame the selected stop: the
+    /// pin's own factor while a run holds it, the stop's crop of its own lens
+    /// (the lens a still run pins), or the stop's factor on the combined
+    /// camera. nil when the device does not serve the stop, and on the Mac.
+    private func stopZoomNeeded(on device: AVCaptureDevice) -> CGFloat? {
+        #if os(iOS)
+        if let pin = sequenceLensPin, pin.device === device { return pin.zoomFactor }
+        guard let stop = currentStop else { return nil }
+        if device === opticsDevice { return CGFloat(stop.rawFactor) }
+        if let lens = physicalLens(for: stop), lens.device === device { return lens.zoomFactor }
+        #endif
+        return nil
+    }
+
     #if os(iOS)
     /// The physical constituent `stop` natively sits on, paired with the zoom
     /// factor that reproduces the stop's framing there.
@@ -2470,6 +2555,20 @@ final class CameraController: NSObject, ObservableObject {
                 .first(where: { $0.deviceType.rawValue == native.expectedBacking })
         else { return nil }
         return (device, CGFloat(max(stop.displayFactor / native.displayFactor, 1)))
+    }
+
+    /// The stop's own physical lens, when it can shoot a size the combined
+    /// camera (`device`) cannot — the case the run's pin exists for. nil
+    /// everywhere else: a physical session, single-camera hardware, a size no
+    /// lens at this stop has. Derived from the live formats, never a model.
+    private func runLensOwning(
+        resolution: CaptureResolution, fps: Int, stills: Bool, notOn device: AVCaptureDevice
+    ) -> AVCaptureDevice? {
+        guard let optics = opticsDevice, optics.isVirtualDevice, device === optics,
+              let stop = currentStop, let lens = physicalLens(for: stop),
+              captureFormatMatch(for: lens.device, resolution: resolution, fps: fps, stills: stills) != nil
+        else { return nil }
+        return lens.device
     }
 
     /// sessionQueue-confined. Decides the run's lens once, before the first
@@ -2499,7 +2598,13 @@ final class CameraController: NSObject, ObservableObject {
     /// is what makes "resolve it before recording starts" true — the
     /// alternative is discovering it at the moment the burst fires, with a
     /// segment already open.
-    private func pinLensForSequence(configurations: [(resolution: CaptureResolution, fps: Int)]) {
+    ///
+    /// `stills`: the run shoots stills (Photo, Interval, a blend), so the
+    /// lens is asked by the stills rules — video stabilization and the exact
+    /// rate never veto it (see `captureFormatMatch(stills:)`).
+    private func pinLensForSequence(
+        configurations: [(resolution: CaptureResolution, fps: Int)], stills: Bool = false
+    ) {
         // DNG owns the input while it is armed or running; the pin never
         // takes it from another world.
         guard sequenceLensPin == nil,
@@ -2519,10 +2624,12 @@ final class CameraController: NSObject, ObservableObject {
         where captureFormatMatch(
             for: lens.device,
             resolution: configuration.resolution,
-            fps: configuration.fps) == nil {
+            fps: configuration.fps,
+            stills: stills) == nil {
             LLog("optics: \(name) cannot shoot"
                  + " \(configuration.resolution.label)@\(configuration.fps)"
-                 + " — run stays on the optics device, lens may change mid-shoot")
+                 + (stills ? " — the run stays on the optics device, its lens locked for the run"
+                           : " — run stays on the optics device, lens may change mid-shoot"))
             return
         }
         guard let input = try? AVCaptureDeviceInput(device: lens.device) else {
@@ -2961,14 +3068,16 @@ final class CameraController: NSObject, ObservableObject {
         // A pinned run reads the pin's own lens (it IS the recording device),
         // which widens the menus rather than narrowing them.
         let listDevice = effectiveRecordingDevice(for: currentStop) ?? device
-        // Photo and Interval list only what their own camera can deliver —
-        // the session's device, asked by the stills rules — so the menu and
-        // `applyCaptureFormat` read one truth. The pinned lens's list offered
-        // the 18 Pro's Photo mode a 4224×3024 it could not shoot. The rate
-        // memory and the burst menu keep reading `listDevice`.
+        // Stills menus describe the lens every stills run shoots on — the
+        // stop's own physical lens (`startInterval` and the blend runs pin it)
+        // — exactly as the video menus do: a lens's capabilities are offered
+        // on that lens and on no other (Steven, 2026-09-27). Asked by the
+        // stills rules (no video-stabilization demand, no ProRes). Photo once
+        // shot a lens-only 4224×3024 through the combined camera, which has
+        // no such format, and came out 1920×1080 for a week; runs now pin.
         let stills = photoViewfinderActive || stillsCaptureActive
         let supportedRates = stills
-            ? stillsFrameRatesByResolution(for: device)
+            ? stillsFrameRatesByResolution(for: listDevice)
             : supportedFrameRatesByResolution(for: listDevice)
         guard !supportedRates.isEmpty else {
             DispatchQueue.main.async {
@@ -2986,7 +3095,11 @@ final class CameraController: NSObject, ObservableObject {
             }
             return $0.pixelCount > $1.pixelCount
         }
-        let desiredResolution = preferredResolution ?? selectedResolution
+        // Stills start from the stored choice: a size one lens has and the
+        // next does not is substituted on that lens only (never saved over,
+        // below), so coming back to the first lens brings the choice back.
+        let desiredResolution = preferredResolution
+            ?? (stills ? RecordingSettingsStore.resolution ?? selectedResolution : selectedResolution)
         // A stills choice the camera cannot deliver falls to the nearest
         // smaller size of its own shape (4224×3024 → 4032×3024) — never to
         // the 1080p default below, which is exactly how the 18 Pro's week went.
@@ -3005,22 +3118,29 @@ final class CameraController: NSObject, ObservableObject {
             ?? resolutions.first { $0.width == 1920 && $0.height == 1080 }
             ?? resolutions[0]
         // A substitution is what the camera can do, not what was chosen: it
-        // is shown and shot, never saved over the stored choice, which Video
-        // shares and asks for again when it comes back (`setStillsCapture`).
+        // is shown and shot, never saved over the stored choice, which both
+        // modes share and ask for again (`setStillsCapture`). That holds for
+        // Video too: once a stored size leaves Video's menu (a sensor-data
+        // format, a refusal `FormatOutputLedger` learned), Video falls to
+        // 1080p here, and saving that would put Photo on 1080p — the 18 Pro's
+        // week, by another road.
         // Judged against the stored choice itself, not the size in effect:
         // from the second refresh on, `selectedResolution` already holds the
         // substitute, and saving then is how a test session overwrote a
-        // stored 4224×3024 (2026-09-27). Only a pick from the menu
-        // (`preferredResolution`) saves a stills size.
+        // stored 4224×3024 (2026-09-27). Only an ask for a different size (a
+        // pick from the menu) saves.
         let stillsSubstituted = stills
             && (resolution.width != desiredResolution.width || resolution.height != desiredResolution.height)
-        let keepsStoredChoice = stills && preferredResolution == nil
-            && (RecordingSettingsStore.resolution.map {
+        let stored = RecordingSettingsStore.resolution
+        let asksForANewSize = preferredResolution.map { ask in stored.map { $0 != ask } ?? true } ?? false
+        let keepsStoredChoice = !asksForANewSize
+            && (stored.map {
                 $0.width != resolution.width || $0.height != resolution.height
+                    || (!stills && $0.isProRes != resolution.isProRes)
             } ?? false)
         if stills { stillsResolutionInEffect = resolution }
         if stillsSubstituted {
-            LLog("stills: \(desiredResolution.width)×\(desiredResolution.height) is not a size \(device.localizedName)"
+            LLog("stills: \(desiredResolution.width)×\(desiredResolution.height) is not a size \(listDevice.localizedName)"
                  + " can deliver — the menu offers \(resolution.width)×\(resolution.height) in its place")
         }
         let rateSet = supportedRates[resolution] ?? [30]
@@ -3230,14 +3350,14 @@ final class CameraController: NSObject, ObservableObject {
     /// camera only sets when it has ProRes formats of its own) is what unions
     /// a constituent's rates into the virtual device's buckets rather than
     /// spawning duplicate rows in the picker.
-    /// The stills menu: what the session's own camera — the one Photo and
-    /// Interval shoot through — can deliver, by the stills rules (no video
-    /// stabilization demand) and without ProRes. The lens-by-lens list the
-    /// video menus read offered the 18 Pro's Photo mode a 4224×3024 its Triple
-    /// Camera does not have, and it shot 1080p for a week.
+    /// The stills menu: what `device` — the lens a still run shoots on — can
+    /// deliver by the stills rules: formats that feed the photo output and
+    /// the blend tap, reach the selected stop's zoom on that lens, and are
+    /// not ProRes; no video-stabilization demand.
     private func stillsFrameRatesByResolution(for device: AVCaptureDevice) -> [CaptureResolution: Set<Int>] {
         var rates: [CaptureResolution: Set<Int>] = [:]
-        accumulateFrameRates(from: device, candidates: Self.preferredFrameRates, into: &rates, stills: true)
+        accumulateFrameRates(from: device, candidates: Self.preferredFrameRates, into: &rates,
+                             stills: true, zoomNeeded: stopZoomNeeded(on: device))
         return rates.filter { !$0.key.isProRes }
     }
 
@@ -3246,59 +3366,114 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     /// sessionQueue-confined, from `configureIfNeeded`. What this camera can
-    /// really shoot as stills, written down every time it is set up: each
-    /// lens's sizes, which of them the session's camera can deliver (the
-    /// stills menu), and the photo each deliverable size makes. A new lens, a
-    /// firmware or an iOS release is exactly what this code has not been
-    /// tested on — the report says what it found before the first shot
-    /// (Logs/stills-selftest-<model>.json), and raises an ALARM when the
-    /// camera cannot shoot stills near the size its lenses offer, or a
-    /// deliverable size cannot make a photo of its own size. Reads formats
-    /// only: no session change, no capture.
+    /// really shoot as stills, written down every time it is set up, per
+    /// camera — the combined one and each physical lens, because capabilities
+    /// belong to lenses and a stills run shoots on the stop's own lens: every
+    /// size, its pixel types (sensor data — ProRes RAW — is never offered),
+    /// the outputs its formats cannot feed by their own word
+    /// (`unsupportedCaptureOutputClasses`) or by `FormatOutputLedger`, and for
+    /// the sizes stills can use, the photo sizes they deliver
+    /// (`supportedMaxPhotoDimensions`) and how far they zoom
+    /// (`videoMaxZoomFactor`, which decides the stops a size can frame). A new
+    /// lens, a firmware or an iOS release
+    /// is exactly what this code has not been tested on; the report says what
+    /// it found before the first shot (Logs/stills-selftest-<model>.json), and
+    /// raises an ALARM when a size cannot make a photo of its own size or a
+    /// camera offers no stills size at all. Reads formats only: no session
+    /// change, no capture, nothing per model.
     private func runStillsSelfTest(on device: AVCaptureDevice) {
-        func sizes(of camera: AVCaptureDevice) -> [StillsSizing.Size] {
-            Array(Set(camera.formats.compactMap { format -> StillsSizing.Size? in
+        struct Row {
+            let size: StillsSizing.Size
+            /// From the formats at this size that feed the stills outputs —
+            /// the only ones a still is ever shot on.
+            var photos: Set<StillsSizing.Size> = []
+            var zoomCeiling: CGFloat = 0
+            var stillsFormats = 0
+            /// Outputs some format at this size says it cannot feed.
+            var refused: Set<String> = []
+            /// Its formats' pixel types, and whether one is sensor data.
+            var pixelTypes: Set<String> = []
+            var sensorData = false
+        }
+        func fourCC(_ code: OSType) -> String {
+            String(bytes: [24, 16, 8, 0].map { UInt8((code >> $0) & 0xFF) }, encoding: .macOSRoman) ?? "\(code)"
+        }
+        let stillsOutputs = Self.outputsNeeded(stills: true)
+        func rows(of camera: AVCaptureDevice) -> [Row] {
+            var bySize: [StillsSizing.Size: Row] = [:]
+            for format in camera.formats {
                 guard !Self.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType(format.formatDescription))
-                else { return nil }
+                else { continue }
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                // The menus' own floor (`accumulateFrameRates`): smaller sizes
-                // are never offered, so they are not "kept off" anything.
-                guard dims.width >= 640, dims.height >= 480 else { return nil }
-                return StillsSizing.Size(width: Int(dims.width), height: Int(dims.height))
-            })).sorted { $0.pixels > $1.pixels }
+                // The menus' own floor (`accumulateFrameRates`).
+                guard dims.width >= 640, dims.height >= 480 else { continue }
+                let size = StillsSizing.Size(width: Int(dims.width), height: Int(dims.height))
+                var row = bySize[size] ?? Row(size: size)
+                row.pixelTypes.insert(fourCC(CMFormatDescriptionGetMediaSubType(format.formatDescription)))
+                if Self.isSensorDataFormat(format) { row.sensorData = true }
+                #if os(iOS)
+                row.refused.formUnion(format.unsupportedCaptureOutputClasses.map { NSStringFromClass($0) })
+                #endif
+                for output in Self.outputsNeeded(stills: true) + Self.outputsNeeded(stills: false)
+                where FormatOutputLedger.refuses(format, on: camera, output: output) {
+                    row.refused.insert("\(NSStringFromClass(output)) (learned)")
+                }
+                if Self.format(format, on: camera, feeds: stillsOutputs) {
+                    row.stillsFormats += 1
+                    row.photos.formUnion(format.supportedMaxPhotoDimensions.map(PhotoRequestPreflight.size))
+                    #if os(iOS)
+                    row.zoomCeiling = max(row.zoomCeiling, format.videoMaxZoomFactor)
+                    #endif
+                }
+                bySize[size] = row
+            }
+            return bySize.values.sorted { $0.size.pixels > $1.size.pixels }
         }
-        var lenses: [AVCaptureDevice] = []
+        var cameras: [AVCaptureDevice] = [device]
         #if os(iOS)
-        if device.isVirtualDevice { lenses = device.constituentDevices }
+        if device.isVirtualDevice { cameras += device.constituentDevices }
         #endif
-        let deliverable = stillsFrameRatesByResolution(for: device).keys
-            .map(Self.stillsSize).sorted { $0.pixels > $1.pixels }
-        var lensSizes: [String: [String]] = [:]
-        var keptOff: [String: [String]] = [:]
-        for lens in lenses {
-            let theirs = sizes(of: lens)
-            lensSizes[lens.localizedName] = theirs.map(\.description)
-            for size in theirs where !deliverable.contains(size) {
-                keptOff[size.description, default: []].append(lens.localizedName)
-            }
-        }
-        var photoSizes: [String: String] = [:]
+        var perCamera: [String: Any] = [:]
         var shortSizes: [String] = []
-        for size in deliverable {
-            let resolution = CaptureResolution(width: Int32(size.width), height: Int32(size.height))
-            guard let match = captureFormatMatch(for: device, resolution: resolution, fps: 30, stills: true),
-                  let photo = match.photoDimensions else {
-                shortSizes.append("\(size): no photo size")
-                continue
+        var empty: [String] = []
+        var summary: [String] = []
+        for camera in cameras {
+            let list = rows(of: camera)
+            let stills = list.filter { $0.stillsFormats > 0 }
+            let notForStills = list.filter { $0.stillsFormats == 0 }
+            perCamera[camera.localizedName] = [
+                "sizes": list.map { $0.size.description },
+                "stillsSizes": stills.map { $0.size.description },
+                "photoSizes": Dictionary(uniqueKeysWithValues: stills.map {
+                    ($0.size.description, $0.photos.sorted { $0.pixels > $1.pixels }.map(\.description))
+                }),
+                "zoomCeilings": Dictionary(uniqueKeysWithValues: stills.map {
+                    ($0.size.description, (Double($0.zoomCeiling) * 100).rounded() / 100)
+                }),
+                "refusedOutputs": Dictionary(uniqueKeysWithValues: list.filter { !$0.refused.isEmpty }.map {
+                    ($0.size.description, $0.refused.sorted())
+                }),
+                "pixelTypes": Dictionary(uniqueKeysWithValues: list.map {
+                    ($0.size.description, $0.pixelTypes.sorted())
+                }),
+                "sensorDataSizes": list.filter(\.sensorData).map { $0.size.description },
+            ]
+            if stills.isEmpty { empty.append(camera.localizedName) }
+            for row in stills where !row.photos.contains(where: {
+                !StillsSizing.isShort(delivered: $0, expected: row.size)
+            }) {
+                shortSizes.append("\(camera.localizedName) \(row.size): photos of at most"
+                                  + " \(row.photos.max { $0.pixels < $1.pixels }?.description ?? "nothing")")
             }
-            let made = PhotoRequestPreflight.size(photo)
-            photoSizes[size.description] = made.description
-            if StillsSizing.isShort(delivered: made, expected: size) {
-                shortSizes.append("\(size): photos of \(made)")
-            }
+            let largestPhoto = stills.flatMap(\.photos).max { $0.pixels < $1.pixels }
+            summary.append("\(camera.localizedName) \(stills.count) stills size(s) to"
+                           + " \(stills.first?.size.description ?? "none"),"
+                           + " photos to \(largestPhoto?.description ?? "none")"
+                           + (notForStills.isEmpty ? ""
+                              : ", not for stills: " + notForStills.map {
+                                  $0.size.description + ($0.sensorData ? " (sensor data)" : "")
+                              }.joined(separator: ", ")))
         }
-        let largestLens = lenses.flatMap { sizes(of: $0) }.max { $0.pixels < $1.pixels }
-        let largestStills = deliverable.first
         let model = LiveBlendController.deviceModelIdentifier()
         let info = Bundle.main.infoDictionary ?? [:]
         let report: [String: Any] = [
@@ -3306,33 +3481,22 @@ final class CameraController: NSObject, ObservableObject {
             "model": model,
             "os": ProcessInfo.processInfo.operatingSystemVersionString,
             "app": "\(info["CFBundleShortVersionString"] ?? "?") (\(info["CFBundleVersion"] ?? "?"))",
-            "stillsCamera": device.localizedName,
-            "deliverable": deliverable.map(\.description),
-            "photoSizes": photoSizes,
-            "lensSizes": lensSizes,
-            "keptOffTheMenu": keptOff,
+            "sessionCamera": device.localizedName,
+            "cameras": perCamera,
             "shortSizes": shortSizes,
+            "learnedRefusals": FormatOutputLedger.entries(),
         ]
         let url = StorageRoot.logsURL.appendingPathComponent("stills-selftest-\(model).json")
         if let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]) {
             try? FileManager.default.createDirectory(at: StorageRoot.logsURL, withIntermediateDirectories: true)
             try? data.write(to: url, options: .atomic)
         }
-        LLog("stills self-test: \(deliverable.count) size(s) on \(device.localizedName), largest"
-             + " \(largestStills?.description ?? "none"); "
-             + (keptOff.isEmpty ? "every lens size is deliverable"
-                : "kept off the menu: " + keptOff.keys.sorted().joined(separator: ", "))
-             + " — \(url.lastPathComponent)")
-        if let largestStills {
-            if let largestLens, StillsSizing.isShort(delivered: largestStills, expected: largestLens) {
-                captureAlarm("selftest", "the largest still \(device.localizedName) can shoot is \(largestStills);"
-                             + " its lenses offer \(largestLens)")
-            }
-        } else {
-            captureAlarm("selftest", "\(device.localizedName) offers no stills size at all")
+        LLog("stills self-test: " + summary.joined(separator: "; ") + " — \(url.lastPathComponent)")
+        if !empty.isEmpty {
+            captureAlarm("selftest", "no stills size at all on " + empty.joined(separator: ", "))
         }
         if !shortSizes.isEmpty {
-            captureAlarm("selftest", "stills sizes that cannot make a photo of their own size: "
+            captureAlarm("selftest", "sizes that cannot make a photo of their own size: "
                          + shortSizes.joined(separator: "; "))
         }
     }
@@ -3341,9 +3505,15 @@ final class CameraController: NSObject, ObservableObject {
         from device: AVCaptureDevice,
         candidates candidateFrameRates: [Int],
         into supportedRates: inout [CaptureResolution: Set<Int>],
-        stills: Bool = false
+        stills: Bool = false,
+        zoomNeeded: CGFloat? = nil
     ) {
+        let outputs = Self.outputsNeeded(stills: stills)
         for format in device.formats {
+            // What the mode's outputs cannot take, or the stop's zoom cannot
+            // frame, is never offered — the same two rules `captureFormatMatch`
+            // applies, so the menu and the run read one truth.
+            guard Self.format(format, on: device, feeds: outputs), Self.format(format, reaches: zoomNeeded) else { continue }
             #if os(iOS)
             guard stills || !videoStabilizationRequested || stabilizationMode(for: format) != nil else {
                 continue
@@ -3549,13 +3719,29 @@ final class CameraController: NSObject, ObservableObject {
         guard let device = videoDevice else { return false }
         let stills = photoViewfinderActive || stillsCaptureActive
         guard let match = captureFormatMatch(for: device, resolution: resolution, fps: fps, stills: stills) else {
+            #if os(iOS)
+            // Not a miss: the size is the stop's own lens's (4K120 on a 16
+            // Pro's wide, which the combined camera does not list), and every
+            // run shoots there — the pin. Meanwhile the viewfinder stays on the
+            // combined camera: stills on its nearest size, video on the format
+            // it has.
+            if let owner = runLensOwning(resolution: resolution, fps: fps, stills: stills, notOn: device) {
+                LLog("applyCaptureFormat: \(resolution.width)×\(resolution.height)@\(fps) is"
+                     + " \(owner.localizedName)'s own — runs shoot it there; the viewfinder stays on"
+                     + " \(device.localizedName)")
+                if stills, let nearest = stillsFallback(on: device, for: resolution) {
+                    return applyCaptureFormat(resolution: nearest, fps: fps)
+                }
+                return false
+            }
+            #endif
             // Never silent. This miss returned without a word for a week on
             // the 18 Pro: the menu offered 4224×3024, the Triple Camera took
             // none of it, and Photo shot 351 projects at the 1920×1080 the
             // session configures with (docs/fieldtests/2026-09-26-18pro-crash-triage.md).
             LLog("applyCaptureFormat: no \(resolution.width)×\(resolution.height)@\(fps)"
                  + "\(stills ? " for stills" : "") on \(device.localizedName) — "
-                 + formatMissReason(on: device, resolution: resolution, fps: fps))
+                 + formatMissReason(on: device, resolution: resolution, fps: fps, stills: stills))
             if stills, let fallback = stillsFallback(on: device, for: resolution) {
                 LLog("applyCaptureFormat: stills fall back to \(fallback.width)×\(fallback.height)")
                 return applyCaptureFormat(resolution: fallback, fps: fps)
@@ -4061,8 +4247,16 @@ final class CameraController: NSObject, ObservableObject {
                 Self.supportsFrameRate(targetFPS, in: range)
             }
         }
+        let outputs = Self.outputsNeeded(stills: stills)
+        // A still is framed by zoom on the lens that takes it: a format that
+        // cannot reach the stop's factor there would shoot a wider picture
+        // than the stop shows (on the bench, the 18 Pro's 2× and 8× came out
+        // at 1× and 4× on a format whose zoom ceiling is 1).
+        let zoomNeeded = stills ? stopZoomNeeded(on: device) : nil
         return device.formats
             .filter { format in
+                guard Self.format(format, on: device, feeds: outputs),
+                      Self.format(format, reaches: zoomNeeded) else { return false }
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 #if os(iOS)
                 let stabilizationMatches = stills || !videoStabilizationRequested
@@ -4145,19 +4339,26 @@ final class CameraController: NSObject, ObservableObject {
 
     /// Why `captureFormatMatch` found nothing, rule by rule — the line a
     /// silent miss never had.
-    private func formatMissReason(on device: AVCaptureDevice, resolution: CaptureResolution, fps: Int) -> String {
+    private func formatMissReason(
+        on device: AVCaptureDevice, resolution: CaptureResolution, fps: Int, stills: Bool
+    ) -> String {
         let sized = device.formats.filter { format in
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             return dims.width == resolution.width && dims.height == resolution.height
         }
         guard !sized.isEmpty else { return "no format at that size" }
-        let coded = sized.filter {
+        let fed = sized.filter { Self.format($0, on: device, feeds: Self.outputsNeeded(stills: stills)) }
+        let zoomNeeded = stills ? stopZoomNeeded(on: device) : nil
+        let zooming = fed.filter { Self.format($0, reaches: zoomNeeded) }
+        let coded = zooming.filter {
             Self.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType($0.formatDescription)) == resolution.isProRes
         }
         let rated = coded.filter { format in
             format.videoSupportedFrameRateRanges.contains { Self.supportsFrameRate(Double(fps), in: $0) }
         }
-        let reason = "\(sized.count) at that size, \(coded.count) in its codec, \(rated.count) take \(fps) fps"
+        let reason = "\(sized.count) at that size, \(fed.count) feed the \(stills ? "photo output and blend tap" : "movie output")"
+            + (zoomNeeded.map { ", \(zooming.count) zoom to \(String(format: "%.2f", $0))" } ?? "")
+            + ", \(coded.count) in its codec, \(rated.count) take \(fps) fps"
         #if os(iOS)
         let stabilized = coded.filter { stabilizationMode(for: $0) != nil }
         return reason + ", \(stabilized.count) stabilize (stabilization \(videoStabilizationRequested ? "asked" : "off"))"
@@ -4172,8 +4373,10 @@ final class CameraController: NSObject, ObservableObject {
     /// Never the chosen size itself, so `applyCaptureFormat` cannot recurse
     /// on it; nil when nothing smaller exists.
     private func stillsFallback(on device: AVCaptureDevice, for resolution: CaptureResolution) -> CaptureResolution? {
+        let outputs = Self.outputsNeeded(stills: true)
         let offered = Set(device.formats.compactMap { format -> StillsSizing.Size? in
-            guard !Self.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType(format.formatDescription))
+            guard !Self.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType(format.formatDescription)),
+                  Self.format(format, on: device, feeds: outputs)
             else { return nil }
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             return StillsSizing.Size(width: Int(dims.width), height: Int(dims.height))
@@ -5863,8 +6066,11 @@ final class CameraController: NSObject, ObservableObject {
                 "sequenceMode": mode.rawValue,
                 "projectID": projectID.uuidString,
             ])
-            self.startNextSegment(
-                resolution: self.selectedResolution, frameRate: self.selectedFrameRate)
+            // Refused (its connection stayed inactive): nothing was recorded
+            // and the take's state is already wound back — the screen never
+            // shows it recording.
+            guard self.startNextSegment(
+                resolution: self.selectedResolution, frameRate: self.selectedFrameRate) else { return }
             DispatchQueue.main.async {
                 self.recordingStartedAt = startedAt
                 self.captureRunStartedAt = startedAt
@@ -6426,8 +6632,9 @@ final class CameraController: NSObject, ObservableObject {
     /// ramp run can hold two: base segments at the shot's resolution, burst
     /// segments at a higher one so a punch-in has pixels to crop. Both were
     /// validated against the pinned lens before the run started.
-    private func startNextSegment(resolution: CaptureResolution, frameRate: Int) {
-        guard let directory = activeSequenceDirectory else { return }
+    @discardableResult
+    private func startNextSegment(resolution: CaptureResolution, frameRate: Int) -> Bool {
+        guard let directory = activeSequenceDirectory else { return false }
         // Every segment records on the device the run started on: the burst
         // format is a format change, never an input change. The formats the
         // picker offers are exactly the ones this device can shoot without one
@@ -6456,6 +6663,16 @@ final class CameraController: NSObject, ObservableObject {
         // yet report what the commit did to it; here it can. A segment that
         // would have opened on a hunting lens is repaired instead of recorded.
         verifyFocusHold(on: videoDevice)
+
+        // The movie output's connection itself, not the format's word: a take
+        // started on an inactive connection throws, an uncatchable abort. (The
+        // 18 Pro's 09-20 Video abort, symbolicated as `liveConnections`, was
+        // ProRes RAW's external-storage refusal instead — `isSensorDataFormat`
+        // keeps that format out.) See `refuseDarkSegment`.
+        guard awaitActiveConnection(movieOutput, timeout: 1.5) else {
+            refuseDarkSegment(resolution: resolution, frameRate: frameRate)
+            return false
+        }
 
         let index = segmentURLs.count
         let url = directory.appendingPathComponent(String(format: "segment-%03d.mov", index))
@@ -6490,6 +6707,7 @@ final class CameraController: NSObject, ObservableObject {
                 self.isRampActive = highRate
             }
         }
+        return true
     }
 
     private func finishSegment(outputFileURL: URL) {
@@ -6657,6 +6875,74 @@ final class CameraController: NSObject, ObservableObject {
         return (durations.prefix(frames).reduce(0, +), frames)
     }
 
+    /// sessionQueue-confined. A segment whose movie connection stayed
+    /// inactive is never started. Its size is tried against another size on
+    /// the same lens: if that one lights, the refusal is the format's own —
+    /// learned (`FormatOutputLedger`), alarmed, and the video menus rebuilt
+    /// without it. The take then ends with what it has: nothing for a first
+    /// segment (the take is refused and wound back), the segments before it
+    /// for a burst switch.
+    private func refuseDarkSegment(resolution: CaptureResolution, frameRate: Int) {
+        let label = "\(resolution.label)@\(frameRate)"
+        if let device = videoDevice {
+            let dark = device.activeFormat
+            if let contrast = movieContrast(on: device, avoiding: resolution, fps: frameRate),
+               applyCaptureFormat(resolution: contrast, fps: frameRate),
+               awaitActiveConnection(movieOutput, timeout: 1.5) {
+                FormatOutputLedger.record(dark, on: device, output: AVCaptureMovieFileOutput.self)
+                DeviceCapabilityMatrix.invalidateCache()
+                capabilityMatrix = DeviceCapabilityMatrix.loadOrProbe(devices: allCaptureDevices())
+                formatRefusalLearnedThisRun = true
+                captureAlarm("format", "\(formatLabel(dark))@\(frameRate) on \(device.localizedName) left the movie"
+                             + " output's connection inactive though the format lists it as supported — the segment"
+                             + " was not started, and the menus stop offering it on this phone and OS",
+                             ["camera": device.localizedName, "size": formatLabel(dark)])
+            } else {
+                captureAlarm("capture", "the movie output's connection stayed inactive on \(device.localizedName)"
+                             + " at \(label) and at another size — the segment was not started")
+            }
+        }
+        CaptureSessionLogger.shared.log("capture_refused", [
+            "kind": "video", "reason": "movieConnection", "detail": label,
+        ])
+        if segmentURLs.isEmpty {
+            resetLiveCaptureState()
+        } else {
+            // Stop's own order: the open burst and mark end where the run does.
+            closeOpenRampInterval(at: Date())
+            closeOpenMarkInterval(at: Date())
+            isFinishingSequence = true
+            completeLiveCapture()
+        }
+        if formatRefusalLearnedThisRun {
+            formatRefusalLearnedThisRun = false
+            refreshCaptureOptions()
+            publishFormat()
+        }
+    }
+
+    /// Another size `device` records at `fps` — the largest below
+    /// `resolution`, else the largest — to tell a format's refusal from a
+    /// connection that is simply down.
+    private func movieContrast(on device: AVCaptureDevice, avoiding resolution: CaptureResolution, fps: Int) -> CaptureResolution? {
+        let outputs = Self.outputsNeeded(stills: false)
+        let sizes = Set(device.formats.compactMap { format -> CaptureResolution? in
+            let subType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+            guard !Self.proResFourCCs.contains(subType),
+                  Self.format(format, on: device, feeds: outputs),
+                  format.videoSupportedFrameRateRanges.contains(where: { Self.supportsFrameRate(Double(fps), in: $0) })
+            else { return nil }
+            #if os(iOS)
+            guard !videoStabilizationRequested || stabilizationMode(for: format) != nil else { return nil }
+            #endif
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            let size = CaptureResolution(width: dims.width, height: dims.height)
+            return size.width == resolution.width && size.height == resolution.height ? nil : size
+        })
+        return sizes.filter { $0.pixelCount < resolution.pixelCount }.max { $0.pixelCount < $1.pixelCount }
+            ?? sizes.max { $0.pixelCount < $1.pixelCount }
+    }
+
     private func completeLiveCapture() {
         guard let sequence = activeSequence,
               let directory = activeSequenceDirectory
@@ -6784,12 +7070,33 @@ final class CameraController: NSObject, ObservableObject {
             self.detachTestCardTapNow()
             self.detachFramingTapNow()
             self.detachShapeTapNow()
-            self.assertStillsFormat()
+            // One lens for the whole shoot (Steven, 2026-09-27: "a shoot must
+            // never change lenses mid-shoot, even when switching to low
+            // light"). The stop's own physical lens, pinned the way a video
+            // sequence and a blend run are: no hand-off can reframe the run,
+            // and a size only that lens has is really shot. A lens that cannot
+            // take the run's size declines by itself, with a line; the combined
+            // camera's switching is then locked for the run instead.
+            let deviceBeforePin = self.videoDevice
+            #if os(iOS)
+            let pinnedBefore = self.sequenceLensPin != nil
+            self.pinLensForSequence(
+                configurations: [(self.stillsResolutionInEffect ?? self.selectedResolution, self.selectedFrameRate)],
+                stills: true)
+            self.stillsRunHoldsLensPin = !pinnedBefore && self.sequenceLensPin != nil
+            if self.sequenceLensPin == nil { self.lockConstituentSwitchingForRun() }
+            #endif
+            // A lens that arrived comes up on the session's preset at zoom 1:
+            // the run's size, its photo size and the stop's crop (2×, 8×) go
+            // back on it even when the preset happens to land on the same size.
+            self.assertStillsFormat(lensArrived: self.videoDevice !== deviceBeforePin)
+            // The connection itself, not the format's word — see there.
+            self.ensureStillsConnection()
             // Same rule as a video take: the shot is in focus when the user
             // presses the shutter, so the lens stops there for the whole run.
             // An interval shoot is the least forgiving of the three — a hunt
             // three frames in is baked into the finished timelapse for good.
-            self.lockFocusForRun(deviceChanged: false)
+            self.lockFocusForRun(deviceChanged: self.videoDevice !== deviceBeforePin)
             self.installRunThermalGuard()
             // Wait for AE/AWB to converge before the first shutter: the timer
             // fires at .now() so frame 0 is otherwise shot with whatever
@@ -6883,7 +7190,7 @@ final class CameraController: NSObject, ObservableObject {
                 #if os(iOS)
                 settings.suppressShutterSound(for: self.photoOutput)
                 #endif
-                if let problem = PhotoRequestPreflight.connectionProblem(of: self.photoOutput) {
+                if let problem = PhotoRequestPreflight.connectionProblem(of: self.photoOutput, device: self.videoDevice) {
                     self.refuseIntervalStill(problem)
                     return
                 }
@@ -6910,13 +7217,73 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// sessionQueue-confined. Whether `output`'s video connection is active
+    /// and enabled within `timeout` — a format or an input change settles in
+    /// the session's own time, and a still or a take needs exactly this.
+    private func awaitActiveConnection(_ output: AVCaptureOutput, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let connection = output.connection(with: .video), connection.isActive, connection.isEnabled {
+                return true
+            }
+            if Date() >= deadline { return false }
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+    }
+
+    /// sessionQueue-confined, before a Photo or Interval run's first still.
+    /// A format can list the photo output as supported and still leave its
+    /// connection inactive (`FormatOutputLedger`); asked here, the run steps
+    /// down to the lens's next stills size rather than refusing every still.
+    /// If the connection comes up there, the refusal is the format's own —
+    /// learned, alarmed once, and the menus stop offering it. If it does not,
+    /// the format is not to blame and nothing is learned; the tick's own check
+    /// refuses the stills, as before.
+    private func ensureStillsConnection() {
+        guard let device = videoDevice, photoAspectPreviousPreset == nil,
+              !awaitActiveConnection(photoOutput, timeout: 1.5) else { return }
+        var dark = [device.activeFormat]
+        for _ in 0..<2 {
+            let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+            let size = CaptureResolution(width: dims.width, height: dims.height)
+            guard let fallback = stillsFallback(on: device, for: size) else { break }
+            LLog("capture: the photo output's connection stayed inactive on \(device.localizedName) at"
+                 + " \(size.width)×\(size.height) — trying \(fallback.width)×\(fallback.height)")
+            let wasStills = stillsCaptureActive
+            stillsCaptureActive = true
+            _ = applyCaptureFormat(resolution: fallback, fps: selectedFrameRate)
+            stillsCaptureActive = wasStills
+            if awaitActiveConnection(photoOutput, timeout: 1.5) {
+                for format in dark {
+                    FormatOutputLedger.record(format, on: device, output: AVCapturePhotoOutput.self)
+                }
+                stillsResolutionInEffect = fallback
+                formatRefusalLearnedThisRun = true
+                let sizes = dark.map { formatLabel($0) }.joined(separator: ", ")
+                captureAlarm("format", "\(sizes) on \(device.localizedName) left the photo output's connection"
+                             + " inactive though the format lists it as supported — this run shoots"
+                             + " \(fallback.width)×\(fallback.height), and the menus stop offering \(sizes)"
+                             + " on this phone and OS", ["camera": device.localizedName, "sizes": sizes])
+                return
+            }
+            dark.append(device.activeFormat)
+        }
+        LLog("capture: the photo output's connection stayed inactive on \(device.localizedName) through"
+             + " \(dark.count) format(s) — not a format's doing, nothing learned")
+    }
+
     /// sessionQueue-confined. A still run shoots at the size the menu shows,
     /// whatever the screen's history: the session can be sitting on the
     /// 1920×1080 it configures with, or on whatever a pinned Holy Grail or
     /// Ladder run left behind — the 18 Pro did both for a week
     /// (docs/fieldtests/2026-09-26-18pro-crash-triage.md). Applied before the
     /// focus lock and the exposure settle, which then work on the real format.
-    private func assertStillsFormat() {
+    ///
+    /// `lensArrived`: the run's lens pin has just swapped the input. The size
+    /// alone cannot say whether the lens is ready then — the zoom and the
+    /// photo size belong to the device that left — so the format is applied
+    /// whatever size the new lens came up on.
+    private func assertStillsFormat(lensArrived: Bool = false) {
         guard let device = videoDevice, photoAspectPreviousPreset == nil else { return }
         #if DEBUG
         if injectStillsFaultIfAsked(on: device) { return }
@@ -6926,9 +7293,14 @@ final class CameraController: NSObject, ObservableObject {
             ? chosen
             : (stillsFallback(on: device, for: chosen) ?? chosen)
         let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
-        guard dims.width != target.width || dims.height != target.height else { return }
-        LLog("capture: the camera is on \(dims.width)×\(dims.height), not \(target.width)×\(target.height)"
-             + " — applying it before the first still")
+        if lensArrived {
+            LLog("capture: \(device.localizedName) joined on \(dims.width)×\(dims.height)"
+                 + " — applying \(target.width)×\(target.height) and the stop's zoom before the first still")
+        } else {
+            guard dims.width != target.width || dims.height != target.height else { return }
+            LLog("capture: the camera is on \(dims.width)×\(dims.height), not \(target.width)×\(target.height)"
+                 + " — applying it before the first still")
+        }
         let wasStills = stillsCaptureActive
         stillsCaptureActive = true
         _ = applyCaptureFormat(resolution: chosen, fps: selectedFrameRate)
@@ -7050,6 +7422,21 @@ final class CameraController: NSObject, ObservableObject {
         self.removeRunThermalGuard()
         let wasHolyGrail = self.holyGrailActive
         self.endHolyGrailIfActive()
+        #if os(iOS)
+        // The run's one lens is given back (or the combined camera's switching
+        // unlocked) once its last still is in — the blend path's order.
+        self.restoreConstituentSwitchingAfterRun()
+        if self.stillsRunHoldsLensPin {
+            self.stillsRunHoldsLensPin = false
+            self.releaseSequenceLensPin()
+            self.publishFormat()
+        }
+        #endif
+        if self.formatRefusalLearnedThisRun {
+            self.formatRefusalLearnedThisRun = false
+            self.refreshCaptureOptions()
+            self.publishFormat()
+        }
         self.releaseRunFocusLock()
         // Closed before the finish handler runs: registration copies the
         // sidecar from beside the frames, and it must be complete by then.
@@ -9942,20 +10329,26 @@ final class CameraController: NSObject, ObservableObject {
             // a line, when the lens cannot shoot the run's format — the run
             // then stays on the optics device and the seed's refusal is
             // reported, not fatal.
+            //
+            // Every blend run takes the pin now, ramped or not (Steven,
+            // 2026-09-27: one lens per shoot, even in low light — and a size
+            // only the stop's lens has must be shot on it). A plain blend used
+            // to stay on the combined camera with its switching locked to
+            // whichever lens was active at the press, which in dim light at a
+            // telephoto stop can be the main camera cropped; that lock is now
+            // only the fallback for a lens that declines (below, and
+            // `lockConstituentSwitchingForRun`). Asked by the stills rules.
             let deviceBeforePin = self.videoDevice
-            if self.holyGrailRequestedForRun {
-                self.pinLensForSequence(
-                    configurations: [(self.selectedResolution, self.selectedFrameRate)])
-                if self.videoDevice !== deviceBeforePin {
-                    // Adding an input re-applies the session preset; the run's
-                    // pinned format (and the pin's zoom, via the re-assert) go
-                    // back on the lens that arrived.
-                    _ = self.applyCaptureFormat(
-                        resolution: self.selectedResolution, fps: self.selectedFrameRate)
-                    self.rampRunHoldsLensPin = true
-                    LLog("optics: ramp run on \(self.videoDevice?.localizedName ?? "?")"
-                         + " — a virtual device refuses a locked custom exposure on iOS 27")
-                }
+            let blendResolution = self.stillsResolutionInEffect ?? self.selectedResolution
+            self.pinLensForSequence(
+                configurations: [(blendResolution, self.selectedFrameRate)], stills: true)
+            if self.videoDevice !== deviceBeforePin {
+                // Adding an input re-applies the session preset; the run's
+                // pinned format (and the pin's zoom, via the re-assert) go
+                // back on the lens that arrived.
+                _ = self.applyCaptureFormat(resolution: blendResolution, fps: self.selectedFrameRate)
+                self.rampRunHoldsLensPin = true
+                LLog("optics: blend run on \(self.videoDevice?.localizedName ?? "?") — one lens for the whole shoot")
             }
             #endif
             // Focus as the user framed it, before this path's session

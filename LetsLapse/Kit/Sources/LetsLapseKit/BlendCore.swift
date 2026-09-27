@@ -160,12 +160,100 @@ public final class BlendCore: @unchecked Sendable {
             ? .rgba16Float
             : (srgb ? .bgra8Unorm_srgb : .bgra8Unorm)
         var cvTexture: CVMetalTexture?
-        let status = CVMetalTextureCacheCreateTextureFromImage(
+        var status = CVMetalTextureCacheCreateTextureFromImage(
             kCFAllocatorDefault, textureCache, pixelBuffer, nil, format, width, height, 0, &cvTexture)
+        if status != kCVReturnSuccess {
+            // Handed a buffer Metal cannot wrap — -6684 on the iPhone 18 Pro's
+            // 4224×3024, -6660 for a plain-memory buffer on a Mac: the code
+            // varies, the cure does not. Wrap a Metal-compatible copy, once.
+            let copy = try metalCompatibleCopy(of: pixelBuffer)
+            status = CVMetalTextureCacheCreateTextureFromImage(
+                kCFAllocatorDefault, textureCache, copy, nil, format, width, height, 0, &cvTexture)
+        }
         guard status == kCVReturnSuccess, let cvTexture, let texture = CVMetalTextureGetTexture(cvTexture) else {
             throw LapseError.textureCreationFailed("CVPixelBuffer wrap failed (status \(status))")
         }
         return (texture, cvTexture)
+    }
+
+    // MARK: Buffers Metal cannot wrap
+
+    /// A copy of `source` that Metal can wrap: same size, same pixel format,
+    /// IOSurface-backed and Metal-compatible, from a pool.
+    ///
+    /// Some capture formats hand over frames Metal refuses
+    /// (kCVReturnPixelBufferNotMetalCompatible, -6684) even when the output
+    /// asked for Metal compatibility — every frame of the iPhone 18 Pro's
+    /// 4224×3024 on a pinned lens (2026-09-26), which left JPEG blend runs
+    /// saving nothing with no error shown. One copy per frame costs a memcpy;
+    /// losing every frame costs the shoot. Nothing here knows a device or a
+    /// format: it answers the buffer in hand.
+    func metalCompatibleCopy(of source: CVPixelBuffer) throws -> CVPixelBuffer {
+        let width = CVPixelBufferGetWidth(source)
+        let height = CVPixelBufferGetHeight(source)
+        let format = CVPixelBufferGetPixelFormatType(source)
+        let pool = try copyPool(width: width, height: height, format: format)
+        var made: CVPixelBuffer?
+        guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &made) == kCVReturnSuccess,
+              let copy = made else {
+            throw LapseError.textureCreationFailed("no Metal-compatible buffer for a \(width)×\(height) copy")
+        }
+        CVPixelBufferLockBaseAddress(source, .readOnly)
+        CVPixelBufferLockBaseAddress(copy, [])
+        defer {
+            CVPixelBufferUnlockBaseAddress(copy, [])
+            CVPixelBufferUnlockBaseAddress(source, .readOnly)
+        }
+        func copyRows(_ from: UnsafeMutableRawPointer?, _ fromStride: Int,
+                      _ to: UnsafeMutableRawPointer?, _ toStride: Int, rows: Int) {
+            guard let from, let to else { return }
+            let bytes = min(fromStride, toStride)
+            for row in 0..<rows {
+                memcpy(to + row * toStride, from + row * fromStride, bytes)
+            }
+        }
+        if CVPixelBufferIsPlanar(source) {
+            for plane in 0..<CVPixelBufferGetPlaneCount(source) {
+                copyRows(CVPixelBufferGetBaseAddressOfPlane(source, plane),
+                         CVPixelBufferGetBytesPerRowOfPlane(source, plane),
+                         CVPixelBufferGetBaseAddressOfPlane(copy, plane),
+                         CVPixelBufferGetBytesPerRowOfPlane(copy, plane),
+                         rows: CVPixelBufferGetHeightOfPlane(source, plane))
+            }
+        } else {
+            copyRows(CVPixelBufferGetBaseAddress(source), CVPixelBufferGetBytesPerRow(source),
+                     CVPixelBufferGetBaseAddress(copy), CVPixelBufferGetBytesPerRow(copy), rows: height)
+        }
+        CVBufferPropagateAttachments(source, copy)
+        return copy
+    }
+
+    private let copyPoolLock = NSLock()
+    private var copyPoolKey: (width: Int, height: Int, format: OSType)?
+    private var copyPoolStorage: CVPixelBufferPool?
+
+    private func copyPool(width: Int, height: Int, format: OSType) throws -> CVPixelBufferPool {
+        copyPoolLock.lock()
+        defer { copyPoolLock.unlock() }
+        if let pool = copyPoolStorage, let key = copyPoolKey,
+           key.width == width, key.height == height, key.format == format {
+            return pool
+        }
+        let attributes: [String: Any] = [
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height,
+            kCVPixelBufferPixelFormatTypeKey as String: format,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+        ]
+        var pool: CVPixelBufferPool?
+        guard CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attributes as CFDictionary, &pool)
+                == kCVReturnSuccess, let pool else {
+            throw LapseError.textureCreationFailed("no Metal-compatible pool for \(width)×\(height)")
+        }
+        copyPoolStorage = pool
+        copyPoolKey = (width, height, format)
+        return pool
     }
 
     /// Mirror of the Metal `YUVParams` struct — layouts must match.
@@ -243,8 +331,13 @@ public final class BlendCore: @unchecked Sendable {
     /// Wraps a biplanar buffer's two planes as Metal textures. Both holders
     /// must stay alive until the GPU work reading them has completed.
     func makeYUVTextures(
-        from pixelBuffer: CVPixelBuffer
+        from original: CVPixelBuffer
     ) throws -> (luma: MTLTexture, chroma: MTLTexture, holders: [CVMetalTexture]) {
+        // A frame without an IOSurface cannot be wrapped plane by plane
+        // (-6684); copy it once into one that can (`metalCompatibleCopy`).
+        let pixelBuffer = CVPixelBufferGetIOSurface(original) == nil
+            ? try metalCompatibleCopy(of: original)
+            : original
         func plane(_ index: Int, _ format: MTLPixelFormat) throws -> (MTLTexture, CVMetalTexture) {
             let width = CVPixelBufferGetWidthOfPlane(pixelBuffer, index)
             let height = CVPixelBufferGetHeightOfPlane(pixelBuffer, index)

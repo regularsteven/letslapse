@@ -19,16 +19,25 @@ import LetsLapseKit
 /// says which check it was.
 enum PhotoRequestPreflight {
     /// *"No active and enabled video connection"* — nothing in the request can
-    /// fix it, so the caller skips the shot.
-    static func connectionProblem(of output: AVCapturePhotoOutput) -> String? {
+    /// fix it, so the caller skips the shot, saying which camera and format it
+    /// was on and whether that format says it cannot feed a photo output.
+    static func connectionProblem(of output: AVCapturePhotoOutput, device: AVCaptureDevice?) -> String? {
         guard let connection = output.connection(with: .video) else {
-            return "the photo output has no video connection"
+            return "the photo output has no video connection" + onFormat(device)
         }
         guard connection.isActive, connection.isEnabled else {
             return "the photo output's video connection is not active and enabled"
-                + " (active \(connection.isActive), enabled \(connection.isEnabled))"
+                + " (active \(connection.isActive), enabled \(connection.isEnabled))" + onFormat(device)
         }
         return nil
+    }
+
+    private static func onFormat(_ device: AVCaptureDevice?) -> String {
+        guard let device else { return "" }
+        let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+        let refuses = !CameraController.format(device.activeFormat, on: device, feeds: [AVCapturePhotoOutput.self])
+        return " — \(device.localizedName) on \(dims.width)×\(dims.height)"
+            + (refuses ? ", a format that cannot feed a photo output" : "")
     }
 
     /// The size to put in `maxPhotoDimensions` (nil: leave it unset), with a
