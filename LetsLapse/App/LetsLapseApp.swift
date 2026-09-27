@@ -835,6 +835,9 @@ struct ContentView: View {
         // way libjxl is timed on a device. `LL_DNGARCHIVE_MP` (megapixels,
         // default keep), `LL_DNGARCHIVE_DISTANCE` (default 0.5, 0 = lossless),
         // `LL_DNGARCHIVE_LIMIT` (first N frames) shape the run.
+        // `LL_DNGARCHIVE_FORMAT=heic|jpeg` runs Clone and compress's rendered
+        // outputs instead (`LL_DNGARCHIVE_QUALITY`, default 0.9) — on any
+        // stills project, raw or not.
         if let hook = environment["LL_DNGARCHIVE"], hook != "0" {
             // stdout is a file when the Mac binary is launched from a shell
             // with a redirect, and then fully buffered — the last frames and
@@ -844,19 +847,24 @@ struct ContentView: View {
             let distance = environment["LL_DNGARCHIVE_DISTANCE"].flatMap(Float.init) ?? 0.5
             let limit = environment["LL_DNGARCHIVE_LIMIT"].flatMap(Int.init)
             let inFlight = environment["LL_DNGARCHIVE_INFLIGHT"].flatMap(Int.init) ?? 2
+            let stillFormat = environment["LL_DNGARCHIVE_FORMAT"].flatMap(DNGArchive.StillsTranscoder.Format.init(rawValue:))
+            let quality = environment["LL_DNGARCHIVE_QUALITY"].flatMap(Double.init) ?? 0.9
             Task { @MainActor in
+                let eligible: (AppModel.CaptureProject) -> Bool = { stillFormat == nil ? model.canArchiveAsDNG($0) : model.canCloneAndCompress($0) }
                 let capture = hook == "latest"
-                    ? model.newestCapture(where: { model.canArchiveAsDNG($0) })
-                    : model.newestCapture(where: { $0.id.uuidString.lowercased().hasPrefix(hook.lowercased()) && model.canArchiveAsDNG($0) })
+                    ? model.newestCapture(where: { eligible($0) })
+                    : model.newestCapture(where: { $0.id.uuidString.lowercased().hasPrefix(hook.lowercased()) && eligible($0) })
                 guard let capture else {
                     print("LL_DNGARCHIVE: no archivable project matches \(hook)")
                     return
                 }
-                let strategy = DNGArchive.Strategy.archive(megapixels: megapixels, distance: distance)
-                print("LL_DNGARCHIVE: \(capture.displayTitle) [\(capture.id.uuidString)] → \(strategy.label)\(limit.map { " · first \($0) frames" } ?? "") · \(inFlight) in flight")
+                let output: AppModel.CloneCompressOutput = stillFormat.map { .still($0, megapixels: megapixels, quality: quality) }
+                    ?? .dng(DNGArchive.Strategy.archive(megapixels: megapixels, distance: distance))
+                print("LL_DNGARCHIVE: \(capture.displayTitle) [\(capture.id.uuidString)] → \(output.label)\(limit.map { " · first \($0) frames" } ?? "") · \(inFlight) in flight")
                 do {
-                    let clone = try await model.duplicateAsDNGArchive(
-                        capture, strategy: strategy, nameSuffix: "DNG hook", limit: limit, inFlight: inFlight,
+                    let clone = try await model.cloneAndCompress(
+                        capture, output: output, nameSuffix: stillFormat == nil ? "DNG hook" : "\(stillFormat!.label) hook",
+                        limit: limit, inFlight: inFlight,
                         progress: { snapshot in
                             if let last = snapshot.lastReport {
                                 let stages = last.stages.map { String(format: "%@ %.0f", $0.0, $0.1) }.joined(separator: " ")

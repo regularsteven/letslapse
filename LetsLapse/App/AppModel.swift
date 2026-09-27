@@ -8376,11 +8376,43 @@ final class AppModel: ObservableObject {
     /// are the burst behind its one picture, so archiving them would clone the
     /// stacking material rather than the photo anybody can see.
     func canArchiveAsDNG(_ capture: CaptureProject) -> Bool {
+        canCloneAndCompress(capture) && sourceFrameURLs(for: capture).allSatisfy { ImportedStills.isRaw($0) }
+    }
+
+    /// Clone and compress (2026-09-27): the projects any of its three outputs
+    /// can take — anything made of stills, raw or not, with the same one
+    /// exception as the DNG archive. Which outputs a project gets is the
+    /// sheet's: Compressed DNG needs raw frames (`canArchiveAsDNG`); HEIC and
+    /// JPEG take any still.
+    func canCloneAndCompress(_ capture: CaptureProject) -> Bool {
         guard capture.kind == .photos else { return false }
         let frames = sourceFrameURLs(for: capture)
-        guard !frames.isEmpty, frames.allSatisfy({ ImportedStills.isRaw($0) }) else { return false }
+        guard !frames.isEmpty, frames.allSatisfy({ ImportedStills.isStill($0) }) else { return false }
         if capture.isPhotoCapture, frames.count > 1 { return false }
         return true
+    }
+
+    /// What Clone and compress writes each frame as.
+    enum CloneCompressOutput: Sendable {
+        /// The DNG archive (docs/dng-archive-spike/): still raw, smaller.
+        case dng(DNGArchive.Strategy)
+        /// Rendered, optionally resized, at an ImageIO quality (0…1).
+        case still(DNGArchive.StillsTranscoder.Format, megapixels: Double?, quality: Double)
+
+        var fileExtension: String {
+            switch self {
+            case .dng: return "dng"
+            case .still(let format, _, _): return format.fileExtension
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .dng(let strategy): return strategy.label
+            case .still(let format, let megapixels, let quality):
+                return DNGArchive.StillsTranscoder.label(format: format, megapixels: megapixels, quality: quality)
+            }
+        }
     }
 
     /// Creates a new project beside `capture` whose frames are DNG archives of
@@ -8401,9 +8433,43 @@ final class AppModel: ObservableObject {
         shouldContinue: @escaping @Sendable () -> Bool = { true },
         progress: @escaping @MainActor (DNGArchive.Converter.SequenceProgress) -> Void = { _ in }
     ) async throws -> CaptureProject {
-        guard canArchiveAsDNG(capture) else {
-            throw DNGArchive.ConversionError.unsupported("only an interval shoot of raw frames can be archived as DNG")
+        try await cloneAndCompress(capture, output: .dng(strategy), nameSuffix: nameSuffix, limit: limit,
+                                   inFlight: inFlight, shouldContinue: shouldContinue, progress: progress)
+    }
+
+    /// Clone and compress: `duplicateAsDNGArchive`'s clone with the frames
+    /// written as `output` — the DNG archive, or HEIC / JPEG rendered through
+    /// `DNGArchive.StillsTranscoder`. Everything else is the same run: the
+    /// staging folder, the sidecars, the re-keyed edits, the ledger (still
+    /// `dng-archive.json`, which the registry and the migrations read — it
+    /// names the format), the derived origin.
+    ///
+    /// A clone rendered from raw frames carries the parent's edits onto
+    /// processed pictures: the grade re-applies, but on a JPEG/HEIC decode
+    /// rather than the raw one it was made on, so the look can move.
+    func cloneAndCompress(
+        _ capture: CaptureProject,
+        output: CloneCompressOutput,
+        nameSuffix: String,
+        limit: Int? = nil,
+        inFlight: Int = 2,
+        shouldContinue: @escaping @Sendable () -> Bool = { true },
+        progress: @escaping @MainActor (DNGArchive.Converter.SequenceProgress) -> Void = { _ in }
+    ) async throws -> CaptureProject {
+        switch output {
+        case .dng:
+            guard canArchiveAsDNG(capture) else {
+                throw DNGArchive.ConversionError.unsupported("only a shoot of raw frames can be archived as DNG")
+            }
+        case .still(let format, _, _):
+            guard canCloneAndCompress(capture) else {
+                throw DNGArchive.ConversionError.unsupported("only a shoot of stills can be cloned and compressed")
+            }
+            guard format.isAvailable else {
+                throw DNGArchive.ConversionError.unsupported("\(format.label) cannot be written on this device")
+            }
         }
+        let outputExtension = output.fileExtension
         var inputs = sourceFrameURLs(for: capture)
         if let limit, limit > 0, limit < inputs.count { inputs = Array(inputs.prefix(limit)) }
         let originalSource = captureFolderURL(for: capture.id).appendingPathComponent("source", isDirectory: true)
@@ -8427,14 +8493,25 @@ final class AppModel: ObservableObject {
             // right for the lossless mosaic; the check is about not filling
             // the disk, not about precision.
             let inputBytes = inputs.reduce(Int64(0)) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) }
-            try Self.checkStorageHeadroom(for: max(inputBytes / 4, 50_000_000), at: projectsRootURL)
+            // A JPEG re-encoded as JPEG or HEIC at its own size shrinks far
+            // less: allow its whole size.
+            let rendersFromProcessed: Bool
+            if case .still = output { rendersFromProcessed = !inputs.allSatisfy { ImportedStills.isRaw($0) } } else { rendersFromProcessed = false }
+            try Self.checkStorageHeadroom(for: max(rendersFromProcessed ? inputBytes : inputBytes / 4, 50_000_000), at: projectsRootURL)
 
-            let converter = DNGArchive.Converter()
             let files = inputs
-            let result = await Task.detached(priority: .userInitiated) {
-                converter.convert(files: files, to: sourceFolder, strategy: strategy, inFlight: max(1, inFlight),
-                                  shouldContinue: shouldContinue) { snapshot in
+            let result = await Task.detached(priority: .userInitiated) { () -> DNGArchive.Converter.SequenceResult in
+                let report: @Sendable (DNGArchive.Converter.SequenceProgress) -> Void = { snapshot in
                     Task { @MainActor in progress(snapshot) }
+                }
+                switch output {
+                case .dng(let strategy):
+                    return DNGArchive.Converter().convert(files: files, to: sourceFolder, strategy: strategy, inFlight: max(1, inFlight),
+                                                          shouldContinue: shouldContinue, progress: report)
+                case .still(let format, let megapixels, let quality):
+                    return DNGArchive.StillsTranscoder().convert(files: files, to: sourceFolder, format: format, megapixels: megapixels,
+                                                                 quality: quality, inFlight: max(1, inFlight),
+                                                                 shouldContinue: shouldContinue, progress: report)
                 }
             }.value
             guard shouldContinue() else { throw CancellationError() }
@@ -8448,9 +8525,10 @@ final class AppModel: ObservableObject {
 
             // Sidecars and the rest of the project, but not the frames and not
             // the blends. framing.json names frames; it only travels when the
-            // names survive (our own DNGs do, an ARW becomes .dng).
+            // names survive (our own DNGs do, an ARW becomes .dng, a JPEG
+            // becomes .heic).
             let frameNames = Set(inputs.map(\.lastPathComponent))
-            let namesSurvive = inputs.allSatisfy { $0.pathExtension.lowercased() == "dng" }
+            let namesSurvive = inputs.allSatisfy { $0.pathExtension.lowercased() == outputExtension }
             for item in (try? FileManager.default.contentsOfDirectory(at: originalSource, includingPropertiesForKeys: nil)) ?? [] {
                 guard !frameNames.contains(item.lastPathComponent), !ImportedStills.isStill(item) else { continue }
                 if item.lastPathComponent == FramingReview.fileName, !namesSurvive { continue }
@@ -8474,7 +8552,7 @@ final class AppModel: ObservableObject {
             var cloneRecords = AssetRecords()
             for input in inputs {
                 let oldName = "source/\(input.lastPathComponent)"
-                let newName = "source/\(input.deletingPathExtension().lastPathComponent).dng"
+                let newName = "source/\(input.deletingPathExtension().lastPathComponent).\(outputExtension)"
                 guard let record = sourceRecords[oldName], record.edited != nil else { continue }
                 var moved = AssetRecord(name: newName)
                 moved.edited = record.edited
@@ -8488,7 +8566,8 @@ final class AppModel: ObservableObject {
             // The record of what was done, beside the frames it describes.
             let ledger: [String: Any] = [
                 "sourceProjectID": capture.id.uuidString,
-                "strategy": strategy.label,
+                "strategy": output.label,
+                "format": outputExtension,
                 "convertedAt": ISO8601DateFormatter().string(from: Date()),
                 "frames": result.reports.count,
                 "inputBytes": result.inputBytes,
@@ -8510,7 +8589,7 @@ final class AppModel: ObservableObject {
             var clone = capture
             clone.id = id
             clone.name = "\(capture.displayTitle) · \(nameSuffix)"
-            clone.sourceFileNames = inputs.map { "source/\($0.deletingPathExtension().lastPathComponent).dng" }
+            clone.sourceFileNames = inputs.map { "source/\($0.deletingPathExtension().lastPathComponent).\(outputExtension)" }
             clone.clipEncodings = nil
             clone.importedFromID = nil
             // The archive was decoded the way the parent shows — its quarter

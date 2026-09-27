@@ -11,6 +11,27 @@ live inline.
 
 ## Open
 
+### Clone and compress — design mirrors, and a device run
+
+"Duplicate as DNG archive…" became **Clone and compress…** (2026-09-27, code
+first by Steven's call): the project ⋯ menu entry on every platform, now
+offered for any stills project (raw or not), and a sheet with a **Format**
+picker — Compressed DNG (raw frames only, unchanged), HEIC (where the device
+has the encoder), JPEG — sharing the Size picker, with High / Compact quality
+for the rendered two. Owed:
+- **Mirrors.** No SVG draws the menu item or the sheet; draw
+  `project-detail` with the ⋯ menu open and the sheet in its three formats
+  (iOS + Mac). Rename the mentions: `design/iOS/INDEX.md` (the project-detail
+  rows, ~l.79 and ~l.596), `design/macOS/INDEX.md` (~l.48), and the `<desc>`
+  of `iOS/project-detail.interval.preview.portrait.svg`.
+- **A device run.** Verified on the Mac only (`LL_DNGARCHIVE=latest
+  LL_DNGARCHIVE_FORMAT=heic|jpeg [LL_DNGARCHIVE_MP=6]`): raw → HEIC, HEIC →
+  JPEG resized, JPEG → HEIC resized, EXIF/GPS carried. On a phone a 48 MP raw
+  renders one frame at a time (memory); time it on the 18 Pro.
+- **The look from raw.** The parent's edits re-apply to rendered pictures,
+  where they were made on the raw decode — a WB or exposure grade can shift.
+  Decide whether a rendered clone should bake the grade instead.
+
 ### Performance baseline — measure before and after every perf fix
 
 Performance baseline: run docs/performance-baseline-plan.md before and after each perf fix — iPhone 18 Pro, USB, Release build.

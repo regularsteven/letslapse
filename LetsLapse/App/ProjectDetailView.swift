@@ -468,12 +468,12 @@ struct ProjectDetailView: View {
                         Label("Share project", systemImage: "square.and.arrow.up")
                     }
                     .disabled(isExportingArchive)
-                    if model.canArchiveAsDNG(capture) {
+                    if model.canCloneAndCompress(capture) {
                         Button {
-                            // The archive is written from the original DNGs.
-                            ask(.frames, "A DNG archive", for: capture) { showingDNGArchive = true }
+                            // The clone is written from the original frames.
+                            ask(.frames, "Clone and compress", for: capture) { showingDNGArchive = true }
                         } label: {
-                            Label("Duplicate as DNG archive…", systemImage: "doc.zipper")
+                            Label("Clone and compress…", systemImage: "doc.zipper")
                         }
                         .disabled(dngArchive.isRunning)
                     }

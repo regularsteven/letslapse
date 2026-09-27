@@ -1,16 +1,55 @@
 import LetsLapseKit
 import SwiftUI
 
-// Duplicating an interval project as a DNG archive: the same shoot, every
-// frame converted to a smaller DNG (camera-native, lossy JPEG XL, optionally
-// resampled) the way Adobe DNG Converter would make it, with the grade, the
-// sidecars, the notes and the overlays carried across. The conversion itself
-// is the Kit's `DNGArchive.Converter` (docs/dng-archive-spike/); this file is
-// the options, the job and the sheet.
+// Clone and compress (until 2026-09-27 "Duplicate as DNG archive…"): the same
+// shoot as a new project, every frame converted — to a smaller DNG
+// (camera-native, lossy JPEG XL, optionally resampled, the way Adobe DNG
+// Converter would make it), or rendered to HEIC or JPEG, optionally resized —
+// with the grade, the sidecars, the notes and the overlays carried across. The
+// conversions are the Kit's `DNGArchive.Converter` (docs/dng-archive-spike/)
+// and `DNGArchive.StillsTranscoder`; this file is the options, the job and the
+// sheet. The type names keep the DNG archive's.
 
-/// What the sheet lets you choose. Defaults are Adobe's: the source size,
-/// distance 0.5.
+/// What the sheet lets you choose. Defaults: Compressed DNG where the frames
+/// are raw (Adobe's: the source size, distance 0.5), else HEIC where this
+/// device writes it, else JPEG.
 struct DNGArchiveOptions: Equatable {
+    /// What each frame becomes.
+    enum Format: String, CaseIterable, Identifiable {
+        case dng, heic, jpeg
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .dng: return "Compressed DNG"
+            case .heic: return "HEIC"
+            case .jpeg: return "JPEG"
+            }
+        }
+        var stillFormat: DNGArchive.StillsTranscoder.Format? {
+            switch self {
+            case .dng: return nil
+            case .heic: return .heic
+            case .jpeg: return .jpeg
+            }
+        }
+    }
+
+    /// HEIC and JPEG's quality — ImageIO's lossy compression quality.
+    enum StillQuality: String, CaseIterable, Identifiable {
+        case high, compact
+        var id: String { rawValue }
+        var title: String { self == .high ? "High" : "Compact" }
+        var value: Double { self == .high ? 0.9 : 0.75 }
+        func detail(for format: Format) -> String {
+            switch (format, self) {
+            case (.heic, .high): return "Quality 0.9 — about half the size of a JPEG at the same quality."
+            case (.heic, .compact): return "Quality 0.75 — smaller again, with some softening in fine detail."
+            case (_, .high): return "Quality 0.9 — opens anywhere."
+            case (_, .compact): return "Quality 0.75 — smaller, with visible artefacts at 1:1."
+            }
+        }
+    }
+
     enum Size: String, CaseIterable, Identifiable {
         case keep, mp12, mp10, mp8, mp6
         var id: String { rawValue }
@@ -69,8 +108,19 @@ struct DNGArchiveOptions: Equatable {
         }
     }
 
+    var format: Format = .dng
     var size: Size = .keep
     var quality: Quality = .standard
+    var stillQuality: StillQuality = .high
+
+    /// Rendered formats are raw no longer: a frame from raw is decoded the
+    /// way the app shows it, then written processed.
+    var output: AppModel.CloneCompressOutput {
+        if let still = format.stillFormat {
+            return .still(still, megapixels: size.megapixels, quality: stillQuality.value)
+        }
+        return .dng(strategy)
+    }
 
     var strategy: DNGArchive.Strategy {
         switch quality {
@@ -83,6 +133,12 @@ struct DNGArchiveOptions: Equatable {
 
     /// What the new project is called, after the original's title.
     var nameSuffix: String {
+        if let still = format.stillFormat {
+            var parts = [still.label]
+            if let megapixels = size.megapixels { parts.append("\(Int(megapixels)) MP") }
+            if stillQuality == .compact { parts.append("compact") }
+            return parts.joined(separator: " · ")
+        }
         var parts = ["DNG"]
         if quality != .losslessMosaic, let megapixels = size.megapixels { parts.append("\(Int(megapixels)) MP") }
         switch quality {
@@ -120,13 +176,20 @@ final class DNGArchiveJob: ObservableObject {
         result = nil
         failure = nil
         summary = nil
-        let strategy = options.strategy
+        let output = options.output
         let suffix = options.nameSuffix
+        // A rendered frame from a 48 MP raw is a few hundred MB while it is
+        // being written: one at a time on a phone, two on a Mac.
+        #if os(iOS)
+        let inFlight = options.format == .dng ? 2 : 1
+        #else
+        let inFlight = 2
+        #endif
         task = Task { [weak self] in
             guard let self else { return }
             do {
-                let clone = try await model.duplicateAsDNGArchive(
-                    capture, strategy: strategy, nameSuffix: suffix,
+                let clone = try await model.cloneAndCompress(
+                    capture, output: output, nameSuffix: suffix, inFlight: inFlight,
                     shouldContinue: { [weak self] in
                         // Read off the main actor by the converter's workers;
                         // a plain Bool flip is what it needs.
@@ -186,12 +249,30 @@ struct DNGArchiveSheet: View {
 
     private var frameCount: Int { model.sourceFrameURLs(for: capture).count }
 
+    /// The formats this project and device can take: Compressed DNG needs raw
+    /// frames, HEIC an encoder.
+    private var formats: [DNGArchiveOptions.Format] {
+        DNGArchiveOptions.Format.allCases.filter { format in
+            switch format {
+            case .dng: return model.canArchiveAsDNG(capture)
+            case .heic, .jpeg: return format.stillFormat?.isAvailable ?? false
+            }
+        }
+    }
+
+    private var detail: String {
+        if options.format == .dng {
+            return "A new project with every frame of “\(capture.displayTitle)” converted to a smaller, still-raw DNG. The original is not touched."
+        }
+        return "A new project with every frame of “\(capture.displayTitle)” rendered as \(options.format.title). The edits carry across; from raw frames they re-apply to the processed pictures, so the look can shift. The original is not touched."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Duplicate as DNG archive")
+                Text("Clone and compress")
                     .font(.title2.weight(.semibold))
-                Text("A new project with every frame of “\(capture.displayTitle)” converted to a smaller, still-raw DNG. The original is not touched.")
+                Text(detail)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -227,7 +308,7 @@ struct DNGArchiveSheet: View {
                     }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .disabled(frameCount < 2)
+                    .disabled(frameCount == 0 || !formats.contains(options.format))
                 }
             }
         }
@@ -236,6 +317,9 @@ struct DNGArchiveSheet: View {
         .frame(minWidth: 460, idealWidth: 500)
         #endif
         .interactiveDismissDisabled(job.isRunning)
+        .onAppear {
+            if !formats.contains(options.format), let first = formats.first { options.format = first }
+        }
     }
 
     private var optionsForm: some View {
@@ -244,21 +328,39 @@ struct DNGArchiveSheet: View {
                 Text("\(frameCount)")
                     .foregroundStyle(.secondary)
             }
+            Picker("Format", selection: $options.format) {
+                ForEach(formats) { format in
+                    Text(format.title).tag(format)
+                }
+            }
+            .pickerStyle(.segmented)
             Picker("Size", selection: $options.size) {
                 ForEach(DNGArchiveOptions.Size.allCases) { size in
                     Text(size.label(sourceMegapixels: sourceMegapixels)).tag(size)
                 }
             }
-            .disabled(options.quality == .losslessMosaic)
-            Picker("Quality", selection: $options.quality) {
-                ForEach(DNGArchiveOptions.Quality.allCases) { quality in
-                    Text(quality.title).tag(quality)
+            .disabled(options.format == .dng && options.quality == .losslessMosaic)
+            if options.format == .dng {
+                Picker("Quality", selection: $options.quality) {
+                    ForEach(DNGArchiveOptions.Quality.allCases) { quality in
+                        Text(quality.title).tag(quality)
+                    }
                 }
+                Text(options.quality.detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Picker("Quality", selection: $options.stillQuality) {
+                    ForEach(DNGArchiveOptions.StillQuality.allCases) { quality in
+                        Text(quality.title).tag(quality)
+                    }
+                }
+                Text(options.stillQuality.detail(for: options.format))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text(options.quality.detail)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             Text("New project: “\(capture.displayTitle) · \(options.nameSuffix)”")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
