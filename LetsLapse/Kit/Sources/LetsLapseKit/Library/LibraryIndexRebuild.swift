@@ -68,6 +68,11 @@ public struct LibraryIndexRebuild {
         public var onlyInIndex: [String] = []
         /// Records in documents that the index does not list.
         public var onlyInDocuments: [String] = []
+        /// `<blend id> in <folder>, <folder>` for a blend id that more than
+        /// one document lists (a keep-both fork and its origin, 2026-09-27):
+        /// two entries the rebuilt manifest carries, one record this diff
+        /// can key — named so the collapse is never silent.
+        public var blendsInSeveralDocuments: [String] = []
         public var differences: [Difference] = []
         /// True when `Collections/collections.json` exists and was compared.
         public var collectionsDocumentRead = false
@@ -111,15 +116,19 @@ public struct LibraryIndexRebuild {
         let documents = readDocuments(in: projects, report: &report)
         var rebuiltCaptures: [String: [String: Any]] = [:]
         var rebuiltBlends: [String: [String: Any]] = [:]
+        var blendHolders: [String: [String]] = [:]
         for document in documents {
             rebuiltCaptures[document.captureID] = document.capture
             for blend in document.blends {
                 guard let id = recordID(blend) else { continue }
                 rebuiltBlends[id] = blend
+                blendHolders[id, default: []].append(document.inTrash ? ".trash/\(document.folder)" : document.folder)
             }
         }
         report.rebuiltCaptures = rebuiltCaptures.count
         report.rebuiltBlends = rebuiltBlends.count
+        report.blendsInSeveralDocuments = blendHolders.filter { $0.value.count > 1 }.keys.sorted()
+            .map { "\($0) in \(blendHolders[$0]!.joined(separator: ", "))" }
 
         // 3. The diff, in canonical form.
         guard report.indexReadable else { return report }
@@ -459,6 +468,9 @@ public struct LibraryIndexRebuild {
         lines.append("diff (index vs documents, canonical form)")
         lines.append("  only in the index: \(r.onlyInIndex.count)" + list(r.onlyInIndex))
         lines.append("  only in the documents: \(r.onlyInDocuments.count)" + list(r.onlyInDocuments))
+        if !r.blendsInSeveralDocuments.isEmpty {
+            lines.append("  blends listed by more than one document: \(r.blendsInSeveralDocuments.count)" + list(r.blendsInSeveralDocuments))
+        }
         if r.collectionsDocumentRead {
             lines.append("  collections: \(r.indexCollections) in the index · \(r.documentCollections) in Collections/collections.json")
         }
@@ -485,6 +497,7 @@ public struct LibraryIndexRebuild {
             "diff": [
                 "onlyInIndex": r.onlyInIndex,
                 "onlyInDocuments": r.onlyInDocuments,
+                "blendsInSeveralDocuments": r.blendsInSeveralDocuments,
                 "differences": r.differences.map { ["record": $0.record, "path": $0.path, "index": $0.index, "document": $0.document] },
                 "identical": r.identical,
             ] as [String: Any],

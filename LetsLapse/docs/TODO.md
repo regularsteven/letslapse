@@ -36,16 +36,49 @@ for the rendered two. Owed:
 
 Performance baseline: run docs/performance-baseline-plan.md before and after each perf fix — iPhone 18 Pro, USB, Release build.
 
-### Library export rebuilt every launch: 6 blends not in the index
+### Library export rebuilt every launch: 6 blends not in the index — fixed in code, device check owed
 
-Every launch on the 18 Pro (2026-09-27) logs *library.json lists 1325
+Every launch on the 18 Pro (2026-09-27) logged *library.json lists 1325
 captures and 298 blends, the index 1325 and 292 — the export will be
-regenerated*, rebuilds the export in 1.2–1.5 s on the persister's serial
-queue, and the next launch finds the same gap — the rebuild writes 298 again.
-Find the six blends the documents hold and the index does not (tombstoned?
-parent missing? a kind the index skips?), fix whichever side is wrong, and
-check the line is gone from launch. Measure with
-`performance-baseline-plan.md` scenario A.
+regenerated*, rebuilt the export in 1.2–1.5 s on the persister's serial
+queue, and the next launch found the same gap.
+
+**Found (2026-09-27, from the 16 Pro's export and the code):** the six are
+the blends of the library's keep-both forks — on the 16 Pro the 13
+`derivedFromOriginID` projects hold exactly 6 blends between them (D4DB4D8A:
+5, BA68A5A2: 1), and `forkProjectForKeepBoth` carried the origin's blend
+records into the fork verbatim, ids included, while the server's version of
+the origin came back with the same ids. The index keyed `blends` by `id`
+alone with `INSERT OR REPLACE`, so a blend two documents named had one row
+that moved to whichever document was written last, and the other's
+`DELETE … WHERE project_id` (a purge, a re-pull, a fork's own remove) then
+took it away for good. The documents were never wrong; the walk saw every
+document current by its date; the export counted every document's entries
+(296 distinct ids, no duplicates left on the 16 Pro) and disagreed with the
+rows at every launch.
+
+**Changed:** `LibraryIndex` schema 4 — a blend row per document entry
+(`PRIMARY KEY (project_id, id)`), `recordCounts()` for the launch check
+(rows on both sides, the export's `generatedBlends` being entries),
+`projectID(forBlend:)` preferring the live owner; when the counts still
+differ the persister runs `reconcileBlends` first — every document's entries
+against its rows, the difference logged blend by blend (*N blend(s) in the
+documents but not the index: …*), the documents concerned re-indexed — then
+regenerates; `lapse index --verify` and `lapse audit --rebuild-index` report
+blend entries missing/stale and blends listed by several documents; the fork
+re-keys its blends (files, posters, asset records, this device's collection
+entries follow). Tests: `LibraryIndexTests` (schema 4 section),
+`LibraryIndexRebuildTests.testABlendListedByTwoDocumentsIsNamed`.
+
+**Owed on a device:** the first launch of this build drops the v3 database
+and logs *index: rebuilt from the files — … in X s* (one-time, a few seconds
+on the phones, ~8 s on the Mac library); the **second** launch must log no
+*the export will be regenerated* / *documents will be checked* line. If it
+does, the log now names the blends — bring them here. Then
+`performance-baseline-plan.md` scenario A for the launch time. The fork's
+re-keying is untested on the two-device bench: run a keep-both conflict
+(`LL_PICPLACE_RESOLVE=both`) on throwaway projects and check the fork's
+blend rows, files under `blends/`, `posters/`, and any collection entry.
 
 ### Settings: the free-up estimate re-runs on every open
 

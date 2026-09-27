@@ -26,7 +26,8 @@ final class LibraryIndexTests: XCTestCase {
     private func writeProject(
         _ n: Int, kind: String = "photos", mode: String? = nil, name: String? = nil, created: Double, added: Double? = nil,
         modified: Double? = nil, frames: Int = 3, size: Int? = nil, tags: [String]? = nil, elements: [String]? = nil,
-        deleted: Double? = nil, blends: Int = 0, blendCreated: [Double]? = nil, captureMode: String? = nil, inTrash: Bool = false
+        deleted: Double? = nil, blends: Int = 0, blendCreated: [Double]? = nil, blendIDs: [String]? = nil,
+        captureMode: String? = nil, inTrash: Bool = false
     ) throws -> URL {
         var capture: [String: Any] = [
             "id": id(n), "kind": kind, "createdAt": ProjectDocumentFormat.documentDate(fromManifestSeconds: created),
@@ -43,7 +44,7 @@ final class LibraryIndexTests: XCTestCase {
         if let deleted { capture["deletedAt"] = ProjectDocumentFormat.documentDate(fromManifestSeconds: deleted) }
         if let captureMode { capture["captureMode"] = captureMode }
         let blendRecords: [[String: Any]] = (0..<blends).map { b in
-            ["id": String(format: "%08X-%04X-4000-8000-000000000000", n, b), "captureID": id(n), "kind": "video",
+            ["id": blendIDs?[b] ?? String(format: "%08X-%04X-4000-8000-000000000000", n, b), "captureID": id(n), "kind": "video",
              "createdAt": ProjectDocumentFormat.documentDate(fromManifestSeconds: blendCreated?[b] ?? created + Double(b)),
              "outputFileName": "blends/\(b).mp4", "summary": "\(b)", "linearLight": true, "useRamp": false,
              "rampStart": 0, "rampEnd": 0, "curve": "linear", "warp": ["bounds": [], "speeds": [], "seams": []]]
@@ -554,5 +555,132 @@ final class LibraryIndexTests: XCTestCase {
         XCTAssertNil(LibraryIndex.ftsQuery(""))
         XCTAssertEqual(LibraryIndex.ftsQuery("night bridge"), "\"night\"* AND \"bridge\"*")
         XCTAssertEqual(LibraryIndex.ftsQuery("say \"hi\", there"), "\"say\"* AND \"hi\"* AND \"there\"*")
+    }
+
+    // MARK: - Blend rows per document entry (schema 4, 2026-09-27)
+
+    private func blendID(_ n: Int, _ b: Int) -> String { String(format: "%08X-%04X-4000-8000-000000000000", n, b) }
+
+    /// The shape that lost six blends: a keep-both fork (7) carrying its
+    /// origin's (1) blend records verbatim, both documents naming the same
+    /// blend ids. With `id` alone as the key the fork's upsert moved the
+    /// rows to itself and the origin's next upsert took them back — and
+    /// whichever document was then removed took the rows with it, while
+    /// the other still listed the blends. A row per document entry keeps
+    /// both, exactly as the export lists both.
+    func testABlendNamedByTwoDocumentsIsTwoRowsAndOutlivesTheOther() throws {
+        let shared = [blendID(1, 0), blendID(1, 1)]
+        try writeProject(1, created: 100, blends: 2)
+        let fork = try writeProject(7, created: 100, blends: 2, blendIDs: shared)
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        XCTAssertEqual(try index.recordCounts().blends, 4, "two documents × two entries")
+        XCTAssertEqual(try index.counts().blends, 4)
+        XCTAssertEqual(try index.project(id: uuid(1))?.blendCount, 2)
+        XCTAssertEqual(try index.project(id: uuid(7))?.blendCount, 2)
+
+        // The app's incremental path — the fork written after the origin,
+        // then the origin again (a grade tick) — moves nothing.
+        try index.upsertProject(documentData: Data(contentsOf: ProjectDocumentFormat.url(inProjectFolder: fork)), folder: id(7))
+        try index.upsertProject(documentData: Data(contentsOf: ProjectDocumentFormat.url(inProjectFolder: projects.appendingPathComponent(id(1)))), folder: id(1))
+        XCTAssertEqual(try index.recordCounts().blends, 4)
+        XCTAssertTrue([uuid(1), uuid(7)].contains(try XCTUnwrap(index.projectID(forBlend: UUID(uuidString: shared[0])!))))
+
+        // The origin goes (purged, or its version replaced by the server's):
+        // the fork's rows stay, and the blend now has one owner.
+        try index.removeProject(id: uuid(1))
+        XCTAssertEqual(try index.recordCounts().blends, 2)
+        XCTAssertEqual(try index.projectID(forBlend: UUID(uuidString: shared[0])!), uuid(7))
+        XCTAssertEqual(try index.projectID(forBlend: UUID(uuidString: shared[1])!), uuid(7))
+        XCTAssertEqual(try index.deletedBlendsInLiveProjects(), [])
+        XCTAssertTrue(try index.verify(againstProjectsFolder: projects).missingBlends.isEmpty)
+    }
+
+    /// While both documents exist, the owner asked for is the live one:
+    /// a tombstoned copy in the trash never answers for a live blend.
+    func testTheLiveDocumentOwnsASharedBlend() throws {
+        try writeProject(1, created: 100, deleted: 900, blends: 1, inTrash: true)
+        try writeProject(7, created: 100, blends: 1, blendIDs: [blendID(1, 0)])
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        XCTAssertEqual(try index.recordCounts().blends, 2)
+        XCTAssertEqual(try index.projectID(forBlend: UUID(uuidString: blendID(1, 0))!), uuid(7))
+    }
+
+    /// The launch's comparison, both sides: the export's trailer counts
+    /// every document's blend entries; so do the rows. A shared blend id
+    /// is two entries and two rows — no launch regenerates over it.
+    func testTheExportTrailerAndTheRowsCountTheSameBlends() throws {
+        try writeProject(1, created: 100, blends: 3)
+        try writeProject(2, created: 200, blends: 1)
+        try writeProject(7, created: 100, blends: 3, blendIDs: [blendID(1, 0), blendID(1, 1), blendID(1, 2)])
+        try writeProject(4, created: 400, deleted: 900, blends: 1, inTrash: true)
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        let export = root.appendingPathComponent("export.json")
+        try LibraryIndexRebuild.rebuiltManifest(root: root).write(to: export)
+        let trailer = try XCTUnwrap(LibraryExportFormat.readTrailer(at: export))
+        let rows = try index.recordCounts()
+        XCTAssertEqual(trailer.captures, 4)
+        XCTAssertEqual(trailer.blends, 8)
+        XCTAssertEqual(rows.projects, trailer.captures)
+        XCTAssertEqual(rows.blends, trailer.blends)
+    }
+
+    /// The gap the walk cannot see: a document whose rows are not its
+    /// entries although its modification date is the one the index holds.
+    /// The reconciliation names the difference blend by blend and
+    /// re-indexes the document as it is; a second pass finds nothing.
+    func testReconcileBlendsNamesAndRepairsWhatTheWalkCallsCurrent() throws {
+        let folder = try writeProject(1, created: 100, blends: 2)
+        try writeProject(2, created: 200, blends: 1)
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        let url = ProjectDocumentFormat.url(inProjectFolder: folder)
+        let stamp = try XCTUnwrap(URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+
+        // Three blends now, one of them already in the index under another
+        // name (a stale row), the file's date put back — current, to the walk.
+        try writeProject(1, created: 100, blends: 3, blendIDs: [blendID(1, 0), blendID(1, 5), blendID(1, 6)])
+        var values = URLResourceValues()
+        values.contentModificationDate = stamp
+        var fresh = URL(fileURLWithPath: url.path)
+        try fresh.setResourceValues(values)
+        XCTAssertEqual(index.documentModifiedAt(projectID: uuid(1))?.timeIntervalSince(stamp) ?? 1, 0, accuracy: 0.001, "what the walk compares")
+        XCTAssertEqual(try index.recordCounts().blends, 3, "the rows are the old entries")
+
+        let dry = try index.reconcileBlends(fromProjectsFolder: projects, repair: false)
+        XCTAssertEqual(dry.missingBlends, [LibraryIndex.BlendEntry(project: uuid(1), blend: UUID(uuidString: blendID(1, 5))!),
+                                           LibraryIndex.BlendEntry(project: uuid(1), blend: UUID(uuidString: blendID(1, 6))!)])
+        XCTAssertEqual(dry.staleBlends, [LibraryIndex.BlendEntry(project: uuid(1), blend: UUID(uuidString: blendID(1, 1))!)])
+        XCTAssertEqual(dry.reindexed, [])
+        XCTAssertEqual(dry.missingProjects, [])
+        XCTAssertEqual(dry.staleProjects, [])
+        XCTAssertEqual(try index.recordCounts().blends, 3, "a dry run writes nothing")
+
+        let repaired = try index.reconcileBlends(fromProjectsFolder: projects)
+        XCTAssertEqual(repaired.missingBlends.count, 2)
+        XCTAssertEqual(repaired.reindexed, [uuid(1)])
+        XCTAssertEqual(try index.recordCounts().blends, 4)
+        XCTAssertEqual(try index.project(id: uuid(1))?.blendCount, 3)
+
+        let again = try index.reconcileBlends(fromProjectsFolder: projects)
+        XCTAssertTrue(again.agreed)
+        XCTAssertEqual(again.reindexed, [])
+        XCTAssertTrue(try index.verify(againstProjectsFolder: projects).consistent)
+    }
+
+    /// A document that lists one blend twice is one row where the export
+    /// lists two entries: named, never repaired into agreement — the
+    /// document is what is wrong.
+    func testABlendListedTwiceByItsDocumentIsNamed() throws {
+        try writeProject(1, created: 100, blends: 2, blendIDs: [blendID(1, 0), blendID(1, 0)])
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        XCTAssertEqual(try index.recordCounts().blends, 1)
+        let outcome = try index.reconcileBlends(fromProjectsFolder: projects)
+        XCTAssertEqual(outcome.duplicatedBlends, [LibraryIndex.BlendEntry(project: uuid(1), blend: UUID(uuidString: blendID(1, 0))!)])
+        XCTAssertEqual(outcome.missingBlends, [])
+        XCTAssertEqual(outcome.reindexed, [])
     }
 }
