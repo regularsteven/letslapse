@@ -160,13 +160,24 @@ enum IntervalCaptureMode: String, CaseIterable, Identifiable {
     static var availableCases: [IntervalCaptureMode] { allCases.filter(\.isAvailableOnThisPlatform) }
 }
 
-/// Output format for Interval shooting. DNG blends Bayer RAW captures into
-/// a real raw file — white balance and tone stay adjustable in post — and
-/// needs a RAW-capable camera source; JPEG is the path every source
-/// supports.
+/// Output format for the still modes (Interval and Photo). DNG blends Bayer
+/// RAW captures into a real raw file — white balance and tone stay adjustable
+/// in post — and needs a RAW-capable camera source; JPEG is the path every
+/// source supports; HEIC (2026-09-27) is JPEG's processed picture at about
+/// half the size, where the photo output lists the HEVC codec.
 enum IntervalOutputFormat: String, CaseIterable {
     /// Raw value stays "standard" — the pre-merge name this preference was
     /// persisted under.
     case jpeg = "standard"
     case dng
+    case heic
+
+    /// Where the choice is stored — `AppModel.intervalOutputFormat`'s key,
+    /// here so the camera can read it at a run's start the way it reads
+    /// Capture Flat's.
+    static let defaultsKey = "letslapse.liveBlendOutputFormat"
+
+    /// A processed picture (JPEG or HEIC) rather than raw — what Capture Flat
+    /// and the processed-stills paths apply to.
+    var isProcessed: Bool { self != .dng }
 }

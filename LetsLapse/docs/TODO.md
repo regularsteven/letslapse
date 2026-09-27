@@ -11,6 +11,35 @@ live inline.
 
 ## Open
 
+### HEIC capture — a device run, and what it touches downstream
+
+Output in the capture format sheet (Photo + Interval) gained **HEIC**
+(2026-09-27, code first): offered where the photo output lists HEVC
+(`CameraController.stillsHEICSupported`), stored as `IntervalOutputFormat.heic`
+under the same key, resolved per run (`runStillsHEIC`) — plain stills via
+`AVCapturePhotoSettings(format: [AVVideoCodecKey: .hevc])`, blended windows
+via `ImageExporter` `.heic`; Capture Flat writes HEIC too; the remote takes
+`setOutputFormat:heic`. Owed:
+- **Device run** (the 18 Pro, over the remote): `setOutputFormat:heic`, a
+  Photo shot, an Interval run with blend 1 and with a blend depth, Capture
+  Flat on and off — check `.heic` in `source/`, the pill / Watch line read
+  HEIC, `checkDeliveredStill` is quiet, and the capture log says `heic`.
+- **PicPlace content type.** `.heic` uploads omit `content_type` (nil in
+  `PicPlaceSyncRun.contentType`, as Scanner siblings always have). Confirm
+  the server takes `image/heic`, then add it.
+- **Auto-apply** classes a HEIC shoot as JPEG (standard / flat slots) — right
+  for now (it is the same processed picture); a HEIC slot only if Steven
+  wants one.
+- **Storage headroom** learns one "still" cost for JPEG and HEIC alike;
+  HEIC is about half — the estimate runs high after JPEG shoots.
+- **Mirrors.** `iOS/capture-format-sheet.portrait.svg` notes the Output
+  section (JPEG | DNG) in its desc only — draw the Photo/Interval sheet with
+  JPEG | HEIC | DNG; a "· HEIC" pill state on the still-mode capture
+  screens is optional (the JPEG drawings stay right).
+- **Encoder contention** (flagged in `CameraController.runStillsHEIC`, not
+  mitigated): HEIC stills share the hardware HEVC encoder with video
+  recording and clip exports.
+
 ### Clone and compress — design mirrors, and a device run
 
 "Duplicate as DNG archive…" became **Clone and compress…** (2026-09-27, code

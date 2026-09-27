@@ -25,7 +25,7 @@ final class AppModel: ObservableObject {
         static let keepExtractedFrames = "letslapse.keepExtractedFrames"
         /// Key string keeps the pre-merge "liveBlend" name existing installs
         /// persisted under.
-        static let intervalOutputFormat = "letslapse.liveBlendOutputFormat"
+        static let intervalOutputFormat = IntervalOutputFormat.defaultsKey
         static let liveBlendResponsiveCapture = "letslapse.liveBlendResponsiveCapture"
         static let liveBlendBurstCapture = "letslapse.liveBlendBurstCapture"
         static let liveBlendBracketedRAW = "letslapse.liveBlendBracketedRAW"
@@ -390,6 +390,7 @@ final class AppModel: ObservableObject {
             switch ext {
             case "JPEG": return "JPG"
             case "TIFF": return "TIF"
+            case "HEIF": return "HEIC"
             case "QUICKTIME": return "MOV"
             default: return ext
             }

@@ -340,6 +340,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         /// `capture_log.json` — the 2026-08-23 flat/non-flat A/B was
         /// undiagnosable because the old path neither applied nor logged it.
         var captureFlat: Bool = false
+        /// Each window's picture: JPEG, or HEIC when the run's Output says so
+        /// and the device can (`CameraController.runStillsHEIC`).
+        var stillsFormat: ImageFormat = .jpeg
         /// Whether this run writes the `frames.timestamps` sidecar — one line
         /// per output file as it lands, flushed immediately, so the finished
         /// project's time axis survives a crash exactly as its frames do.
@@ -1083,7 +1086,8 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 }
                 entry.blendMillis = (ProcessInfo.processInfo.systemUptime - blendStart) * 1000
                 let url = configuration.outputDirectory
-                    .appendingPathComponent(String(format: "frame-%05d.jpg", outputIndex))
+                    .appendingPathComponent(String(format: "frame-%05d.%@", outputIndex,
+                                                   configuration.stillsFormat == .heic ? "heic" : "jpg"))
                 let encodeStart = ProcessInfo.processInfo.systemUptime
                 // The tapped frames carry no EXIF of their own, so author the
                 // record the photo path gets from the camera: the exposure
@@ -1096,7 +1100,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                     metadata[kCGImagePropertyGPSDictionary] = gps
                 }
                 try ImageExporter.write(
-                    image, to: url, format: .jpeg,
+                    image, to: url, format: configuration.stillsFormat,
                     metadata: metadata.isEmpty ? nil : metadata)
                 entry.encodeMillis = (ProcessInfo.processInfo.systemUptime - encodeStart) * 1000
                 let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)

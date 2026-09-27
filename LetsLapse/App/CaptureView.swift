@@ -1216,7 +1216,8 @@ struct CaptureView: View {
                 try? FileManager.default.removeItem(at: parked)
                 try? FileManager.default.copyItem(at: result.logURL, to: parked)
             }
-            let format = result.outputFormat == "dng" ? "DNG" : "JPEG"
+            let format = result.outputFormat == "dng" ? "DNG"
+                : result.frameURLs.first?.pathExtension.lowercased() == "heic" ? "HEIC" : "JPEG"
             let blend: String
             switch blendDepth {
             case .fixed(let frames):
@@ -1666,7 +1667,18 @@ struct CaptureView: View {
         if mode == .video {
             return !camera.appleLogAvailableForSelection
         }
-        return model.intervalOutputFormat == .jpeg
+        return model.intervalOutputFormat.isProcessed
+    }
+
+    /// What a still-mode run will actually write: the Output choice, or JPEG
+    /// where the camera can't do it (DNG without Bayer RAW, HEIC without the
+    /// HEVC codec) — the same fallback the run itself makes.
+    private var effectiveStillsFormat: IntervalOutputFormat {
+        switch model.intervalOutputFormat {
+        case .dng: return camera.liveBlendDNGSupport.isSupported ? .dng : .jpeg
+        case .heic: return camera.stillsHEICSupported ? .heic : .jpeg
+        case .jpeg: return .jpeg
+        }
     }
 
     private func previewTopAnchorOffset(in size: CGSize) -> CGFloat {
@@ -2514,7 +2526,7 @@ struct CaptureView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(isCapturing ? LL.amber.opacity(0.6) : LL.amber)
                     } else {
-                        Text("· JPEG")
+                        Text(effectiveStillsFormat == .heic ? "· HEIC" : "· JPEG")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(isCapturing ? .white.opacity(0.55) : .white)
                     }
@@ -6162,9 +6174,11 @@ struct CaptureView: View {
             switch token {
             case "jpeg", "standard": wanted = .jpeg
             case "dng": wanted = .dng
+            case "heic": wanted = .heic
             default: return false
             }
             if wanted == .dng, !camera.liveBlendDNGSupport.isSupported { return false }
+            if wanted == .heic, !camera.stillsHEICSupported { return false }
             if model.intervalOutputFormat != wanted { model.intervalOutputFormat = wanted }
             return true
         case .state:
@@ -6226,8 +6240,8 @@ struct CaptureView: View {
         // read the still format ("12MP 4:3 · DNG" / "1920×1080 · JPEG").
         let formatLine: String
         if mode != .video {
-            let dngActive = model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
-            formatLine = "\(formatSummary) · \(dngActive ? "DNG" : "JPEG")"
+            let written = effectiveStillsFormat
+            formatLine = "\(formatSummary) · \(written == .dng ? "DNG" : written == .heic ? "HEIC" : "JPEG")"
         } else {
             // The burst's resolution rides the same line when it differs, so
             // the wrist can see the shoot has two formats without a new screen.
@@ -6696,7 +6710,7 @@ private struct FormatSheet: View {
     /// for DNG, which is already fully adjustable in post.
     private var showsCaptureFlat: Bool {
         if mode == .video { return true }
-        return model.intervalOutputFormat == .jpeg
+        return model.intervalOutputFormat.isProcessed
     }
 
     /// Explains what "Capture Flat" does for the active mode. Video wording
@@ -6791,6 +6805,12 @@ private struct FormatSheet: View {
                     Section {
                         Picker("Output", selection: $model.intervalOutputFormat) {
                             Text("JPEG").tag(IntervalOutputFormat.jpeg)
+                            // Only where the photo output lists HEVC — or
+                            // while it is the stored choice, so the picker
+                            // never shows no selection.
+                            if camera.stillsHEICSupported || model.intervalOutputFormat == .heic {
+                                Text("HEIC").tag(IntervalOutputFormat.heic)
+                            }
                             Text("DNG").tag(IntervalOutputFormat.dng)
                         }
                         .pickerStyle(.segmented)
@@ -6799,9 +6819,12 @@ private struct FormatSheet: View {
                     } footer: {
                         if camera.liveBlendDNGSupport.isSupported {
                             let aspect = camera.liveBlendDNGSupport.sensorDimensions.map(sensorAspectLabel) ?? "4:3"
-                            Text("DNG keeps the sensor's raw data — white balance and tone stay adjustable in post, for day-to-night and mixed-light work. Applies with or without blending, and captures the sensor's full \(aspect) frame — the viewfinder shows that framing. JPEG is smaller and ready to share.")
+                            Text("DNG keeps the sensor's raw data — white balance and tone stay adjustable in post, for day-to-night and mixed-light work. Applies with or without blending, and captures the sensor's full \(aspect) frame — the viewfinder shows that framing. JPEG is smaller and ready to share\(camera.stillsHEICSupported ? "; HEIC is the same picture at about half the size" : "").")
                         } else {
-                            Text("DNG unavailable — \(camera.liveBlendDNGSupport.reason ?? "not supported on this camera source"). Shoots fall back to JPEG.")
+                            Text("DNG unavailable — \(camera.liveBlendDNGSupport.reason ?? "not supported on this camera source"). Shoots fall back to JPEG.\(camera.stillsHEICSupported ? " HEIC is JPEG's picture at about half the size." : "")")
+                        }
+                        if model.intervalOutputFormat == .heic, !camera.stillsHEICSupported {
+                            Text("HEIC unavailable on this camera source. Shoots fall back to JPEG.")
                         }
                     }
                 }

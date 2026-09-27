@@ -1259,6 +1259,37 @@ final class CameraController: NSObject, ObservableObject {
     @Published var liveBlendDNGSupport = LiveBlendDNGSupport(
         isSupported: false, reason: "Checking camera…")
 
+    /// Whether the photo output can deliver HEIC stills — its
+    /// `availablePhotoCodecTypes` lists HEVC. Published after each camera
+    /// set-up, like `liveBlendDNGSupport`; the format sheet offers HEIC only
+    /// while it holds.
+    @Published private(set) var stillsHEICSupported = false
+
+    /// sessionQueue: whether this run's processed stills are HEIC — the
+    /// stored Output choice, if the photo output can deliver it, else JPEG.
+    /// Decided once when a stills run starts, so the settings, the file
+    /// names and the capture log agree for the whole run.
+    ///
+    /// ⚠️ HEIC stills — and each blended window's HEIC — go through the
+    /// hardware HEVC encoder, the one video recording and the clip exports
+    /// (the `hevc10` blend profile, ProRes→HEVC conversion, Clone and
+    /// compress's HEIC) use. A stills run never records video, but an export
+    /// running at the same time shares that encoder; "Cannot Encode" is the
+    /// symptom (`Errors.swift`). Not mitigated — flagged (2026-09-27).
+    private(set) var runStillsHEIC = false
+
+    /// sessionQueue: the stored Output choice, resolved against the device.
+    private func resolveRunStillsHEIC() -> Bool {
+        let stored = IntervalOutputFormat(
+            rawValue: UserDefaults.standard.string(forKey: IntervalOutputFormat.defaultsKey) ?? "") ?? .jpeg
+        return stored == .heic && photoOutput.availablePhotoCodecTypes.contains(.hevc)
+    }
+
+    /// The capture log's format word for a processed-stills run.
+    private func processedStillsFormatName() -> String {
+        (runStillsHEIC ? "heic" : "jpeg") + (FlatCapture.isEnabled(.stills) ? "-flat" : "")
+    }
+
     /// Actual dimensions of the live feed the preview layer is showing
     /// (published from every (re)configuration), so the viewfinder
     /// letterboxes to what the sensor really delivers — the 4:3 photo feed
@@ -1911,9 +1942,13 @@ final class CameraController: NSObject, ObservableObject {
                 reason: "This camera does not provide RAW sensor data.")
             #endif
         }
+        let heic = photoOutput.availablePhotoCodecTypes.contains(.hevc)
         DispatchQueue.main.async {
             if self.liveBlendDNGSupport != support {
                 self.liveBlendDNGSupport = support
+            }
+            if self.stillsHEICSupported != heic {
+                self.stillsHEICSupported = heic
             }
         }
     }
@@ -7179,8 +7214,9 @@ final class CameraController: NSObject, ObservableObject {
             self.photoDirectory = directory
             self.photoURLs = []
             self.intervalWriter = FrameTimestampWriter(directory: directory)
+            self.runStillsHEIC = self.resolveRunStillsHEIC()
             let conditions = self.captureConditions(
-                format: FlatCapture.isEnabled(.stills) ? "jpeg-flat" : "jpeg", shapeSearch: shapeSearch)
+                format: self.processedStillsFormatName(), shapeSearch: shapeSearch)
             let projectID = self.runIdentity.current ?? self.runIdentity.mint()
             self.plainRunLog = PlainRunLog(
                 sessionID: projectID.uuidString, conditions: conditions,
@@ -7236,7 +7272,9 @@ final class CameraController: NSObject, ObservableObject {
                     connection.videoOrientation = runOrientation
                 }
                 #endif
-                let settings = AVCapturePhotoSettings()
+                let settings = self.runStillsHEIC
+                    ? AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
+                    : AVCapturePhotoSettings()
                 if let photoDimensions = self.selectedPhotoDimensions {
                     // Asked of the live output and format, never assumed:
                     // built against the iOS 27 SDK, a size either would refuse
@@ -10471,6 +10509,7 @@ final class CameraController: NSObject, ObservableObject {
             let dimensions = self.videoDevice.map {
                 CMVideoFormatDescriptionGetDimensions($0.activeFormat.formatDescription)
             }
+            self.runStillsHEIC = self.resolveRunStillsHEIC()
             let configuration = LiveBlendController.Configuration(
                 intervalSeconds: interval,
                 blendDepth: depth,
@@ -10504,11 +10543,13 @@ final class CameraController: NSObject, ObservableObject {
                 // reads the stills scope — Video's Log choice says nothing
                 // about whether these JPEGs want the flat grade.
                 captureFlat: FlatCapture.isEnabled(.stills),
+                // Each window's picture in the run's processed format.
+                stillsFormat: self.runStillsHEIC ? .heic : .jpeg,
                 // Holy Grail owns the sidecar on ramped runs — the ramp
                 // appends richer entries (scene EV) per window.
                 writesFrameTimestamps: !self.holyGrailRequestedForRun,
                 conditions: self.captureConditions(
-                    format: FlatCapture.isEnabled(.stills) ? "jpeg-flat" : "jpeg",
+                    format: self.processedStillsFormatName(),
                     shapeSearch: self.blendRunLabel.shapeSearch),
                 captureModeName: self.blendRunLabel.captureModeName)
             LLog("liveblend: \(configuration.captureModeName ?? "interval") — \(configuration.conditions?.summary ?? "")")
@@ -11168,9 +11209,9 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
 
 extension CameraController {
     /// Writes a captured still to disk. When GPS tagging is on and a fix is
-    /// available, the JPEG is copied through ImageIO with a GPS dictionary
-    /// added (pixels untouched — the original encoded image is preserved).
-    /// Any failure falls back to writing the raw data unmodified.
+    /// available, the JPEG or HEIC is copied through ImageIO with a GPS
+    /// dictionary added (pixels untouched — the original encoded image is
+    /// preserved). Any failure falls back to writing the raw data unmodified.
     fileprivate func writeCapturedPhoto(_ data: Data, to url: URL) -> Bool {
         let gpsDictionary: Any? = (gpsTaggingEnabled
             ? LocationService.shared.latestLocation?.exifGPSDictionary()
@@ -11178,8 +11219,12 @@ extension CameraController {
         // "Capture Flat": bake a low-contrast, desaturated grade into the JPEG
         // at save time (GPS carried along). On failure, fall through to writing
         // the original encoded bytes unmodified.
+        // Written in the file's own format: until 2026-09-27 the flat
+        // re-encode was always JPEG, which put JPEG bytes in a Scanner
+        // sibling named `.heic`.
         if FlatCapture.isEnabled(.stills),
-           FlatCapture.write(jpegData: data, to: url, gps: gpsDictionary) {
+           FlatCapture.write(jpegData: data, to: url, gps: gpsDictionary,
+                             as: url.pathExtension.lowercased() == "heic" ? .heic : .jpeg) {
             return true
         }
         guard let gpsDictionary else {
@@ -11228,7 +11273,7 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
             LLog("capture: still delivered — \(data.count) bytes")
             guard let directory = self.photoDirectory else { return }
             let url = directory.appendingPathComponent(
-                String(format: "frame-%05d.jpg", self.photoURLs.count))
+                String(format: "frame-%05d.%@", self.photoURLs.count, self.runStillsHEIC ? "heic" : "jpg"))
             if self.writeCapturedPhoto(data, to: url) {
                 self.photoURLs.append(url)
                 self.checkDeliveredStill(photo, data: data)

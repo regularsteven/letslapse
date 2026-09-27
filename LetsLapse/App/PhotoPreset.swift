@@ -1172,7 +1172,9 @@ enum FlatCapture {
     /// the Apple maker note are copied from the source; only the orientation
     /// (now baked into the pixels) and the EXIF pixel dimensions (which the
     /// bake may have swapped) are restated.
-    static func write(jpegData: Data, to url: URL, gps: Any?, quality: CGFloat = 0.95) -> Bool {
+    /// `type` is what to write: the still's own format — JPEG, or HEIC for a
+    /// HEIC run or a Scanner sibling (2026-09-27; it was always JPEG).
+    static func write(jpegData: Data, to url: URL, gps: Any?, as type: UTType = .jpeg, quality: CGFloat = 0.95) -> Bool {
         guard let image = CIImage(data: jpegData, options: [.applyOrientationProperty: true]) else {
             return false
         }
@@ -1180,7 +1182,7 @@ enum FlatCapture {
         guard output.extent.width > 0, output.extent.height > 0,
               let cgImage = context.createCGImage(output, from: output.extent),
               let destination = CGImageDestinationCreateWithURL(
-                url as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else {
+                url as CFURL, type.identifier as CFString, 1, nil) else {
             return false
         }
         var properties: [CFString: Any] = [
