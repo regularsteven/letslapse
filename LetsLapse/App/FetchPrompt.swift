@@ -49,7 +49,9 @@ struct FetchPromptContent {
     var title: String {
         switch offer {
         case .download: return "Download \(noun.text)?"
-        case .downloading: return "Downloading \(noun.text)"
+        case .downloading(let progress):
+            return progress.source == nil ? "Downloading \(noun.text)" : "Importing \(noun.text)"
+        case .nearby(let nearby, _): return "Import \(noun.text) from \(nearby.deviceName)?"
         case .signIn: return "Sign in to PicPlace?"
         case .connect: return "This library isn't connected"
         case .notUploaded: return "\(noun.capitalized) \(noun.verb)n't on PicPlace yet"
@@ -64,7 +66,11 @@ struct FetchPromptContent {
             return "\(needs) — \(shortfall.sizeText) on PicPlace. You can keep browsing while \(noun.pronoun) download\(noun.isPlural ? "" : "s")."
         case .downloading(let progress):
             let percent = Int((progress.fraction * 100).rounded())
-            return "\(percent) % so far. \(subject) can go ahead as soon as \(noun.pronoun) \(noun.verb) here."
+            let from = progress.source.map { " from \($0)" } ?? ""
+            return "\(percent) % so far\(from). \(subject) can go ahead as soon as \(noun.pronoun) \(noun.verb) here."
+        case .nearby(let nearby, let alsoOnPicPlace):
+            let also = alsoOnPicPlace ? " \(noun.capitalized) \(noun.verb) on PicPlace too." : ""
+            return "\(needs) — \(shortfall.sizeText) on \(nearby.deviceName), nearby. You can keep browsing while \(noun.pronoun) come\(noun.isPlural ? "" : "s") over.\(also)"
         case .signIn:
             return "\(needs). \(noun.capitalized) \(noun.verb) on PicPlace — sign in to download \(noun.object)."
         case .connect:
@@ -139,6 +145,7 @@ private struct FetchPromptModifier: ViewModifier {
 
     private func word() {
         guard let request, asked?.id != request.id, let capture = model.capture(id: request.captureID) else { return }
+        model.nearby.want(capture.id)
         guard let shortfall = model.availability(of: request.capability, for: capture).shortfall else {
             // Here after all: the tap goes ahead.
             self.request = nil
@@ -162,6 +169,18 @@ private struct FetchPromptModifier: ViewModifier {
             Button("Stay as Is", role: .cancel) {}
         case .downloading:
             Button("Continue When Ready") { waiting = asked.request }
+            Button("Stay as Is", role: .cancel) {}
+        case .nearby(_, let alsoOnPicPlace):
+            Button("Import and Continue") {
+                guard let capture = model.capture(id: asked.request.captureID) else { return }
+                if model.picplace.fetch(capture, shortfall: asked.content.shortfall) { waiting = asked.request }
+            }
+            if alsoOnPicPlace {
+                Button("Download from PicPlace") {
+                    guard let capture = model.capture(id: asked.request.captureID) else { return }
+                    if model.picplace.fetch(capture, shortfall: asked.content.shortfall, fromPicPlace: true) { waiting = asked.request }
+                }
+            }
             Button("Stay as Is", role: .cancel) {}
         case .signIn:
             Button("Sign In") { model.picplace.signIn() }

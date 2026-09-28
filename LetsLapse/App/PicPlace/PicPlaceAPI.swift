@@ -34,9 +34,23 @@ struct PPStatus: Decodable {
     /// library while it holds a live project. Absent on a server from
     /// before libraries.
     var libraries: [PPLibrary]?
+    /// The account's current nearby key, by id — never the key itself
+    /// (docs/picplace-nearby-key-ask.md §4.3). nil until the first
+    /// `GET /nearby/key` mints one.
+    var nearby: PPNearbyStatus?
 
     /// Whether this server keeps libraries apart (libraries plan L8).
     var hasLibraries: Bool { features["libraries"] == true }
+    /// Whether this server hands out the nearby key (ask §4.3).
+    var offersNearbyKey: Bool { features["nearby_key"] == true }
+}
+
+struct PPNearbyStatus: Decodable { var keyId: String? }
+
+/// `GET /nearby/key` (ask §4.2).
+struct PPNearbyKeyResponse: Decodable {
+    struct Key: Decodable { var keyId: String; var key: String; var issuedAt: Date? }
+    var nearby: Key
 }
 
 /// One of the account's libraries (`letslapse-libraries.md` §2.3). `uuid`
@@ -81,6 +95,10 @@ struct PPDeviceSummary: Decodable, Equatable {
     var id: String
     var name: String
     var platform: String?
+    /// Set once the device was revoked (PicPlace, 2026-09-28). Its presence
+    /// rows stay with the tier they last said — a lost phone still says
+    /// `original` — but nobody can check what it holds any more.
+    var revokedAt: Date?
 }
 
 struct PPClaim: Decodable {
@@ -94,7 +112,33 @@ struct PPClaim: Decodable {
 struct PPPresence: Decodable {
     var device: PPDeviceSummary?
     var revision: Int?
+    /// How much of the project the device holds: `original`, `proxy` or
+    /// `preview` (every push and download posts it). Read since 2026-09-28,
+    /// so "only on …" names a device that holds the originals rather than
+    /// any device that checked in (docs/nearby-originals-plan.md §9).
+    var tier: String?
     var confirmedAt: Date?
+}
+
+extension Array where Element == PPPresence {
+    /// The other devices' names, in PicPlace's order — the card's "also on".
+    func otherDeviceNames(excluding deviceID: String?) -> [String] {
+        compactMap(\.device).filter { $0.id != deviceID }.map(\.name)
+    }
+
+    /// The other devices that hold the originals, the freshest check-in
+    /// first. A device whose row carries no tier (a build from before
+    /// tiers) may hold them, so it counts when no row says `original`;
+    /// one that says `preview` or `proxy` never does.
+    func originalsHolders(excluding deviceID: String?) -> [String] {
+        // A revoked device's row is not a copy (PicPlace's nearby-key
+        // answer §5): it can't be asked, so it is never named.
+        let others = filter { $0.device.map { $0.id != deviceID && $0.revokedAt == nil } ?? false }
+            .sorted { ($0.confirmedAt ?? .distantPast) > ($1.confirmedAt ?? .distantPast) }
+        let holding = others.filter { $0.tier == "original" }
+        let candidates = holding.isEmpty ? others.filter { $0.tier == nil } : holding
+        return candidates.compactMap { $0.device?.name }
+    }
 }
 
 struct PPProject: Decodable {

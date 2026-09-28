@@ -820,7 +820,7 @@ struct GalleryView: View {
     /// The Projects header's pill, here too: PicPlace and nearby devices
     /// behind one glyph, over the model's one server.
     private var syncChip: some View {
-        ProjectSharingChip(server: model.transferServer, picplace: model.picplace, isEnabled: $sharingEnabled)
+        ProjectSharingChip(server: model.transferServer, picplace: model.picplace, nearby: model.nearby, isEnabled: $sharingEnabled)
     }
 
     /// ▤ Library — collapses the sidebar where it is inline, opens it as a

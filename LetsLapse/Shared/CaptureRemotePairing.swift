@@ -68,8 +68,15 @@ enum CaptureRemotePairing {
         identity: String = "letslapse-remote",
         bulkTransfer: Bool = false
     ) -> NWParameters {
+        parameters(key: derivedKey(code: code, salt: salt), identity: identity, bulkTransfer: bulkTransfer)
+    }
+
+    /// The same link with the pre-shared key given as bytes rather than
+    /// derived from a six-digit code — the nearby-originals link, whose key
+    /// is derived from the PicPlace account's nearby key (`NearbyTrust.psk`,
+    /// docs/nearby-originals-plan.md §5). Identical TLS and TCP settings.
+    static func parameters(key keyData: Data, identity: String, bulkTransfer: Bool) -> NWParameters {
         let tls = NWProtocolTLS.Options()
-        let keyData = derivedKey(code: code, salt: salt)
         let identityData = Data(identity.utf8)
         let keyDD = keyData.withUnsafeBytes { DispatchData(bytes: $0) }
         let identityDD = identityData.withUnsafeBytes { DispatchData(bytes: $0) }

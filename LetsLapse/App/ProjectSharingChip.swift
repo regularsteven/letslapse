@@ -39,6 +39,9 @@ import SwiftUI
 struct ProjectSharingChip: View {
     @ObservedObject var server: ProjectTransferServer
     @ObservedObject var picplace: PicPlaceController
+    /// Originals going to another of this account's devices nearby — the
+    /// ring shows them too (docs/nearby-originals-plan.md §8).
+    @ObservedObject var nearby: NearbyService
     /// The Settings switch, bound through from the list so that turning
     /// sharing on or off here does exactly what turning it on or off there
     /// does — one write, one listener, no third state.
@@ -63,7 +66,7 @@ struct ProjectSharingChip: View {
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Opens project syncing: PicPlace and nearby devices")
         .sheet(isPresented: $showsSheet) {
-            ProjectSyncSheet(server: server, picplace: picplace, isEnabled: $isEnabled)
+            ProjectSyncSheet(server: server, picplace: picplace, nearby: nearby, isEnabled: $isEnabled)
         }
         #if DEBUG
         // `LL_SYNC_PANEL=1` opens the panel as the header appears — how the
@@ -99,7 +102,7 @@ struct ProjectSharingChip: View {
         // `fraction` is nil rather than a guess when the job has no honest
         // denominator, and a ring is nothing but a denominator — so there is
         // no ring then, and the sheet's byte count is the only readout.
-        if let fraction = server.activeTransfer?.fraction {
+        if let fraction = server.activeTransfer?.fraction ?? nearby.serving?.fraction {
             Circle()
                 .trim(from: 0, to: max(0.02, fraction))
                 .stroke(LL.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
@@ -110,6 +113,9 @@ struct ProjectSharingChip: View {
     }
 
     private var accessibilityLabel: String {
+        if nearby.serving != nil {
+            return "Project syncing, sending originals to \(nearby.servingTo ?? "another of your devices")"
+        }
         guard isEnabled else { return "Project syncing, sharing off" }
         if let transfer = server.activeTransfer {
             return "Project syncing, sending \(transfer.projectName)"
@@ -188,6 +194,7 @@ extension View {
 struct ProjectSyncSheet: View {
     @ObservedObject var server: ProjectTransferServer
     @ObservedObject var picplace: PicPlaceController
+    @ObservedObject var nearby: NearbyService
     @Binding var isEnabled: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -212,6 +219,13 @@ struct ProjectSyncSheet: View {
                     }
                     if let transfer = server.activeTransfer {
                         sending(transfer)
+                    }
+                    // Originals going to another of this account's devices
+                    // — no code, no switch here: the account is the trust.
+                    if let serving = nearby.serving {
+                        sending(serving, title: "Sending originals to \(nearby.servingTo ?? "another of your devices")") {
+                            nearby.stopServing()
+                        }
                     }
                     if let failure = server.failure {
                         Label(failure, systemImage: "exclamationmark.triangle")
@@ -762,12 +776,22 @@ struct ProjectSyncSheet: View {
         }
     }
 
-    private func sending(_ transfer: ProjectTransferServer.TransferProgress) -> some View {
+    private func sending(_ transfer: ProjectTransferServer.TransferProgress, title: String? = nil,
+                         stop: (() -> Void)? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Sending \(transfer.projectName)", systemImage: "arrow.up.circle.fill")
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundStyle(.green)
-            Text(detail(transfer))
+            HStack(alignment: .firstTextBaseline) {
+                Label(title ?? "Sending \(transfer.projectName)", systemImage: "arrow.up.circle.fill")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(.green)
+                Spacer(minLength: 8)
+                if let stop {
+                    Button("Stop", action: stop)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(LL.accent)
+                        .buttonStyle(.plain)
+                }
+            }
+            Text(title == nil ? detail(transfer) : "\(transfer.projectName) · \(detail(transfer))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let fraction = transfer.fraction {

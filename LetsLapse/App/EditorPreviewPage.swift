@@ -46,7 +46,7 @@ struct EditorPreviewPage: View {
 
     var body: some View {
         EditorPreviewPageContent(
-            picplace: model.picplace, holdings: model.holdingsStore, captureID: captureID,
+            picplace: model.picplace, holdings: model.holdingsStore, nearby: model.nearby, captureID: captureID,
             exitRequest: exitRequest, onExit: onExit, paging: paging)
     }
 }
@@ -56,6 +56,8 @@ private struct EditorPreviewPageContent: View {
     @ObservedObject var picplace: PicPlaceController
     /// The status card's sizes and the arrival check move with it.
     @ObservedObject var holdings: ProjectHoldingsStore
+    /// Devices of this account nearby — the card's *Import originals from …*.
+    @ObservedObject var nearby: NearbyService
     @Environment(\.dismiss) private var dismiss
 
     let captureID: UUID
@@ -128,6 +130,8 @@ private struct EditorPreviewPageContent: View {
             // PicPlace's own list of the project's files: whether it holds
             // the originals, and their size by its count.
             picplace.refreshProject(captureID)
+            // And the devices nearby: which of them holds the originals.
+            nearby.want(captureID)
             checkArrival()
             #if DEBUG
             consumePromptHook()
@@ -537,6 +541,14 @@ private struct EditorPreviewPageContent: View {
         case .downloading:
             Button("Continue When Ready") { resume = prompt.tapped.landing(captureID) }
             Button("Stay as Is", role: .cancel) {}
+        case .nearby(_, let alsoOnPicPlace):
+            Button("Import and Continue") { download(prompt.content.shortfall, landing: prompt.tapped.landing(captureID)) }
+            if alsoOnPicPlace {
+                Button("Download from PicPlace") {
+                    download(prompt.content.shortfall, landing: prompt.tapped.landing(captureID), fromPicPlace: true)
+                }
+            }
+            Button("Stay as Is", role: .cancel) {}
         case .signIn:
             Button("Sign In") { picplace.signIn() }
             Button("Stay as Is", role: .cancel) {}
@@ -545,9 +557,11 @@ private struct EditorPreviewPageContent: View {
         }
     }
 
-    private func download(_ shortfall: ProjectHoldings.Shortfall, landing: EditorPageRequest) {
+    /// Brings the files — from a device nearby when one offers them (N12),
+    /// else from PicPlace.
+    private func download(_ shortfall: ProjectHoldings.Shortfall, landing: EditorPageRequest, fromPicPlace: Bool = false) {
         guard let capture else { return }
-        if picplace.fetch(capture, shortfall: shortfall) { resume = landing }
+        if picplace.fetch(capture, shortfall: shortfall, fromPicPlace: fromPicPlace) { resume = landing }
     }
 
     /// "the originals", "the rest of the originals" — a Photo capture's is
@@ -568,15 +582,24 @@ private struct EditorPreviewPageContent: View {
         var action: CardAction?
     }
 
-    private enum CardAction {
+    private enum CardAction: Equatable {
         case download, stop, signIn
+        /// The full-width button under the line: *Import originals from
+        /// iPhone 18 Pro* (Steven's brief, 2026-09-28).
+        case importNearby(String)
 
         var label: String {
             switch self {
             case .download: return "Download"
             case .stop: return "Stop"
             case .signIn: return "Sign In"
+            case .importNearby(let title): return title
             }
+        }
+
+        var isFullWidth: Bool {
+            if case .importNearby = self { return true }
+            return false
         }
     }
 
@@ -589,13 +612,16 @@ private struct EditorPreviewPageContent: View {
         let shortfall = holdings.flatMap { $0.shortfall(for: $0.pictureNeed) }
         let noun = noun(for: shortfall)
         if let progress = picplace.progress[captureID], progress.phase == .downloading {
+            // A nearby import says where from; its first word is the device.
+            let asking = progress.source.map { "Asking \($0) for the files…" } ?? "Asking PicPlace for the files…"
+            let from = progress.source.map { "From \($0) · " } ?? ""
             let caption = progress.filesTotal == 0
-                ? "Asking PicPlace for the files…"
+                ? asking
                 : progress.bytesDone == 0
-                    ? "\(LLFormat.bytes(progress.bytesTotal)) to download"
-                    : "\(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
+                    ? "\(from)\(LLFormat.bytes(progress.bytesTotal)) to \(progress.source == nil ? "download" : "import")"
+                    : "\(from)\(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
                     + (resume?.group.map { " · \($0.title) opens when \(noun.pronoun) \(noun.verb) here" } ?? "")
-            return Status(glyph: .cloud(.downloading), title: "Downloading \(noun.text)",
+            return Status(glyph: .cloud(.downloading), title: progress.source == nil ? "Downloading \(noun.text)" : "Importing \(noun.text)",
                           caption: caption, fraction: progress.fraction, action: .stop)
         }
         let tier = holdings?.tier ?? .preview
@@ -609,6 +635,15 @@ private struct EditorPreviewPageContent: View {
         var caption: String
         var action: CardAction?
         switch offer {
+        case .nearby(let nearby, let alsoOnPicPlace):
+            // Steven's brief: the line says where the originals are, the
+            // button brings them.
+            caption = alsoOnPicPlace
+                ? "Editing needs \(noun.text) — on \(nearby.deviceName) nearby, and on PicPlace" + (shortfall.map { " · \($0.sizeText)" } ?? "")
+                : "\(subject) \(verb) only on \(nearby.deviceName) for now"
+            if !alsoOnPicPlace { glyph = .asset(.originals, .nowhere) }
+            let what = noun.text == "the originals" ? "originals" : noun.text
+            action = .importNearby("Import \(what) from \(nearby.deviceName)")
         case .download, .downloading:
             caption = "Editing needs \(noun.text) — on PicPlace" + (shortfall.map { " · \($0.sizeText)" } ?? "")
             action = picplace.canSync ? .download : nil
@@ -629,6 +664,10 @@ private struct EditorPreviewPageContent: View {
         // A download that failed says why, on the line that offers it again.
         if let error = picplace.records[model.originID(of: capture)]?.lastError,
            picplace.records[model.originID(of: capture)]?.failedHeavyOnly == true {
+            caption = error
+        }
+        // So does an import from a device nearby — in its own words.
+        if let error = nearby.importError(for: captureID) {
             caption = error
         }
         return Status(glyph: glyph, title: tier.label, caption: caption, action: action)
@@ -661,12 +700,25 @@ private struct EditorPreviewPageContent: View {
                     }
                 }
                 Spacer(minLength: 8)
-                if let action = status.action {
+                if let action = status.action, !action.isFullWidth {
                     Button(action.label) { perform(action) }
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(accent)
                         .buttonStyle(.plain)
                 }
+            }
+            if let action = status.action, action.isFullWidth {
+                Button { perform(action) } label: {
+                    Text(action.label)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .foregroundStyle(style == .dark ? Color.black : Color.white)
+                        .background(accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(12)
@@ -690,7 +742,7 @@ private struct EditorPreviewPageContent: View {
     private func perform(_ action: CardAction) {
         guard let capture else { return }
         switch action {
-        case .download:
+        case .download, .importNearby:
             let availability = model.availability(of: .pixelEdit, for: capture)
             guard let shortfall = availability.shortfall else { checkArrival(); return }
             download(shortfall, landing: resume ?? Tapped.line.landing(captureID))

@@ -202,7 +202,7 @@ struct SettingsView: View {
                 // Between Storage and Advanced because it is about where
                 // projects live, not about the engine (picplace-sync-v1.md).
                 LLSectionHeader("PicPlace")
-                PicPlaceSettingsCard(picplace: model.picplace)
+                PicPlaceSettingsCard(picplace: model.picplace, nearby: model.nearby)
                     .padding(.bottom, 12)
                     .id(SettingsAnchor.picplace)
 

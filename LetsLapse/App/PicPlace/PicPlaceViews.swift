@@ -27,6 +27,20 @@ struct PicPlaceStatusCard: View {
 
     private var capture: AppModel.CaptureProject? { model.capture(id: captureID) }
 
+    /// Moves when a device nearby answers — the card's *Import from …*.
+    @State private var nearbyRevision = 0
+
+    /// A device of this account nearby holding what the editor needs here
+    /// (docs/nearby-originals-plan.md) — from the holdings already known,
+    /// never a folder walk in a body.
+    private func nearbyOffer(for capture: AppModel.CaptureProject) -> (offer: NearbyOffer, shortfall: ProjectHoldings.Shortfall)? {
+        _ = nearbyRevision
+        guard let holdings = model.cachedHoldings(for: capture.id),
+              let shortfall = holdings.shortfall(for: holdings.pictureNeed),
+              let offer = model.nearby.offer(for: capture, shortfall: shortfall) else { return nil }
+        return (offer, shortfall)
+    }
+
     var body: some View {
         if let capture {
             let state = picplace.state(for: capture)
@@ -45,7 +59,13 @@ struct PicPlaceStatusCard: View {
             // The server's view — Also on, and the per-file truth the
             // Originals and Blends lines read — once the session is up: on a
             // cold launch the card appears before the sign-in lands.
-            .task(id: picplace.canSync) { picplace.refreshProject(captureID) }
+            .task(id: picplace.canSync) {
+                picplace.refreshProject(captureID)
+                // And the devices nearby: which of them holds the originals.
+                model.loadHoldings(for: [captureID])
+                model.nearby.want(captureID)
+            }
+            .onReceive(model.nearby.$answers) { _ in nearbyRevision &+= 1 }
             .onAppear {
                 if case .notSynced = state { _ = picplace.summary(for: capture) }
                 #if DEBUG
@@ -511,7 +531,7 @@ struct PicPlaceStatusCard: View {
         case .changes: return "Changes to sync"
         case .syncing(let progress):
             switch progress.phase {
-            case .downloading: return "Downloading from PicPlace"
+            case .downloading: return progress.source.map { "Importing from \($0)" } ?? "Downloading from PicPlace"
             case .verifying, .removing: return "Freeing up space"
             default: return "Syncing to PicPlace"
             }
@@ -541,6 +561,10 @@ struct PicPlaceStatusCard: View {
             let part = picplace.originalsStatus(for: capture)?.originals.onlyThere
             let files = part.map(\.files) ?? record?.serverHeavyFiles ?? record?.heavyFiles ?? 0
             let bytes = part.map(\.bytes) ?? record?.serverHeavyBytes ?? record?.heavyBytes ?? 0
+            if let error = model.nearby.importError(for: capture.id) { return error }
+            if let nearby = nearbyOffer(for: capture) {
+                return "The originals are on \(nearby.offer.deviceName), nearby\(files > 0 ? ", and on PicPlace" : "") · \(nearby.shortfall.sizeText)"
+            }
             if files > 0 {
                 return "The originals are on PicPlace · \(files.formatted()) file\(files == 1 ? "" : "s") · \(LLFormat.bytes(bytes))"
             }
@@ -619,7 +643,9 @@ struct PicPlaceStatusCard: View {
         let (label, isCancel): (String, Bool) = {
             switch state {
             case .conflict: return ("Review…", false)
-            case .previewOnly: return (picplace.hasOriginalsToDownload(capture) ? "Download originals" : "Preview only", false)
+            case .previewOnly:
+                if let nearby = nearbyOffer(for: capture) { return ("Import from \(nearby.offer.deviceName)", false) }
+                return (picplace.hasOriginalsToDownload(capture) ? "Download originals" : "Preview only", false)
             case .elsewhere: return ("Elsewhere", false)
             case .signedOut: return (picplace.isSigningIn ? "Signing in…" : "Sign in", false)
             case .notConnected: return (picplace.libraryLink == .mismatch ? "Settings" : "Connect…", false)
@@ -633,7 +659,13 @@ struct PicPlaceStatusCard: View {
         return Button {
             switch state {
             case .conflict: picplace.isReviewingConflicts = true
-            case .previewOnly: picplace.downloadOriginals(capture, kinds: picplace.originalsDownloadKinds(for: capture))
+            case .previewOnly:
+                // A device nearby first (N12); `fetch` picks it.
+                if let nearby = nearbyOffer(for: capture) {
+                    picplace.fetch(capture, shortfall: nearby.shortfall)
+                } else {
+                    picplace.downloadOriginals(capture, kinds: picplace.originalsDownloadKinds(for: capture))
+                }
             case .signedOut: picplace.signIn()
             case .notConnected: if picplace.libraryLink == .unbound || picplace.libraryLink == .needsLibrary { picplace.offerConnect() } else { model.requestedTab = .settings }
             case .syncing:
@@ -649,7 +681,7 @@ struct PicPlaceStatusCard: View {
         }
         .buttonStyle(.plain)
         .disabled((picplace.isSigningIn && !isCancel)
-                  || { if case .previewOnly = state { return !picplace.hasOriginalsToDownload(capture) } else { return false } }()
+                  || { if case .previewOnly = state { return !picplace.hasOriginalsToDownload(capture) && nearbyOffer(for: capture) == nil } else { return false } }()
                   || { if case .elsewhere = state { return true } else { return false } }())
     }
 
@@ -675,6 +707,11 @@ struct PicPlaceStatusCard: View {
 /// code first, the mirrors follow once the flows hold).
 struct PicPlaceSettingsCard: View {
     @ObservedObject var picplace: PicPlaceController
+    /// Nearby originals: the switch's Local Network line.
+    @ObservedObject var nearby: NearbyService
+    /// Settings ▸ PicPlace ▸ *Let my devices import originals from this
+    /// one* — on by default (N16); the service follows the setting.
+    @AppStorage(NearbyService.serveKey) private var nearbyServe = true
     @State private var isEditingServer = false
     @State private var serverDraft = ""
     @State private var isConfirmingSignOut = false
@@ -943,6 +980,16 @@ struct PicPlaceSettingsCard: View {
             LLRow(title: "Upload originals automatically",
                   subtitle: "Source photos, videos and blends of every project, one project at a time. Nothing is ever removed from this device on its own.") {
                 Toggle("", isOn: $picplace.autoOriginalsEnabled).labelsHidden().disabled(!picplace.autoSyncEnabled)
+            }
+            // Nearby originals (docs/nearby-originals-plan.md §8): only once
+            // PicPlace hands out the account's nearby key.
+            if picplace.serverOffersNearbyKey {
+                LLRow(title: "Let my devices import originals from this one",
+                      subtitle: nearby.failure
+                        ?? "Your other devices signed in to PicPlace can bring this device's originals and blends over your local network while LetsLapse is open. Only projects on PicPlace, and nothing leaves your network.",
+                      titleColor: nearby.failure == nil ? .primary : LL.levelOff) {
+                    Toggle("", isOn: $nearbyServe).labelsHidden()
+                }
             }
             if let status = picplace.autoStatus ?? picplace.autoHold ?? picplace.originalsHold.map { "Originals: \($0)" } {
                 LLRow(title: "Auto-sync", subtitle: status) {

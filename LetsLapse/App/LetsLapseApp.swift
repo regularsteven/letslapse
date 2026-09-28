@@ -290,6 +290,10 @@ struct LetsLapseApp: App {
                 // switcher over a live camera shouldn't read as "phone away".
                 .onChange(of: scenePhase) { phase in
                     WatchRemoteControlReceiver.shared.setAppActive(phase != .background)
+                    // A phone serves its originals only while LetsLapse is
+                    // open (nearby originals, N3): the service stands down
+                    // in the background and comes back in front.
+                    model.nearbyIfLoaded?.setSceneActive(phase != .background)
                     // Backgrounded is as far as iOS lets an app see its own
                     // end coming: the queued writes land now (W6) and the
                     // compatibility export is regenerated (M3).

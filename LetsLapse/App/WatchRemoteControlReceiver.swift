@@ -188,7 +188,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             return
         }
         let listener = remoteListener ?? CaptureRemoteListener(
-            deviceName: UIDevice.current.name,
+            deviceName: DeviceName.current,
             deviceModel: UIDevice.current.model)
         remoteListener = listener
         // Both closures route into the same handling the Watch uses, so a

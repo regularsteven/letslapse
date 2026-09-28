@@ -12,6 +12,9 @@ struct PicPlaceSyncProgress: Equatable {
     var filesTotal = 0
     var bytesDone: Int64 = 0
     var bytesTotal: Int64 = 0
+    /// The device the files come from, when it is a nearby one, not
+    /// PicPlace ("iPhone 18 Pro") — the words say *Importing* then.
+    var source: String?
 
     var fraction: Double {
         guard bytesTotal > 0 else { return 0 }
@@ -31,6 +34,10 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     var bytes: Int64
     var uploaded: Int
     var alsoOn: [String]
+    /// Of `alsoOn`, the devices PicPlace's presence says hold the originals,
+    /// freshest first (2026-09-28). nil on a record from before: fall back
+    /// to `alsoOn`.
+    var originalsOn: [String]?
     var server: String
     var lastError: String?
     /// The policy that produced the record (`minimal` · `originals` ·
@@ -110,6 +117,20 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     /// Whether the records — bundle and poster — of a push by THIS device
     /// reached the server: a record that has only ever failed has none.
     var recordsReachedServer: Bool { revision > 0 && (lastError == nil || failedHeavyOnly) }
+
+    /// The device to name in "only on … for now": one that holds the
+    /// originals, else — on a record from before tiers were read — the
+    /// first other device, as it always was. nil: none known.
+    var originalsHolder: String? {
+        guard let originalsOn else { return alsoOn.first }
+        return originalsOn.first
+    }
+
+    /// Both lists from one presence answer.
+    mutating func notePresence(_ presence: [PPPresence], excluding deviceID: String?) {
+        alsoOn = presence.otherDeviceNames(excluding: deviceID)
+        originalsOn = presence.originalsHolders(excluding: deviceID)
+    }
 
     /// The failure on record was a heavy upload's — the originals, or the
     /// blends alone (D1) — which leaves the records where the last push put
@@ -533,16 +554,14 @@ struct PicPlaceSyncRun {
             // 7. Presence, then let go of the claim.
             await report { $0.phase = .finishing }
             let presence: [String: [PPPresence]] = try await client.post("projects/\(uuid)/presence", json: ["revision": project.revision, "tier": project.tier])
-            let alsoOn = (presence["presence"] ?? [])
-                .compactMap(\.device)
-                .filter { $0.id != thisDeviceID }
-                .map(\.name)
+            let alsoOn = (presence["presence"] ?? []).otherDeviceNames(excluding: thisDeviceID)
             // Best effort: the push is complete; a claim this device could
             // not release expires on its own and this device may re-claim it.
             let _: [String: PPClaim?]? = try? await client.delete("projects/\(uuid)/claim")
 
             var record = PicPlaceSyncRecord(syncedAt: Date(), revision: project.revision, files: files.count, bytes: totalBytes,
                                             uploaded: pending.count, alsoOn: alsoOn,
+                                            originalsOn: (presence["presence"] ?? []).originalsHolders(excluding: thisDeviceID),
                                             server: (try? await client.currentTokens().server) ?? PicPlaceConfiguration.serverString, lastError: nil,
                                             policy: project.policy.rawValue,
                                             heavyFiles: project.policy.sendsHeavy ? 0 : inventory.summary.heavyFiles,

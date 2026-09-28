@@ -11,6 +11,34 @@ live inline.
 
 ## Open
 
+### Nearby originals — import a project's originals from your own device on the same network
+
+**Raised:** 2026-09-28 (Steven) · **Size:** large · **Detail:**
+[nearby-originals-plan.md](nearby-originals-plan.md) · **Server ask:**
+[picplace-nearby-key-ask.md](picplace-nearby-key-ask.md), going to the PicPlace developer
+first; the app work waits on their answers · **Working mode:** code first, SVG mirrors
+after sign-off.
+
+A preview on one device (records and poster from PicPlace) whose originals are only on
+another device of the same PicPlace account, on the same network, gets **Import originals
+from iPhone 18 Pro**. It uses the existing LAN transfer, with no pairing code and no *Share
+projects with nearby devices* on the phone: the account is the trust, through a key only
+its signed-in devices can read (the ask). The button shows only when a device nearby holds
+all of what is missing. Files are checked against the preview's own `assets.ndjson` hashes
+and land the way a PicPlace download does; the Mac's upload can then relay them to
+PicPlace. Decided 2026-09-28: a phone serves only while LetsLapse is open; a new "fill in"
+request rather than the Create tab's whole-project import; model names ("iPhone 18 Pro")
+where iOS says "iPhone". Stages 0–6 are in the plan §11.
+
+**2026-09-28: built (stages 0–4 and N13), bench-verified on two Simulators, and
+device-verified** — Release on the 18 Pro → 16 Pro against picplace.co, where PicPlace
+deployed the key the same day: both phones fetched the key on launch, three imports with no
+failures, 369 MB at about 9.5 MB/s over Wi-Fi (plan §15). **Uncommitted.** Owed: the SVG
+mirrors (after Steven's sign-off), Stop mid-send and the *Sending originals to …* row seen
+on a device, a blend import, N13 on a real pull, a Mac importing (sign it in to picplace.co
+first), and the bench clean-up (the two Simulators, the `nearby-bench-*` tokens on
+picplace.test, `LetsLapseRun/libraries/nearby-bench-b`).
+
 ### Gallery multi-select menu — Add to Collection and Export / Share for several projects
 
 The Gallery's menu on a multi-selection (2026-09-28, `GalleryGridContent.batchContextMenu`)
@@ -416,6 +444,9 @@ offered for download on the 18 Pro):
   device name only with Apple's `com.apple.developer.device-information.user-assigned-device-name`
   entitlement (requested from Apple, justified by the feature). Without it, the app
   could let a person name each device in Settings and send that to PicPlace.
+  **2026-09-28:** Steven chose the model name ("iPhone 18 Pro") where iOS gives a generic
+  one, and the device PicPlace's presence `tier` says holds the originals, not
+  `alsoOn.first` — [nearby-originals-plan.md](nearby-originals-plan.md) N5 and §9, stage 0.
 - The PicPlace card's first line after an originals upload: *"Synced 2 minutes ago · records and preview ·
   209,9 MB · 55 uploaded"* — the policy label (records and preview) beside the originals just sent. It should say
   what the last run sent (Steven, 2026-09-26).

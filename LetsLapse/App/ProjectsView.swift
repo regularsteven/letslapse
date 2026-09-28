@@ -261,7 +261,7 @@ struct ProjectsView: View {
                 Text("Projects")
                     .font(.system(size: 34, weight: .bold))
                 Spacer(minLength: 8)
-                ProjectSharingChip(server: model.transferServer, picplace: model.picplace, isEnabled: $sharingEnabled)
+                ProjectSharingChip(server: model.transferServer, picplace: model.picplace, nearby: model.nearby, isEnabled: $sharingEnabled)
                     .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 6 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

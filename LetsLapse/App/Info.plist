@@ -46,6 +46,10 @@
 		     camera remote on purpose: different lifetime, different grant, and
 		     a client browsing for one must never find the other. -->
 		<string>_letslapse-xfer._tcp</string>
+		<!-- Nearby originals (docs/nearby-originals-plan.md): this PicPlace
+		     account's own devices, keyed by the account's nearby key — no
+		     code, local network only. Dormant until PicPlace offers the key. -->
+		<string>_letslapse-near._tcp</string>
 	</array>
 
 	<!-- Export compliance, answered in the binary so every TestFlight upload

@@ -316,6 +316,15 @@ final class PicPlaceController: ObservableObject {
     /// start the next project into the same stop.
     var originalsRunPaused = false
     @Published internal(set) var manualOriginalsWaiting = false
+    /// The account's nearby key as this device holds it
+    /// (PicPlaceNearbyKey.swift, docs/nearby-originals-plan.md §5): nil
+    /// until PicPlace offers one and this device has fetched it.
+    @Published internal(set) var nearbyKey: PicPlaceNearbyKey?
+    /// The last `/status` said PicPlace hands out the key.
+    @Published internal(set) var serverOffersNearbyKey = false
+    var nearbyKeyFetch: Task<Void, Never>?
+    /// When an unrecognised peer last sent this device back to `/status`.
+    var nearbyStatusRereadAt: Date?
     /// Whether any network is up at all — an interrupted upload waits for it.
     var isNetworkUp = true
     /// Pushes and a check that were due while the network rule — or a
@@ -542,6 +551,9 @@ final class PicPlaceController: ObservableObject {
         client = PicPlaceClient(tokens: tokens, accountKey: tokensKey) { [weak self] in
             Task { @MainActor in self?.handleSignedOutByServer() }
         }
+        // The nearby key held from an earlier run: the service can find the
+        // account's devices before `/status` answers — or with no internet.
+        restoreNearbyKey()
         #if DEBUG
         // `LL_PICPLACE_SIGNOUT=1` starts from a signed-out state: revokes the
         // device if one is registered and clears the tokens and defaults —
@@ -717,6 +729,7 @@ final class PicPlaceController: ObservableObject {
             Self.saveProfile(nil, for: key)
         }
         PicPlaceKeychain.clearLegacy()
+        dropNearbyKey(reason: "signed out", accountKey: key)
         profile = nil
         usage = nil
         Self.setSession(nil, forHost: host)
@@ -758,6 +771,7 @@ final class PicPlaceController: ObservableObject {
             // Offline at launch is fine: the stored profile stands until the
             // server says otherwise (a refused refresh calls handleSignedOutByServer).
             LLog("picplace: could not reach \(sessionHost) at launch: \(error)")
+            noteNearbyKeyRefusal(error)
         }
         // A transient failure of the handshake (a 500, a flaky link) must
         // not cost the launch its check: the profile is known, the check
@@ -822,6 +836,7 @@ final class PicPlaceController: ObservableObject {
         // filing (or a pull) left posters unnoted (`settlePosters`).
         serverListsAssetsInBatches = status.features["asset_lists_batch"] == true
         serverSyncsCollections = status.features["collections"] == true
+        noteNearbyKey(status)
         #if DEBUG
         // `LL_PICPLACE_NO_BATCH=1`: behave as a server without the batched
         // read — every unnoted poster goes through the push queue (how the
@@ -919,11 +934,16 @@ final class PicPlaceController: ObservableObject {
     func refreshUsage(rows: [PPProject]? = nil) {
         guard isSignedIn else { return }
         Task {
-            if let status: PPStatus = try? await client.get("status") {
+            do {
+                let status: PPStatus = try await client.get("status")
                 noteLimits(status)
                 noteLibraries(status)
                 await repairBindingLibraryIfMissing(status)
                 await refreshUsage(status: status, rows: rows)
+            } catch {
+                // A disabled account or a revoked device ends the nearby
+                // key's use here; anything else is the next read's.
+                noteNearbyKeyRefusal(error)
             }
         }
     }
@@ -1031,6 +1051,7 @@ final class PicPlaceController: ObservableObject {
         progress.removeAll()
         if let key = profile?.accountKey { Self.saveProfile(nil, for: key) }
         if let host = profile?.host { Self.setSession(nil, forHost: host) }
+        dropNearbyKey(reason: "signed out by PicPlace", accountKey: profile?.accountKey)
         profile = nil
         usage = nil
         lastSignInError = "PicPlace signed this device out. Sign in again."
@@ -1687,7 +1708,7 @@ final class PicPlaceController: ObservableObject {
                 let detail: PPProjectDetail = try await client.get("projects/\(key.uuidString.lowercased())")
                 let project = detail.project
                 guard var record = records[key] else { return }
-                record.alsoOn = project.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name)
+                record.notePresence(project.presence, excluding: profile?.deviceID)
                 let heavy = (detail.assets ?? []).filter { $0.status == "confirmed" && PicPlaceSyncInventory.isHeavy($0.name) }
                 record.serverHeavyFiles = heavy.count
                 record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }
@@ -2169,12 +2190,11 @@ final class PicPlaceController: ObservableObject {
 
     // MARK: This device
 
+    /// The name presence rows and the device list show: the Mac's computer
+    /// name, a phone's model ("iPhone 18 Pro") where iOS only says "iPhone"
+    /// (`DeviceName`, 2026-09-28).
     static var deviceName: String {
-        #if os(macOS)
-        return Host.current().localizedName ?? "Mac"
-        #else
-        return UIDevice.current.name
-        #endif
+        DeviceName.current
     }
 
     static var platform: String {

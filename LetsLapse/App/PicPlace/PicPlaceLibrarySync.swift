@@ -393,7 +393,8 @@ extension PicPlaceController {
             let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
             records[originID] = PicPlaceSyncRecord(
                 syncedAt: Date(), revision: row.revision, files: files, bytes: bytes, uploaded: 0,
-                alsoOn: row.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name),
+                alsoOn: row.presence.otherDeviceNames(excluding: profile?.deviceID),
+                originalsOn: row.presence.originalsHolders(excluding: profile?.deviceID),
                 server: profile?.server ?? serverString, lastError: nil, policy: "pull",
                 heavyFiles: heavy.count, heavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) },
                 serverHeavyFiles: heavy.count, serverHeavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) },

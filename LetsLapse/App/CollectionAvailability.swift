@@ -50,16 +50,17 @@ extension PicPlaceController {
         return .download
     }
 
-    /// Brings `blends` down — one download per project, each blend by name.
-    /// Returns how many downloads started.
+    /// Brings `blends` here — per project, each blend by name, from a
+    /// device nearby when one holds them (N12), else from PicPlace.
+    /// `fromPicPlace` skips the nearby devices. Returns how many started.
     @discardableResult
-    func fetchBlends(_ blends: [AppModel.BlendProject]) -> Int {
+    func fetchBlends(_ blends: [AppModel.BlendProject], fromPicPlace: Bool = false) -> Int {
         var started = 0
         for (captureID, group) in Dictionary(grouping: blends, by: \.captureID) {
             guard let capture = model.capture(id: captureID), canSync, syncTasks[captureID] == nil,
                   !removingProjects.contains(captureID) else { continue }
-            downloadOriginals(capture, kinds: [.blend], only: Set(group.map(\.outputFileName)))
-            if syncTasks[captureID] != nil { started += 1 }
+            guard let shortfall = model.holdings(for: capture).shortfall(for: .blends(Set(group.map(\.id)))) else { continue }
+            if fetch(capture, shortfall: shortfall, fromPicPlace: fromPicPlace) { started += 1 }
         }
         return started
     }
@@ -101,7 +102,8 @@ struct ClipsPrompt: Identifiable {
     var title: String {
         switch offer {
         case .download: return "Download \(clips)?"
-        case .downloading: return "Downloading \(clips)"
+        case .downloading(let progress): return progress.source == nil ? "Downloading \(clips)" : "Importing \(clips)"
+        case .nearby(let nearby, _): return "Import \(clips) from \(nearby.deviceName)?"
         case .signIn: return "Sign in to PicPlace?"
         case .connect: return "This library isn't connected"
         case .notUploaded, .unavailable: return count == 1 ? "This clip isn't here" : "\(count) clips aren't here"
@@ -116,6 +118,8 @@ struct ClipsPrompt: Identifiable {
             return "\(needs) — \(count == 1 ? "it's" : "\(count) are") on PicPlace\(size). You can keep working while \(count == 1 ? "it downloads" : "they download")."
         case .downloading:
             return "\(needs); \(count == 1 ? "it's" : "they're") on the way."
+        case .nearby(let nearby, let alsoOnPicPlace):
+            return "\(needs) — \(count == 1 ? "it's" : "they're") on \(nearby.deviceName), nearby\(size). You can keep working while \(count == 1 ? "it comes" : "they come") over.\(alsoOnPicPlace ? " \(count == 1 ? "It's" : "They're") on PicPlace too." : "")"
         case .signIn:
             return "\(needs), and \(count == 1 ? "it's" : "they're") on PicPlace — sign in to download \(count == 1 ? "it" : "them")."
         case .connect:

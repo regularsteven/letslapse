@@ -33,6 +33,12 @@ enum PicPlaceKeychain {
     /// (2026-09-14). Whatever the data-protection query says short of
     /// success, the login keychain is asked.
     static func load(account: String) -> PicPlaceTokens? {
+        loadData(account: account).flatMap { try? JSONDecoder().decode(PicPlaceTokens.self, from: $0) }
+    }
+
+    /// The item's bytes, whatever they hold — the tokens, or the account's
+    /// nearby key (`PicPlaceNearbyKey`, under `<account key>|nearby`).
+    static func loadData(account: String) -> Data? {
         var query = baseQuery(account: account, dataProtection: true)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -45,11 +51,14 @@ enum PicPlaceKeychain {
             status = SecItemCopyMatching(legacy as CFDictionary, &item)
         }
         guard status == errSecSuccess, let data = item as? Data else { return nil }
-        return try? JSONDecoder().decode(PicPlaceTokens.self, from: data)
+        return data
     }
 
     static func save(_ tokens: PicPlaceTokens, account: String) throws {
-        let data = try JSONEncoder().encode(tokens)
+        try saveData(try JSONEncoder().encode(tokens), account: account)
+    }
+
+    static func saveData(_ data: Data, account: String) throws {
         var status = write(data, account: account, dataProtection: true)
         if status != errSecSuccess {
             status = write(data, account: account, dataProtection: false)

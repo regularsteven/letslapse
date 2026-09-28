@@ -1699,6 +1699,18 @@ struct CollectionDetailView: View {
         case .downloading:
             Button("Continue When Ready") { if prompt.thenExport { exportWhenClipsArrive = true } }
             Button("Stay as Is", role: .cancel) {}
+        case .nearby(_, let alsoOnPicPlace):
+            Button("Import and Continue") {
+                let blends = prompt.blendIDs.compactMap { model.blend(id: $0) }
+                if model.picplace.fetchBlends(blends) > 0, prompt.thenExport { exportWhenClipsArrive = true }
+            }
+            if alsoOnPicPlace {
+                Button("Download from PicPlace") {
+                    let blends = prompt.blendIDs.compactMap { model.blend(id: $0) }
+                    if model.picplace.fetchBlends(blends, fromPicPlace: true) > 0, prompt.thenExport { exportWhenClipsArrive = true }
+                }
+            }
+            Button("Stay as Is", role: .cancel) {}
         case .signIn:
             Button("Sign In") { model.picplace.signIn() }
             Button("Stay as Is", role: .cancel) {}
@@ -1900,7 +1912,11 @@ private struct MissingClipsBanner: View {
                 // PicPlace's list of each project's files: the size of a
                 // blend `assets.ndjson` never recorded.
                 .task(id: Set(missing.map(\.captureID))) {
-                    for id in Set(missing.map(\.captureID)) { picplace.refreshProject(id) }
+                    for id in Set(missing.map(\.captureID)) {
+                        picplace.refreshProject(id)
+                        // And the devices nearby, which may hold them too.
+                        model.nearby.want(id)
+                    }
                 }
             }
         }

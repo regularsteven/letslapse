@@ -888,6 +888,10 @@ final class AppModel: ObservableObject {
         /// export started on this device can see it: reading 20 GB off the disk
         /// under a blend makes both look broken.
         case servingTransfer
+        /// Originals going to another of this account's devices nearby
+        /// (`NearbyService`, 2026-09-28) — its own case, so the code-based
+        /// server refuses while it runs and each ends only its own.
+        case servingNearby
 
         /// What the other device is told. Sentences, because the client shows
         /// this verbatim and "busy" on its own explains nothing.
@@ -898,6 +902,7 @@ final class AppModel: ObservableObject {
             case .exportingArchive: return "That device is exporting a project."
             case .importingArchive: return "That device is importing a project."
             case .servingTransfer: return "That device is already sending a project."
+            case .servingNearby: return "That device is sending originals to another of your devices."
             }
         }
     }
@@ -950,6 +955,19 @@ final class AppModel: ObservableObject {
     /// projects this device pushed, and the pushes in flight. Main-actor
     /// state the cards observe directly; nothing else in the model reads it.
     @MainActor lazy var picplace = PicPlaceController(model: self)
+    /// Nearby originals (docs/nearby-originals-plan.md): this account's
+    /// other devices on the local network — what they hold of the projects
+    /// on screen, and the originals they ask this device for. Made at
+    /// launch beside `picplace`; dormant until PicPlace hands out the
+    /// account's nearby key.
+    @MainActor var nearby: NearbyService {
+        if let nearbyStorage { return nearbyStorage }
+        let service = NearbyService(model: self)
+        nearbyStorage = service
+        return service
+    }
+    private var nearbyStorage: NearbyService?
+    @MainActor var nearbyIfLoaded: NearbyService? { nearbyStorage }
     private var transferServerStorage: ProjectTransferServer?
     /// The server when something has started it — a library switch stops
     /// it and never makes one only to stop it.
@@ -9283,6 +9301,7 @@ final class AppModel: ObservableObject {
             // first connection must not wait for a card to be drawn: an
             // empty library's Projects tab draws none.
             _ = picplace
+            nearby.update()
         }
         sweepTrashAtLaunch()
         if libraryExportStale {
@@ -10661,7 +10680,11 @@ final class AppModel: ObservableObject {
     /// a copy failed — "Project 132497FD is not in the library" — and the
     /// iPad's conflicts could not take PicPlace's version.
     func applyPulledUpdate(projectID: UUID, originID: UUID, capture arrived: CaptureProject, blends arrivedBlends: [BlendProject]) throws {
+        // Blends another device deleted since this one last agreed: live
+        // here, a tombstone in what arrived.
+        var deletedElsewhere: [BlendProject] = []
         _ = try store.update(projectID) { document in
+            let liveHere = Set(document.blends.filter { $0.deletedAt == nil }.map(\.id))
             var capture = arrived
             capture.id = projectID
             capture.originID = originID
@@ -10679,13 +10702,44 @@ final class AppModel: ObservableObject {
             }
             let known = Set(blends.map(\.id))
             blends.append(contentsOf: document.blends.filter { !known.contains($0.id) })
+            deletedElsewhere = blends.filter { $0.deletedAt != nil && liveHere.contains($0.id) }
             document.capture = capture
             document.blends = blends
         }
+        trashBlendFilesDeletedElsewhere(deletedElsewhere)
         validatedSourceFrames.remove(projectID)
         noteFilesChanged(for: projectID)
         assetStore.forget(projectFolder: captureFolderURL(for: projectID))
         noteIndexChanged()
+    }
+
+    /// A blend is one asset on every device (docs/nearby-originals-plan.md
+    /// N13, Steven 2026-09-28: "deletion would be global"): its tombstone
+    /// arriving from another device does here what a delete here does —
+    /// the file goes to this device's trash (purged with the record after
+    /// 30 days) and the collections here let go of it. Until now the
+    /// tombstone hid the blend and its file stayed in `blends/` for good.
+    private func trashBlendFilesDeletedElsewhere(_ gone: [BlendProject]) {
+        guard !gone.isEmpty else { return }
+        removeCollectionEntries(blendIDs: Set(gone.map(\.id)))
+        persistCollectionsQuietly()
+        var moved = 0
+        for blend in gone {
+            let output = blendOutputURL(for: blend).standardizedFileURL
+            let folder = captureFolderURL(for: blend.captureID).standardizedFileURL.path
+            guard output.path.hasPrefix(folder.hasSuffix("/") ? folder : folder + "/"),
+                  FileManager.default.fileExists(atPath: output.path) else { continue }
+            do {
+                try moveToTrash(output, as: trashURL
+                    .appendingPathComponent(blend.captureID.uuidString, isDirectory: true)
+                    .appendingPathComponent("blends", isDirectory: true)
+                    .appendingPathComponent(output.lastPathComponent))
+                moved += 1
+            } catch {
+                LLog("pull: could not move \(output.lastPathComponent), deleted on another device, to the trash — \(error.localizedDescription)")
+            }
+        }
+        LLog("pull: \(gone.count) blend(s) deleted on another device — \(moved) file(s) moved to the trash here")
     }
 
     /// "Keep both" (v2 plan §4.4): this device's version of a project becomes
@@ -11339,6 +11393,7 @@ final class AppModel: ObservableObject {
     /// re-roots; a DEBUG build logs its release.
     func prepareForSwitch() {
         picplace.shutDown()
+        nearbyIfLoaded?.shutDown()
         transferServerIfLoaded?.stop()
         flushLibraryPersistsAndExport()
         persister.refuseWrites = "This library was switched away from; the old model writes nothing."

@@ -175,15 +175,12 @@ final class ProjectTransferServer: ObservableObject {
         catalogue = []
     }
 
-    /// What the other end's picker shows. `UIDevice` on iOS; on a Mac the
-    /// sharing name people already recognise (the one in Settings ▸ General ▸
-    /// About and on AirDrop), falling back to the host name.
+    /// What the other end's picker shows: on a Mac the sharing name people
+    /// already recognise (Settings ▸ General ▸ About, AirDrop); on iOS the
+    /// model ("iPhone 18 Pro") where the system only says "iPhone"
+    /// (`DeviceName`).
     static var deviceName: String {
-        #if os(iOS)
-        return UIDevice.current.name
-        #else
-        return Host.current().localizedName ?? ProcessInfo.processInfo.hostName
-        #endif
+        DeviceName.current
     }
 
     /// Coarse on purpose — it picks the glyph in the picker and disambiguates
@@ -716,7 +713,10 @@ final class ProjectTransferServer: ObservableObject {
     private static let nullSink = false
     #endif
 
-    private nonisolated static func pump(
+    /// Also the nearby-originals serve's pump (`NearbyService`, 2026-09-28):
+    /// the same frames, window and pools for a list of heavy files, with an
+    /// empty `manifestData` — none of its entries is `project.json`.
+    nonisolated static func pump(
         job: TransferJob,
         connection: NWConnection,
         folder: URL,

@@ -618,7 +618,7 @@ extension PicPlaceController {
         record.syncedAt = Date()
         record.revision = row.revision
         record.clearFailure()
-        record.alsoOn = row.presence.compactMap(\.device).filter { $0.id != profile?.deviceID }.map(\.name)
+        record.notePresence(row.presence, excluding: profile?.deviceID)
         record.posterToken = nil
         record.serverConfirmedSeen = assets.count
         let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
