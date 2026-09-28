@@ -72,10 +72,34 @@ via `ImageExporter` `.heic`; Capture Flat writes HEIC too; the remote takes
   (`ftypheic`, HEVC; 0.76–1.4 MB, 3024×4032, EXIF + GPS carried); the format
   line read `4032×3024 · HEIC` throughout; capture logs say `heic-flat`
   (Capture Flat was on, so the flat HEIC write is proved); `shoot.py audit`
-  PASS, no alarms, no crash reports. **Still owed:** the blended-window path
-  (an Interval run with a blend depth > 1 — Photo's `--blend 3` delivered one
-  frame, so it never reached `LiveBlendController`), and a run with Capture
-  Flat off.
+  PASS, no alarms, no crash reports. **The blended-window path has had its
+  device run since (2026-09-28):** *Stack 28. 9. at 08:42* (641 windows) and
+  *10:23* (77) are "Interval · HEIC · 10-frame blend" shoots that landed as
+  4032×3024 HEIC on the 18 Pro (08:42's capture log: blend 10,
+  `captureFlat: true`), and 08:42's 641-photo blend rendered. **Still owed:**
+  a run with Capture Flat off.
+- **Review photos on a long shoot — jetsam, fixed 2026-09-28 in `c7d56f7`.**
+  *08:42* died at ~430 of 641 in Originals ▸ Review photos, three times, with
+  no crash report (`JetsamEvent-2026-09-28-100631`: frontmost at 5.57 GB).
+  `FramingMeasurement.measureChunk` decoded every photo in one long block on a
+  global queue with no autorelease pool, so each still's half-size picture
+  (~12–14 MB) lived until the review ended. It was never HEIC's alone: on the
+  Mac the unfixed `lapse framing --workers 2` climbed the same on this shoot's
+  HEICs (1.86 GB at 100, 8.76 GB at 600) and on JPEGs of the same frames
+  (2.33 → 5.03 GB, 100 → 300); a pool per decode holds 0.83–0.85 GB (HEIC) and
+  1.27–1.37 GB (JPEG) at any length, with identical offsets. The review now
+  logs `framing:` lines (start, every 10 %, end) with the footprint. **Owed:**
+  the phone check — a build with the fix, Review on *08:42*, then pull `Logs/`
+  (the `framing:` footprint stays flat to the end) and `shoot.py audit
+  --device iphone-18 --hours 1` (no new JetsamEvent). The sweep: stabilised
+  and plain interval export already drain a pool per still
+  (`ImageStacker.accumulateImages`, `stackSequence`,
+  `BlendWindowRenderer.render`), so the step after the review is safe. The one
+  unpooled per-frame loop over a whole shoot left is raw-only: Clone and
+  compress → Compressed DNG (`DNGArchive.convert`, one block per frame on a
+  private concurrent queue, `DNGArchiveConverter.swift:415`) — worth a
+  footprint bench on a long raw shoot. The white-balance measure
+  (`AppModel.measureWhiteBalance`) reads raw metadata only.
 - **PicPlace content type.** `.heic` uploads omit `content_type` (nil in
   `PicPlaceSyncRun.contentType`, as Scanner siblings always have). Confirm
   the server takes `image/heic`, then add it.
@@ -91,6 +115,24 @@ via `ImageExporter` `.heic`; Capture Flat writes HEIC too; the remote takes
 - **Encoder contention** (flagged in `CameraController.runStillsHEIC`, not
   mitigated): HEIC stills share the hardware HEVC encoder with video
   recording and clip exports.
+
+### Two 18 Pro crash reports from the night of 2026-09-27 — a watchdog kill on the project cards, a navigation assertion
+
+Found by `shoot.py audit --device iphone-18` on 2026-09-28 (Release 0.1.0, iOS 27.0
+24A437). Neither is the framing review's jetsam (HEIC capture, above).
+- **`LetsLapse-2026-09-27-225950.ips` — watchdog kill (`0x8BADF00D`, FrontBoard).** The
+  main thread was in `AppModel.effectiveFrameCount(for:)` under `ProjectCard.body`. It
+  builds a `URL(fileURLWithPath:)` for every source file name only to take its last
+  component, and each one costs a `getcwd` (an `open`) because the path is relative:
+  hundreds per card, per body pass, on a long shoot. The names are `source/frame-00001.heic`
+  and the nominations are bare, so the fix is a string last component
+  (`($0 as NSString).lastPathComponent`). Look for the same pattern in the other per-name
+  filters while there.
+- **`LetsLapse-2026-09-27-225154.ips` — SIGABRT: an `NSAssertionHandler` failure in
+  `-[UINavigationController setViewControllers:animated:]`**, driven by SwiftUI
+  navigation. The report carries no assertion text. It needs its own look: what was
+  navigating at 22:51 (that session's console log), and whether the "Steve 18 Pro crash
+  investigation" session already has it.
 
 ### Clone and compress — design mirrors, and a device run
 
