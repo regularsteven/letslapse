@@ -33,8 +33,11 @@ where iOS says "iPhone". Stages 0–6 are in the plan §11.
 **2026-09-28: built (stages 0–4 and N13), bench-verified on two Simulators, and
 device-verified** — Release on the 18 Pro → 16 Pro against picplace.co, where PicPlace
 deployed the key the same day: both phones fetched the key on launch, three imports with no
-failures, 369 MB at about 9.5 MB/s over Wi-Fi (plan §15). **Uncommitted.** Owed: the SVG
-mirrors (after Steven's sign-off), Stop mid-send and the *Sending originals to …* row seen
+failures, 369 MB at about 9.5 MB/s over Wi-Fi (plan §15). Committed `cf702fe`; the SVG
+mirrors drawn the same day (plan §15). **Steven's call:** the project card's action
+*Import from iPhone 18 Pro* wraps to two lines and cuts its caption before the size —
+recommended: *Import originals* as the action (the sibling of *Download originals*), the
+device named in the caption. Owed: Stop mid-send and the *Sending originals to …* row seen
 on a device, a blend import, N13 on a real pull, a Mac importing (sign it in to picplace.co
 first), and the bench clean-up (the two Simulators, the `nearby-bench-*` tokens on
 picplace.test, `LetsLapseRun/libraries/nearby-bench-b`).

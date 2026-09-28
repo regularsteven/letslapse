@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1228 908" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iPadOS · Editor preview page · interval, originals on a device nearby · landscape</title>
+  <desc>Mirrors App/EditorPreviewPage.swift `floatingBody(in:)` — the editor's PREVIEW PAGE on an iPad in LANDSCAPE when a device of this PicPlace account, on the same network, holds the originals (nearby originals, docs/nearby-originals-plan.md §7; Steven's brief of 2026-09-28: 'Preview only · The originals are only on iPhone for now · [Import originals from {Steve iPhone 18}]'); the iPad twin of iOS/project-photo.viewer.preview.nearby.portrait.svg. Everything but the status card is project-photo.viewer.preview.landscape.svg's: `Self.fit(aspect:in:)` sizes the picture to the whole safe area at the poster's aspect and the ZStack seats it top-left — a 3:4 shoot is 582 × 776 at (0, 24), poster.jpg as it is, never graded again — so the taller card moves nothing; `touchChrome` (Back and ⓘ at x 16 / 60, the tab pill trailing at 16 with Editor selected and Text · Frames · Masks locked, amber at 38 %, all centred on y 54); App/EditorControls/EditorGroupBar.swift (`.padPill`, `locked: true`) beside the card, 380 × 66, right 16, bottom 784, cells #8E8E93 at 42 %, none selected, the dots amber at 55 % (Presets, Light). THE OFFER: `NearbyService.offer(for:shortfall:)` (App/Nearby/NearbyService.swift) — a device that answered the holdings question with every original, not busy; a Mac first, else the first to answer (N14) — reaches the card through `PicPlaceController.fetchOffer` as `.nearby(NearbyOffer, alsoOnPicPlace:)`, ahead of PicPlace (N12); the page asks for it on appear (`nearby.want(captureID)`, beside loadHoldings and refreshProject). The card shows it only while that device answers (N7, N15): LetsLapse closed there, or another network, and this is the page's 'not uploaded yet' card again. THE FOOT ROW, HStack(alignment: .bottom, spacing 18) padded 16: `statusCard(style: .dark)` with `CardAction.importNearby` in the editor's timeline-capsule seat (x 16 → 766, `maxWidth: .infinity`). THE CARD: radius 16, black 60 % over .ultraThinMaterial, padding 12, VStack(spacing 10) — the INTERVAL · 54 s · 55 frames badge (App/EditorControls/EditorMarqueeBadge.swift), then HStack(alignment: .top, spacing 10): `StatusGlyphView(.asset(.originals, .nowhere), size 13, surface .photo)` — the slashed camera, white at 45 %: PicPlace doesn't hold them either (with `alsoOnPicPlace` the grey camera stays); the title `ProjectHoldings.Tier.label` 'Preview only' 13 pt semibold white; the caption 11.5 pt #8E8E93 '\(subject) \(verb) only on \(nearby.deviceName) for now' → 'The originals are only on iPhone 18 Pro for now', one line: with the action out of the row the column could take 680 pt (the card less padding, the 18 pt glyph, two 10 pt gaps and the Spacer's 8); then the full-width button under the row, 'Import \(what) from \(deviceName)' → 'Import originals from iPhone 18 Pro' ('the originals' loses its article; a Photo capture reads 'Import the full-size photo from …'), 14 pt semibold black on LL.amber, lineLimit 2, 9 pt above and below the line, radius 10, the card's width less its padding (726). Bottom-aligned with the buttons pill, the card GROWS UP by the button (10 + 34.71): 750 × 130.94, its top at 653.06 (697.77 at rest), over the poster's foot. The press (or a tap on a greyed control, whose prompt reads 'Import the originals from iPhone 18 Pro?' · Import and Continue · Stay as Is) → `PicPlaceController.fetch` → `importNearby`: the same task slot, progress and Stop as a download — the card reads 'Importing the originals' over 'Asking iPhone 18 Pro for the files…', then 'From iPhone 18 Pro · 120 MB of 209,9 MB' with the amber bar, the ↓ cloud and Stop — landing on the Editor page. With `alsoOnPicPlace` the caption reads 'Editing needs the originals — on iPhone 18 Pro nearby, and on PicPlace · 55 files · 209,9 MB' (still one line at this width), the camera grey, the same button. A failed import's sentence (`NearbyService.importErrors`) replaces the caption until the next press. The device's name is `DeviceName.current` on the other device — the model where iOS says only 'iPhone' (N5). GEOMETRY: the iPhone mirror's card offsets carried to this width, and the card laid out headlessly with the code's own modifiers (SwiftUI ImageRenderer on the Mac, 2026-09-28: one-line caption at 256 pt, one-line button label at 237.7 pt centred in 726) — iOS SF Pro metrics for the seats, as the sibling files. Not screenshot-verified on an iPad: the 2026-09-28 bench ran iPhone Simulators. HOOKS: the nearby bench — two Simulators bound to one picplace.test account (`LL_PICPLACE_TOKENS`, one token per install), the originals `LL_REGISTER`ed on the first and the project pulled as a preview on an iPad Simulator in landscape; `LL_DROP_SOURCES=&lt;uuid&gt;:originals` then `LL_TAB=gallery LL_ITEM=&lt;uuid&gt;` there with the first open (`LL_NEARBY_IMPORT=&lt;uuid&gt;` presses the button). iPad PORTRAIT takes `railBody`: the same card, dark (railCardStyle is .dark on iOS, so the badge rides in it too), under the buttons card in the rail — min(340, 42 %) wide, a 308 pt card — undrawn.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="1180" height="820" rx="18"/></clipPath>
+    <linearGradient id="psky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FA3B8"/><stop offset="0.45" stop-color="#E8B98C"/><stop offset="1" stop-color="#F6DFB2"/></linearGradient>
+    <linearGradient id="priver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9A45E"/><stop offset="1" stop-color="#5C666E"/></linearGradient>
+    <clipPath id="pframe"><rect x="0" y="0" width="582" height="776"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="1192" height="832" rx="24" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="1180" height="820" fill="#000000"/>
+    <g transform="translate(24,24)">
+      <g id="status-bar" fill="#FFFFFF"><!-- the page is a full-screen cover (the pager): the 24 pt bar stays, hidden only in clear preview -->
+        <text x="16" y="17" font-size="12.5" class="sb">18:14</text>
+        <text x="56" y="17" font-size="12.5" class="sb">Fri 25 Sep</text>
+        <path d="M1080 12 a8 8 0 0 1 12 0 M1083 15 a4.5 4.5 0 0 1 6 0 M1085.5 17.5 l0.5 0.5 0.5 -0.5" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="wifi"/>
+        <text x="1138" y="17" text-anchor="end" font-size="12.5" class="sb">100 %</text>
+        <g data-symbol="battery.100"><rect x="1144" y="7" width="23" height="11" rx="3.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.45"/><rect x="1168" y="10.5" width="2" height="4" rx="1" fill-opacity="0.45"/><rect x="1146" y="9" width="19" height="7" rx="2"/></g>
+      </g>
+      <!-- picturePane(anchor: .center) framed at Self.fit(aspect:in:) — the poster's aspect fitted to the whole safe area (1180 × 776) and seated top-left by the ZStack: a 3:4 shoot is 582 × 776 at (0, 24); the black beside it is the ground, not a pane -->
+      <g id="poster" transform="translate(0.00,24.00) scale(1.00000)">
+      <g clip-path="url(#pframe)">
+        <rect x="0" y="0" width="582" height="776" fill="url(#psky)"/>
+        <ellipse cx="157.1" cy="108.6" rx="98.9" ry="27.2" fill="#7E93A9" opacity="0.35"/>
+        <ellipse cx="407.4" cy="77.6" rx="116.4" ry="23.3" fill="#8A9DB1" opacity="0.3"/>
+        <ellipse cx="302.6" cy="201.8" rx="139.7" ry="23.3" fill="#EACBA0" opacity="0.45"/>
+        <ellipse cx="116.4" cy="279.4" rx="104.8" ry="17.1" fill="#F2D9AE" opacity="0.5"/>
+        <circle cx="337.6" cy="310.4" r="23.3" fill="#FFCE7E" opacity="0.95"/>
+        <path d="M0 434.6 L0 415.2 L23.3 415.2 L23.3 407.4 L58.2 407.4 L58.2 417.5 L116.4 417.5 L116.4 409.7 L174.6 409.7 L174.6 419 L232.8 419 L232.8 405.1 L273.5 397.3 L314.3 392.7 L360.8 397.3 L384.1 408.2 L419 403.5 L419 412.8 L465.6 412.8 L465.6 402 L506.3 402 L506.3 411.3 L582 411.3 L582 434.6 Z" fill="#5D5346"/>
+        <rect x="0" y="434.6" width="582" height="12.4" fill="#8C7B5F"/>
+        <rect x="0" y="447" width="582" height="9.3" fill="#6E6152"/>
+        <g fill="#524A40"><rect x="203.7" y="456.3" width="8.7" height="18.6"/><rect x="261.9" y="456.3" width="8.7" height="18.6"/><rect x="320.1" y="456.3" width="8.7" height="18.6"/><rect x="378.3" y="456.3" width="8.7" height="18.6"/></g>
+        <rect x="0" y="456.3" width="582" height="319.7" fill="url(#priver)"/>
+        <rect x="87.3" y="481.1" width="232.8" height="9.3" rx="3" fill="#EBC27E" opacity="0.5"/>
+        <rect x="64" y="512.2" width="291" height="9.3" rx="3" fill="#E0B26B" opacity="0.4"/>
+        <rect x="104.8" y="543.2" width="209.5" height="9.3" rx="3" fill="#D2A45F" opacity="0.3"/>
+        <path d="M273.5 682.9 L582 543.2 L582 776 L192.1 776 Z" fill="#8A7A55"/>
+        <path d="M424.9 776 L582 589.8 L582 776 Z" fill="#3F4438"/>
+        <g fill="#221F1C"><circle cx="320.1" cy="706.2" r="4"/><circle cx="349.2" cy="694.5" r="4"/><circle cx="381.2" cy="681.3" r="4"/><circle cx="413.2" cy="667.4" r="4"/><circle cx="296.8" cy="725.6" r="4"/><circle cx="448.1" cy="651.8" r="4"/></g>
+      </g>
+      </g>
+      <g id="touch-chrome"><!-- EditorPreviewPage.touchChrome: HStack(spacing 8) padded 16 / 12 under the safe area — Back · ⓘ · Spacer · EditorTabPill -->
+<g id="back-button"><!-- chromeDisc("chevron.left", "Back"): 36 pt, black 40 % -->
+  <circle cx="34" cy="54" r="18" fill="#000" opacity="0.4"/>
+  <path d="M37 48 L31 54 L37 60" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+</g>
+<g id="info-button"><!-- infoButton: chromeDisc("info.circle", "Project info") — the pager's onInfo raises the project's panel as a sheet (metadata works anywhere) -->
+  <circle cx="78" cy="54" r="18" fill="#000" opacity="0.4"/>
+  <g data-symbol="info.circle" fill="none" stroke="#FFF" stroke-linecap="round"><circle cx="78" cy="54" r="7.7" stroke-width="1.7"/><path d="M76.6 53.1H78.1V58.1M76.4 58.3H79.8" stroke-width="1.6" stroke-linejoin="round"/></g>
+  <circle cx="78" cy="50.1" r="1.15" fill="#FFF"/>
+</g>
+<g id="tab-pill"><!-- EditorTabPill(locked: Text · Frames · Masks): rgba(28,28,30,.85) over material, radius 18; the Editor page selected (amber, black label); a locked page's label is amber at 38 % — still tappable, the tap asks (hint "Needs the originals") -->
+<rect x="914.7" y="39" width="249.3" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+<rect x="917.7" y="42" width="59.2" height="24" rx="12" fill="#FFB340"/>
+<text x="947.3" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+<text x="1003.4" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Text</text>
+<text x="1063.7" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Frames</text>
+<text x="1130.2" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Masks</text>
+</g>
+</g>
+      <g id="foot-row"><!-- HStack(alignment: .bottom, spacing 18) { statusCard(.dark).frame(maxWidth: .infinity) ; EditorGroupBar(.padPill) } .padding(16) — the card takes the editor's timeline-capsule seat, x 16 → 766; bottom-aligned with the pill (784), so the button makes it grow UP: 130.94 tall, top 653.06 -->
+<g id="status-card"><!-- statusCard(style: .dark) with CardAction.importNearby — 750 × 130.94; the text column may take 680 pt (the card less padding, the 18 pt glyph, two 10 pt gaps and the Spacer's 8 — no action in the row), the button the card's width less its padding (726). Offsets from the card's top as the iPhone mirror: badge +12, title +54.38, caption +71.46, button +84.24 -->
+<rect x="16.0" y="653.06" width="750.0" height="130.94" rx="16" fill="#141416" fill-opacity="0.74"/>
+<g id="marquee-badge"><!-- EditorMarqueeBadge(kind: .interval): 20 pt, black 50 %, 11 pt semibold white — kind · length · frames -->
+<rect x="28.0" y="665.06" width="175.1" height="20" rx="10" fill="#000" opacity="0.5"/>
+<text x="39.0" y="679.06" font-size="11" class="sb" fill="#FFF">INTERVAL · 54 s · 55 frames</text></g>
+<!-- StatusGlyphView(.asset(.originals, .nowhere), size 13, surface .photo): the slashed camera — not here, and not on PicPlace either (plan §16); with alsoOnPicPlace the grey camera stays -->
+<g transform="translate(25.63,690.72) scale(0.9474)" data-symbol="camera.fill + a slash knocked through (no SF camera.slash)"><mask id="nb-knock-camera" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M3 2.4L21 21.6" stroke="#000000" stroke-width="5" stroke-linecap="round"/></mask><g mask="url(#nb-knock-camera)"><path fill="#FFFFFF" fill-opacity="0.45" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g><path d="M3 2.4L21 21.6" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="2.3" stroke-linecap="round"/></g>
+<text x="56.0" y="707.44" font-size="13" class="sb" fill="#FFF">Preview only</text>
+<text x="56.0" y="724.52" font-size="11.5" fill="#8E8E93">The originals are only on iPhone 18 Pro for now</text>
+<g id="import-nearby"><!-- CardAction.importNearby — the full-width button: Text 14 pt semibold, lineLimit 2, 9 pt above and below, black on LL.amber, radius 10; 10 pt under the row, 12 above the card's foot; the label one line (237.7 pt) centred in 726 -->
+<rect x="28.0" y="737.29" width="726.0" height="34.71" rx="10" fill="#FFB340"/>
+<text x="391.0" y="759.62" text-anchor="middle" font-size="14" class="sb" fill="#000">Import originals from iPhone 18 Pro</text>
+</g>
+</g>
+<g id="main-buttons"><!-- EditorGroupBar(style: .padPill, locked: true): padding 6, six 58 pt cells 4 apart, radius 26 over rgba(28,28,30,.85) + material — 380 × 66, right 16 / bottom 16 off the safe area; cells #8E8E93 at 42 %, none selected; dots amber at 55 % -->
+<rect x="784" y="718" width="380" height="66" rx="26" fill="#1C1C1E" opacity="0.85"/>
+<g opacity="0.42"><g transform="translate(809.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="photo.stack"><rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g><text x="819.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Presets</text></g>
+<circle cx="819.0" cy="771.0" r="2" fill="#FFB340" fill-opacity="0.55"/>
+<g opacity="0.42"><g transform="translate(871.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="sun.max"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g><text x="881.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Light</text></g>
+<circle cx="881.0" cy="771.0" r="2" fill="#FFB340" fill-opacity="0.55"/>
+<g opacity="0.42"><g transform="translate(933.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="circle.lefthalf.filled"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></g><text x="943.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Color</text></g>
+<circle cx="943.0" cy="771.0" r="2" fill="none"/>
+<g opacity="0.42"><g transform="translate(995.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="sparkles"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8zM18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" fill="currentColor"/></g><text x="1005.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Effects</text></g>
+<circle cx="1005.0" cy="771.0" r="2" fill="none"/>
+<g opacity="0.42"><g transform="translate(1057.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="triangle"><path d="M12 4l9 16H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></g><text x="1067.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Detail</text></g>
+<circle cx="1067.0" cy="771.0" r="2" fill="none"/>
+<g opacity="0.42"><g transform="translate(1119.0,731.0) scale(0.8333)" color="#8E8E93" data-symbol="crop.rotate"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g><text x="1129.0" y="764.0" text-anchor="middle" font-size="10" class="sb" fill="#8E8E93">Crop</text></g>
+<circle cx="1129.0" cy="771.0" r="2" fill="none"/>
+</g>
+      </g>
+      <rect x="485" y="806" width="210" height="5" rx="2.5" fill="#FFFFFF" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="614" y="874" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iPadOS · Editor preview page · interval, originals on a device nearby · landscape · 1180×820 pt</text>
+  <text x="614" y="892" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors EditorPreviewPage floatingBody + statusCard(.dark) with CardAction.importNearby, grown up beside EditorGroupBar(.padPill, locked) — NearbyService.offer → FetchOffer.nearby</text>
+</svg>

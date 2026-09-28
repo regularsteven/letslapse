@@ -220,8 +220,9 @@ across is the 18 Pro uploading to PicPlace and the 16 Pro downloading.
   cold at launch.
 - **DEBUG:** `-letslapse.nearby.serve NO` as a launch argument turns the switch
   off for a run without writing the setting.
-  `LL_NEARBY_STAGE=offer|importing|sending` stages the card and chip states for
-  screenshots with no peer.
+  `LL_NEARBY_STAGE=offer|importing|sending` (staging the card and chip states
+  with no peer) was planned and **not built**: the mirrors were drawn from the
+  bench and from the code's own layout.
 
 ## 9. Device names and the real holder (stage 0: no server needed)
 
@@ -270,7 +271,7 @@ across is the 18 Pro uploading to PicPlace and the 16 Pro downloading.
 | 3 | `requestFiles`, `NearbyImportRun`, `FetchOffer.nearby`, the card, the prompt, the other doors | — | Mac ← Simulator import; Stop and press again; a damaged file refused |
 | 4 | Serving chip, keep-awake, Settings switch, permission line, busy answers | — | Capture on the serving side mid-import; switch off |
 | 5 | The relay (bench; code only if it fails) | — | B uploads; A frees space |
-| 6 | SVG mirrors, after sign-off | — | INDEX rows ✅ |
+| 6 | SVG mirrors, after sign-off — **drawn 2026-09-28** | — | INDEX rows ✅ |
 
 ## 12. Bench
 
@@ -357,6 +358,15 @@ clean.
   Network. Two Simulators need nothing. And one bench token per install: a
   token reused by two installs attributes both installs' presence to one
   device row.
+
+**Mirrors, 2026-09-28** (Steven: "commit it, then do the mirrors"): the preview page's
+offer, prompt and importing states on the iPhone, the iPad (offer) and the Mac item view;
+the project screen of a preview with the new `picplace-status.preview-nearby` card state;
+Project Syncing while sending; the Settings account card's new row (886.8 pt). **Found
+drawing them:** the project card's action *Import from iPhone 18 Pro* wraps to two lines,
+and its caption, capped at two lines, is cut before the size — Steven's call; the card
+keeps the grey camera where the editor page slashes it; the Gallery pill ignores nearby
+devices (right: it says what PicPlace and this device hold).
 
 **Not yet verified:** a Mac importing; Stop mid-transfer and the *Sending
 originals to …* row (the Simulator send is too fast to see); real Wi-Fi
