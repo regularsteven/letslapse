@@ -11,6 +11,21 @@ live inline.
 
 ## Open
 
+### Gallery multi-select menu — Add to Collection and Export / Share for several projects
+
+The Gallery's menu on a multi-selection (2026-09-28, `GalleryGridContent.batchContextMenu`)
+offers Clone and compress…, Upload to PicPlace and Delete N Projects…. Steven's list also
+had two it cannot offer yet:
+- **Add to Collection.** Collections hold blended clips and stills (`LapseCollection`
+  members), not projects — there is no "add these projects" at all. Decide what adding a
+  project means (its newest blend? its hero still? every blend?), then a batch add.
+- **Export / Share.** `exportProject` writes one full-size `.lapse` per project into
+  `tmp/` for one share sheet (`ProjectArchiveShare.swift`); N projects would mean N full
+  copies at once. Needs a multi-archive export (sequential, into one folder or one
+  share) before it can join the menu.
+- Also noticed: the single-project menu's **Delete…** deletes at once — no confirm,
+  despite its ellipsis (unchanged here by instruction; the batch one confirms).
+
 ### HEIC capture — a device run, and what it touches downstream
 
 Output in the capture format sheet (Photo + Interval) gained **HEIC**

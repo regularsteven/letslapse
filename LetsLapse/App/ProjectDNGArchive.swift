@@ -164,6 +164,12 @@ final class DNGArchiveJob: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var progress: DNGArchive.Converter.SequenceProgress?
     @Published private(set) var result: AppModel.CaptureProject?
+    /// Every clone made (2026-09-28: the Gallery's multi-select runs one
+    /// clone per selected project, in turn); `result` is the last.
+    @Published private(set) var results: [AppModel.CaptureProject] = []
+    /// Which project of the run is converting — "2 of 5 · name" — while a
+    /// batch runs; nil for one project.
+    @Published private(set) var projectLine: String?
     @Published private(set) var failure: String?
     @Published private(set) var summary: String?
     private var cancelled = false
@@ -175,11 +181,21 @@ final class DNGArchiveJob: ObservableObject {
     }
 
     func start(model: AppModel, capture: AppModel.CaptureProject, options: DNGArchiveOptions) {
-        guard !isRunning else { return }
+        start(model: model, captures: [capture], options: options)
+    }
+
+    /// One clone per project, in order, with the same options. A failure
+    /// stops the run there — the clones already made stay — and Cancel
+    /// stops it between frames.
+    func start(model: AppModel, captures: [AppModel.CaptureProject], options: DNGArchiveOptions) {
+        guard !isRunning, !captures.isEmpty else { return }
         isRunning = true
         cancelled = false
+        cancelledFlag = false
         progress = nil
         result = nil
+        results = []
+        projectLine = nil
         failure = nil
         summary = nil
         let output = options.output
@@ -195,7 +211,15 @@ final class DNGArchiveJob: ObservableObject {
         #endif
         task = Task { [weak self] in
             guard let self else { return }
+            var frames = 0, inBytes = 0, outBytes = 0
+            var seconds = 0.0
             do {
+                for (index, capture) in captures.enumerated() {
+                    guard !self.cancelledFlag else { throw CancellationError() }
+                    if captures.count > 1 {
+                        self.projectLine = "Project \(index + 1) of \(captures.count) · \(capture.displayTitle)"
+                    }
+                    self.progress = nil
                 let clone = try await model.cloneAndCompress(
                     capture, output: output, nameSuffix: suffix, inFlight: inFlight,
                     shouldContinue: { [weak self] in
@@ -206,14 +230,21 @@ final class DNGArchiveJob: ObservableObject {
                     progress: { [weak self] snapshot in
                         self?.progress = snapshot
                     })
-                self.result = clone
-                if let progress = self.progress {
-                    self.summary = String(
-                        format: "%d frames · %@ → %@ · %@ · %.2f frames/s",
-                        progress.framesDone, Self.bytes(progress.inputBytes), Self.bytes(progress.outputBytes),
-                        Self.duration(progress.elapsedSeconds),
-                        progress.elapsedSeconds > 0 ? Double(progress.framesDone) / progress.elapsedSeconds : 0)
+                    self.result = clone
+                    self.results.append(clone)
+                    if let progress = self.progress {
+                        frames += progress.framesDone
+                        inBytes += progress.inputBytes
+                        outBytes += progress.outputBytes
+                        seconds += progress.elapsedSeconds
+                    }
                 }
+                self.projectLine = nil
+                let clones = captures.count > 1 ? "\(self.results.count) clones · " : ""
+                self.summary = String(
+                    format: "%@%d frames · %@ → %@ · %@ · %.2f frames/s",
+                    clones, frames, Self.bytes(inBytes), Self.bytes(outBytes), Self.duration(seconds),
+                    seconds > 0 ? Double(frames) / seconds : 0)
             } catch is CancellationError {
                 self.failure = nil
             } catch {
@@ -244,35 +275,57 @@ final class DNGArchiveJob: ObservableObject {
 struct DNGArchiveSheet: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    let capture: AppModel.CaptureProject
+    /// One project from its ⋯ menu, or the Gallery's multi-selection
+    /// (2026-09-28) — each becomes its own clone, with the same options.
+    let captures: [AppModel.CaptureProject]
     @ObservedObject var job: DNGArchiveJob
     @State private var options = DNGArchiveOptions()
-    /// Opens the new project when the run finishes.
+    /// Opens the new project when the run finishes (one project only).
     var onFinished: (AppModel.CaptureProject) -> Void = { _ in }
 
+    init(capture: AppModel.CaptureProject, job: DNGArchiveJob,
+         onFinished: @escaping (AppModel.CaptureProject) -> Void = { _ in }) {
+        self.init(captures: [capture], job: job, onFinished: onFinished)
+    }
+
+    init(captures: [AppModel.CaptureProject], job: DNGArchiveJob,
+         onFinished: @escaping (AppModel.CaptureProject) -> Void = { _ in }) {
+        self.captures = captures
+        self.job = job
+        self.onFinished = onFinished
+    }
+
+    private var isBatch: Bool { captures.count > 1 }
+
     private var sourceMegapixels: Double? {
-        guard let width = capture.sourceWidth, let height = capture.sourceHeight, width > 0, height > 0 else { return nil }
+        guard !isBatch, let capture = captures.first,
+              let width = capture.sourceWidth, let height = capture.sourceHeight, width > 0, height > 0 else { return nil }
         return Double(width * height) / 1e6
     }
 
-    private var frameCount: Int { model.sourceFrameURLs(for: capture).count }
+    private var frameCount: Int { captures.reduce(0) { $0 + model.sourceFrameURLs(for: $1).count } }
 
-    /// The formats this project and device can take: Compressed DNG needs raw
-    /// frames, HEIC an encoder.
+    /// The formats every project and this device can take: Compressed DNG
+    /// needs raw frames in all of them, HEIC an encoder.
     private var formats: [DNGArchiveOptions.Format] {
         DNGArchiveOptions.Format.allCases.filter { format in
             switch format {
-            case .dng: return model.canArchiveAsDNG(capture)
+            case .dng: return captures.allSatisfy { model.canArchiveAsDNG($0) }
             case .heic, .jpeg: return format.stillFormat?.isAvailable ?? false
             }
         }
     }
 
+    private var subject: String {
+        isBatch ? "each of the \(captures.count) selected projects" : "“\(captures.first?.displayTitle ?? "")”"
+    }
+
     private var detail: String {
+        let made = isBatch ? "A new project for \(subject), every frame" : "A new project with every frame of \(subject)"
         if options.format == .dng {
-            return "A new project with every frame of “\(capture.displayTitle)” converted to a smaller, still-raw DNG. The original is not touched."
+            return "\(made) converted to a smaller, still-raw DNG. The \(isBatch ? "originals are" : "original is") not touched."
         }
-        return "A new project with every frame of “\(capture.displayTitle)” rendered as \(options.format.title). The original is not touched."
+        return "\(made) rendered as \(options.format.title). The \(isBatch ? "originals are" : "original is") not touched."
     }
 
     var body: some View {
@@ -297,7 +350,7 @@ struct DNGArchiveSheet: View {
                     Button("Cancel") { job.cancel() }
                         .keyboardShortcut(.cancelAction)
                     Spacer()
-                } else if let result = job.result {
+                } else if let result = job.result, !isBatch {
                     Spacer()
                     Button("Close") { dismiss() }
                         .keyboardShortcut(.cancelAction)
@@ -307,12 +360,17 @@ struct DNGArchiveSheet: View {
                     }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
+                } else if job.summary != nil {
+                    Spacer()
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
                 } else {
                     Button("Cancel") { dismiss() }
                         .keyboardShortcut(.cancelAction)
                     Spacer()
                     Button(job.failure == nil ? "Start" : "Try again") {
-                        job.start(model: model, capture: capture, options: options)
+                        job.start(model: model, captures: captures, options: options)
                     }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
@@ -332,6 +390,12 @@ struct DNGArchiveSheet: View {
 
     private var optionsForm: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if isBatch {
+                LabeledContent("Projects") {
+                    Text("\(captures.count)")
+                        .foregroundStyle(.secondary)
+                }
+            }
             LabeledContent("Frames") {
                 Text("\(frameCount)")
                     .foregroundStyle(.secondary)
@@ -376,7 +440,9 @@ struct DNGArchiveSheet: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("New project: “\(capture.displayTitle) · \(options.nameSuffix)”")
+            Text(isBatch
+                 ? "New projects: “<title> · \(options.nameSuffix)”"
+                 : "New project: “\(captures.first?.displayTitle ?? "") · \(options.nameSuffix)”")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -394,6 +460,11 @@ struct DNGArchiveSheet: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
+                if let line = job.projectLine {
+                    Text(line)
+                        .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                }
                 ProgressView(value: job.fraction)
                 if let progress = job.progress {
                     HStack {

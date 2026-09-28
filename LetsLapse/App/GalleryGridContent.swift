@@ -53,6 +53,11 @@ struct GalleryGridContent: View {
     /// A menu item that needs files this device does not hold, asking
     /// whether to fetch them (FetchPrompt.swift).
     @State private var fetchRequest: FetchPromptRequest?
+    /// The multi-selection's Delete N Projects…, waiting for its confirm.
+    @State private var pendingBatchDelete: [UUID]?
+    /// The multi-selection's Clone and compress… — the projects it takes.
+    @State private var batchClone: [AppModel.CaptureProject]?
+    @StateObject private var batchCloneJob = DNGArchiveJob()
 
     var body: some View {
         Group {
@@ -76,6 +81,24 @@ struct GalleryGridContent: View {
         .editorCover($editorRequest)
         #endif
         .fetchPrompt($fetchRequest)
+        .confirmationDialog(
+            batchDeleteTitle,
+            isPresented: Binding(get: { pendingBatchDelete != nil }, set: { if !$0 { pendingBatchDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete \(pendingBatchDelete?.count ?? 0) Projects", role: .destructive) {
+                deleteBatch(pendingBatchDelete ?? [])
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(batchDeleteMessage)
+        }
+        .sheet(isPresented: Binding(get: { batchClone != nil }, set: { if !$0 { batchClone = nil } })) {
+            if let batchClone {
+                DNGArchiveSheet(captures: batchClone, job: batchCloneJob)
+                    .environmentObject(model)
+            }
+        }
     }
 
     // MARK: Standard grid
@@ -196,8 +219,97 @@ struct GalleryGridContent: View {
 
     // MARK: Context menu
 
+    /// The multi-selection's menu takes over when the pressed tile is one of
+    /// two or more selected (2026-09-28); a tile outside the selection keeps
+    /// its own menu, the way Finder and Photos behave.
     @ViewBuilder
     private func tileContextMenu(for capture: AppModel.CaptureProject) -> some View {
+        if selection.isBatch, selection.ids.contains(capture.id) {
+            batchContextMenu
+        } else {
+            singleContextMenu(for: capture)
+        }
+    }
+
+    /// The selected projects, in the grid's order.
+    private var selectedCaptures: [AppModel.CaptureProject] {
+        rows.compactMap { selection.ids.contains($0.id) ? model.capture(id: $0.id) : nil }
+    }
+
+    /// Only what applies to all of them at once (Steven, 2026-09-28): no
+    /// Open / Project details / Edit (one project each), no Done Selecting /
+    /// Select All (the selection header has both). Add to Collection and
+    /// Export / Share are left out until they can take several projects —
+    /// docs/TODO.md.
+    @ViewBuilder
+    private var batchContextMenu: some View {
+        let captures = selectedCaptures
+        // Clone and compress takes stills projects whose frames are here; the
+        // rest are left out of the run, and the row says how many go.
+        let clonable = captures.filter { model.canCloneAndCompress($0) && model.isAvailable(.frames, for: $0) }
+        if !clonable.isEmpty {
+            Button {
+                batchClone = clonable
+            } label: {
+                Label(clonable.count == captures.count
+                      ? "Clone and compress\u{2026}"
+                      : "Clone and compress \(clonable.count) of \(captures.count)\u{2026}",
+                      systemImage: "doc.zipper")
+            }
+            .disabled(batchCloneJob.isRunning)
+        }
+
+        if model.picplace.canSync {
+            Button {
+                // The Settings button's path: a job per project, one at a
+                // time, each a row in Project Syncing.
+                model.picplace.queueUploadJobs(for: captures)
+            } label: {
+                Label("Upload to PicPlace", systemImage: "icloud.and.arrow.up")
+            }
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            pendingBatchDelete = captures.map(\.id)
+        } label: {
+            Label("Delete \(captures.count) Projects\u{2026}", systemImage: "trash")
+        }
+    }
+
+    /// Where the projects go, and — the single delete's warning, counted —
+    /// how many hold files only PicPlace has, which the delete destroys.
+    private var batchDeleteMessage: String {
+        let captures = (pendingBatchDelete ?? []).compactMap { model.capture(id: $0) }
+        var text = "They move to the trash on this device, and the delete reaches PicPlace at the next check."
+        let onlyThere = captures.filter { model.picplace.deletionWarning(for: $0) != nil }.count
+        if onlyThere > 0 {
+            text += " \(onlyThere) of them hold\(onlyThere == 1 ? "s" : "") originals or blends only on PicPlace — deleting removes those from PicPlace too, for good."
+        }
+        return text
+    }
+
+    private var batchDeleteTitle: String {
+        "Delete \(pendingBatchDelete?.count ?? 0) projects?"
+    }
+
+    private func deleteBatch(_ ids: [UUID]) {
+        for id in ids {
+            guard let capture = model.capture(id: id) else { continue }
+            do {
+                try model.deleteCapture(capture)
+                selection.remove(id)
+            } catch {
+                LLog("gallery: could not delete \(capture.displayTitle): \(error)")
+            }
+        }
+        if selection.isEmpty { selection.clear() }
+    }
+
+    /// One project's menu — unchanged by the multi-selection work.
+    @ViewBuilder
+    private func singleContextMenu(for capture: AppModel.CaptureProject) -> some View {
         Button {
             onOpen(capture.id)
         } label: {
