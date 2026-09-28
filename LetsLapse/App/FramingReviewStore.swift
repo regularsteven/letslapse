@@ -52,16 +52,32 @@ final class FramingReviewStore: ObservableObject {
 
     /// Reports whole percents only: the measurement calls back from its
     /// worker threads for every photo, and a main-actor hop per photo would
-    /// be five thousand hops on a long shoot.
+    /// be five thousand hops on a long shoot. Forward only, since two
+    /// workers can report out of order. It also keeps the run's peak memory
+    /// footprint, sampled once a percent, for the console.
     private final class ProgressGate: @unchecked Sendable {
         private let lock = NSLock()
         private var lastPercent = -1
-        func admit(_ fraction: Double) -> Bool {
+        private var peakMB = 0.0
+
+        /// The new whole percent, or nil when `fraction` does not move it on.
+        func admit(_ fraction: Double) -> Int? {
             let percent = Int(fraction * 100)
             lock.lock(); defer { lock.unlock() }
-            guard percent != lastPercent else { return false }
+            guard percent > lastPercent else { return nil }
             lastPercent = percent
-            return true
+            peakMB = max(peakMB, DNGArchive.ProcessMemory.footprintMB())
+            return percent
+        }
+
+        var percent: Int { lock.lock(); defer { lock.unlock() }; return max(0, lastPercent) }
+
+        /// The footprint now in MB, and the run's peak with it folded in.
+        func footprint() -> (now: Int, peak: Int) {
+            let now = DNGArchive.ProcessMemory.footprintMB()
+            lock.lock(); defer { lock.unlock() }
+            peakMB = max(peakMB, now)
+            return (Int(now), Int(peakMB))
         }
     }
 
@@ -101,6 +117,15 @@ final class FramingReviewStore: ObservableObject {
         let flag = CancelFlag()
         cancelFlags[id] = flag
         let gate = ProgressGate()
+        // The review said nothing to the console until 2026-09-28, when a
+        // 641-photo HEIC shoot was jetsam-killed mid-review and the log held
+        // no trace of it. Start, every tenth and the end now each carry the
+        // footprint (`phys_footprint`, the figure jetsam bills), so a leak
+        // shows as a climbing number in a Logs pull.
+        let started = Date()
+        let tag = id.uuidString.prefix(8)
+        let total = urls.count
+        let seconds: @Sendable () -> String = { String(format: "%.1f", Date().timeIntervalSince(started)) }
         let task = Task { [weak self] in
             let outcome: Result<FramingReview, Error> = await Task.detached(priority: .userInitiated) {
                 do {
@@ -108,11 +133,17 @@ final class FramingReviewStore: ObservableObject {
                         throw LapseError.imageLoadFailed(urls[0])
                     }
                     let decoder = FramingLumaDecoder(scale: 0.5)
+                    let workers = FramingMeasurement.defaultWorkers
+                    LLog("framing: measuring \(total) photo(s) of \(tag) at 0.5× with \(workers) workers — footprint \(gate.footprint().now) MB")
                     let offsets = try FramingMeasurement.measure(
                         urls: urls, scale: 0.5, luma: { try decoder.luma(at: $0) },
-                        workers: FramingMeasurement.defaultWorkers,
+                        workers: workers,
                         progress: { fraction in
-                            guard gate.admit(fraction) else { return }
+                            guard let percent = gate.admit(fraction) else { return }
+                            if percent % 10 == 0, percent > 0, percent < 100 {
+                                let done = Int((fraction * Double(total)).rounded())
+                                LLog("framing: \(percent)% (\(done) of \(total)) in \(seconds()) s — footprint \(gate.footprint().now) MB")
+                            }
                             Task { @MainActor in
                                 FramingReviewStore.shared.runs[id]?.progress = fraction
                             }
@@ -130,8 +161,13 @@ final class FramingReviewStore: ObservableObject {
                         offsets: offsets, captureSpanSeconds: span,
                         quarterTurns: ProjectOrientation.shared.turns(for: urls[0]))
                     try review.write(inSourceFolder: sourceFolder)
+                    LLog("framing: measured \(total) in \(seconds()) s — \(review.verdict.rawValue), \(review.events.count) knock(s); peak footprint \(gate.footprint().peak) MB")
                     return .success(review)
+                } catch is CancellationError {
+                    LLog("framing: cancelled at \(gate.percent)% after \(seconds()) s")
+                    return .failure(CancellationError())
                 } catch {
+                    LLog("framing: failed at \(gate.percent)% after \(seconds()) s — \(error.localizedDescription); peak footprint \(gate.footprint().peak) MB")
                     return .failure(error)
                 }
             }.value

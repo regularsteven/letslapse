@@ -157,7 +157,16 @@ public enum FramingMeasurement {
         var previousSize: (Int, Int)?
         if lo > 0 {
             if isCancelled?() == true { throw CancellationError() }
-            let plane = try luma(urls[lo - 1])
+            // The pool per decode is load-bearing, not hygiene: a worker is
+            // one block on a global queue, which never drains a pool per
+            // block, and the decode's ImageIO/Core Image temporaries are
+            // autoreleased — each still's half-size picture then lived until
+            // the whole review ended. On the 18 Pro that was ~12 MB a photo:
+            // 641 HEIC stills (4032×3024) were jetsam-killed at 5.57 GB,
+            // ~430 in (2026-09-28). `lapse framing --workers 2` on the same
+            // stills peaked at 8.8 GB for 600 (JPEG climbed alike); with the
+            // pool, 0.83 GB for 100 and 0.85 GB for 641.
+            let plane = try autoreleasepool { try luma(urls[lo - 1]) }
             previous = correlatorFor(plane).spectrum(of: plane)
             previousSize = (plane.width, plane.height)
         }
@@ -168,7 +177,7 @@ public enum FramingMeasurement {
         shifts.reserveCapacity(hi - lo)
         for index in lo..<hi {
             if isCancelled?() == true { throw CancellationError() }
-            let plane = try luma(urls[index])
+            let plane = try autoreleasepool { try luma(urls[index]) }
             let size = (plane.width, plane.height)
             if index == lo {
                 let engine = correlatorFor(plane)
