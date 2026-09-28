@@ -11,6 +11,39 @@ live inline.
 
 ## Open
 
+### Share project leaves its `.lapse` in `tmp/` when the screen goes away mid-export
+
+Confirmed 2026-09-28 (Steven's report; a 24 GB `Victory Bridge Sunset.lapse` in the Mac's
+`$TMPDIR` from a Release build's 16:56 export, no sheet up, nothing holding it open).
+`exportProject` (`AppModel.swift`) writes `<name>.lapse` straight into `temporaryDirectory`
+(unsandboxed Mac: `/var/folders/…/T/`), and its one delete is the archive sheet's `onDismiss`
+(`ExportedArchiveSheetModifier.discardArchive`, `ProjectArchiveShare.swift`). **That path
+works** — Share → sheet → Done removes the file at once, from the Gallery pane and from the
+item view's inspector. The leak is an export that never reaches its sheet: the result is
+assigned from an unstructured `Task` to the calling view's `@State`, so when that view has
+left the hierarchy — a tab switch (the Mac keeps only the selected tab), Open into the item
+view, a deselect, a pop on iOS (same code, untested there) — the archive is written, handed
+to a dead view, never shown, never deleted. Reproduced on a scratch root with a 1.5 GB
+project: Share then *Projects*, and Share then *Open*, each left the file; Share → Done did
+not. A 24 GB project takes ~30 s to archive and the pane's footer **Share** shows nothing
+meanwhile (the inspector row says "Sharing…"), so walking away is the natural move.
+
+Nothing else reaches the file: Clear cache and the storage figure (`isCacheItem`) do not
+match `<name>.lapse`, and `ImportStaging.sweepOrphans` takes only its own prefix. It is one
+orphan per project name (`DirectoryArchive.write` replaces a same-named file); the Mac's
+`dirhelper` should drop it after 3 days untouched, iOS purges `tmp/` only when it wants the
+space. Quitting with the sheet up is not a path — the quit is ignored while it is open.
+Found in passing: the pane's footer Share skips `ask(.exportProject, …)` and
+`GalleryPreviewPanel.exportShare` swallows every error, so a preview-only project or a
+full disk (which this orphan helps cause) makes Share silently do nothing.
+
+Fix shape: export into an app-named folder (`tmp/letslapse-export-<uuid>/<Name>.lapse` —
+the share keeps its filename, and Clear cache and the storage figure see it); keep the
+pending archive somewhere a navigation cannot drop it, or cancel the export and delete its
+output when the view goes; an age-gated launch sweep of those folders (a second LetsLapse
+copy may be presenting one — see `sweepOrphans`); "Sharing…" on the footer button. Not
+on the share's completion: `ShareLink` has none, and the sheet can share more than once.
+
 ### Nearby originals — import a project's originals from your own device on the same network
 
 **Raised:** 2026-09-28 (Steven) · **Size:** large · **Detail:**
