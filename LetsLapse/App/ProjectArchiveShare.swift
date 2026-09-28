@@ -33,15 +33,31 @@ extension View {
 ///
 /// The URL is remembered separately because `sheet(item:onDismiss:)` fires its
 /// dismissal closure after the binding has already gone nil.
+///
+/// Dismissal is the completion for every outcome (2026-09-28): `ShareLink`
+/// reports none of its own, and the system share UI is modal over this sheet,
+/// so by the time the sheet closes the share has either been sent or
+/// cancelled. The URL is remembered the moment the archive arrives, not when
+/// the sheet appears, and the host going away removes it too — an export that
+/// finished as its screen was left (a Gallery selection changed mid-export)
+/// never showed a sheet, and its archive stayed in tmp. The launch sweep
+/// (`ProjectArchive.sweepStaleExports`) catches whatever still escapes.
 private struct ExportedArchiveSheetModifier: ViewModifier {
     @Binding var archive: ExportedArchive?
     @State private var presentedURL: URL?
 
     func body(content: Content) -> some View {
-        content.sheet(item: $archive, onDismiss: discardArchive) { produced in
-            ExportedArchiveSheet(archive: produced) { archive = nil }
-                .onAppear { presentedURL = produced.url }
-        }
+        content
+            .sheet(item: $archive, onDismiss: discardArchive) { produced in
+                ExportedArchiveSheet(archive: produced) { archive = nil }
+            }
+            .onChange(of: archive?.url) { _, url in
+                if let url { presentedURL = url }
+            }
+            .onDisappear {
+                archive = nil
+                discardArchive()
+            }
     }
 
     private func discardArchive() {

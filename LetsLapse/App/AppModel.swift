@@ -9304,6 +9304,7 @@ final class AppModel: ObservableObject {
             nearby.update()
         }
         sweepTrashAtLaunch()
+        ProjectArchive.sweepStaleExports()
         if libraryExportStale {
             libraryExportStale = false
             persister.regenerateExport(reconcilingBlends: libraryExportCountsDiffered)
@@ -10298,7 +10299,14 @@ final class AppModel: ObservableObject {
             if needed > 0, available < needed {
                 throw ExportError.insufficientStorage(available: available, needed: needed)
             }
-            try ProjectArchive.write(contentsOf: folder, to: archiveURL)
+            do {
+                try ProjectArchive.write(contentsOf: folder, to: archiveURL)
+            } catch {
+                // A write that failed part-way (the disk filled, a file
+                // vanished) must not leave a half archive in tmp.
+                try? FileManager.default.removeItem(at: archiveURL)
+                throw error
+            }
         }.value
         return archiveURL
     }

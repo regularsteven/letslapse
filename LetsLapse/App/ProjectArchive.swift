@@ -26,6 +26,36 @@ enum ProjectArchiveError: LocalizedError {
 enum ProjectArchive {
     static let fileExtension = "lapse"
 
+    /// The launch's safety net (2026-09-28): every `.lapse` at the top of the
+    /// temporary directory older than `age` is removed. `exportProject`
+    /// writes its archive there — a full second copy of the project — and
+    /// the share sheet deletes it when it closes; a sheet that never opened
+    /// (the screen went away mid-export), a crash, or a debug export left the
+    /// rest behind, several GB of them over time. A day is far past any share
+    /// still using one. Off the main thread; logs what it freed.
+    static func sweepStaleExports(olderThan age: TimeInterval = 24 * 60 * 60) {
+        DispatchQueue.global(qos: .utility).async {
+            let temp = FileManager.default.temporaryDirectory
+            let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
+            guard let items = try? FileManager.default.contentsOfDirectory(
+                at: temp, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { return }
+            let cutoff = Date().addingTimeInterval(-age)
+            var removed = 0
+            var bytes: Int64 = 0
+            for item in items where item.pathExtension.lowercased() == fileExtension {
+                guard let values = try? item.resourceValues(forKeys: Set(keys)), values.isRegularFile == true,
+                      let modified = values.contentModificationDate, modified < cutoff else { continue }
+                if (try? FileManager.default.removeItem(at: item)) != nil {
+                    removed += 1
+                    bytes += Int64(values.fileSize ?? 0)
+                }
+            }
+            if removed > 0 {
+                LLog("export: removed \(removed) stale .lapse archive(s) from tmp — \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))")
+            }
+        }
+    }
+
     /// The project subfolders that travel — the ONE definition, read by the
     /// installer (`AppModel.installStagedProject`) and by the transfer's file
     /// enumerator (`ProjectTransferServer`).
