@@ -53,7 +53,9 @@ struct GalleryGridContent: View {
     /// A menu item that needs files this device does not hold, asking
     /// whether to fetch them (FetchPrompt.swift).
     @State private var fetchRequest: FetchPromptRequest?
-    /// The multi-selection's Delete N Projects…, waiting for its confirm.
+    /// A Delete waiting for its confirm — the multi-selection's Delete N
+    /// Projects…, or one tile's Delete… (one id; it confirms too since
+    /// 2026-09-28).
     @State private var pendingBatchDelete: [UUID]?
     /// The multi-selection's Clone and compress… — the projects it takes.
     @State private var batchClone: [AppModel.CaptureProject]?
@@ -86,7 +88,8 @@ struct GalleryGridContent: View {
             isPresented: Binding(get: { pendingBatchDelete != nil }, set: { if !$0 { pendingBatchDelete = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Delete \(pendingBatchDelete?.count ?? 0) Projects", role: .destructive) {
+            Button((pendingBatchDelete?.count ?? 0) == 1 ? "Delete Project" : "Delete \(pendingBatchDelete?.count ?? 0) Projects",
+                   role: .destructive) {
                 deleteBatch(pendingBatchDelete ?? [])
             }
             Button("Cancel", role: .cancel) {}
@@ -282,6 +285,11 @@ struct GalleryGridContent: View {
     /// how many hold files only PicPlace has, which the delete destroys.
     private var batchDeleteMessage: String {
         let captures = (pendingBatchDelete ?? []).compactMap { model.capture(id: $0) }
+        if captures.count == 1, let capture = captures.first {
+            // One project: the single delete's own warning, word for word.
+            return "It moves to the trash on this device, and the delete reaches PicPlace at the next check."
+                + (model.picplace.deletionWarning(for: capture).map { " " + $0 } ?? "")
+        }
         var text = "They move to the trash on this device, and the delete reaches PicPlace at the next check."
         let onlyThere = captures.filter { model.picplace.deletionWarning(for: $0) != nil }.count
         if onlyThere > 0 {
@@ -291,7 +299,11 @@ struct GalleryGridContent: View {
     }
 
     private var batchDeleteTitle: String {
-        "Delete \(pendingBatchDelete?.count ?? 0) projects?"
+        let ids = pendingBatchDelete ?? []
+        if ids.count == 1, let capture = ids.first.flatMap({ model.capture(id: $0) }) {
+            return "Delete \u{201C}\(capture.displayTitle)\u{201D}?"
+        }
+        return "Delete \(ids.count) projects?"
     }
 
     private func deleteBatch(_ ids: [UUID]) {
@@ -395,10 +407,9 @@ struct GalleryGridContent: View {
         Divider()
 
         Button(role: .destructive) {
-            do {
-                try model.deleteCapture(capture)
-                selection.remove(capture.id)
-            } catch {}
+            // Confirmed first, as the ellipsis promises (2026-09-28) — the
+            // same dialog as the multi-selection's, worded for one.
+            pendingBatchDelete = [capture.id]
         } label: {
             Label("Delete\u{2026}", systemImage: "trash")
         }

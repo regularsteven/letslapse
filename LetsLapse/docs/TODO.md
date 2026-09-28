@@ -23,8 +23,8 @@ had two it cannot offer yet:
   `tmp/` for one share sheet (`ProjectArchiveShare.swift`); N projects would mean N full
   copies at once. Needs a multi-archive export (sequential, into one folder or one
   share) before it can join the menu.
-- Also noticed: the single-project menu's **Delete…** deletes at once — no confirm,
-  despite its ellipsis (unchanged here by instruction; the batch one confirms).
+- ~~The single-project menu's Delete… deleted at once~~ — confirms since 2026-09-28
+  (the same dialog, worded for one project).
 
 ### HEIC capture — a device run, and what it touches downstream
 
