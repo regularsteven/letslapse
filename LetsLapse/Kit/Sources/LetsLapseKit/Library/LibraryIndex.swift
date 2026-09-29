@@ -624,6 +624,24 @@ public final class LibraryIndex: @unchecked Sendable {
             """, [.text(key), .text(key), .text(key), .text(key)]) { UUID(uuidString: $0.text(0) ?? "") }.first ?? nil
     }
 
+    /// Every id a live project answers to — its origin, its own id, its
+    /// one-hop import id: `projectID(originID:)` asked of a whole list at
+    /// once, as one read. `imported_from_id` has no index, so each single
+    /// ask scans the table; the transfer picker asked it of 1,553 offered
+    /// projects, several times a redraw, and pinned the Mac's main thread
+    /// (2026-09-29).
+    public func liveProjectIdentities() throws -> Set<UUID> {
+        lock.lock(); defer { lock.unlock() }
+        let rows = try db.query("SELECT origin_id, id, imported_from_id FROM projects WHERE deleted_at IS NULL") {
+            [$0.text(0), $0.text(1), $0.text(2)]
+        }
+        var identities = Set<UUID>()
+        for row in rows {
+            for text in row { if let text, let uuid = UUID(uuidString: text) { identities.insert(uuid) } }
+        }
+        return identities
+    }
+
     private static func whereClause(_ query: ProjectQuery) -> (String, [SQLiteDatabase.Value]) {
         var clauses: [String] = []
         var values: [SQLiteDatabase.Value] = []

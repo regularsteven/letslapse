@@ -27,14 +27,15 @@ final class LibraryIndexTests: XCTestCase {
         _ n: Int, kind: String = "photos", mode: String? = nil, name: String? = nil, created: Double, added: Double? = nil,
         modified: Double? = nil, frames: Int = 3, size: Int? = nil, tags: [String]? = nil, elements: [String]? = nil,
         deleted: Double? = nil, blends: Int = 0, blendCreated: [Double]? = nil, blendIDs: [String]? = nil,
-        captureMode: String? = nil, inTrash: Bool = false
+        captureMode: String? = nil, inTrash: Bool = false, origin: String? = nil, importedFrom: String? = nil
     ) throws -> URL {
         var capture: [String: Any] = [
             "id": id(n), "kind": kind, "createdAt": ProjectDocumentFormat.documentDate(fromManifestSeconds: created),
             "originalName": "\(frames) photos", "mode": mode ?? (kind == "video" ? "Video" : "Photo"),
-            "sourceFileNames": (1...frames).map { "source/frame-\($0).dng" }, "originID": id(n),
+            "sourceFileNames": (1...frames).map { "source/frame-\($0).dng" }, "originID": origin ?? id(n),
             "sourceWidth": 4032, "sourceHeight": 3024, "presetState": ["kind": "original"],
         ]
+        if let importedFrom { capture["importedFromID"] = importedFrom }
         if let name { capture["name"] = name }
         if let added { capture["addedAt"] = ProjectDocumentFormat.documentDate(fromManifestSeconds: added) }
         if let modified { capture["modifiedAt"] = ProjectDocumentFormat.documentDate(fromManifestSeconds: modified) }
@@ -520,6 +521,22 @@ final class LibraryIndexTests: XCTestCase {
         XCTAssertEqual(try index.projectID(originID: uuid(2)), uuid(2), "its own origin")
         XCTAssertNil(try index.projectID(originID: uuid(9)))
         XCTAssertEqual(try index.projects(LibraryIndex.ProjectQuery()).rows.map(\.id), try index.projectIDs(LibraryIndex.ProjectQuery()), "the page and the ids agree")
+    }
+
+    /// The whole-list form of the origin lookup answers exactly what the
+    /// single one does, id by id — the transfer picker's "already here".
+    func testLiveProjectIdentitiesMatchTheOriginLookup() throws {
+        try writeProject(1, created: 100)                                       // its own origin
+        try writeProject(2, created: 200, origin: id(20))                        // a copy: origin elsewhere
+        try writeProject(3, created: 300, importedFrom: id(30))                  // pulled before origins
+        try writeProject(4, created: 400, deleted: 999, inTrash: true, origin: id(40))  // gone
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+        let identities = try index.liveProjectIdentities()
+        XCTAssertEqual(identities, Set([1, 2, 20, 3, 30].map(uuid)))
+        for n in [1, 2, 20, 3, 30, 4, 40, 9] {
+            XCTAssertEqual(identities.contains(uuid(n)), try index.projectID(originID: uuid(n)) != nil, "id \(n)")
+        }
     }
 
     /// M3: the whole-library questions the app used to answer by walking

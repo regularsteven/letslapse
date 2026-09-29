@@ -180,8 +180,10 @@ extension PicPlaceController {
         }
         guard canSync else { return }
         // Waits its turn behind the jobs already sending; the one ending
-        // starts it (`startNextUploadJob`).
+        // starts it (`startNextUploadJob`). And, not pressed, for PicPlace to
+        // answer again (2026-09-29).
         if !pressed, runningUploadJobs >= Self.uploadJobLimit { return }
+        if !pressed, isUnreachable { return }
         if networkHolds(job) {
             if job.hold != .waitingForWiFi {
                 job.hold = .waitingForWiFi
@@ -265,7 +267,9 @@ extension PicPlaceController {
     /// when the network changes. A paused or refused job waits for its
     /// person; Pause for all sending holds every one.
     func resumeUploadJobs(reason: String) {
-        guard !isShutDown, canSync, !sendsPaused else { return }
+        // PicPlace not answering holds them too; its answer resumes them
+        // (`noteServerReachable`, 2026-09-29).
+        guard !isShutDown, canSync, !sendsPaused, !isUnreachable else { return }
         // Oldest first, so the job that has waited longest takes the free
         // slot; the limit holds the rest.
         for (id, job) in uploadJobs.sorted(by: { $0.value.startedAt < $1.value.startedAt }) where syncTasks[id] == nil {
@@ -398,7 +402,8 @@ extension PicPlaceController {
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard let self, !Task.isCancelled else { return }
             self.uploadRetryTasks[id] = nil
-            guard self.uploadJobs[id]?.hold == .interrupted, !self.sendsPaused else { return }
+            // Still interrupted while PicPlace is silent: its answer resumes it.
+            guard self.uploadJobs[id]?.hold == .interrupted, !self.sendsPaused, !self.isUnreachable else { return }
             self.startUploadJob(id, reason: "retry \(count)")
         }
     }

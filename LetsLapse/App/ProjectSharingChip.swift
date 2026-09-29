@@ -360,9 +360,14 @@ struct ProjectSyncSheet: View {
     /// long run of sends is what made the check look stuck. A pause holds
     /// every send (edits, catch-ups, the originals queue), survives a
     /// relaunch, and lets what is mid-send finish first.
+    ///
+    /// Only once a push of the run has begun (2026-09-29): a project queued
+    /// that turns out to need nothing leaves without flashing the block —
+    /// 750 of them did in six minutes, each jumping everything below it. A
+    /// paused run shows at once: its Resume is here.
     @ViewBuilder
     private var sendBlock: some View {
-        if let run = picplace.sendRun, run.total > 0 {
+        if let run = picplace.sendRun, run.total > 0, run.started || picplace.sendsPaused {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 8) {
                     Text(sendTitle(run))
@@ -643,13 +648,21 @@ struct ProjectSyncSheet: View {
         } else if picplace.sendsPaused {
             // The sending block below says it, with Resume.
             EmptyView()
+        } else if picplace.isUnreachable {
+            // PicPlace gave no answer (2026-09-29): one steady line — what
+            // waits here, and when it looks again — not a queue failing.
+            Label(unreachableLine, systemImage: "icloud.slash")
+                .font(.system(size: 13.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         } else if let error = picplace.autoError {
             Label(error, systemImage: "exclamationmark.triangle")
                 .font(.system(size: 13.5))
                 .foregroundStyle(LL.levelOff)
                 .fixedSize(horizontal: false, vertical: true)
         } else if let hold = picplace.autoHold {
-            Label("Auto-sync \(hold)", systemImage: "pause.circle")
+            Label("Auto-sync \(hold)" + (picplace.heldPushes.isEmpty ? "" : " · \(Self.changesWaiting(picplace.heldPushes.count))"),
+                  systemImage: "pause.circle")
                 .font(.system(size: 13.5))
                 .foregroundStyle(.secondary)
         } else if picplace.autoSyncEnabled {
@@ -661,6 +674,20 @@ struct ProjectSyncSheet: View {
                 .font(.system(size: 13.5))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// "Can't reach picplace.co · 12 changes waiting · next try 11:40".
+    private var unreachableLine: String {
+        var parts = ["Can't reach \(picplace.sessionHost)"]
+        if !picplace.heldPushes.isEmpty { parts.append(Self.changesWaiting(picplace.heldPushes.count)) }
+        if let until = picplace.unreachableUntil {
+            parts.append("next try \(until.formatted(date: .omitted, time: .shortened))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    static func changesWaiting(_ count: Int) -> String {
+        count == 1 ? "1 change waiting" : "\(count.formatted()) changes waiting"
     }
 
     private func initialSyncLine(_ progress: PicPlaceController.InitialSyncProgress) -> String {

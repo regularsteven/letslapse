@@ -324,6 +324,14 @@ actor PicPlaceClient {
     private let session: URLSession
     /// Called once when a refresh is refused — the tokens are gone for good.
     private let signedOut: @Sendable () -> Void
+    /// Whether PicPlace answered at all (2026-09-29): false each time a
+    /// request gives up with no HTTP answer — no route, a timeout, a
+    /// certificate that isn't PicPlace's — and true on the first answer
+    /// after that. The controller closes its gate on false
+    /// (`noteServerUnreachable`), so nothing automatic asks again until its
+    /// backoff has passed.
+    private let reachability: @Sendable (Bool) -> Void
+    private var lastAnswered = true
 
     // MARK: The rate limit
 
@@ -350,6 +358,10 @@ actor PicPlaceClient {
     private static let remainingReserve = 3
     private static let maxRetryAfter: TimeInterval = 120
     private static let attemptsPerRequest = 4
+    /// Attempts for a request that gets no HTTP answer at all: two, not
+    /// four (2026-09-29). With the timeout at 60 s, four meant up to four
+    /// minutes a request on a network that swallows packets.
+    private static let attemptsWithoutAnswer = 2
     #if DEBUG
     /// `LL_PICPLACE_RATE=<n>` pins the budget (the server's own figure is
     /// ignored) — set high, it reproduces the 2026-09-15 storm against the
@@ -365,17 +377,52 @@ actor PicPlaceClient {
     }()
     #endif
 
-    init(tokens: PicPlaceTokens?, accountKey: String?, signedOut: @escaping @Sendable () -> Void) {
+    init(tokens: PicPlaceTokens?, accountKey: String?, signedOut: @escaping @Sendable () -> Void,
+         reachability: @escaping @Sendable (Bool) -> Void = { _ in }) {
         self.tokens = tokens
         self.accountKey = accountKey
         self.signedOut = signedOut
+        self.reachability = reachability
         #if DEBUG
         if let forcedRate { requestsPerMinute = forcedRate }
         #endif
         let config = URLSessionConfiguration.default
         config.waitsForConnectivity = false
-        config.timeoutIntervalForRequest = 60
+        // Half the old minute (2026-09-29): an API answer is small, and a
+        // batch is 100 files at most. The bytes of assets never come here —
+        // they go to the presigned URLs (`PicPlaceTransfer`).
+        config.timeoutIntervalForRequest = 30
         session = URLSession(configuration: config)
+    }
+
+    /// Failures a second try two seconds later won't mend: a certificate
+    /// that isn't PicPlace's — a network intercepting it (2026-09-29's
+    /// `sad.certificate.that.cannot.be.valid.com`) — no network at all,
+    /// data switched off.
+    static func isHopeless(_ error: Error) -> Bool {
+        guard let code = (error as? URLError)?.code else { return false }
+        switch code {
+        case .secureConnectionFailed, .serverCertificateHasBadDate, .serverCertificateUntrusted,
+             .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid, .clientCertificateRejected,
+             .clientCertificateRequired, .appTransportSecurityRequiresSecureConnection,
+             .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Tells the controller when PicPlace stopped or started answering:
+    /// every failure (a gate that has reopened closes again), but only the
+    /// first answer after one.
+    private func noteAnswered(_ answered: Bool) {
+        if answered {
+            guard !lastAnswered else { return }
+            lastAnswered = true
+        } else {
+            lastAnswered = false
+        }
+        reachability(answered)
     }
 
     var isSignedIn: Bool { tokens != nil }
@@ -628,7 +675,14 @@ actor PicPlaceClient {
         while true {
             attempt += 1
             try await waitForTurn()
-            let current = try await validTokens()
+            let current: PicPlaceTokens
+            do {
+                current = try await validTokens()
+            } catch let offline as PicPlaceOfflineError {
+                // The refresh found no PicPlace either.
+                noteAnswered(false)
+                throw offline
+            }
             var components = URLComponents(url: apiBase(for: current).appendingPathComponent(path), resolvingAgainstBaseURL: false)!
             if !query.isEmpty { components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) } }
             var request = URLRequest(url: components.url!)
@@ -652,12 +706,23 @@ actor PicPlaceClient {
                 throw CancellationError()
             } catch {
                 let offline = PicPlaceOfflineError(underlying: error)
-                guard attempt < Self.attemptsPerRequest, (error as? URLError)?.code != .cancelled else { throw offline }
+                if (error as? URLError)?.code == .cancelled { throw offline }
+                // One more try at most, and none for a failure a retry
+                // cannot mend; then the controller's gate holds everything
+                // automatic (2026-09-29).
+                guard attempt < Self.attemptsWithoutAnswer, !Self.isHopeless(error) else {
+                    noteAnswered(false)
+                    throw offline
+                }
                 LLog("picplace: \(method) \(path) — no answer (\(error.localizedDescription)); trying again")
                 try await Task.sleep(nanoseconds: UInt64(2 * attempt) * 1_000_000_000)
                 continue
             }
-            guard let http = response as? HTTPURLResponse else { throw PicPlaceOfflineError(underlying: nil) }
+            guard let http = response as? HTTPURLResponse else {
+                noteAnswered(false)
+                throw PicPlaceOfflineError(underlying: nil)
+            }
+            noteAnswered(true)
             noteRateLimit(http)
 
             if http.statusCode == 401, !refreshed, tokens != nil {

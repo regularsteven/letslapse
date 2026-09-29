@@ -328,8 +328,9 @@ final class PicPlaceController: ObservableObject {
     /// Whether any network is up at all — an interrupted upload waits for it.
     var isNetworkUp = true
     /// Pushes and a check that were due while the network rule — or a
-    /// pause — held them.
-    var heldPushes: Set<UUID> = []
+    /// pause, or PicPlace not answering — held them. Published for the
+    /// drawer's "N changes waiting".
+    @Published var heldPushes: Set<UUID> = []
     var heldCheck = false
     var forcedNetwork = false
     var autoTimer: Timer?
@@ -357,6 +358,25 @@ final class PicPlaceController: ObservableObject {
     /// reached at all — the queue stops on that rather than fail through
     /// its remaining projects one slow timeout at a time.
     var lastSyncFailedOffline = false
+    /// PicPlace gave no answer at all (2026-09-29) — no route, a timeout, a
+    /// certificate that isn't PicPlace's (a network intercepting it). Until
+    /// this passes nothing automatic asks it anything: checks, pushes,
+    /// poster catch-ups, the blends and originals walks, upload retries,
+    /// usage and listing reads. What was due waits in `heldPushes`, and the
+    /// first check back finds whatever differs anyway — nothing piles up. A
+    /// person's press still goes; any answer, a network change or the end
+    /// of the backoff (`reachabilityProbe`) opens it again.
+    @Published var unreachableUntil: Date?
+    /// No-answer failures in a row with the gate open — the backoff: 1, 2,
+    /// 4, 8, 16, then 30 minutes.
+    var unreachableStreak = 0
+    /// The one look once the backoff has run out.
+    var reachabilityProbe: Task<Void, Never>?
+    /// What the last whole blends and originals walks saw, and when
+    /// (2026-09-29): after a check that changed nothing, a walk reads every
+    /// project to the same end — every three minutes, all night.
+    var blendsWalkSeen: (key: WalkKey, at: Date)?
+    var originalsWalkSeen: (key: WalkKey, at: Date)?
     /// The first two are legacy install-wide keys: read once into the
     /// library's `settings.json` (then removed), and still honoured from
     /// the argument domain for a run.
@@ -548,9 +568,11 @@ final class PicPlaceController: ObservableObject {
         #if DEBUG
         PicPlaceTransfer.armHooks()
         #endif
-        client = PicPlaceClient(tokens: tokens, accountKey: tokensKey) { [weak self] in
+        client = PicPlaceClient(tokens: tokens, accountKey: tokensKey, signedOut: { [weak self] in
             Task { @MainActor in self?.handleSignedOutByServer() }
-        }
+        }, reachability: { [weak self] answered in
+            Task { @MainActor in self?.noteServerAnswered(answered) }
+        })
         // The nearby key held from an earlier run: the service can find the
         // account's devices before `/status` answers — or with no internet.
         restoreNearbyKey()
@@ -932,7 +954,9 @@ final class PicPlaceController: ObservableObject {
     /// projects are on the server and the bytes they take. `rows` spares
     /// the index read when the caller has just read it (the check).
     func refreshUsage(rows: [PPProject]? = nil) {
-        guard isSignedIn else { return }
+        // Not while PicPlace is silent: the card keeps its last figures, and
+        // the check after its answer refreshes them (2026-09-29).
+        guard isSignedIn, !isUnreachable else { return }
         Task {
             do {
                 let status: PPStatus = try await client.get("status")
@@ -982,15 +1006,17 @@ final class PicPlaceController: ObservableObject {
         let bytes = serverLibrary?.usedBytes ?? status.storage.usedBytes
         var missing: [PPProject] = []
         if let index = model.libraryIndex {
-            // One index query per server row — 1,388 of them took 0.4–0.9 s
-            // on the main thread after every check (2026-09-27, the last
-            // Settings hangs left once the other passes had moved). The index
-            // has its own lock, so the loop runs off the main actor.
+            // One read of every id a live project answers to, then a set
+            // lookup per server row (2026-09-29). It was one index query per
+            // row, each a table scan — 1,388 of them took 0.4–0.9 s on the
+            // main thread after every check (2026-09-27), then as long off
+            // it. Still off the main actor: the index has its own lock.
             let candidates = scoped
             missing = await Task.detached(priority: .utility) {
-                candidates.filter { row in
+                let here = (try? index.liveProjectIdentities()) ?? []
+                return candidates.filter { row in
                     guard let uuid = UUID(uuidString: row.uuid) else { return true }
-                    return ((try? index.projectID(originID: uuid)) ?? nil) == nil
+                    return !here.contains(uuid)
                 }
             }.value
         }
@@ -1598,6 +1624,7 @@ final class PicPlaceController: ObservableObject {
         originalsQueueTask?.cancel(); originalsQueueTask = nil
         blendsQueueTask?.cancel(); blendsQueueTask = nil
         heavyRecheckTask?.cancel(); heavyRecheckTask = nil
+        reachabilityProbe?.cancel(); reachabilityProbe = nil
         for task in verifyTasks.values { task.cancel() }
         verifyTasks = [:]
         usageRefreshTask?.cancel(); usageRefreshTask = nil
@@ -1700,7 +1727,8 @@ final class PicPlaceController: ObservableObject {
         // What is here is walked again whatever the session: a blend
         // rendered since the card last looked is a file PicPlace lacks.
         if progress[captureID] == nil, let capture = model.capture(id: captureID) { refreshHeavyListing(for: capture) }
-        guard canSync, let capture = model.capture(id: captureID), progress[captureID] == nil else { return }
+        // PicPlace's list waits for PicPlace to answer (2026-09-29).
+        guard canSync, !isUnreachable, let capture = model.capture(id: captureID), progress[captureID] == nil else { return }
         let key = model.originID(of: capture)
         guard records[key] != nil else { return }
         Task {

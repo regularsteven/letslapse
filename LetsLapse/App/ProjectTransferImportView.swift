@@ -40,6 +40,13 @@ struct ProjectTransferImportView: View {
     /// the code has rotated since it was drawn. Cleared by any deliberate
     /// attempt, so it never outlives the mistake it describes.
     @State private var scanMismatch: String?
+    /// Every id this library's live projects answer to, read once and again
+    /// whenever the index changes (`AppModel.importedIdentities`): "already
+    /// here?" for each offered project is then a set lookup. Asked of the
+    /// model per project it was a table scan and a document decode each —
+    /// 1,553 offered projects, several times a redraw, a redraw per PicPlace
+    /// pull: the main thread pinned (2026-09-29).
+    @State private var importedIDs: Set<UUID> = []
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -59,6 +66,9 @@ struct ProjectTransferImportView: View {
             #if DEBUG
             autoRunIfRequested()
             #endif
+        }
+        .onReceive(model.$indexRevision) { _ in
+            importedIDs = model.importedIdentities()
         }
         .onDisappear {
             // Closing is the human saying they are done. An in-flight pull
@@ -591,7 +601,7 @@ struct ProjectTransferImportView: View {
                 // the box takes its selection with it — otherwise the footer would
                 // count bytes for projects nobody can see.
                 if hidesImported {
-                    selectedProjects.removeAll { model.hasImported(originID: $0.originID ?? $0.captureID) }
+                    selectedProjects.removeAll { isImported($0) }
                 }
             } label: {
                 HStack(spacing: 8) {
@@ -660,11 +670,17 @@ struct ProjectTransferImportView: View {
     /// pulled (or sent) before.
     private var visibleProjects: [PTProjectInfo] {
         guard hidesImported else { return client.projects }
-        return client.projects.filter { !model.hasImported(originID: $0.originID ?? $0.captureID) }
+        return client.projects.filter { !isImported($0) }
     }
 
     private var importedCount: Int {
-        client.projects.filter { model.hasImported(originID: $0.originID ?? $0.captureID) }.count
+        client.projects.filter { isImported($0) }.count
+    }
+
+    /// Whether this library already holds the offered project — the
+    /// `hasImported` answer, from `importedIDs`.
+    private func isImported(_ project: PTProjectInfo) -> Bool {
+        importedIDs.contains(project.originID ?? project.captureID)
     }
 
     /// What the Select menu offers: Custom and All always, a date bucket only
@@ -743,7 +759,7 @@ struct ProjectTransferImportView: View {
                     // Only ever seen with the box unticked — and then it is
                     // the reason the row was hidden, which is the one thing
                     // unticking has to explain.
-                    if model.hasImported(originID: project.originID ?? project.captureID) {
+                    if isImported(project) {
                         Text("Already in your library")
                             .font(.caption2)
                             .foregroundStyle(LL.accent)

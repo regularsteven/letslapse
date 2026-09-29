@@ -106,18 +106,36 @@ extension AppModel {
     /// caller's — the signpost's interval and the console line. The frames
     /// the pass found whole become `source(for:)`'s tickets, unless a file
     /// changed anywhere meanwhile.
+    ///
+    /// Asked again with no document written and no file changed since the
+    /// last read of the same query, the last answer is the answer
+    /// (2026-09-29): the check's pass and the tally's a beat later were two
+    /// full reads, and a Mac left open overnight read its 1,538 documents
+    /// 400 times to learn nothing. Half an hour at most — the backstop for a
+    /// change nobody announced.
     func libraryPass(_ query: LibraryIndex.ProjectQuery = LibraryPass.everyProject, name: StaticString) async -> LibraryPassSnapshot? {
         guard let index = libraryIndex else { return nil }
+        if let memo = libraryPassMemo, memo.query == query, memo.index == indexRevision, memo.files == filesRevision,
+           Date().timeIntervalSince(memo.at) < 30 * 60 {
+            return memo.snapshot
+        }
         let store = self.store
         let root = projectsFolderURL
         let validated = validatedSourceFramesSnapshot
         let revision = filesRevision
+        let indexSeen = indexRevision
         let signpost = LLPerf.begin(name)
         let snapshot = await Task.detached(priority: .utility) {
             LibraryPass.read(index: index, store: store, projectsRoot: root, query: query, framesValidated: validated)
         }.value
         LLPerf.end(name, signpost)
         noteSourceFramesValidated(snapshot.framesValidated, filesRevision: revision)
+        // Kept only when nothing moved while it read.
+        if indexSeen == indexRevision, revision == filesRevision {
+            libraryPassMemo = (query, indexSeen, revision, Date(), snapshot)
+        } else {
+            libraryPassMemo = nil
+        }
         LLog(String(format: "%@: %d of %d project(s) read in %.2f s off main%@", "\(name)", snapshot.projects.count, snapshot.rows.count,
                     snapshot.seconds, snapshot.framesValidated.isEmpty ? "" : " (\(snapshot.framesValidated.count) frame walks)"))
         return snapshot

@@ -11,6 +11,52 @@ live inline.
 
 ## Open
 
+### PicPlace quiet sync and the "can't reach" gate — built 2026-09-29, device check owed
+
+After the Mac ran hot and the Project Syncing sheet flashed on 2026-09-28 (a
+Size sort measuring ~1,300 projects; each write woke the push machinery for
+nothing), and a network that blocks picplace.co with a fake certificate:
+
+- **Only edits wake sync** — `noteProjectChanged` returns unless the project
+  moved past its PicPlace base (`hasMovedPastBase`).
+- **One "can't reach PicPlace" gate** — the client reports no-answer failures
+  (`PicPlaceClient.reachability`); the controller closes `unreachableUntil`
+  (1, 2, 4 … 30 min), `autoAllowed` is false meanwhile, edits wait in
+  `heldPushes` (no timers, no requests), one look at the end of the backoff or
+  on a network change, and the first answer releases everything.
+- **Fail fast** — one retry for a request with no answer (none for TLS or
+  certificate failures, no network), a 30 s timeout.
+- **Idle means idle** — the timer checks every 15 min when the app isn't in
+  front; `libraryPass` answers from its memo when nothing was written and no
+  file changed; the blends and originals walks skip when nothing moved since
+  their last whole walk (`WalkKey`, 30 min at most).
+- **The drawer** — the sending block only once a push has begun; one line
+  "Can't reach picplace.co · N changes waiting · next try HH:MM" while silent.
+- **The transfer import window** — "already here" from one index read
+  (`LibraryIndex.liveProjectIdentities`), not a table scan and a document
+  decode per offered project per redraw (1,553 offered pinned the main thread).
+
+Benched on the Mac against picplace.test (`LL_PICPLACE_OUTAGE=10:40`,
+`LL_PICPLACE_RENAME=…@20`, `LL_SYNC_PANEL=1`): the gate closed on the first
+offline failure, the queue held instead of failing through, the edit made in
+the outage waited, the look after the backoff found PicPlace and released it;
+10 checks read the library twice. Owed:
+
+- **A device run** (iPhone, Release) — sync as usual, then Airplane Mode for a
+  few minutes with an edit: one gate line, no retries in the log, the edit
+  goes when the network is back.
+- **A real blocked network** (the `sad.certificate…` one) on the Mac: one
+  "can't be reached" line, then silence until the next look.
+- **The SVG mirror** after Steven's sign-off on the drawer (code first):
+  `docs/design/iOS/projects.sharing.portrait.svg` (status-line order, block
+  only once a push begins) and a new offline state file; iOS `INDEX.md`.
+- Still open, separately: the Projects list decodes nearly every
+  `project.json` per redraw once a library passes the store's 512 (the
+  `if let … model.capture(id:)` in `ProjectsView`'s `ForEach`, the card's
+  `blends(for:)`) — the heat of 2026-09-28; and `PicPlaceController.pull`
+  rewrites all of `sync-state.json` after every pulled project (2.1 GB
+  written in one first connection).
+
 ### Holy Grail highlight guard — built 2026-09-28, device check owed
 
 The fix for the 18 Pro telephoto runaway (report:

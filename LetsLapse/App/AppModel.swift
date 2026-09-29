@@ -4698,6 +4698,11 @@ final class AppModel: ObservableObject {
     /// found this session, so the pass need not walk it again.
     var validatedSourceFramesSnapshot: Set<UUID> { validatedSourceFrames }
 
+    /// The last whole-library pass and what it was read under
+    /// (`libraryPass`, 2026-09-29): asked again with nothing written and no
+    /// file changed since, the answer is the same one.
+    var libraryPassMemo: (query: LibraryIndex.ProjectQuery, index: Int, files: Int, at: Date, snapshot: LibraryPassSnapshot)?
+
     /// A pass off the main actor walked these projects' frames and found
     /// them all — the same check `source(for:)` makes — so they become
     /// tickets, unless a file changed anywhere since the pass took its
@@ -10373,6 +10378,16 @@ final class AppModel: ObservableObject {
     /// can still prove they are the same shoot.
     func hasImported(originID: UUID) -> Bool {
         existingImport(of: originID) != nil
+    }
+
+    /// `hasImported` for a whole list: every id this library's live
+    /// projects answer to, in one index read — test membership with
+    /// `contains`. Per project, `hasImported` is a table scan and a document
+    /// decode; the transfer picker asked it of 1,553 projects several times
+    /// a redraw and pinned the main thread while PicPlace pulled (2026-09-29).
+    /// Empty without an index.
+    func importedIdentities() -> Set<UUID> {
+        (try? libraryIndex?.liveProjectIdentities()) ?? []
     }
 
     /// Answers the "you already have this" question. `importAgain` true makes a

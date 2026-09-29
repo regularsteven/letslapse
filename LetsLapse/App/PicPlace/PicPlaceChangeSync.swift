@@ -96,11 +96,25 @@ extension PicPlaceController {
         }
     }
 
+    /// The app is the one in front — the timer's full pace (a Mac left in
+    /// the background checks every fifteen minutes, not three).
+    var isAppActive: Bool {
+        #if os(macOS)
+        NSApplication.shared.isActive
+        #else
+        UIApplication.shared.applicationState == .active
+        #endif
+    }
+
     /// A check, unless one runs, the first connection is still pending, or
     /// a shoot is being written (its project must not be pushed mid-write).
     func checkForChanges(reason: String) {
         guard !isShutDown, canSync, binding?.initialSync.state == .done, checkTask == nil, initialSyncTask == nil else { return }
         if model.stage == .processing { LLog("picplace: check (\(reason)) skipped — a capture is running"); return }
+        // PicPlace isn't answering: nothing automatic asks until the look at
+        // the end of the backoff, or a network change (2026-09-29). A
+        // person's press asks at once.
+        if reason != "manual", isUnreachable { return }
         // Only a person's press runs on mobile data; every automatic reason
         // waits for Wi-Fi and is picked up when the network changes.
         if reason != "manual", !autoAllowed {
@@ -142,7 +156,8 @@ extension PicPlaceController {
         if check.pushed > 0 { parts.append("\(check.pushed) sent") }
         if check.retried > 0 { parts.append("\(check.retried) sent on a retry") }
         // While the sending block shows the run, its count is there.
-        if check.queued > 0, sendRun == nil, !sendsPaused { parts.append("\(check.queued) to send") }
+        // Nor while PicPlace is silent: the drawer's line counts what waits.
+        if check.queued > 0, sendRun?.started != true, !sendsPaused, !isUnreachable { parts.append("\(check.queued) to send") }
         if check.postersKnown > 0 { parts.append("\(check.postersKnown) poster\(check.postersKnown == 1 ? "" : "s") already on PicPlace") }
         if check.waiting > 0 { parts.append("\(check.waiting) waiting to retry") }
         if check.deletedThere > 0 { parts.append("\(check.deletedThere) deleted on PicPlace") }

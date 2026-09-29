@@ -38,6 +38,18 @@ extension PicPlaceController {
         return 3 * 60
     }
 
+    /// The timer's pace while the app is not in front (2026-09-29): a Mac
+    /// left open overnight ran 198 checks — each two reads of PicPlace and
+    /// passes over every project — and learned nothing. Coming to the front
+    /// checks at once, as ever. A test's shortened interval holds in the
+    /// background too: a driver-launched instance is rarely the active app.
+    private static var backgroundCheckInterval: TimeInterval {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["LL_PICPLACE_CHECK_INTERVAL"] != nil { return checkInterval }
+        #endif
+        return 15 * 60
+    }
+
     // MARK: Arming
 
     func armAutoSync() {
@@ -45,13 +57,20 @@ extension PicPlaceController {
         autoTimer?.invalidate()
         LLog("picplace: auto-sync switches for this device and library — changes \(autoSyncEnabled ? "on" : "off"), originals \(autoOriginalsEnabled ? "ON" : "off"), Wi-Fi only \(wifiOnly ? "on" : "off")")
         #if DEBUG
-        // `LL_PICPLACE_RENAME=<uuid>:<name>` renames a project through the
-        // real funnel five seconds after launch — the auto-push's cue.
+        // `LL_PICPLACE_RENAME=<uuid>:<name>[@<seconds>]` renames a project
+        // through the real funnel five seconds after launch — or that many —
+        // the auto-push's cue (a later one lands inside `LL_PICPLACE_OUTAGE`).
         if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_RENAME"] {
-            let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+            var spec = Substring(raw)
+            var delay = 5.0
+            if let at = raw.lastIndex(of: "@"), let seconds = Double(raw[raw.index(after: at)...]) {
+                delay = seconds
+                spec = raw[..<at]
+            }
+            let parts = spec.split(separator: ":", maxSplits: 1).map(String.init)
             if parts.count == 2, let id = UUID(uuidString: parts[0]) {
                 Task { @MainActor [weak self] in
-                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                     guard let self, self.model.capture(id: id) != nil else { return }
                     self.model.updateCapture(id) { $0.name = parts[1] }
                     LLog("picplace hook: renamed \(id.uuidString.prefix(8)) to \(parts[1])")
@@ -62,6 +81,8 @@ extension PicPlaceController {
         autoTimer = Timer.scheduledTimer(withTimeInterval: Self.checkInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.autoSyncEnabled else { return }
+                if !self.isAppActive, let last = self.lastCheckAt,
+                   Date().timeIntervalSince(last) < Self.backgroundCheckInterval - 5 { return }
                 self.checkForChanges(reason: "timer")
             }
         }
@@ -111,6 +132,9 @@ extension PicPlaceController {
                 let wasUp = self.isNetworkUp
                 self.isOnWiFi = unmetered
                 self.isNetworkUp = up
+                // A network that changed may reach PicPlace where the last
+                // one could not: the gate opens and one check looks.
+                if up, self.unreachableUntil != nil { self.networkChangedWhileUnreachable() }
                 if was != unmetered {
                     LLog("picplace: network is \(unmetered ? "Wi-Fi/Ethernet" : "mobile or metered") — auto-sync \(self.autoAllowed ? "may run" : "waits")")
                     self.autoSyncSettingChanged()
@@ -156,6 +180,10 @@ extension PicPlaceController {
         /// Seconds spent sending — not paused, not held — the pace the
         /// estimate is made from.
         var activeSeconds: Double = 0
+        /// A push of this run has begun (2026-09-29). Until one has, the
+        /// drawer shows no sending block: a project queued that turns out to
+        /// need nothing leaves the count without ever having flashed it.
+        var started = false
 
         var left: Int { max(0, total - done) }
 
@@ -167,10 +195,11 @@ extension PicPlaceController {
     }
 
     /// Whether anything automatic may move right now: the switch, the
-    /// session, the network rule, the battery.
+    /// session, the network rule, PicPlace answering, the battery.
     var autoAllowed: Bool {
         guard autoSyncEnabled, canSync else { return false }
         if wifiOnly, !isOnWiFi { return false }
+        if isUnreachable { return false }
         #if os(iOS)
         if ProcessInfo.processInfo.isLowPowerModeEnabled { return false }
         #endif
@@ -183,10 +212,91 @@ extension PicPlaceController {
         if !canSync { return "not connected" }
         if sendsPaused { return "paused — resume it in Project Syncing" }
         if wifiOnly, !isOnWiFi { return "waiting for Wi-Fi" }
+        if isUnreachable { return "waiting — \(sessionHost) can't be reached" }
         #if os(iOS)
         if ProcessInfo.processInfo.isLowPowerModeEnabled { return "paused in Low Power Mode" }
         #endif
         return nil
+    }
+
+    // MARK: PicPlace not answering (2026-09-29)
+
+    /// The gate is closed: PicPlace gave no answer and its backoff has not
+    /// run out (`unreachableUntil`).
+    var isUnreachable: Bool { (unreachableUntil ?? .distantPast) > Date() }
+
+    /// The client's word (`PicPlaceClient.reachability`): no answer, or the
+    /// first answer after none.
+    func noteServerAnswered(_ answered: Bool) {
+        if answered { noteServerReachable() } else { noteServerUnreachable() }
+    }
+
+    /// A request got no answer at all. The first closes the gate for a
+    /// minute, and each failed look after it for twice as long, up to half
+    /// an hour. Requests failing together while it is closed are one
+    /// failure, not a streak.
+    private func noteServerUnreachable() {
+        guard !isShutDown else { return }
+        let now = Date()
+        if let until = unreachableUntil, until > now { return }
+        unreachableStreak += 1
+        let wait = min(30 * 60, 60 * pow(2, Double(unreachableStreak - 1)))
+        unreachableUntil = now.addingTimeInterval(wait)
+        LLog("picplace: \(sessionHost) can't be reached — nothing automatic asks it for \(Int((wait / 60).rounded())) min (no answer \(unreachableStreak) time\(unreachableStreak == 1 ? "" : "s") in a row)")
+        reachabilityProbe?.cancel()
+        reachabilityProbe = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard let self, !Task.isCancelled, !self.isShutDown else { return }
+            self.reachabilityProbe = nil
+            self.lookForServer(reason: "retry")
+        }
+    }
+
+    /// PicPlace answered after a silence: the gate opens, and what it held
+    /// goes — the pushes, a check to catch up, the uploads.
+    private func noteServerReachable() {
+        guard unreachableUntil != nil || unreachableStreak > 0 else { return }
+        reachabilityProbe?.cancel()
+        reachabilityProbe = nil
+        unreachableUntil = nil
+        unreachableStreak = 0
+        LLog("picplace: \(sessionHost) answers again — automatic sync carries on")
+        releaseHeldPushes()
+        // The answer may be the look's own check; one already running is it.
+        if checkTask == nil { lookForServer(reason: "reachable") }
+        resumeUploadJobs(reason: "reachable")
+    }
+
+    /// The network changed while the gate was closed: it opens, and one
+    /// look goes now. The streak stays — so the answer, if one comes, is
+    /// PicPlace back (`noteServerReachable` releases what was held), and
+    /// silence on this network too waits longer again.
+    func networkChangedWhileUnreachable() {
+        reachabilityProbe?.cancel()
+        reachabilityProbe = nil
+        unreachableUntil = nil
+        LLog("picplace: the network changed — looking for \(sessionHost) again")
+        lookForServer(reason: "network")
+    }
+
+    /// One look: the check, or the first connection still pending. Its
+    /// answer opens the gate; its silence closes it again for longer.
+    private func lookForServer(reason: String) {
+        if binding?.initialSync.state == .pending {
+            runInitialSyncIfPending()
+        } else {
+            checkForChanges(reason: reason)
+        }
+    }
+
+    /// The drawer's run ends when PicPlace goes silent under it: what it
+    /// had not sent is held (`heldPushes`) and the drawer's one line counts
+    /// it, rather than a run that cannot move. A pause keeps its run — its
+    /// Resume goes on counting.
+    private func endSendRunForSilence() {
+        guard isUnreachable, !sendsPaused else { return }
+        sendRun = nil
+        sendRunIDs.removeAll()
     }
 
     /// A switch or a condition moved: stop what is no longer allowed, start
@@ -228,8 +338,9 @@ extension PicPlaceController {
             checkForChanges(reason: "network")
         }
         releaseHeldPushes()
-        scheduleOriginalsQueue()
-        scheduleBlendsQueue()
+        // A switch or a condition moved — nothing the walks' key sees.
+        scheduleOriginalsQueue(force: true)
+        scheduleBlendsQueue(force: true)
     }
 
     /// The pushes a hold kept, back into the queue with the reasons they
@@ -271,8 +382,8 @@ extension PicPlaceController {
         let wasHolding = !heldPushes.isEmpty
         releaseHeldPushes(manual: true)
         resumePausedUploadJobs()
-        scheduleOriginalsQueue()
-        scheduleBlendsQueue()
+        scheduleOriginalsQueue(force: true)
+        scheduleBlendsQueue(force: true)
         if !wasHolding { checkForChanges(reason: "manual") }
     }
 
@@ -295,8 +406,23 @@ extension PicPlaceController {
     /// change, the project joins the queue — and goes up if it actually
     /// moved past the base (a pull writes the document too, and must not
     /// bounce back).
+    ///
+    /// Only an edit wakes it (2026-09-29): a write that left the project at
+    /// its PicPlace base — a measured size, a pulled update, a status field,
+    /// a stamp on the way to disk — has nothing to send, which the push used
+    /// to find out twenty seconds later. The size sort wrote 750 documents
+    /// in six minutes and each one flashed the drawer's sending block.
     func noteProjectChanged(_ id: UUID) {
         guard autoSyncEnabled, canSync, binding?.initialSync.state == .done else { return }
+        guard let capture = model.capture(id: id), capture.deletedAt == nil, hasMovedPastBase(capture) else { return }
+        // PicPlace isn't answering: held as it is, no timer — the answer
+        // releases it, and the check after it would find it anyway.
+        if isUnreachable {
+            pendingPushes[id]?.cancel()
+            pendingPushes[id] = nil
+            holdForSilence(id, reason: .edited)
+            return
+        }
         pendingPushes[id]?.cancel()
         pendingPushes[id] = Task { [weak self] in
             do { try await Task.sleep(nanoseconds: UInt64(Self.pushDebounce * 1_000_000_000)) } catch { return }
@@ -316,6 +442,12 @@ extension PicPlaceController {
     /// kept *Checking PicPlace…* greyed out for that hour, 2026-09-24).
     func enqueuePush(_ id: UUID, reason: PushReason = .edited, manual: Bool = false) {
         guard canSync, autoSyncEnabled || manual else { return }
+        // Silence holds an automatic push outside any run: the drawer's line
+        // counts it, and the answer releases it (2026-09-29).
+        if !manual, !pushQueueManual, isUnreachable {
+            holdForSilence(id, reason: reason)
+            return
+        }
         if manual { pushQueueManual = true }
         pushReasons[id] = max(pushReasons[id] ?? reason, reason)
         if !sendRunIDs.contains(id) {
@@ -329,8 +461,26 @@ extension PicPlaceController {
             heldPushes.insert(id)
             return
         }
+        // Queued now, so no longer waiting: the drawer's count stays true
+        // when the check queues a project a hold was keeping.
+        if heldPushes.contains(id) { heldPushes.remove(id) }
         if !pushQueue.contains(id) { pushQueue.append(id) }
         drainPushQueue()
+    }
+
+    /// Whether the project holds an edit PicPlace hasn't got: never agreed a
+    /// revision with it, or moved past the one it agreed — `pushIfNeeded`'s
+    /// test for an edit, asked when the write lands.
+    func hasMovedPastBase(_ capture: AppModel.CaptureProject) -> Bool {
+        guard let base = records[model.originID(of: capture)]?.revision else { return true }
+        return revision(of: capture) != base
+    }
+
+    /// Held while PicPlace is silent — an id in a set, no timer, no request,
+    /// no place in a run — with the stronger of its reasons.
+    private func holdForSilence(_ id: UUID, reason: PushReason) {
+        pushReasons[id] = max(pushReasons[id] ?? reason, reason)
+        if !heldPushes.contains(id) { heldPushes.insert(id) }
     }
 
     private func drainPushQueue() {
@@ -380,6 +530,7 @@ extension PicPlaceController {
             guard !sendsPaused, autoAllowed || pushQueueManual else {
                 heldPushes.formUnion(pushQueue)
                 pushQueue.removeAll()
+                endSendRunForSilence()
                 break
             }
             // A check or the first connection walks the whole library and
@@ -421,12 +572,19 @@ extension PicPlaceController {
             }
             if outcome == .failed, lastSyncFailedOffline {
                 // The server cannot be reached: failing through the rest one
-                // timeout at a time helps nobody. The check — which runs
-                // again on the timer and when the network changes — pushes
-                // whatever still differs, this project included.
-                LLog("picplace: push queue — PicPlace can't be reached; \(pushQueue.count) project(s) left to the next check")
-                dropFromSendRun(pushQueue)
+                // timeout at a time helps nobody. What is left — this project
+                // too — waits for PicPlace's answer (2026-09-29), which
+                // releases it; the check after it pushes whatever still
+                // differs anyway. The drawer's line counts them.
+                // A check can have queued the project being sent again: count ids once.
+                LLog("picplace: push queue — PicPlace can't be reached; \(Set(pushQueue + [id]).count) project(s) wait for it")
+                holdForSilence(id, reason: reason)
+                for left in pushQueue { holdForSilence(left, reason: pushReasons[left] ?? .edited) }
                 pushQueue.removeAll()
+                if !sendsPaused {
+                    sendRun = nil
+                    sendRunIDs.removeAll()
+                }
                 break
             }
         }
@@ -468,7 +626,7 @@ extension PicPlaceController {
         case .poster:
             guard moved || (record?.posterToken == nil && !model.sourcesMissing(capture)) else { return .nothing }
         }
-        if var run = sendRun { run.current = capture.displayTitle; sendRun = run }
+        if var run = sendRun { run.current = capture.displayTitle; run.started = true; sendRun = run }
         let run = sendRun
         autoStatus = (run?.total ?? 0) > 1
             ? "Syncing \((run?.done ?? 0) + 1) of \(run?.total ?? 0) · \(capture.displayTitle)…"
@@ -499,13 +657,40 @@ extension PicPlaceController {
     /// Every project whose originals are only here goes up, one at a time,
     /// oldest first, while the conditions hold. Re-armed after every check
     /// and every auto-push; a project already being synced waits its turn.
-    func scheduleOriginalsQueue() {
+    ///
+    /// Skipped when nothing has moved since the last whole walk (2026-09-29)
+    /// — it would read every project to the same end; `force` for a change
+    /// the key cannot see (a switch, Resume, a look PicPlace asked for).
+    func scheduleOriginalsQueue(force: Bool = false) {
         guard originalsAllowed, originalsQueueTask == nil else { return }
+        if !force, walkIsFresh(originalsWalkSeen) { return }
+        let key = currentWalkKey
         originalsQueueTask = Task { [weak self] in
             guard let self else { return }
-            await runOriginalsQueue(manual: false)
+            if await runOriginalsQueue(manual: false) { originalsWalkSeen = (key, Date()) }
             originalsQueueTask = nil
         }
+    }
+
+    /// What a walk's answer depends on: the library's documents, its files
+    /// and the sync facts. Taken as the walk starts, so a change made while
+    /// it walked brings the next one.
+    struct WalkKey: Equatable {
+        var index: Int
+        var files: Int
+        var facts: Int
+    }
+
+    var currentWalkKey: WalkKey {
+        WalkKey(index: model.indexRevision, files: model.filesRevision, facts: syncFactsRevision)
+    }
+
+    /// A walk that saw this key within half an hour: nothing to walk for.
+    /// The half hour is PicPlace's side, which can move without the records
+    /// saying so.
+    func walkIsFresh(_ seen: (key: WalkKey, at: Date)?) -> Bool {
+        guard let seen else { return false }
+        return seen.key == currentWalkKey && Date().timeIntervalSince(seen.at) < 30 * 60
     }
 
     /// A person's *Upload now* (Settings, beside free up space): the same
@@ -536,8 +721,11 @@ extension PicPlaceController {
     /// originals go up (negotiated by hash, so only what is missing is sent).
     /// Until 2026-09-23 "uploaded once" (`originalsMovedAt`) skipped a
     /// project for good, so a later blend never went up.
-    private func runOriginalsQueue(manual: Bool) async {
-        guard let libraryIndex = model.libraryIndex else { return }
+    /// True when it walked every project — what `scheduleOriginalsQueue`
+    /// remembers the walk by.
+    @discardableResult
+    private func runOriginalsQueue(manual: Bool) async -> Bool {
+        guard let libraryIndex = model.libraryIndex else { return false }
         var query = LibraryIndex.ProjectQuery()
         query.limit = 100_000
         query.sort = .created
@@ -545,23 +733,26 @@ extension PicPlaceController {
         let rows = (try? libraryIndex.projects(query).rows) ?? []
         let now = Date()
         var visited = 0
+        var walkedWhole = true
         for row in rows {
             // Every row reads its document on the main actor and most are
             // passed over at once: a beat for the screen every few dozen
             // rows, so a walk of a thousand is not one stall (2026-09-27).
             visited += 1
             if visited % 32 == 0 { await Task.yield() }
-            guard manual ? canSync : originalsAllowed, !Task.isCancelled else { break }
-            if manual, model.stage == .processing { break }
+            guard manual ? canSync : originalsAllowed, !Task.isCancelled else { walkedWhole = false; break }
+            if manual, model.stage == .processing { walkedWhole = false; break }
             if manual, wifiOnly, !isOnWiFi {
                 LLog("picplace: originals queue — waiting for Wi-Fi")
                 manualOriginalsWaiting = true
+                walkedWhole = false
                 break
             }
             // The drawer's Pause holds a person's run too: the project being
             // sent finishes, the next one waits for Resume.
             if sendsPaused {
                 LLog("picplace: originals queue — paused")
+                walkedWhole = false
                 break
             }
             guard let capture = model.capture(id: row.id), let record = records[model.originID(of: capture)] else { continue }
@@ -605,17 +796,20 @@ extension PicPlaceController {
                 // next walk sends the rest. Not the next project now.
                 originalsRunPaused = false
                 LLog("picplace: originals queue — stopped with \(capture.displayTitle) part-way; the next walk carries on")
+                walkedWhole = false
                 break
             }
             if records[origin]?.lastError != nil {
                 // One failure stops the walk; the next check re-arms the
                 // queue and this project waits out its backoff.
                 updateAutoError()
+                walkedWhole = false
                 break
             }
             updateAutoError()
         }
         if autoStatus?.hasPrefix("Uploading originals") == true { autoStatus = nil }
+        return walkedWhole
     }
 
     // MARK: The blends queue (D1, 2026-09-25)
@@ -635,11 +829,15 @@ extension PicPlaceController {
         autoAllowed && model.stage != .processing && !sendsPaused
     }
 
-    func scheduleBlendsQueue() {
+    /// Skipped, as the originals walk is, when nothing has moved since the
+    /// last whole walk; `force` for what the key cannot see.
+    func scheduleBlendsQueue(force: Bool = false) {
         guard heavyChecksAllowed, blendsQueueTask == nil else { return }
+        if !force, walkIsFresh(blendsWalkSeen) { return }
+        let key = currentWalkKey
         blendsQueueTask = Task { [weak self] in
             guard let self else { return }
-            await runBlendsQueue()
+            if await runBlendsQueue() { blendsWalkSeen = (key, Date()) }
             blendsQueueTask = nil
         }
     }
@@ -653,7 +851,7 @@ extension PicPlaceController {
             try? await Task.sleep(for: .seconds(90))
             guard !Task.isCancelled, let self else { return }
             heavyRecheckTask = nil
-            scheduleBlendsQueue()
+            scheduleBlendsQueue(force: true)
         }
     }
 
@@ -678,8 +876,10 @@ extension PicPlaceController {
     /// PicPlace's count of its heavy files covers what is here. A set found
     /// incomplete for want of something this queue does not send is not
     /// read again until it changes (`heavySetMissing`).
-    private func runBlendsQueue() async {
-        guard let libraryIndex = model.libraryIndex else { return }
+    /// True when it walked every project — what `scheduleBlendsQueue`
+    /// remembers the walk by.
+    private func runBlendsQueue() async -> Bool {
+        guard let libraryIndex = model.libraryIndex else { return false }
         var query = LibraryIndex.ProjectQuery()
         query.limit = 100_000
         query.sort = .created
@@ -687,12 +887,13 @@ extension PicPlaceController {
         let rows = (try? libraryIndex.projects(query).rows) ?? []
         let now = Date()
         var visited = 0
+        var walkedWhole = true
         for row in rows {
             // As in the originals queue: a beat for the screen every few
             // dozen rows read on the main actor (2026-09-27).
             visited += 1
             if visited % 32 == 0 { await Task.yield() }
-            guard heavyChecksAllowed, !Task.isCancelled else { break }
+            guard heavyChecksAllowed, !Task.isCancelled else { walkedWhole = false; break }
             guard let capture = model.capture(id: row.id) else { continue }
             let origin = model.originID(of: capture)
             guard let record = records[origin], record.recordsReachedServer, record.elsewhereLibrary == nil,
@@ -765,10 +966,12 @@ extension PicPlaceController {
             if originalsRunPaused {
                 originalsRunPaused = false
                 LLog("picplace: blends queue — stopped with \(capture.displayTitle) part-way; the next walk carries on")
+                walkedWhole = false
                 break
             }
             if records[origin]?.lastError != nil {
                 updateAutoError()
+                walkedWhole = false
                 break
             }
             // The set was whole before the blend: with the blend there it is
@@ -781,6 +984,7 @@ extension PicPlaceController {
             }
         }
         if autoStatus?.hasPrefix("Uploading blends") == true { autoStatus = nil }
+        return walkedWhole
     }
 
     // MARK: The look right after an upload (2026-09-26)
