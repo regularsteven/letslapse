@@ -11,6 +11,95 @@ live inline.
 
 ## Open
 
+### Holy Grail highlight guard — built 2026-09-28, device check owed
+
+The fix for the 18 Pro telephoto runaway (report:
+`docs/fieldtests/2026-09-28-18pro-holy-grail-runaway.md`): every Dynamic and
+Ladder run now caps its light at what the frames' own highlights allow
+(`HolyGrailRampEngine.highlightCeilingGain`, `HighlightTally`,
+`LiveBlendRawController.sensorHighlights(from:)`, the video tap's
+`sampleLinearLight`). Kit-tested and simulated; **never run on a phone.** Owed:
+
+- **A dusk Dynamic DNG run on the 18 Pro telephoto** (the night's framing if
+  possible). Pass: no window with ≥ 10 % of the frame at white for more than
+  a couple of windows; the guard's `holding` lines in the console; ISO rising
+  only as the light falls. Read it with `tools/ramp_audit.py` (guard columns).
+- **The white assumption, on a blown frame:** the DNG reading takes 1.0 of a
+  baseline-exposure-0 decode as the sensor's white. Confirmed linear on a real
+  telephoto DNG and clipping exactly at 1.0 on Apple's linear DNGs, but never
+  seen on a clipped Bayer frame. A deliberately over-exposed window should log
+  `peak` ≈ 1.0 (`highlightPeak` per window). If Core Image's white balance
+  pushes a channel past 1.0 before the raw clips, the guard is merely early.
+- **Cost:** the second look is ~25 ms on the M4 Max for 48 MP; check the
+  phone's `processingMillis` against a pre-guard run. BLEND 1 pass-through
+  pays a whole decode at most every 4 s — watch the 12 Pro at short intervals.
+- **The 16 Pro, same night-type shoot on the default:** its frames should
+  never trip the guard (no `highlights` issues) unless a large area really is
+  at white.
+- **JPEG/HEIC:** a bright-sky Dynamic run — the guard should only hold for
+  output codes ≥ 250 over ≥ 10 % of the frame.
+- Watch for a slow ⅙-stop sawtooth when the ceiling lifts (flicker report).
+
+Left as they were, by decision (the guard makes them harmless; each wants its
+own fix): the anchor drift still trusts the AE's opinion and still moves a
+stop a minute at 3 s; APEX brightness still compresses past correct exposure;
+the delivered shutter still comes from EXIF `ExposureTime`, which rounds long
+exposures to 1/n (0.73 s → "1 s") — `ShutterSpeedValue`, or the bracket's own
+commanded value, is exact.
+
+### Sky first — a second, switchable metering method beside today's (2026-09-28)
+
+From the runaway review with Steven: keep today's meter frozen as the default
+("Camera") and add one that meters the frames it shot at the exposure it
+commanded, with large bright areas as the ceiling ("Sky first"). The pattern
+is the one the app already uses twice — Render Variants (frozen, append-only,
+a ledger) and the Auto blend strategies (all resolved every window, one
+actuates, all logged): every Dynamic/Ladder run computes both, the chosen one
+drives, the other rides the log, so every shoot — the 16 Pro's included —
+shows what Sky first would have done at no risk. A row in Settings ▸ Recording
+(name to agree), stamped into `capture_log.json`, a remote command for bench
+runs, `ramp_audit.py` side by side, and a check that flags any meter moving
+with the ramp's own steps. Steven's rules for it: the sky and clouds lead —
+protect the sky even if the foreground darkens, JPEG and HEIC too; a sky
+under ~10 % of the shot must not run the shoot; no per-lens ISO rules, and
+high ISO is fine where it is clean — blown areas are what is not. First
+estimates for "large": points (< ~1 % of the frame per region: the sun's disc,
+lamps, windows) may clip; patches (1–10 %) may clip partly; areas (≥ 10 %)
+must not, with ~⅓ stop of headroom; all clipped pixels together under ~3–5 %;
+per colour channel. Noise preference: later (Steven). Design-sync applies to
+the Settings row.
+
+### Dynamic, Ladder and Basic — who owns the interval and the stack (2026-09-28)
+
+Steven: Basic does what the user asked, and uses more time when the frames
+need it (today a 2 s interval that cannot hold five 1 s frames drops them —
+the runaway night got 1–2 of 5); Dynamic is LetsLapse's entirely (interval,
+blend and exposure); Ladder is the ladder's (each rung owns interval, blend
+and its exposure box; the servo and the highlight rule work inside it).
+The blend's job is to fake a longer exposure — an ND filter in daylight — and
+at night the long shutter does that already. Proposal to explore: one
+"coverage" target (how much of each interval the shutter is open, film's
+shutter angle) sets Dynamic's blend depth on any device — many frames in
+daylight, one at night, more only once the interval passes the 1 s frame
+limit — and the light stretches the interval up to a user limit (EVERY=Auto
+already widens it). Zone's table (8 → 5 → 3 → 2 → 1 frames as light falls)
+is already half of this. Needs its own design pass (dials, SVGs).
+
+### The DNG blend works in Core Image's shouldered space, not linear light
+
+Found 2026-09-28 while building the highlight guard. The blend decodes each
+Bayer frame with `CIRAWFilter` defaults (`boostAmount 0`), which applies the
+DNG's BaselineExposure (+3.82 EV on an 18 Pro telephoto frame) and then
+compresses highlights into a shoulder topping out near 1.2: median ×14.2,
+90th percentile ×9.7, 99th ×3.2, brightest ×1.3 against the baseline-free
+decode of the same file. So `FrameLuminanceStats`' "1.0 = sensor saturation"
+is not true there — Lumen's thresholds and `fractionAbove98` read a
+compressed scale — and the authored blended DNGs carry that shoulder in
+their "linear" data (less highlight latitude in the grade than the originals
+had). Look at `extendedDynamicRangeAmount` / the other `CIRAWFilter` knobs,
+or blend at baseline exposure 0 and carry the lift in the DNG's own
+BaselineExposure; measure against Apple's originals before changing a pixel.
+
 ### Share project leaves its `.lapse` in `tmp/` when the screen goes away mid-export
 
 Confirmed 2026-09-28 (Steven's report; a 24 GB `Victory Bridge Sunset.lapse` in the Mac's
