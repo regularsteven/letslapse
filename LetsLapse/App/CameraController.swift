@@ -429,6 +429,15 @@ final class CameraController: NSObject, ObservableObject {
     private var holyGrailLastSceneEV: Double?
     #if os(iOS)
     private var holyGrailLastMeasurement: HolyGrailMeasurement?
+    /// The light gain the ramp wrote as each recent window opened — what
+    /// stamps a highlight reading with the exposure its frames were shot at,
+    /// since the DNG path's readings land a window or two late.
+    private var holyGrailGainByWindow: [Int: Double] = [:]
+    /// The highlight guard's state as last logged, and whether the run
+    /// readout was last red — both logged on transitions only, like the
+    /// refusal trail.
+    private var holyGrailLoggedHighlightState: HolyGrailRampEngine.HighlightGuardState = .off
+    private var holyGrailReadoutWasRed = false
     #endif
     private var holyGrailActive = false
     private var holyGrailPending = false
@@ -5349,16 +5358,19 @@ final class CameraController: NSObject, ObservableObject {
             parts.append("physical")
         }
         parts.append("custom exposure \(device.isExposureModeSupported(.custom) ? "supported" : "unsupported")")
-        let mode: String
-        switch device.exposureMode {
-        case .locked: mode = "locked"
-        case .autoExpose: mode = "autoExpose"
-        case .continuousAutoExposure: mode = "continuousAutoExposure"
-        case .custom: mode = "custom"
-        @unknown default: mode = "unknown"
-        }
-        parts.append("mode \(mode)")
+        parts.append("mode \(Self.exposureModeName(device.exposureMode))")
         return parts.joined(separator: " · ")
+    }
+
+    /// The exposure mode's name, as the logs spell it.
+    private static func exposureModeName(_ mode: AVCaptureDevice.ExposureMode) -> String {
+        switch mode {
+        case .locked: return "locked"
+        case .autoExpose: return "autoExpose"
+        case .continuousAutoExposure: return "continuousAutoExposure"
+        case .custom: return "custom"
+        @unknown default: return "unknown"
+        }
     }
     #endif
 
@@ -7750,7 +7762,15 @@ final class CameraController: NSObject, ObservableObject {
         engine.deadbandStops = 0.12
         engine.dwellSteps = 3
         engine.reversalRefractorySteps = 10
+        // The 2026-09-28 fix, on for every Dynamic and Ladder run: the frames'
+        // own highlights cap the light, whatever the two meters believe. On
+        // the 18 Pro telephoto both read the ramp's own ISO as a darkening
+        // scene and the shoot ran from ISO 19 to 7,680 in 2.6 minutes.
+        engine.highlightGuardEnabled = true
         holyGrailEngine = engine
+        holyGrailGainByWindow = [:]
+        holyGrailLoggedHighlightState = .off
+        holyGrailReadoutWasRed = false
     }
 
     /// sessionQueue-confined. The envelope the ramp may move inside.
@@ -7805,7 +7825,8 @@ final class CameraController: NSObject, ObservableObject {
     /// own steps 7.9 stops into the 12 Pro's shutter floor over a correctly
     /// exposed dusk (`docs/fieldtests/2026-09-04-ladder-readout-runaway.md`).
     private func advanceHolyGrailRamp(
-        frame: Int, delivered: (shutter: Double, iso: Double)?, measurement: HolyGrailMeasurement?
+        frame: Int, delivered: (shutter: Double, iso: Double)?, measurement: HolyGrailMeasurement?,
+        highlights: HolyGrailRampEngine.HighlightReading? = nil
     ) {
         guard let limits = holyGrailLimits, holyGrailEngine != nil,
               let measurement
@@ -7841,10 +7862,12 @@ final class CameraController: NSObject, ObservableObject {
                 shutterSeconds: pair.shutter, iso: Float(pair.iso),
                 aperture: limits.aperture, exposureTargetOffset: offset.isFinite ? offset : 0)
         }
-        holyGrailEngine?.advance(measuredEV: measuredEV, limits: limits, aeSceneEV: aeSceneEV)
+        holyGrailEngine?.advance(
+            measuredEV: measuredEV, limits: limits, aeSceneEV: aeSceneEV, highlights: highlights)
         if let gap = holyGrailEngine?.aeGapEV, abs(gap) > 0.5, frame % 100 == 0 {
             LLog(String(format: "holygrail: anchor drifting — aim sits %+.2f stops off AE", gap))
         }
+        noteHighlightGuardTransition(window: frame, limits: limits)
         holyGrailLastDelivered = pair
         holyGrailLastSceneEV = aeSceneEV
         holyGrailLastMeasurement = measurement
@@ -7890,11 +7913,66 @@ final class CameraController: NSObject, ObservableObject {
                   shutter > 0, iso > 0 else { return nil }
             return (shutter, iso)
         }
-        advanceHolyGrailRamp(frame: index, delivered: delivered, measurement: measurement)
+        // The frames' highlights, stamped with the light they were shot at —
+        // which the ramp knows exactly, because it wrote it as their window
+        // opened. A reading from before the ramp last moved is then never
+        // answered as if it described the frames being shot now.
+        let highlights = scene?.highlights.map { reading -> HolyGrailRampEngine.HighlightReading in
+            var stamped = reading
+            stamped.gain = holyGrailGainByWindow[reading.window]
+            return stamped
+        }
+        advanceHolyGrailRamp(
+            frame: index, delivered: delivered, measurement: measurement, highlights: highlights)
         advanceLadder(window: index)
-        noteHolyGrailApply(applyHolyGrailExposure(), stage: "window \(index)")
+        let outcome = applyHolyGrailExposure()
+        noteHolyGrailApply(outcome, stage: "window \(index)")
+        if outcome == .applied, let written = holyGrailAppliedExposure.target {
+            holyGrailGainByWindow[index] = HolyGrailRampEngine.lightGain(
+                shutterSeconds: written.duration.seconds, iso: written.iso)
+            // A reading is never more than a few windows late; a short memory.
+            holyGrailGainByWindow = holyGrailGainByWindow.filter { $0.key > index - 16 }
+        }
         repaceHolyGrailAutoInterval()
         snapshotHolyGrailRecord(scene: scene)
+    }
+
+    /// sessionQueue-confined. The highlight guard's trail: one console line
+    /// and one `capture_log.json` issue per change of what it is doing —
+    /// holding the ramp under its highlights, stepping down off a clip, or
+    /// clear again — never one per window.
+    private func noteHighlightGuardTransition(window: Int, limits: HolyGrailRampEngine.HardwareLimits) {
+        guard let engine = holyGrailEngine else { return }
+        let state = engine.highlightState
+        guard state != holyGrailLoggedHighlightState else { return }
+        let previous = holyGrailLoggedHighlightState
+        holyGrailLoggedHighlightState = state
+        // The first "clear" of a run is the guard arming, not news.
+        if previous == .off, state == .clear { return }
+        let reading = engine.lastHighlightReading
+        let readingText = reading.map {
+            String(format: "%.0f%% of the frame at white, %.0f%% within ⅓ stop (window %d, peak %.3f)",
+                   $0.clippedFraction * 100, $0.hotFraction * 100, $0.window, $0.peak ?? .nan)
+        } ?? "no reading"
+        let ceilingText = engine.highlightCeilingGain.map {
+            String(format: "ceiling EV %.1f",
+                   HolyGrailRampEngine.sceneEV100(forGain: $0, aperture: limits.aperture))
+        } ?? "no ceiling"
+        let detail: String
+        let severity: String
+        switch state {
+        case .darkening:
+            detail = "highlights clipping — \(readingText) · \(ceilingText) — stepping down"
+            severity = "warning"
+        case .holding:
+            detail = "highlights holding — \(readingText) · \(ceilingText) — the ramp adds no more light"
+            severity = "info"
+        case .clear, .off:
+            detail = "highlights clear — \(readingText) · \(ceilingText)"
+            severity = "info"
+        }
+        LLog("holygrail: \(detail) · window \(window)")
+        noteRunIssue(kind: "highlights", severity: severity, detail: detail)
     }
 
     // MARK: - Light Ladder
@@ -8393,6 +8471,8 @@ final class CameraController: NSObject, ObservableObject {
         case .apexBrightness(let value)?: brightness = value
         case nil: break
         }
+        let reading = engine.lastHighlightReading
+        let aperture = holyGrailLimits?.aperture ?? videoDevice?.lensAperture ?? 1.78
         holyGrailRecord.set(CaptureExposureLog.RampState(
             commandedShutter: engine.currentTarget.shutterSeconds,
             commandedISO: Double(engine.currentTarget.iso),
@@ -8404,7 +8484,16 @@ final class CameraController: NSObject, ObservableObject {
             aeGapEV: engine.aeGapEV,
             applied: holyGrailApplyAttempted ? holyGrailLastApplyReason == nil : nil,
             applyOutcome: holyGrailLastApplyReason,
-            rung: ladderActiveRung?.name))
+            rung: ladderActiveRung?.name,
+            highlightGuard: engine.highlightState.rawValue,
+            highlightClipped: reading?.clippedFraction,
+            highlightHot: reading?.hotFraction,
+            highlightWindow: reading?.window,
+            highlightCeilingEV: engine.highlightCeilingGain.map {
+                HolyGrailRampEngine.sceneEV100(forGain: $0, aperture: aperture)
+            },
+            highlightPeak: reading?.peak,
+            deviceExposureMode: videoDevice.map { Self.exposureModeName($0.exposureMode) }))
     }
 
     /// sessionQueue-confined. One bounded second attempt at the seed write, for
@@ -8507,6 +8596,22 @@ final class CameraController: NSObject, ObservableObject {
             deliveredShutterSeconds: delivered?.shutter,
             deliveredISO: delivered.map { Float($0.iso) },
             notDrivingReason: holyGrailLastApplyReason)
+        // The run readout's red line is the one on-screen alarm a shoot has.
+        // Logged with the text it shows (CaptureView's `runExposureText`) as
+        // it lights and as it clears, so the next "a red notification came
+        // up" can be matched to a window and a pair — 2026-09-28's could only
+        // be reconstructed from the ramp's arithmetic.
+        let readoutRed = state.isDriving && state.isClipped
+        if readoutRed != holyGrailReadoutWasRed {
+            holyGrailReadoutWasRed = readoutRed
+            let pair = "\(ManualExposureDetents.shutterLabel(state.shutterSeconds)) · ISO "
+                + String(format: "%.0f · EV %.1f", Double(state.iso), state.sceneEV)
+            let detail = readoutRed
+                ? "run readout red: \(pair) · past the sensor's limit"
+                : "run readout amber again: \(pair)"
+            LLog("holygrail: \(detail)")
+            noteRunIssue(kind: "readout", severity: readoutRed ? "warning" : "info", detail: detail)
+        }
         DispatchQueue.main.async {
             if self.holyGrailState != state { self.holyGrailState = state }
         }
@@ -8533,6 +8638,9 @@ final class CameraController: NSObject, ObservableObject {
         holyGrailLastDelivered = nil
         holyGrailLastSceneEV = nil
         holyGrailLastMeasurement = nil
+        holyGrailGainByWindow = [:]
+        holyGrailLoggedHighlightState = .off
+        holyGrailReadoutWasRed = false
         if ladderRequestedForRun != nil {
             LLog("ladder: end after \(ladderChangeCount) rung change(s)")
         }

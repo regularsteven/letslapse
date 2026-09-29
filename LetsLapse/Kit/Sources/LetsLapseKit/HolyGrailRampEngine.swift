@@ -206,14 +206,20 @@ public struct HolyGrailRampEngine: Equatable {
     /// luma meter's crush multiplied the error ×1.75. Dynamic mode's contract
     /// is that a shoot *ends* where AE would meter the ending scene — so the
     /// anchor drifts there, slowly enough to be invisible frame-to-frame
-    /// (1/20 stop per window ≈ 1 stop per hour at 3 s) and referenced to an
-    /// absolute opinion, which also cancels the meter's non-invariance.
+    /// and referenced to an absolute opinion, which also cancels the meter's
+    /// non-invariance. The shipping 1/20 stop per window is a stop a MINUTE
+    /// at 3 s (a stop and a half at 2 s) — this comment once said an hour.
     ///
-    /// Stability against the 2026-08-15 runaway class is by construction:
-    /// this is a rate-capped outer loop an order of magnitude slower than the
-    /// servo it trims, its per-step authority is `anchorDriftPerStep` no
-    /// matter how wrong the anchor is, and it only acts on a smoothed,
-    /// deadbanded disagreement.
+    /// Stability against the 2026-08-15 runaway class was argued by
+    /// construction: a rate-capped outer loop slower than the servo it trims,
+    /// its per-step authority `anchorDriftPerStep` no matter how wrong the
+    /// anchor is, acting only on a smoothed, deadbanded disagreement. Its
+    /// TOTAL authority is unbounded, though, and that argument assumed AE's
+    /// opinion describes the scene: on 2026-09-28 (iPhone 18 Pro telephoto,
+    /// ISO carrying the ramp) it moved stop for stop with the ramp's own
+    /// ISO, the gap never closed, and the drift added five stops in a
+    /// hundred windows. The highlight guard is what bounds it now: near the
+    /// highlights' ceiling the drift may not add light.
     public var anchorDriftPerStep: Double = 0
     /// Disagreements smaller than this never move the anchor — AE breathing
     /// and metering noise stay out of the exposure record.
@@ -225,6 +231,104 @@ public struct HolyGrailRampEngine: Equatable {
     /// `measuredEV − appliedEV` told the 2026-08-25 story; this is the same
     /// number available live.
     public private(set) var aeGapEV: Double?
+
+    // MARK: Highlight guard (the 2026-09-28 18 Pro runaway)
+
+    /// What a window's frames said about their brightest areas, read off the
+    /// pixels themselves.
+    ///
+    /// It exists because every other input the ramp has is somebody's
+    /// opinion of the scene, and on 2026-09-28 both opinions were wrong the
+    /// same way: on an iPhone 18 Pro telephoto at dusk, once the shutter sat
+    /// at 1 s and ISO carried the ramp, the frames' APEX brightness fell ~⅔
+    /// of a stop for every stop of ISO the ramp added, and the AE's
+    /// "scene EV" fell a full stop. Brighter frames read as a darker scene,
+    /// the ramp answered with more ISO, and in 2.6 minutes it went from
+    /// ISO 19 to the lens's 7,680 while the light fell perhaps a stop — the
+    /// last four minutes of the shoot blown out. Pixels at the sensor's
+    /// white are not an opinion: no meter can talk the ramp past them.
+    public struct HighlightReading: Equatable, Sendable {
+        /// Share of the frame whose brightest colour channel sits at the
+        /// sensor's white (`clippedLevel`) — detail that is already gone.
+        /// The brightest channel, not luma: a golden sky clips red while
+        /// its luma still reads well short of white.
+        public var clippedFraction: Double
+        /// Share within `marginStops` of white (`hotLevel`) — what one more
+        /// full step would clip.
+        public var hotFraction: Double
+        /// The window the frames were shot in.
+        public var window: Int
+        /// The light gain those frames were shot at, when the caller knows
+        /// it — the ramp chose it, so the camera layer does. Nil is read as
+        /// the gain the ramp holds now. It is what makes a late reading
+        /// safe: the DNG path measures a window or two behind, and a reading
+        /// taken before the ramp last moved must not be answered as if it
+        /// described the frames being shot now.
+        public var gain: Double?
+        /// The brightest sample, on the reading's own scale — logged, so a
+        /// device run can confirm where white really sits (1.0 on the
+        /// sensor scale).
+        public var peak: Double?
+
+        public init(
+            clippedFraction: Double, hotFraction: Double, window: Int,
+            gain: Double? = nil, peak: Double? = nil
+        ) {
+            self.clippedFraction = clippedFraction
+            self.hotFraction = hotFraction
+            self.window = window
+            self.gain = gain
+            self.peak = peak
+        }
+
+        /// White, as a fraction of saturation.
+        public static let clippedLevel = 0.98
+        /// How far under white "hot" starts — one full ramp step.
+        public static let marginStops = 1.0 / 3.0
+        /// A third of a stop under white: 2^(−⅓) of saturation.
+        public static let hotLevel = exp2(-marginStops)
+    }
+
+    /// What the guard did on the last step, for the log and the readout.
+    public enum HighlightGuardState: String, Equatable, Sendable {
+        /// Not enabled for this run.
+        case off
+        /// Nothing bright enough to matter, or no reading yet.
+        case clear
+        /// The ramp wanted more light and the highlights refused it.
+        case holding
+        /// The frames were clipping: stepping down.
+        case darkening
+    }
+
+    /// Off by default so the pure policy tests stay what they were; the
+    /// camera layer switches it on for every ramped run (Dynamic and Ladder).
+    public var highlightGuardEnabled = false
+    /// More than this share of the frame at white — or within a step of it —
+    /// is a large bright area going, not a lamp or the sun: the sun's disc
+    /// is ~0.1 % of a 4× telephoto frame, a sky is tens of percent. Steven's
+    /// number (2026-09-28): a sky that is under 10 % of the shot must not run
+    /// the shoot.
+    public static let highlightTripFraction = 0.10
+    /// A ceiling is only lifted when a reading taken AT it shows less than
+    /// this share hot — room the light has made by falling away.
+    public static let highlightRoomFraction = 0.05
+    /// How far one lift raises the ceiling: half the hot margin, so a lift
+    /// can never carry a patch from "not hot" straight to "at white" — and
+    /// no less, because the shipping gate's 0.12-stop deadband would never
+    /// step into a smaller one.
+    public static let highlightLiftStops = 1.0 / 6.0
+
+    /// The most light the frames may be given, from what their highlights
+    /// have shown — seconds at ISO 100, like `lightGain`. Nil = no limit
+    /// seen yet. Set one step under an exposure that clipped, at an
+    /// exposure that ran hot, and lifted a sixth of a stop at a time as the
+    /// light falls away from it. It only ever limits brightening and forces
+    /// darkening; everything else the ramp does is untouched.
+    public private(set) var highlightCeilingGain: Double?
+    public private(set) var highlightState: HighlightGuardState = .off
+    /// The newest reading the guard has seen.
+    public private(set) var lastHighlightReading: HighlightReading?
 
     /// Seeds the ramp from an exposure the camera is already delivering —
     /// in practice the live AE values read off the device the instant before
@@ -271,9 +375,13 @@ public struct HolyGrailRampEngine: Equatable {
     /// exposure a fresh shoot would open on. On a device path where the ±EV
     /// control drives `setExposureTargetBias`, AE's opinion is bias-inclusive
     /// — the drift converges on the rendering the operator dialed.
+    /// `highlights` is the newest reading of the frames' brightest areas
+    /// (`highlightGuardEnabled` runs only): it sets the ceiling no step may
+    /// cross, whatever the two meters above believe.
     @discardableResult
     public mutating func advance(
-        measuredEV: Double, limits: HardwareLimits, aeSceneEV: Double? = nil
+        measuredEV: Double, limits: HardwareLimits, aeSceneEV: Double? = nil,
+        highlights: HighlightReading? = nil
     ) -> ExposureTarget {
         guard measuredEV.isFinite else { return currentTarget }
 
@@ -299,27 +407,84 @@ public struct HolyGrailRampEngine: Equatable {
             }
         }
         smoothedEV = smoothed
-        driftAnchor(toward: aeSceneEV, smoothed: smoothed)
+        let currentGain = max(currentTarget.lightGain, 1e-9)
+        foldHighlights(highlights, currentGain: currentGain)
+        // Within a step of the highlights' ceiling the anchor may not drift
+        // toward more light. That drift is what walked the 2026-09-28 shoot
+        // five stops over — a twentieth of a stop every window for a hundred
+        // windows — and behind a ceiling it would only wind up.
+        let nearCeiling = highlightCeilingGain.map {
+            currentGain >= $0 * exp2(-HighlightReading.marginStops)
+        } ?? false
+        driftAnchor(toward: aeSceneEV, smoothed: smoothed, mayBrighten: !nearCeiling)
 
         let wantedGain = Self.requiredGain(
             sceneEV100: aimEV(from: smoothed) - bias, aperture: limits.aperture)
-        let currentGain = max(currentTarget.lightGain, 1e-9)
         // Rate-limit in stops of total exposure — the one place flicker is
         // won or lost.
-        let wantedStops = log2(max(wantedGain, 1e-9)) - log2(currentGain)
-        frameCount += 1
-        guard let allowedStops = gatedStep(wantedStops: wantedStops) else {
-            return currentTarget
+        var wantedStops = log2(max(wantedGain, 1e-9)) - log2(currentGain)
+        // Never more light than the highlights allow.
+        let headroom = highlightCeilingGain.map { log2(max($0, 1e-12)) - log2(currentGain) }
+        var held = false
+        if let headroom, wantedStops > headroom {
+            wantedStops = headroom
+            held = true
         }
+        frameCount += 1
+        var allowedStops = gatedStep(wantedStops: wantedStops)
+        let darkening = headroom.map { $0 < -0.01 } ?? false
+        if darkening, let headroom {
+            // Above the ceiling, the frames are clipping: down now, at most a
+            // step a window, whatever the dwell and the refractory say — they
+            // exist to stop a quantizer ringing, and this is not that. The
+            // step counts as a committed move, so the refractory then keeps
+            // the ramp from climbing straight back into the clip.
+            allowedStops = min(allowedStops ?? 0, max(headroom, -stopsPerStep))
+            noteStep(in: -1)
+        }
+        if highlightGuardEnabled {
+            highlightState = darkening ? .darkening : (held ? .holding : .clear)
+        }
+        guard let allowedStops else { return currentTarget }
         currentTarget = Self.split(gain: currentGain * exp2(allowedStops), limits: limits)
         return currentTarget
+    }
+
+    /// Folds one highlight reading into the ceiling (`highlightCeilingGain`).
+    private mutating func foldHighlights(_ reading: HighlightReading?, currentGain: Double) {
+        guard highlightGuardEnabled, let reading,
+              reading.clippedFraction.isFinite, reading.hotFraction.isFinite else { return }
+        lastHighlightReading = reading
+        // The light the frames were shot at. Unknown is read as now: a
+        // ceiling set from the current gain can only hold or lower the
+        // exposure, never raise it.
+        let shotAt = max(reading.gain ?? currentGain, 1e-12)
+        if reading.clippedFraction >= Self.highlightTripFraction {
+            // Detail is going: that exposure is off limits, and so is the
+            // step under it until a reading taken there says otherwise.
+            lowerHighlightCeiling(to: shotAt * exp2(-HighlightReading.marginStops))
+        } else if reading.hotFraction >= Self.highlightTripFraction {
+            // One more step would clip it: no more light than this.
+            lowerHighlightCeiling(to: shotAt)
+        } else if let ceiling = highlightCeilingGain,
+                  shotAt >= ceiling * exp2(-0.05),
+                  reading.hotFraction < Self.highlightRoomFraction {
+            // Shot at the ceiling, with room: the light has fallen away.
+            highlightCeilingGain = ceiling * exp2(Self.highlightLiftStops)
+        }
+    }
+
+    private mutating func lowerHighlightCeiling(to gain: Double) {
+        highlightCeilingGain = min(highlightCeilingGain ?? .infinity, gain)
     }
 
     /// The slow outer loop: close the standing disagreement between where the
     /// ramp aims and where the device AE believes the scene is, a twentieth
     /// of a stop at a time. See `anchorDriftPerStep` for why and for the
     /// stability argument.
-    private mutating func driftAnchor(toward aeSceneEV: Double?, smoothed: Double) {
+    private mutating func driftAnchor(
+        toward aeSceneEV: Double?, smoothed: Double, mayBrighten: Bool = true
+    ) {
         guard anchorDriftPerStep > 0, anchorsToSeedExposure,
               calibration != nil, let aeSceneEV, aeSceneEV.isFinite else { return }
         // aim = smoothed − calibration. A positive gap means the ramp is
@@ -335,6 +500,8 @@ public struct HolyGrailRampEngine: Equatable {
         }
         aeGapEV = smoothedGap
         guard abs(smoothedGap) > anchorDriftDeadband else { return }
+        // A positive gap raises the calibration, which adds light.
+        guard mayBrighten || smoothedGap < 0 else { return }
         calibration = (calibration ?? 0)
             + min(max(smoothedGap, -anchorDriftPerStep), anchorDriftPerStep)
     }
@@ -435,13 +602,20 @@ public struct HolyGrailRampEngine: Equatable {
     /// True when the scene has run past what the hardware can hold — the ramp
     /// is asking for more light than max shutter × max ISO can give (or less
     /// than min × min). Frames keep coming; they just stop tracking.
+    ///
+    /// Not while the highlights hold the ramp under the hardware's ceiling:
+    /// then it is not asking the sensor for more than it has, it is declining
+    /// to take it, and a red "past the sensor's limit" over frames that are
+    /// correctly held is the false alarm that got a shoot stopped on
+    /// 2026-09-04.
     public func isClipped(limits: HardwareLimits) -> Bool {
         guard let smoothedEV else { return false }
         let wanted = Self.requiredGain(
             sceneEV100: aimEV(from: smoothedEV) - bias, aperture: limits.aperture)
         let ceiling = Self.lightGain(shutterSeconds: limits.maxShutter.seconds, iso: limits.maxISO)
         let floor = Self.lightGain(shutterSeconds: limits.minShutter.seconds, iso: limits.minISO)
-        return wanted > ceiling * 1.01 || wanted < floor * 0.99
+        let heldUnderHardware = highlightCeilingGain.map { $0 < ceiling * 0.99 } ?? false
+        return (wanted > ceiling * 1.01 && !heldUnderHardware) || wanted < floor * 0.99
     }
 
     // MARK: - Pure maths (the testable core)

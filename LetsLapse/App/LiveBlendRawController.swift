@@ -187,6 +187,16 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// stats' own iso/shutter/ev say which window they came from, and the
     /// strategies only act once per distinct measurement. workQueue.
     private var lastWindowStats: FrameLuminanceStats?
+    /// The newest window's highlights on the sensor's own scale, and the
+    /// window its frames were shot in — the ramp's highlight guard reads
+    /// them (ramped runs only; see `sensorHighlights(from:)`). Like the
+    /// stats they land a window or two late, which is why the window rides
+    /// along. workQueue.
+    private var lastHighlightTally: HighlightTally?
+    private var lastHighlightWindow: Int?
+    /// When a pass-through window last paid for a decode to read its
+    /// highlights (BLEND 1 decodes nothing otherwise). processingQueue.
+    private var lastPassThroughHighlightUptime = -Double.infinity
     /// The decision behind the currently open window, attached to its
     /// output's log entry when the window commits — and held verbatim
     /// through meter dropouts and catch-up closes. workQueue.
@@ -474,13 +484,17 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 ? windowBrightnessSum / Double(windowBrightnessCount) : nil
             windowBrightnessSum = 0
             windowBrightnessCount = 0
+            let highlights = lastHighlightWindow.flatMap { window in
+                lastHighlightTally?.reading(window: window)
+            }
             let scene: BlendWindowScene? = (mean == nil && lastWindowFrameCount == 0) ? nil
                 : BlendWindowScene(
                     meanLinearLuma: nil,
                     apexBrightness: mean,
                     deliveredShutterSeconds: lastWindowExposure?.exposureDuration,
                     deliveredISO: lastWindowExposure?.iso,
-                    frames: lastWindowFrameCount)
+                    frames: lastWindowFrameCount,
+                    highlights: highlights)
             onWindowOpened?(windowIndex, scene)
         }
         windowFrameBytes = 0
@@ -964,6 +978,8 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         // touches `configuration` fields the interval re-pace can rewrite.
         let decision = windowDecision
         let wantsStats = configuration.blendDepth == .auto
+        // Every ramped run's highlight guard reads the window's highlights.
+        let measuresHighlights = configuration.rampExposure != nil
         // Snapshot before the reset below: whether this window's emptiness
         // (if it is empty) was the backpressure gate's own doing.
         let sawBackpressure = windowSawBackpressure
@@ -1022,6 +1038,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 var processed = entry
                 var url: URL?
                 var stats: FrameLuminanceStats?
+                var highlights: HighlightTally?
                 if frames.isEmpty || self.discardRequested.withLock({ $0 }) {
                     // Empty window, or a discard raced the queue: nothing to
                     // produce (a discarded run's log already says so). An
@@ -1040,13 +1057,14 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                     url = self.processWindow(
                         frames: frames, exposure: exposure,
                         wantsStats: wantsStats, entry: &processed,
-                        stats: &stats)
+                        stats: &stats,
+                        measuresHighlights: measuresHighlights, highlights: &highlights)
                 }
                 processed.totalMillis = (ProcessInfo.processInfo.systemUptime - processStart) * 1000
                 self.workQueue.async {
                     self.commitOutput(
                         processed, url: url, exposure: exposure,
-                        stats: stats, decision: decision, ramp: ramp)
+                        stats: stats, highlights: highlights, decision: decision, ramp: ramp)
                 }
             }
         }
@@ -1058,10 +1076,15 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         url: URL?,
         exposure: DNGAuthor.DNGExposure,
         stats: FrameLuminanceStats?,
+        highlights: HighlightTally? = nil,
         decision: BlendStrategyDecision?,
         ramp: CaptureExposureLog.RampState? = nil
     ) {
         pendingProcessingWindows = max(0, pendingProcessingWindows - 1)
+        if let highlights {
+            lastHighlightTally = highlights
+            lastHighlightWindow = processed.index
+        }
         var entry = processed
         let done = ProcessInfo.processInfo.systemUptime
         entry.actualIntervalSeconds = lastCompletionUptime.map { done - $0 }
@@ -1160,6 +1183,39 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         pumpCaptures()
     }
 
+    /// The highlight guard's reading of one frame, on the sensor's own scale.
+    ///
+    /// Not the blend's working buffer: Core Image lifts an iPhone Bayer frame
+    /// by its BaselineExposure (+3.8 EV on the 18 Pro telephoto) and folds
+    /// its highlights into a shoulder near 1.2 — measured 2026-09-28, a
+    /// sample 1.8 stops under white already reads 0.93 there, so "near
+    /// white" in that buffer is a bright sky with room to spare. Rendered
+    /// again from the SAME filter with baseline exposure 0, at an eighth of
+    /// the size, 1.0 is the sensor's white; and because the filter has
+    /// already decompressed the raw data for the blend, the second look
+    /// costs ~25 ms where a fresh decode costs a full one (both measured on
+    /// a 48 MP telephoto DNG). Changes the filter: call it after the blend
+    /// has rendered what it needed. processingQueue.
+    private func sensorHighlights(from filter: CIRAWFilter) -> HighlightTally? {
+        filter.baselineExposure = 0
+        filter.scaleFactor = 0.125
+        guard let image = filter.outputImage else { return nil }
+        let width = Int(image.extent.width)
+        let height = Int(image.extent.height)
+        guard width > 0, height > 0 else { return nil }
+        var pixels = [Float](repeating: 0, count: width * height * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            ciContext.render(
+                image,
+                toBitmap: buffer.baseAddress!,
+                rowBytes: width * 16,
+                bounds: image.extent,
+                format: .RGBAf,
+                colorSpace: LiveBlendRawController.linearColorSpace)
+        }
+        return HighlightTally.sample(rgbaFloat: pixels, width: width, height: height)
+    }
+
     /// Blend + author, entirely through Apple's calibrated RAW decode:
     /// every frame's DNG is taken to scene-linear working space, averaged,
     /// and written as a compressed Bayer DNG. Fallback rule (deterministic,
@@ -1167,12 +1223,16 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// first frame is saved as Apple's own unblended DNG; with nothing
     /// decodable the window fails. Runs on `processingQueue`; mutates only
     /// the entry and `processingFileIndex`, returning the written file.
+    /// `measuresHighlights` (ramped runs) also reads the window's first
+    /// frame for the highlight guard, into `highlights`.
     private func processWindow(
         frames: [Data],
         exposure: DNGAuthor.DNGExposure,
         wantsStats: Bool,
         entry: inout LiveBlendSessionLog.OutputEntry,
-        stats: inout FrameLuminanceStats?
+        stats: inout FrameLuminanceStats?,
+        measuresHighlights: Bool = false,
+        highlights: inout HighlightTally?
     ) -> URL? {
         let referenceData = frames.first
         // The exposure tags the authored output will carry. An authored DNG has
@@ -1234,6 +1294,20 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         // of one, so a count change never switches rendering pipelines.
         // fixed(1) keeps the pass-through: that run is uniform end to end.
         if configuration.blendDepth == .fixed(1), let referenceData {
+            // A pass-through decodes nothing, so its highlight reading costs a
+            // whole decode: taken at most every four seconds, which keeps a
+            // slow phone's short interval affordable. The reading carries
+            // its window, so the ramp never mistakes it for a newer one.
+            let now = ProcessInfo.processInfo.systemUptime
+            if measuresHighlights, now - lastPassThroughHighlightUptime >= 4 {
+                lastPassThroughHighlightUptime = now
+                autoreleasepool {
+                    if let filter = CIRAWFilter(imageData: referenceData, identifierHint: nil) {
+                        filter.boostAmount = 0
+                        highlights = sensorHighlights(from: filter)
+                    }
+                }
+            }
             let output = withExposure(geotagged(referenceData))
             let url = configuration.outputDirectory
                 .appendingPathComponent(String(format: "frame-%05d.dng", processingFileIndex))
@@ -1254,6 +1328,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             let blendStart = ProcessInfo.processInfo.systemUptime
             var summed: CIImage?
             var decodedCount = 0
+            // The first frame's filter, kept for the highlight reading once
+            // the blend has rendered (`sensorHighlights(from:)`).
+            var referenceFilter: CIRAWFilter?
             for frameData in frames {
                 autoreleasepool {
                     guard let filter = CIRAWFilter(imageData: frameData, identifierHint: nil) else {
@@ -1266,6 +1343,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                         return
                     }
                     decodedCount += 1
+                    if measuresHighlights, referenceFilter == nil { referenceFilter = filter }
                     if let current = summed {
                         summed = image.applyingFilter("CIAdditionCompositing", parameters: [
                             kCIInputBackgroundImageKey: current,
@@ -1323,6 +1401,15 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 format: .RGBA16,
                 colorSpace: LiveBlendRawController.linearColorSpace)
             entry.blendMillis = (ProcessInfo.processInfo.systemUptime - blendStart) * 1000
+
+            // The blend's pixels are rendered and copied out (`wrappedData`),
+            // so the reference filter is free to be re-aimed at the sensor's
+            // own scale for the highlight guard — a second look, not a decode.
+            if let filter = referenceFilter {
+                highlights = sensorHighlights(from: filter)
+                // Its decoded raw goes now, not after the DNG write below.
+                referenceFilter = nil
+            }
 
             if wantsStats {
                 // Strided point sample of the buffer the blend just rendered

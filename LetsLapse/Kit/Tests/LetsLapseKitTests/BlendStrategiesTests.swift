@@ -187,6 +187,55 @@ final class BlendStrategiesTests: XCTestCase {
         XCTAssertEqual(stats.fraction(below: 0.001 * pow(2, 0.5)), 0.15, accuracy: 0.001)
     }
 
+    // MARK: Highlights (the ramp's highlight guard, 2026-09-28)
+
+    /// A golden sky clips red first: its luma reads well short of white, so
+    /// the guard has to ask each sample's brightest channel.
+    func testHighlightTallyCountsTheBrightestChannel() {
+        var tally = HighlightTally()
+        tally.add(red: 0.99, green: 0.55, blue: 0.2)   // orange, red at white
+        tally.add(red: 0.85, green: 0.5, blue: 0.2)    // a third of a stop under
+        tally.add(red: 0.5, green: 0.5, blue: 0.5)     // mid-tone
+        tally.add(red: 0.01, green: 0.01, blue: 0.01)  // shadow
+        XCTAssertEqual(tally.clippedFraction ?? -1, 0.25, accuracy: 1e-9)
+        XCTAssertEqual(tally.hotFraction ?? -1, 0.5, accuracy: 1e-9)
+        let reading = tally.reading(window: 7)
+        XCTAssertEqual(reading?.window, 7)
+        XCTAssertNil(reading?.gain, "the camera layer stamps the gain, not the sampler")
+        XCTAssertNil(HighlightTally().reading(window: 0), "no samples, no reading")
+    }
+
+    /// The DNG path's sampler over a baseline-free RAW render: a fifth of
+    /// the frame orange with red past white — its luma is nowhere near white.
+    func testTheSensorSampleCountsAClippedGoldenSkyThatLumaMisses() {
+        let width = 50, height = 50
+        var buffer = [Float](repeating: 0, count: width * height * 4)
+        for i in 0..<(width * height) {
+            let sky = i % 5 == 0
+            buffer[i * 4] = sky ? 1.0 : 0.02
+            buffer[i * 4 + 1] = sky ? 0.55 : 0.02
+            buffer[i * 4 + 2] = sky ? 0.2 : 0.02
+            buffer[i * 4 + 3] = 1
+        }
+        let tally = HighlightTally.sample(rgbaFloat: buffer, width: width, height: height, targetSamples: 2500)
+        XCTAssertEqual(tally?.clippedFraction ?? -1, 0.2, accuracy: 0.001)
+        XCTAssertEqual(tally?.hotFraction ?? -1, 0.2, accuracy: 0.001)
+        XCTAssertEqual(tally?.peak ?? 0, 1.0, accuracy: 1e-6)
+        XCTAssertNil(HighlightTally.sample(rgbaFloat: [], width: 0, height: 0))
+    }
+
+    /// A processed 8-bit frame's white is its own: a bright sky at code 240
+    /// is a sky, not a clip; 250 is a step from white, 254 is white.
+    func testBakedOutputLevelsSitInTheTopCodes() {
+        func linear(_ code: Double) -> Double { pow(code / 255, 2.2) }
+        var tally = HighlightTally(levels: .bakedOutput)
+        for code in [240.0, 249.0, 251.0, 255.0] {
+            tally.add(red: linear(code), green: linear(code * 0.9), blue: linear(code * 0.7))
+        }
+        XCTAssertEqual(tally.hot, 2, "251 and 255 are within a step of white")
+        XCTAssertEqual(tally.clipped, 1, "only 255 is white")
+    }
+
     func testThresholdLadderReachesTheHighISORange() {
         // The ladder must keep discriminating where night shoots live: the
         // ISO-indexed starving threshold at ISO 3200 has to land strictly

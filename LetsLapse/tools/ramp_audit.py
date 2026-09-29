@@ -109,7 +109,7 @@ def main() -> int:
     else:
         print("ramp: not asked for (a plain interval run)")
 
-    trail = [i for i in issues if i.get("kind") in ("ramp", "ladder")]
+    trail = [i for i in issues if i.get("kind") in ("ramp", "ladder", "highlights", "readout")]
     if trail:
         print("issues:")
         for issue in trail:
@@ -123,7 +123,11 @@ def main() -> int:
     if ramped and not has_records and stamps:
         print("(no ramp records — reconstructing the command from frames.timestamps)")
     print()
-    print(" window  time          commanded        delivered         Δstops  engineEV  sceneEV  meas   applied")
+    # The highlight guard (2026-09-28): what it did, and the reading it had
+    # — share of the frame at white / within ⅓ stop, the window measured.
+    has_guard = any((f.get("ramp") or {}).get("highlightGuard") for f in frames)
+    print(" window  time          commanded        delivered         Δstops  engineEV  sceneEV  meas   applied"
+          + ("  guard      clip%  hot%  (w)" if has_guard else ""))
     prev_smoothed = None
     last_key = None
     for f in frames:
@@ -139,6 +143,12 @@ def main() -> int:
                 f"Bv{ramp['apexBrightness']:.1f}" if ramp.get("apexBrightness") is not None else "")
             applied = ramp.get("applied")
             applied_text = {True: "yes", False: "NO", None: ""}[applied]
+            guard = ramp.get("highlightGuard")
+            if guard:
+                clipped, hot = ramp.get("highlightClipped"), ramp.get("highlightHot")
+                applied_text = f"{applied_text:<4}  {guard:<9} " + (
+                    f"{clipped * 100:>5.1f} {hot * 100:>5.1f}  (w{ramp.get('highlightWindow')})"
+                    if clipped is not None and hot is not None else "    —     —")
         else:
             stamp = stamps.get(idx) or stamps.get((idx or 0) - 1) or {}
             c_sh, c_iso = stamp.get("shutter"), stamp.get("iso")

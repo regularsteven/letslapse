@@ -97,6 +97,12 @@ struct BlendWindowScene {
     var deliveredISO: Double?
     /// Frames the window collected.
     var frames: Int
+    /// The frames' brightest areas, for the ramp's highlight guard — read
+    /// off the pixels, and stamped with the window they were shot in: on the
+    /// DNG path that is the newest window whose blend has been processed,
+    /// one or two behind the one closing; the video tap measures the closing
+    /// window itself. Nil when nothing was measured.
+    var highlights: HolyGrailRampEngine.HighlightReading? = nil
 }
 
 /// The experiment log written to Application Support/LetsLapse/Logs/.
@@ -404,6 +410,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     /// Running mean of the current window's sampled luma. videoQueue.
     private var windowLumaSum: Double = 0
     private var windowLumaCount = 0
+    /// The same samples' highlights — at the output's white, and a step
+    /// under it — for the ramp's highlight guard. videoQueue.
+    private var windowHighlights = HighlightTally(levels: .bakedOutput)
     /// Running mean of the frames' EXIF brightness, when they carry one.
     private var windowBrightnessSum: Double = 0
     private var windowBrightnessCount = 0
@@ -743,10 +752,12 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             }
             // Cheap scene measurement for the ramp, taken from the frame the
             // window is about to average — a strided sample, not a full pass.
+            // The same samples count its highlights for the guard.
             if onWindowOpened != nil,
-               let luma = LiveBlendController.meanLinearLuma(of: pixelBuffer) {
-                windowLumaSum += luma
+               let sample = LiveBlendController.sampleLinearLight(of: pixelBuffer) {
+                windowLumaSum += sample.meanLuma
                 windowLumaCount += 1
+                windowHighlights.merge(sample.highlights)
             }
             pending.withLock { $0 += 1 }
             let expectedGeneration = generation.withLock { $0 }
@@ -792,6 +803,17 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     /// Rec.709-weighted. Linear light is the point: the ramp reasons in stops,
     /// and stops are ratios of linear luminance.
     static func meanLinearLuma(of buffer: CVPixelBuffer, targetSamples: Int = 1024) -> Double? {
+        sampleLinearLight(of: buffer, targetSamples: targetSamples)?.meanLuma
+    }
+
+    /// `meanLinearLuma`'s sample, with its highlights counted as it goes: the
+    /// same ~1,000 pixels, each one's brightest channel held against the
+    /// output's white (code 254 up) and a step under it (250 up) — see
+    /// `HighlightTally.Levels.bakedOutput`. Baked 8-bit highlights are the
+    /// ones no grade recovers.
+    static func sampleLinearLight(
+        of buffer: CVPixelBuffer, targetSamples: Int = 1024
+    ) -> (meanLuma: Double, highlights: HighlightTally)? {
         guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA else { return nil }
         guard CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return nil }
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
@@ -804,6 +826,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         let pixels = base.assumingMemoryBound(to: UInt8.self)
         var sum = 0.0
         var count = 0
+        var highlights = HighlightTally(levels: .bakedOutput)
         var y = 0
         while y < height {
             let row = pixels + y * bytesPerRow
@@ -811,14 +834,16 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             while x < width {
                 let p = row + x * 4
                 let b = Double(p[0]) / 255, g = Double(p[1]) / 255, r = Double(p[2]) / 255
-                sum += 0.2126 * pow(r, 2.2) + 0.7152 * pow(g, 2.2) + 0.0722 * pow(b, 2.2)
+                let linearR = pow(r, 2.2), linearG = pow(g, 2.2), linearB = pow(b, 2.2)
+                sum += 0.2126 * linearR + 0.7152 * linearG + 0.0722 * linearB
+                highlights.add(red: linearR, green: linearG, blue: linearB)
                 count += 1
                 x += step
             }
             y += step
         }
         guard count > 0 else { return nil }
-        return sum / Double(count)
+        return (sum / Double(count), highlights)
     }
 
     private func targetSeconds(_ index: Int, of target: Int) -> Double {
@@ -886,11 +911,13 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                         ? windowBrightnessSum / Double(windowBrightnessCount) : nil,
                     deliveredShutterSeconds: delivered?.exposureDuration,
                     deliveredISO: delivered?.iso,
-                    frames: closing.frameTimes.count)
+                    frames: closing.frameTimes.count,
+                    highlights: windowHighlights.reading(window: closing.index))
             }
             lastWindowScene = scene
             windowLumaSum = 0
             windowLumaCount = 0
+            windowHighlights = HighlightTally(levels: .bakedOutput)
             windowBrightnessSum = 0
             windowBrightnessCount = 0
             onWindowOpened?(index, scene)

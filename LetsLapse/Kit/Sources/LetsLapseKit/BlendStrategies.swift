@@ -358,6 +358,113 @@ public struct FrameLuminanceStats: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - Highlights (the Holy Grail ramp's highlight guard)
+
+/// Counts a frame's samples at white, and within a step of it, by each
+/// sample's BRIGHTEST colour channel — a golden sky clips red while its luma
+/// still reads well short of white. The pixel side of
+/// `HolyGrailRampEngine.HighlightReading`.
+///
+/// "White" depends on the scale the samples are in, which is why the levels
+/// travel with the tally rather than living in the engine:
+///
+/// - `.sensor` — a RAW decode with baseline exposure 0, where 1.0 is the
+///   sensor's white. NOT the DNG blend's own working buffer: Core Image
+///   lifts an iPhone Bayer frame by its BaselineExposure (+3.8 EV on the
+///   18 Pro telephoto) and folds the highlights into a shoulder near 1.2,
+///   so there a sample 1.8 stops under white already reads 0.93 (measured
+///   2026-09-28 on a telephoto DNG: median ×14.2, 99th percentile ×3.2,
+///   brightest pixel ×1.3).
+/// - `.bakedOutput` — a processed 8-bit frame (the JPEG/HEIC video tap),
+///   linearised with the ramp's 2.2 power. White is what the output bakes;
+///   the tone curve's shoulder packs the last step before it into the top
+///   few codes, so "one step from white" is ~250 and white 254 up.
+public struct HighlightTally: Equatable, Sendable {
+    public struct Levels: Equatable, Sendable {
+        public var hot: Double
+        public var clipped: Double
+
+        public init(hot: Double, clipped: Double) {
+            self.hot = hot
+            self.clipped = clipped
+        }
+
+        public static let sensor = Levels(
+            hot: HolyGrailRampEngine.HighlightReading.hotLevel,
+            clipped: HolyGrailRampEngine.HighlightReading.clippedLevel)
+        public static let bakedOutput = Levels(
+            hot: pow(250.0 / 255, 2.2), clipped: pow(254.0 / 255, 2.2))
+    }
+
+    public let levels: Levels
+    public private(set) var samples = 0
+    public private(set) var clipped = 0
+    public private(set) var hot = 0
+    /// The brightest sample seen — logged, so a device run can confirm where
+    /// its white really sits on this scale.
+    public private(set) var peak = 0.0
+
+    public init(levels: Levels = .sensor) {
+        self.levels = levels
+    }
+
+    /// One sample, in linear light, on this tally's scale.
+    public mutating func add(red: Double, green: Double, blue: Double) {
+        let brightest = max(red, green, blue)
+        samples += 1
+        peak = max(peak, brightest)
+        if brightest >= levels.hot { hot += 1 }
+        if brightest >= levels.clipped { clipped += 1 }
+    }
+
+    /// Folds another tally in — the video tap sums a window's frames.
+    public mutating func merge(_ other: HighlightTally) {
+        samples += other.samples
+        clipped += other.clipped
+        hot += other.hot
+        peak = max(peak, other.peak)
+    }
+
+    public var clippedFraction: Double? {
+        samples > 0 ? Double(clipped) / Double(samples) : nil
+    }
+
+    public var hotFraction: Double? {
+        samples > 0 ? Double(hot) / Double(samples) : nil
+    }
+
+    /// The reading the ramp consumes, for the window these samples came from.
+    public func reading(window: Int) -> HolyGrailRampEngine.HighlightReading? {
+        guard let clippedFraction, let hotFraction else { return nil }
+        return HolyGrailRampEngine.HighlightReading(
+            clippedFraction: clippedFraction, hotFraction: hotFraction, window: window, peak: peak)
+    }
+
+    /// A strided sample (~`targetSamples`) of an interleaved RGBA float
+    /// buffer already on the tally's scale — the DNG path's baseline-free
+    /// RAW render.
+    public static func sample(
+        rgbaFloat buffer: [Float], width: Int, height: Int,
+        levels: Levels = .sensor, targetSamples: Int = 8192
+    ) -> HighlightTally? {
+        guard width > 0, height > 0, buffer.count >= width * height * 4 else { return nil }
+        let step = max(1, Int((Double(width * height) / Double(targetSamples)).squareRoot()))
+        var tally = HighlightTally(levels: levels)
+        var y = 0
+        while y < height {
+            let row = y * width * 4
+            var x = 0
+            while x < width {
+                let p = row + x * 4
+                tally.add(red: Double(buffer[p]), green: Double(buffer[p + 1]), blue: Double(buffer[p + 2]))
+                x += step
+            }
+            y += step
+        }
+        return tally
+    }
+}
+
 // MARK: - Lumen
 
 /// Zone's answer, corrected by what the pixels said. The correction is

@@ -725,4 +725,282 @@ final class HolyGrailRampEngineTests: XCTestCase {
                        accuracy: 0.01,
                        "a big error steps immediately, at the rate limit")
     }
+
+    // MARK: - Highlight guard (the 2026-09-28 18 Pro runaway)
+
+    private typealias Reading = HolyGrailRampEngine.HighlightReading
+
+    /// The iPhone 18 Pro telephoto (4×) as the 2026-09-28 shoot met it:
+    /// 1.0 s shutter ceiling, ISO 15–7,680, f/2.8.
+    private let tele18 = HolyGrailRampEngine.HardwareLimits(
+        minShutter: CMTime(value: 1, timescale: 50_000),
+        maxShutter: CMTime(value: 1, timescale: 1),
+        minISO: 15,
+        maxISO: 7680,
+        aperture: 2.8)
+
+    private func wideEV(_ gain: Double) -> Double {
+        HolyGrailRampEngine.sceneEV100(forGain: gain, aperture: 1.78)
+    }
+
+    /// A plain servo with the guard on — no smoothing lag, no gate, no
+    /// anchor — so a fed measurement maps straight to a wanted move.
+    private func guardedServo(shutter: Double, iso: Float) -> HolyGrailRampEngine {
+        var engine = HolyGrailRampEngine(
+            seed: .init(shutterSeconds: shutter, iso: iso), limits: wide,
+            smoothing: 1.0, anchorsToSeedExposure: false)
+        engine.highlightGuardEnabled = true
+        return engine
+    }
+
+    /// Every Dynamic run's configuration, as `seedHolyGrailRamp` sets it.
+    private func shippingDynamicEngine(
+        seed: HolyGrailRampEngine.ExposureTarget, limits: HolyGrailRampEngine.HardwareLimits
+    ) -> HolyGrailRampEngine {
+        var engine = HolyGrailRampEngine(seed: seed, limits: limits)
+        engine.anchorDriftPerStep = 0.05
+        engine.deadbandStops = 0.12
+        engine.dwellSteps = 3
+        engine.reversalRefractorySteps = 10
+        engine.highlightGuardEnabled = true
+        return engine
+    }
+
+    func testTheHighlightGuardIsInertUntilEnabled() {
+        var plain = anchoredEngine(shutter: 1.0 / 100, iso: 54)
+        var fed = plain
+        let start = wideEV(plain.currentTarget.lightGain)
+        for step in 0..<40 {
+            let ev = start - 0.05 * Double(step)
+            plain.advance(measuredEV: ev, limits: wide)
+            fed.advance(measuredEV: ev, limits: wide,
+                        highlights: Reading(clippedFraction: 0.5, hotFraction: 0.9, window: step))
+        }
+        XCTAssertEqual(plain, fed, "off, the guard reads nothing and changes nothing")
+        XCTAssertEqual(fed.highlightState, .off)
+        XCTAssertNil(fed.highlightCeilingGain)
+    }
+
+    /// A shoot whose highlights never come near white runs exactly as it
+    /// did before the guard — the property the 16 Pro's shoots rely on.
+    func testAHealthyShootNeverFeelsTheGuard() {
+        var plain = anchoredEngine(shutter: 1.0 / 100, iso: 54)
+        var guarded = plain
+        guarded.highlightGuardEnabled = true
+        let start = wideEV(plain.currentTarget.lightGain)
+        for step in 0..<120 {
+            let ev = start - 0.04 * Double(step)
+            plain.advance(measuredEV: ev, limits: wide)
+            guarded.advance(
+                measuredEV: ev, limits: wide,
+                highlights: Reading(clippedFraction: 0.0, hotFraction: 0.03, window: step,
+                                    gain: guarded.currentTarget.lightGain))
+            XCTAssertEqual(guarded.currentTarget, plain.currentTarget)
+        }
+        XCTAssertEqual(guarded.highlightState, .clear)
+        XCTAssertNil(guarded.highlightCeilingGain)
+    }
+
+    func testAHotReadingHoldsTheRampWhereItIs() {
+        var engine = guardedServo(shutter: 1.0 / 100, iso: 54)
+        let start = engine.currentTarget.lightGain
+        let darker = wideEV(start) - 1   // the meter asks for a stop more light
+        let hot = Reading(clippedFraction: 0.02, hotFraction: 0.15, window: 1, gain: start)
+        for _ in 0..<10 { engine.advance(measuredEV: darker, limits: wide, highlights: hot) }
+        XCTAssertEqual(engine.currentTarget.lightGain, start, accuracy: start * 1e-9,
+                       "one more step would clip a large area — no more light")
+        XCTAssertEqual(engine.highlightState, .holding)
+        XCTAssertEqual(engine.highlightCeilingGain ?? 0, start, accuracy: start * 1e-9)
+
+        var free = guardedServo(shutter: 1.0 / 100, iso: 54)
+        free.advance(measuredEV: darker, limits: wide)
+        XCTAssertEqual(log2(free.currentTarget.lightGain / start), 1.0 / 3.0, accuracy: 0.01,
+                       "without the reading the same servo climbs")
+        XCTAssertEqual(free.highlightState, .clear)
+    }
+
+    func testClippedFramesStepDownAThirdOfAStopPerReading() {
+        var engine = guardedServo(shutter: 1.0 / 100, iso: 54)
+        let start = engine.currentTarget.lightGain
+        let darker = wideEV(start) - 1   // the meter still asks for MORE light
+        let clipped = Reading(clippedFraction: 0.2, hotFraction: 0.3, window: 1, gain: start)
+        engine.advance(measuredEV: darker, limits: wide, highlights: clipped)
+        XCTAssertEqual(log2(engine.currentTarget.lightGain / start), -1.0 / 3.0, accuracy: 0.01)
+        XCTAssertEqual(engine.highlightState, .darkening)
+        // The same reading again — window 1's blend is still the newest to
+        // land — is not answered twice.
+        engine.advance(measuredEV: darker, limits: wide, highlights: clipped)
+        XCTAssertEqual(log2(engine.currentTarget.lightGain / start), -1.0 / 3.0, accuracy: 0.01)
+        XCTAssertEqual(engine.highlightState, .holding)
+        // The frames shot at the new exposure, still clipping: another step.
+        let lower = engine.currentTarget.lightGain
+        engine.advance(measuredEV: darker, limits: wide,
+                       highlights: Reading(clippedFraction: 0.12, hotFraction: 0.2, window: 2, gain: lower))
+        XCTAssertEqual(log2(engine.currentTarget.lightGain / start), -2.0 / 3.0, accuracy: 0.01)
+    }
+
+    /// Clipping outranks the gate: the dwell and the refractory exist to stop
+    /// a quantizer ringing, and a blown sky is not that.
+    func testAClipStepsDownThroughTheGate() {
+        var engine = gatedEngine(shutter: 1.0 / 1000, iso: 54)
+        engine.highlightGuardEnabled = true
+        let start = engine.currentTarget.lightGain
+        let anchor = wideEV(start)
+        // Establish an upward ramp: the reversal refractory is now armed.
+        for _ in 0..<4 { engine.advance(measuredEV: anchor - 0.9, limits: wide) }
+        let committed = engine.currentTarget.lightGain
+        XCTAssertGreaterThan(committed, start)
+        engine.advance(measuredEV: anchor - 0.9, limits: wide,
+                       highlights: Reading(clippedFraction: 0.25, hotFraction: 0.4, window: 5, gain: committed))
+        XCTAssertEqual(log2(engine.currentTarget.lightGain / committed), -1.0 / 3.0, accuracy: 0.01)
+    }
+
+    func testTheCeilingLiftsAsTheLightFallsAwayFromIt() {
+        var engine = guardedServo(shutter: 1.0 / 100, iso: 54)
+        let start = engine.currentTarget.lightGain
+        let darker = wideEV(start) - 1
+        engine.advance(measuredEV: darker, limits: wide,
+                       highlights: Reading(clippedFraction: 0, hotFraction: 0.12, window: 1, gain: start))
+        XCTAssertEqual(engine.currentTarget.lightGain, start, accuracy: start * 1e-9)
+        // Frames shot AT the ceiling, now with room: a sixth of a stop each.
+        for window in 2...4 {
+            engine.advance(measuredEV: darker, limits: wide,
+                           highlights: Reading(clippedFraction: 0, hotFraction: 0.02, window: window,
+                                               gain: engine.currentTarget.lightGain))
+        }
+        XCTAssertEqual(log2(engine.currentTarget.lightGain / start), 3.0 / 6.0, accuracy: 0.01)
+        // Room measured anywhere but at the ceiling lifts nothing.
+        let ceiling = engine.highlightCeilingGain ?? 0
+        engine.advance(measuredEV: darker, limits: wide,
+                       highlights: Reading(clippedFraction: 0, hotFraction: 0, window: 5, gain: ceiling / 2))
+        XCTAssertEqual(engine.highlightCeilingGain ?? 0, ceiling, accuracy: ceiling * 1e-9)
+    }
+
+    /// The red "past the sensor's limit" is for a ramp the SENSOR has run out
+    /// on. One its highlights are holding is declining the light, and saying
+    /// otherwise over correctly held frames is how a shoot gets stopped.
+    func testTheRedReadoutStaysAmberWhileHighlightsHoldTheRamp() {
+        let night = wideEV(HolyGrailRampEngine.lightGain(shutterSeconds: 1, iso: 12096)) - 3
+        var unguarded = guardedServo(shutter: 1.0 / 100, iso: 54)
+        unguarded.highlightGuardEnabled = false
+        unguarded.advance(measuredEV: night, limits: wide)
+        XCTAssertTrue(unguarded.isClipped(limits: wide))
+
+        var engine = guardedServo(shutter: 1.0 / 100, iso: 54)
+        engine.advance(measuredEV: night, limits: wide,
+                       highlights: Reading(clippedFraction: 0, hotFraction: 0.2, window: 1,
+                                           gain: engine.currentTarget.lightGain))
+        XCTAssertEqual(engine.highlightState, .holding)
+        XCTAssertFalse(engine.isClipped(limits: wide))
+    }
+
+    /// The 2026-09-28 pattern in miniature: an AE opinion that reads the
+    /// scene 0.6 stops darker than wherever the ramp is, however far it goes.
+    func testTheAnchorCannotDriftTowardMoreLightUnderTheCeiling() {
+        var held = anchoredEngine(shutter: 1.0 / 100, iso: 54)
+        held.anchorDriftPerStep = 0.05
+        held.highlightGuardEnabled = true
+        var free = held
+        free.highlightGuardEnabled = false
+        let measured = wideEV(held.currentTarget.lightGain)
+        for window in 0..<60 {
+            held.advance(
+                measuredEV: measured, limits: wide,
+                aeSceneEV: wideEV(held.currentTarget.lightGain) - 0.6,
+                highlights: Reading(clippedFraction: 0, hotFraction: 0.15, window: window,
+                                    gain: held.currentTarget.lightGain))
+            free.advance(
+                measuredEV: measured, limits: wide,
+                aeSceneEV: wideEV(free.currentTarget.lightGain) - 0.6)
+        }
+        XCTAssertEqual(held.calibration ?? 99, 0, accuracy: 1e-9,
+                       "behind the ceiling the drift never added light")
+        XCTAssertGreaterThan(free.calibration ?? 0, 1, "unguarded, the same opinion walks the anchor")
+        XCTAssertGreaterThan(free.currentTarget.lightGain, held.currentTarget.lightGain * 2)
+    }
+
+    // MARK: The 2026-09-28 dusk, simulated
+
+    /// The frames' own brightness meter as the shoot met it: honest near a
+    /// correct exposure, compressing past it, and never able to report more
+    /// than ~3 stops over however far over the frames are — the run's APEX
+    /// brightness sat at exactly that for its last 90 windows.
+    private func compressedMeter(exposureEV: Double, overStops x: Double) -> Double {
+        exposureEV + (x <= 0 ? x : 3.05 * (1 - exp(-x / 3.05)))
+    }
+
+    /// A dusk telephoto frame: 30 % sky, spread evenly in stops from 0.30 to
+    /// 0.65 of saturation at a correct exposure; the rest mid-grey and
+    /// darker. The share of the frame at white and within ⅓ stop of it when
+    /// the frame is `x` stops over.
+    private func duskHighlights(overStops x: Double) -> (clipped: Double, hot: Double) {
+        let sky = 0.30
+        let low = log2(0.30), high = log2(0.65)
+        func share(atOrAbove level: Double) -> Double {
+            let threshold = log2(level) - x
+            var total = sky * min(max((high - threshold) / (high - low), 0), 1)
+            if log2(0.18) >= threshold { total += 1 - sky }
+            return total
+        }
+        return (share(atOrAbove: Reading.clippedLevel), share(atOrAbove: Reading.hotLevel))
+    }
+
+    private struct DuskRun {
+        var finalISO: Float = 0
+        var finalOverStops = 0.0
+        /// Windows whose frames had 10 % or more of the frame at white.
+        var windowsClipped = 0
+        var worstClipped = 0.0
+    }
+
+    /// Seeded correctly exposed, the light falling ~0.12 stop a minute at
+    /// 2 s windows, both meters behaving as they did that night, the
+    /// shipping drift and gate, and the highlights landing two windows late
+    /// (the DNG path's blend) stamped with the gain their frames had.
+    private func simulateTelephotoDusk(guarded: Bool, windows: Int = 500) -> DuskRun {
+        let startEV = 7.2
+        let seed = HolyGrailRampEngine.split(
+            gain: HolyGrailRampEngine.requiredGain(sceneEV100: startEV, aperture: 2.8), limits: tele18)
+        var engine = shippingDynamicEngine(seed: seed, limits: tele18)
+        engine.highlightGuardEnabled = guarded
+        var readings: [Int: Reading] = [:]
+        var run = DuskRun()
+        for window in 0..<windows {
+            let sceneEV = startEV - 0.004 * Double(window)
+            let gain = engine.currentTarget.lightGain
+            let exposureEV = HolyGrailRampEngine.sceneEV100(forGain: gain, aperture: 2.8)
+            let over = sceneEV - exposureEV
+            let lights = duskHighlights(overStops: over)
+            if lights.clipped >= HolyGrailRampEngine.highlightTripFraction { run.windowsClipped += 1 }
+            run.worstClipped = max(run.worstClipped, lights.clipped)
+            readings[window] = Reading(
+                clippedFraction: lights.clipped, hotFraction: lights.hot, window: window, gain: gain)
+            engine.advance(
+                measuredEV: compressedMeter(exposureEV: exposureEV, overStops: over),
+                limits: tele18,
+                aeSceneEV: exposureEV - 0.6,
+                highlights: readings[window - 2])
+            run.finalOverStops = over
+        }
+        run.finalISO = engine.currentTarget.iso
+        return run
+    }
+
+    /// The failure itself, reproduced from the mechanism alone: the drift
+    /// pushes, the compressed meter reads the brighter frames as a darker
+    /// scene, and the ramp runs to the lens's maximum ISO.
+    func testTheTelephotoDuskRunsAwayWithoutTheGuard() {
+        let run = simulateTelephotoDusk(guarded: false)
+        XCTAssertEqual(run.finalISO, 7680, accuracy: 1)
+        XCTAssertGreaterThan(run.finalOverStops, 5)
+        XCTAssertGreaterThan(run.windowsClipped, 200)
+    }
+
+    func testTheHighlightGuardHoldsTheTelephotoDusk() {
+        let run = simulateTelephotoDusk(guarded: true)
+        XCTAssertLessThan(run.finalOverStops, 1.0, "the sky's brightest third stays under white")
+        XCTAssertLessThan(run.finalISO, 100)
+        XCTAssertLessThanOrEqual(run.windowsClipped, 10, "a late reading may overshoot briefly — no more")
+        XCTAssertLessThan(run.worstClipped, 0.3)
+    }
 }

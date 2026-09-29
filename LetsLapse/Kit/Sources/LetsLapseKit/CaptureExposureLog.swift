@@ -183,6 +183,27 @@ public struct CaptureExposureLog {
         public var applyOutcome: String?
         /// The Ladder rung this window ran on, on a Ladder run.
         public var rung: String?
+        /// The highlight guard (2026-09-28): what it did on this window's
+        /// step (`HolyGrailRampEngine.HighlightGuardState`), the newest
+        /// reading it had — share of the frame at white and within a third of
+        /// a stop of it, and the window those frames were shot in (the DNG
+        /// path measures one or two behind) — and its ceiling as a scene EV
+        /// at this lens's aperture: the ramp gives no scene darker than that
+        /// more light. Nil in logs from before the guard.
+        public var highlightGuard: String?
+        public var highlightClipped: Double?
+        public var highlightHot: Double?
+        public var highlightWindow: Int?
+        public var highlightCeilingEV: Double?
+        /// The reading's brightest sample on its own scale (1.0 = the
+        /// sensor's white on the DNG path) — the device check that white
+        /// sits where the guard assumes.
+        public var highlightPeak: Double?
+        /// The device's exposure mode as the window opened — `custom` on a
+        /// driving ramp. Recorded because the 2026-09-28 runaway had the AE's
+        /// metering offset ignore nine stops of the ramp's own ISO, and the
+        /// log could not say what mode the device reported meanwhile.
+        public var deviceExposureMode: String?
 
         public init(
             commandedShutter: Double? = nil,
@@ -195,7 +216,14 @@ public struct CaptureExposureLog {
             aeGapEV: Double? = nil,
             applied: Bool? = nil,
             applyOutcome: String? = nil,
-            rung: String? = nil
+            rung: String? = nil,
+            highlightGuard: String? = nil,
+            highlightClipped: Double? = nil,
+            highlightHot: Double? = nil,
+            highlightWindow: Int? = nil,
+            highlightCeilingEV: Double? = nil,
+            highlightPeak: Double? = nil,
+            deviceExposureMode: String? = nil
         ) {
             self.commandedShutter = commandedShutter
             self.commandedISO = commandedISO
@@ -208,6 +236,13 @@ public struct CaptureExposureLog {
             self.applied = applied
             self.applyOutcome = applyOutcome
             self.rung = rung
+            self.highlightGuard = highlightGuard
+            self.highlightClipped = highlightClipped
+            self.highlightHot = highlightHot
+            self.highlightWindow = highlightWindow
+            self.highlightCeilingEV = highlightCeilingEV
+            self.highlightPeak = highlightPeak
+            self.deviceExposureMode = deviceExposureMode
         }
     }
 
