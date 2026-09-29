@@ -681,7 +681,9 @@ struct ProjectSyncSheet: View {
         var parts = ["Can't reach \(picplace.sessionHost)"]
         if !picplace.heldPushes.isEmpty { parts.append(Self.changesWaiting(picplace.heldPushes.count)) }
         if let until = picplace.unreachableUntil {
-            parts.append("next try \(until.formatted(date: .omitted, time: .shortened))")
+            // Whole on its line (non-breaking spaces): the phone's width left
+            // "11:40" alone on a second one.
+            parts.append("next\u{00A0}try\u{00A0}\(until.formatted(date: .omitted, time: .shortened))")
         }
         return parts.joined(separator: " · ")
     }

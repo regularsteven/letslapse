@@ -31,7 +31,8 @@ nothing), and a network that blocks picplace.co with a fake certificate:
   file changed; the blends and originals walks skip when nothing moved since
   their last whole walk (`WalkKey`, 30 min at most).
 - **The drawer** — the sending block only once a push has begun; one line
-  "Can't reach picplace.co · N changes waiting · next try HH:MM" while silent.
+  "Can't reach picplace.co · N changes waiting · next try HH:MM" while silent
+  (signed off; mirrored in `docs/design/iOS/projects.sharing.unreachable.portrait.svg`).
 - **The transfer import window** — "already here" from one index read
   (`LibraryIndex.liveProjectIdentities`), not a table scan and a document
   decode per offered project per redraw (1,553 offered pinned the main thread).
@@ -47,9 +48,6 @@ the outage waited, the look after the backoff found PicPlace and released it;
   goes when the network is back.
 - **A real blocked network** (the `sad.certificate…` one) on the Mac: one
   "can't be reached" line, then silence until the next look.
-- **The SVG mirror** after Steven's sign-off on the drawer (code first):
-  `docs/design/iOS/projects.sharing.portrait.svg` (status-line order, block
-  only once a push begins) and a new offline state file; iOS `INDEX.md`.
 - Still open, separately: the Projects list decodes nearly every
   `project.json` per redraw once a library passes the store's 512 (the
   `if let … model.capture(id:)` in `ProjectsView`'s `ForEach`, the card's
