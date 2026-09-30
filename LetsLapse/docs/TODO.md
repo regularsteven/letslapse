@@ -11,6 +11,29 @@ live inline.
 
 ## Open
 
+### Synthetic generator: the follow-ups from its move and its new subjects (2026-09-30)
+
+The scene kit left `docs/design/kit` for its own repository,
+`letslapse-generator` (`docs/design/generator.md`). It now generates doors,
+arches, windows, buildings, flowers and a solid tram at any yaw, with exact
+per-object ground truth (`schema_version` 2.0). Reports are in that
+repository: `docs/reports/job-1-extraction.md` and `job-2-subjects.md`.
+Owed here, none started:
+- **shapesynth reads the generator's `kit/` by path**
+  (`tools/shapesynth/kit.py`). Make it consume `llgen generate` output
+  folders instead, so the record is the only coupling between the repos.
+- **Two version keys** in every record: `schema: 1` (the Kit's
+  `SceneManifest.schema`, a required Int) beside `schema_version`. Folding
+  them needs `SceneManifest` to accept a missing `schema`.
+- **The Kit reads none of the 2.0 ground truth yet**: `objects[]`, yaw,
+  colour, attachments, visibility. That is the input for validating the AI
+  metadata against it (out of the generator brief's scope).
+- **`docs/design/scenes.ai`** (28 MB, unreferenced, committed the same
+  evening as the kit) is probably its source art. Move it to the generator?
+- Generator-side questions, answered there: `windows-aspect-drift` crosses
+  the Kit's square band, so one `--family` drops half the set; tilt and
+  camera pitch are not modelled.
+
 ### Blend jobs: pause, resume, outlive the app — built 2026-09-30, pause/background checked on the 18 Pro
 
 A blend used to die with the app: backgrounded (iOS runs no GPU work there; a
