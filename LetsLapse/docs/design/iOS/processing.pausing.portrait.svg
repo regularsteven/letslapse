@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Processing · pausing · portrait</title>
+  <desc>Mirrors App/ProcessingView.swift + App/LLRigProgress.swift — Signed off by Steven 2026-09-30 (with the paused glyph grey rather than amber — the 2026-09-26 status scheme keeps amber for things in motion) and implemented the same day; verified against the running app on the iPhone 16 Pro Simulator (iOS 18.6) and the Mac with LL_OPEN=latest LL_AUTO=process LL_BLEND_PAUSE_AT=&lt;0…1&gt; (paused), a background/foreground round trip (resumed), a kill and relaunch (the offer), Resume Later (the card) and LL_BLEND_CANT_RESUME=1 (the Start Again card). The moment after Pause is pressed on the running screen (processing.portrait.svg): the blend engine is closing the piece of the clip it is writing, which usually takes under a second, so this state is transient. Pause turns disabled and says why — a small ProgressView (.controlSize(.small), 14 pt) and 'Pausing…', 7 pt apart and centred on the button, both in the disabled grey #9C9CA1 (secondary at 70 %, the grey of the checklist's pending rows); the white LLSecondaryButtonStyle card is unchanged, so it still reads as a button, just not one to press again. Cancel stays enabled: pressed now, it discards the job as it always has. The ETA line reads 'Saving progress…' in place of the countdown. The gauge is unchanged — still sweeping, still 34 % — and so is the checklist (Blending frames current at 1,240 / 3,600): nothing has stopped until the piece is closed. When it is, the screen becomes processing.paused.portrait.svg. Leaving the app goes through the same step, off screen, and ends paused the same way (processing.resumed.portrait.svg is the return). Everything else as processing.portrait.svg.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="prev"><rect x="16" y="107" width="361" height="260" rx="20"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="blur2"><feGaussianBlur stdDeviation="2.5"/></filter>
+    <radialGradient id="vignette" cx="196.5" cy="237" r="93.6" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity="0.55"/>
+      <stop offset="0.55" stop-color="#000" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="markGlow" cx="512" cy="486" r="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F0A32C" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0A32C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="markPipe" x1="190.4" y1="84" x2="833.6" y2="888" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E9EEF6"/>
+      <stop offset="0.45" stop-color="#BAC6D8"/>
+      <stop offset="1" stop-color="#7C8CA5"/>
+    </linearGradient>
+    <linearGradient id="markBoard" x1="242" y1="234" x2="458" y2="690" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E2E4E"/>
+      <stop offset="1" stop-color="#04101F"/>
+    </linearGradient>
+    <linearGradient id="markLens" x1="478" y1="279" x2="478" y2="625" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1E1C48"/>
+      <stop offset="0.26" stop-color="#4A4A93"/>
+      <stop offset="0.42" stop-color="#150332"/>
+      <stop offset="0.72" stop-color="#0C0322"/>
+      <stop offset="1" stop-color="#001C4C"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- preview card with progress ring -->
+      <g id="preview-card">
+        <g clip-path="url(#prev)">
+          <rect x="16" y="107" width="361" height="260" fill="#33415A"/>
+          <g filter="url(#blur2)">
+            <circle cx="120" cy="180" r="24" fill="#FFB340" opacity="0.8"/>
+            <polygon points="16,300 100,252 190,294 280,250 377,286 377,367 16,367" fill="#1A222E"/>
+          </g>
+          <rect x="16" y="107" width="361" height="260" fill="#000" opacity="0.55"/>
+        </g>
+        <!-- The gauge: the rig at 120pt with the lens as the readout. The arc
+             around the pipe is an indeterminate SWEEP, not a fill — the design
+             moves the resolution into the number and lets the sweep keep the
+             motion honest between progress updates. -->
+        <g id="progress-mark">
+          <circle cx="196.5" cy="237" r="93.6" fill="url(#vignette)"/>
+          <g transform="translate(136.5,177) scale(0.1171875)">
+            <circle cx="512" cy="486" r="440" fill="url(#markGlow)"/>
+            <g transform="rotate(-5 512 486)">
+              <rect x="281" y="790" width="34" height="112" rx="9" fill="#1E4368"/>
+              <rect x="269" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+              <rect x="709" y="790" width="34" height="112" rx="9" fill="#1E4368"/>
+              <rect x="697" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+            </g>
+            <circle cx="512" cy="486" r="402" fill="url(#markPipe)"/>
+            <circle cx="512" cy="486" r="402" fill="none" stroke="#6E7F99" stroke-width="9"/>
+            <!-- sweeping head + trail, 9-27% of the circumference, 1.70s cycle -->
+            <circle cx="512" cy="486" r="402" fill="none" stroke="#F0A32C" stroke-width="17" stroke-linecap="round" pathLength="100" stroke-dasharray="24 76" opacity="0.28" transform="rotate(-145 512 486)"/>
+            <circle cx="512" cy="486" r="402" fill="none" stroke="#F0A32C" stroke-width="17" stroke-linecap="round" pathLength="100" stroke-dasharray="18 82" transform="rotate(-145 512 486)"/>
+            <g transform="rotate(-5 512 486)">
+              <rect x="340" y="640" width="48" height="134" rx="12" fill="#12324F"/>
+              <rect x="325" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+              <rect x="636" y="640" width="48" height="134" rx="12" fill="#12324F"/>
+              <rect x="621" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+              <rect x="242" y="234" width="540" height="456" rx="18" fill="url(#markBoard)"/>
+              <rect x="242" y="234" width="540" height="456" rx="18" fill="none" stroke="#245A85" stroke-width="7"/>
+              <rect x="274" y="266" width="32" height="32" rx="8" fill="#F0A32C"/>
+              <rect x="718" y="266" width="32" height="32" rx="8" fill="#F0A32C"/>
+              <rect x="718" y="626" width="32" height="32" rx="8" fill="#F0A32C"/>
+              <rect x="274" y="626" width="32" height="32" rx="8" fill="#F0A32C"/>
+            </g>
+            <circle cx="478" cy="452" r="196" fill="none" stroke="#F0A32C" stroke-width="14"/>
+            <circle cx="478" cy="452" r="173" fill="#02040C"/>
+            <!-- lens dimmed to 55% (vs 85% on launch) so the digits own the aperture -->
+            <circle cx="478" cy="452" r="173" fill="url(#markLens)" opacity="0.55"/>
+          </g>
+          <!-- readout centred on the LENS (478,452 in mark space), not the view -->
+          <text x="192.5" y="235.4" font-size="15.6" class="sb" fill="#F0A32C" text-anchor="middle">34<tspan font-size="8.4" fill="#8A9AB5"> %</tspan></text>
+        </g>
+      </g>
+
+      <!-- stage checklist -->
+      <g id="stage-checklist">
+        <rect x="16" y="383" width="361" height="172" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="stage-preparing">
+          <path d="M32 409 l5 5 9 -10" stroke="#34C759" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+          <text x="58" y="415" font-size="15" fill="#000">Preparing footage</text>
+        </g>
+        <g id="stage-blending">
+          <circle cx="39" cy="451" r="4.5" fill="#FFB340"/>
+          <text x="58" y="456" font-size="15" class="sb" fill="#000">Blending frames</text>
+          <text x="361" y="456" font-size="13" class="m" fill="#6D6D72" text-anchor="end">1,240 / 3,600</text>
+        </g>
+        <g id="stage-encoding">
+          <circle cx="39" cy="493" r="4.5" fill="none" stroke="#A9A9AE" stroke-width="1.2"/>
+          <text x="58" y="498" font-size="15" fill="#9C9CA1">Encoding video</text>
+        </g>
+        <g id="stage-saving">
+          <circle cx="39" cy="535" r="4.5" fill="none" stroke="#A9A9AE" stroke-width="1.2"/>
+          <text x="58" y="540" font-size="15" fill="#9C9CA1">Saving to project</text>
+        </g>
+      </g>
+
+      <!-- ETA: the countdown gives way to what is happening while the piece closes -->
+      <text x="196.5" y="585" font-size="13" fill="#6D6D72" text-anchor="middle">Saving progress…</text>
+
+      <!-- pause · cancel (2026-09-30, design-first): HStack(spacing: 12) of two
+           equal LLSecondaryButtonStyle buttons, (361 − 12) / 2 = 174.5 pt each;
+           the caption is VStack(spacing: 8) under them and wraps to two lines,
+           so the block (pinned 12 pt above the home indicator) sits 14 pt
+           higher than the single Cancel did -->
+      <g id="pause-cancel">
+        <g id="pause" data-state="pausing · disabled">
+          <rect x="16" y="724" width="174.5" height="50" rx="14" fill="#FFF" filter="url(#soft)"/>
+          <!-- .disabled(true) while the piece closes: ProgressView().controlSize(.small) 14 pt + 7 + "Pausing…" 72.1 pt = 93.1 pt, centred on 103.25;
+               both in the disabled grey #9C9CA1 (secondary at 70 %, the pending checklist rows' grey) on the unchanged white card -->
+          <g data-symbol="ProgressView" stroke="#9C9CA1" stroke-width="1.6" stroke-linecap="round"><path d="M63.70 745.60 L63.70 742.40" stroke-opacity="1.0"/><path d="M66.10 746.60 L68.37 744.33" stroke-opacity="0.24"/><path d="M67.10 749.00 L70.30 749.00" stroke-opacity="0.3"/><path d="M66.10 751.40 L68.37 753.67" stroke-opacity="0.38"/><path d="M63.70 752.40 L63.70 755.60" stroke-opacity="0.47"/><path d="M61.30 751.40 L59.03 753.67" stroke-opacity="0.58"/><path d="M60.30 749.00 L57.10 749.00" stroke-opacity="0.7"/><path d="M61.30 746.60 L59.03 744.33" stroke-opacity="0.85"/></g>
+          <text x="77.7" y="754.5" font-size="15.5" class="sb" fill="#9C9CA1">Pausing…</text>
+        </g>
+        <g id="cancel">
+          <rect x="202.5" y="724" width="174.5" height="50" rx="14" fill="#FFF" filter="url(#soft)"/>
+          <text x="289.75" y="754.5" font-size="15.5" class="sb" fill="#FF3B30" text-anchor="middle">Cancel</text>
+        </g>
+        <!-- wrapped as CoreText breaks it at 361 pt (line 1 is 333.2 pt); 13.72 pt lines -->
+        <text x="196.5" y="792.28" font-size="11.5" fill="#6D6D72" text-anchor="middle">Pause keeps what's blended so far. Cancel discards it — your</text>
+        <text x="196.5" y="806" font-size="11.5" fill="#6D6D72" text-anchor="middle">original is safe.</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Processing · pausing · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProcessingView.swift — Pause disabled · “Saving progress…”</text>
+</svg>

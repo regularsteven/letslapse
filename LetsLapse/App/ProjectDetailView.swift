@@ -378,6 +378,11 @@ struct ProjectDetailView: View {
             ScrollViewReader { scroller in
             ScrollView {
                 VStack(spacing: 14) {
+                    // A blend that was paused and left for later — Resume
+                    // Later, or Later on the launch offer — waits here.
+                    if let job = model.pendingBlendJob(for: capture.id) {
+                        BlendJobCard(job: job)
+                    }
                     // A Scanner shoot is a set of frames for export, not
                     // material for a blend, so it gets its own body — leading
                     // with the frames and with Export, and keeping the blend
@@ -2521,5 +2526,102 @@ private struct ManageClipSheet: View {
             isBusy = false
         }
         #endif
+    }
+}
+
+/// A paused blend job on its project (`project-detail.video.blend-paused` and
+/// `.blend-restart`, signed off 2026-09-30): how far it got, and Resume — or,
+/// when the project has changed since so the saved pieces no longer belong
+/// to the clip it would make, Start Again. The glyph is grey: held, not
+/// moving (amber means running in the status scheme of 2026-09-26).
+private struct BlendJobCard: View {
+    @EnvironmentObject var model: AppModel
+    let job: BlendJobSummary
+
+    var body: some View {
+        let canResume = model.blendJobCanResume(job)
+        // The actions beside the text where the card is wide enough (iPad,
+        // the Mac), on a row of their own under it on a phone — the PicPlace
+        // job line's rule.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                summary(canResume: canResume)
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 16)
+                actions(canResume: canResume)
+            }
+            VStack(alignment: .trailing, spacing: 12) {
+                summary(canResume: canResume)
+                actions(canResume: canResume)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .llCard()
+    }
+
+    private func summary(canResume: Bool) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: canResume ? "pause.circle.fill" : "arrow.counterclockwise.circle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(canResume
+                     ? "Blend paused · \(Int((job.fraction * 100).rounded()))%"
+                     : "Blend can't resume")
+                    .font(.system(size: 15, weight: .semibold))
+                Text(canResume
+                     ? detail
+                     : "This project changed while the blend was paused — it has to start again.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func actions(canResume: Bool) -> some View {
+        HStack(spacing: 16) {
+            Button("Discard", role: .destructive) {
+                model.discardBlendJob(job)
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.red)
+            .buttonStyle(.plain)
+
+            Button {
+                Task {
+                    if canResume {
+                        await model.resumeBlendJob(job)
+                    } else {
+                        await model.restartBlendJob(job)
+                    }
+                }
+            } label: {
+                Label(canResume ? "Resume" : "Start Again",
+                      systemImage: canResume ? "play.fill" : "arrow.counterclockwise")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .frame(height: 32)
+                    .background(LL.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .fixedSize()
+    }
+
+    /// "1,240 of 3,600 frames · paused 2 hours ago".
+    private var detail: String {
+        var parts: [String] = []
+        if let done = job.framesDone, let total = job.framesTotal, total > 0 {
+            parts.append("\(done.formatted()) of \(total.formatted()) frames")
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        parts.append("paused \(formatter.localizedString(for: job.updatedAt, relativeTo: Date()))")
+        return parts.joined(separator: " · ")
     }
 }

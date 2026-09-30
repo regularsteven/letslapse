@@ -1361,6 +1361,45 @@ final class AppModel: ObservableObject {
     @Published var requestedEditorPage: EditorPageRequest?
 
     private var blendTask: Task<Void, Never>?
+    /// The job `blendTask` is running, or holding once it paused — nil when
+    /// there is none. A job is a folder that outlives the app (`BlendJobs.swift`).
+    private var blendJobRun: BlendJobRun?
+    /// Why the flow's job is held, or nil while it runs (or when there is no
+    /// job). The processing screen reads it.
+    @Published private(set) var blendJobHold: BlendJobHold?
+    /// Jobs on disk this launch is not running — the ones a relaunch offers
+    /// to resume, and a project's paused row. Found at launch, newest first.
+    @Published private(set) var pendingBlendJobs: [BlendJobSummary] = []
+    /// Pause was pressed and the engine is closing the piece it is writing —
+    /// the Processing screen's "Pausing…".
+    @Published private(set) var blendJobPausing = false
+    /// Until when the Processing screen says "Picked up where it left off":
+    /// a job the app paused itself (it left the foreground) and resumed by
+    /// itself on the way back.
+    @Published private(set) var blendResumedNoticeUntil: Date?
+    /// The launch offer — the one job the last close interrupted (only one
+    /// job ever runs, so there is at most one). Made once per launch; any
+    /// answer clears it, and a job parked with Later is never offered again.
+    @Published private(set) var blendResumeOffer: BlendJobSummary?
+    private var blendOfferMade = false
+    /// This launch. A job record claiming to be running under any other
+    /// launch's token is one that launch never finished.
+    private static let launchToken = UUID()
+    /// Where the running pass's frames stood when the run (re)started, and
+    /// when — so a resumed run's time left is paced by the work it does, not
+    /// by the frames it found already done.
+    private var etaBaseline: (frames: Int, at: Date)?
+    /// The app-lifecycle observers a job needs (installed with the first job).
+    private var blendLifecycleObservers: [NSObjectProtocol] = []
+    #if os(iOS)
+    /// The seconds iOS grants a backgrounded app to close the piece in flight.
+    private var blendBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    #else
+    /// Keeps App Nap off a Mac while a blend runs in a window behind others.
+    private var blendNapActivity: NSObjectProtocol?
+    #endif
+    /// DEBUG: `LL_BLEND_PAUSE_AT` fires once per process.
+    private var blendPauseHookFired = false
     /// Thermal state, logged at launch and on every change — the console log
     /// then carries the state a run was measured under (2026-09-27: three
     /// shots at `serious` with nothing in the log until the capture line).
@@ -3380,8 +3419,23 @@ final class AppModel: ObservableObject {
     }
 
     func reset() {
+        // A running job stops and is discarded with the flow: its control
+        // reaches the stills engines, which task cancellation never does.
+        if let job = blendJobRun, blendJobHold == nil {
+            job.clearPendingHold()
+            job.control.cancel()
+        }
         blendTask?.cancel()
         blendTask = nil
+        // A held job outlives the flow that held it: it waits on its project
+        // for a resume. (A running one is cancelled with the task above.)
+        if let job = blendJobRun, blendJobHold != nil {
+            blendJobRun = nil
+            blendJobHold = nil
+            blendJobPausing = false
+            pendingBlendJobs.removeAll { $0.id == job.record.id }
+            pendingBlendJobs.insert(BlendJobSummary(record: job.record, folder: job.folder), at: 0)
+        }
         source = nil
         currentCaptureID = nil
         photoBlendDepth = 1
@@ -3556,6 +3610,20 @@ final class AppModel: ObservableObject {
     }
 
     func cancelProcessing() {
+        if let job = blendJobRun {
+            // A Cancel after a Pause is a discard, not a hold.
+            job.clearPendingHold()
+            // The stills engines run in a detached task that task
+            // cancellation never reached — they answer this instead.
+            job.control.cancel()
+            if blendJobHold != nil {
+                // A held job has no task running: Cancel throws it away here.
+                endBlendJob(job)
+                processingStartedAt = nil
+                stage = .configure
+                return
+            }
+        }
         blendTask?.cancel()
     }
 
@@ -5050,6 +5118,7 @@ final class AppModel: ObservableObject {
         processingFramesTotal = nil
         activeProgressPlan = nil
         tailPhaseStartedAt = nil
+        etaBaseline = nil
     }
 
     /// Establishes the band layout for the run and primes the frame counters.
@@ -5107,12 +5176,22 @@ final class AppModel: ObservableObject {
     /// The padding keeps "Almost done" honest — it can't fire while a stitch
     /// or grade pass hasn't even started.
     private func updateBlendETA(_ plan: BlendProgressPlan) {
-        guard let started = processingStartedAt,
-              let done = processingFramesDone, done >= 20,
+        guard processingStartedAt != nil,
+              let done = processingFramesDone,
               done < plan.totalFrames else { return }
-        let elapsed = Date().timeIntervalSince(started)
+        // Paced from the first frames this run reported, not from zero: a
+        // resumed job arrives with a third of its frames already done, and
+        // counting those as this run's work promised it would finish in
+        // seconds.
+        guard let baseline = etaBaseline else {
+            etaBaseline = (done, Date())
+            return
+        }
+        let doneHere = done - baseline.frames
+        guard doneHere >= 20 else { return }
+        let elapsed = Date().timeIntervalSince(baseline.at)
         guard elapsed >= 2 else { return }
-        let remaining = elapsed / Double(done) * Double(plan.totalFrames - done)
+        let remaining = elapsed / Double(doneHere) * Double(plan.totalFrames - done)
             + 2 * Double(plan.tailStageCount)
         processingETADate = Date().addingTimeInterval(remaining)
     }
@@ -5152,8 +5231,18 @@ final class AppModel: ObservableObject {
     }
 
     func startProcessing(blendProfile: VideoEncodePolicy.Profile? = nil) {
-        guard let source, let captureID = currentCaptureID else { return }
+        guard source != nil, currentCaptureID != nil else { return }
         blendProfileOverride = blendProfile
+        runBlend(resuming: nil)
+    }
+
+    /// The run — a fresh one, or a held job picked up again (`resumeBlendJob`),
+    /// in which case the Adjust recipe has already been put back and `resumed`
+    /// carries the record with its checkpoints. Everything below resolves the
+    /// run's inputs from the Adjust state exactly as a fresh run does, so a
+    /// resumed run is rebuilt by the code that built it the first time.
+    private func runBlend(resuming resumed: (record: BlendJobRecord, folder: URL)?) {
+        guard let source, let captureID = currentCaptureID else { return }
         // The processing screen's hero, resolved once for the whole run —
         // resolved in the view body it cost a per-frame existence walk on
         // every progress tick. Before the stage flip, so the screen's first
@@ -5172,6 +5261,11 @@ final class AppModel: ObservableObject {
         errorMessage = nil
         resetProcessingProgress()
         processingStartedAt = Date()
+        if let resumed {
+            // Where the bar stood when the job was held: a resumed run climbs
+            // on from there instead of dropping to zero first.
+            progress = resumed.record.fraction
+        }
         let ramp = self.ramp
         let fps = Double(outputFPS)
         let linear = linearLight
@@ -5352,12 +5446,16 @@ final class AppModel: ObservableObject {
             guard case .photos(let urls) = source else { return nil }
             return urls.first
         }()
+        let job = beginBlendJob(captureID: captureID, resuming: resumed)
         beginActivity(.blending)
         blendTask = Task { [weak self] in
             // Every exit from this task — success, cancel, throw — passes here,
             // which is the only way a bracket around a job with this many
             // failure paths stays honest.
-            defer { self?.endActivity(.blending) }
+            defer {
+                self?.endActivity(.blending)
+                self?.setBlendKeepsScreenAwake(false)
+            }
             do {
                 guard let self else { return }
                 var output: ProcessingOutput
@@ -5368,16 +5466,20 @@ final class AppModel: ObservableObject {
                         hasStitch: false, hasGrade: hasTailPass,
                         hasSlice: sliceSettings != nil))
                     self.processingPhase = .blending(clip: 1, of: 1)
-                    output = try await self.blendVideo(
-                        url: url, ramp: ramp, fps: fps, linear: linear,
-                        trimHeadTailSeconds: trim,
-                        customWindows: warpCompiled?.schedules.first)
+                    output = try await self.blendPass("main", clipIndex: 0, job: job) { segmentation in
+                        try await self.blendVideo(
+                            url: url, ramp: ramp, fps: fps, linear: linear,
+                            trimHeadTailSeconds: trim,
+                            customWindows: warpCompiled?.schedules.first,
+                            segmentation: segmentation)
+                    }
                 case .liveSequence(let liveSource):
                     output = try await self.blendLiveSequence(
                         liveSource, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
                         willBakeGrade: hasTailPass, willSlice: sliceSettings != nil,
                         warpSchedules: warpCompiled?.schedules,
-                        normalization: normalization)
+                        normalization: normalization,
+                        job: job)
                 case .photos(let urls):
                     // Tail-frame review drops the flagged shaky frames from the
                     // blend — they stay on disk, just out of this render.
@@ -5448,6 +5550,8 @@ final class AppModel: ObservableObject {
                             baseline: sliceSettings, variations: sliceVariations,
                             captureID: captureID, parameters: parameters,
                             posterSourceURL: posterSourceURL)
+                        // The fast path ends the run itself; the job ends with it.
+                        self.endBlendJob(job)
                         return
                     }
                     // Stills bake their grade frame by frame inside the blend,
@@ -5480,13 +5584,17 @@ final class AppModel: ObservableObject {
                         // A depth of 1 gives a straight timelapse; larger
                         // depths blend consecutive stills into each frame for
                         // motion blur. Output is a video sequence.
-                        output = try await self.blendPhotosSequence(
-                            urls: filteredURLs, ramp: .constant(photoDepth), fps: fps,
-                            linear: linear, grade: grade, frameTimes: frameTimes,
-                            customWindows: intervalCompiled?.windows,
-                            customWindowTimes: intervalCompiled?.presentationSeconds,
-                            profile: self.blendProfileOverride ?? self.defaultBlendProfile,
-                            overlayBake: overlayBake)
+                        let profile = self.blendProfileOverride ?? self.defaultBlendProfile
+                        output = try await self.blendPass("main", clipIndex: 0, job: job) { segmentation in
+                            try await self.blendPhotosSequence(
+                                urls: filteredURLs, ramp: .constant(photoDepth), fps: fps,
+                                linear: linear, grade: grade, frameTimes: frameTimes,
+                                customWindows: intervalCompiled?.windows,
+                                customWindowTimes: intervalCompiled?.presentationSeconds,
+                                profile: profile,
+                                overlayBake: overlayBake,
+                                segmentation: segmentation)
+                        }
                     }
                 }
                 // Tail passes share the plan's reserved band. The geometry
@@ -5946,23 +6054,36 @@ final class AppModel: ObservableObject {
                 }
                 self.progress = 1
                 self.processingStartedAt = nil
+                self.endBlendJob(job)
                 self.stage = .done
-            } catch is CancellationError {
-                self?.processingStartedAt = nil
-                self?.stage = .configure
-            } catch LapseError.cancelled {
-                self?.processingStartedAt = nil
-                self?.stage = .configure
             } catch {
-                self?.processingStartedAt = nil
+                guard let self else { return }
+                self.processingStartedAt = nil
+                // A pause the run was asked for — by a person, or by the app
+                // leaving the foreground — comes back as `.paused` from the
+                // engine, or as whatever the GPU threw when iOS refused it
+                // work in the background, or as a cancelled tail pass: all of
+                // them a hold, with the job kept for its resume.
+                // Cancel wins over everything, a Pause still landing included:
+                // the engine may answer that pause before it sees the cancel.
+                if let hold = job.pendingHold ?? (Self.isPause(error) ? .person : nil),
+                   !job.control.isCancelled {
+                    self.holdBlendJob(job, hold, after: error)
+                    return
+                }
+                self.endBlendJob(job)
+                if error is CancellationError || Self.isCancel(error) {
+                    self.stage = .configure
+                    return
+                }
                 let description = (error as? LapseError)?.errorDescription ?? error.localizedDescription
                 // On the console as well as the banner: a headless bench run
                 // has no banner to read, and the banner does not say which
                 // stage threw.
                 LLog("render failed: \(description) — \(error)"
-                     + " · source \(self?.currentCaptureID?.uuidString.prefix(8) ?? "?")")
-                self?.errorMessage = description
-                self?.stage = .configure
+                     + " · source \(self.currentCaptureID?.uuidString.prefix(8) ?? "?")")
+                self.errorMessage = description
+                self.stage = .configure
             }
         }
     }
@@ -6307,7 +6428,8 @@ final class AppModel: ObservableObject {
         linear: Bool,
         trimHeadTailSeconds: Double,
         clipIndex: Int = 0,
-        customWindows: [Int]? = nil
+        customWindows: [Int]? = nil,
+        segmentation: BlendSegmentation? = nil
     ) async throws -> ProcessingOutput {
         #if os(macOS)
         // The external runner only speaks constant windows; warped and ramped
@@ -6370,10 +6492,15 @@ final class AppModel: ObservableObject {
             trimHeadTailSeconds: trimHeadTailSeconds,
             customWindows: customWindows
         )
-        let result = try await blender.blend(input: url, to: output, options: options) { fraction in
+        let result = try await blender.blend(
+            input: url, to: output, options: options, segmentation: segmentation
+        ) { fraction in
             Task { @MainActor [weak self] in
                 self?.reportClipProgress(clipIndex, fraction: fraction)
             }
+        }
+        if let method = result.resume {
+            LLog("blend resumed (\(method.rawValue)) · \(url.lastPathComponent) · \(result.outputFrames) frames out")
         }
         let trimSummary = trimHeadTailSeconds > 0 ? " · trimmed \(String(format: "%.1f", trimHeadTailSeconds))s each end" : ""
         let summary = "\(result.inputFrames) frames in → \(result.outputFrames) frames out · "
@@ -6462,14 +6589,16 @@ final class AppModel: ObservableObject {
         willBakeGrade: Bool,
         willSlice: Bool = false,
         warpSchedules: [[Int]]? = nil,
-        normalization: SegmentNormalization? = nil
+        normalization: SegmentNormalization? = nil,
+        job: BlendJobRun? = nil
     ) async throws -> ProcessingOutput {
         guard !source.segmentURLs.isEmpty else { throw LapseError.noInputFrames }
 
         guard source.sequence.mode == .ramp else {
             return try await blendMarkerSequence(
                 source, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
-                willBakeGrade: willBakeGrade, willSlice: willSlice, warpSchedules: warpSchedules)
+                willBakeGrade: willBakeGrade, willSlice: willSlice, warpSchedules: warpSchedules,
+                job: job)
         }
 
         let segmentURLByName = source.resolvedByOriginalName
@@ -6479,7 +6608,11 @@ final class AppModel: ObservableObject {
             beginProgressPlan(.make(
                 clipFrames: [1], hasStitch: false, hasGrade: willBakeGrade, hasSlice: willSlice))
             processingPhase = .blending(clip: 1, of: 1)
-            return try await blendVideo(url: fallbackURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
+            return try await blendPass("main", clipIndex: 0, job: job) { segmentation in
+                try await self.blendVideo(
+                    url: fallbackURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0,
+                    segmentation: segmentation)
+            }
         }
 
         var processedPieces: [StitchPiece] = []
@@ -6511,36 +6644,45 @@ final class AppModel: ObservableObject {
             // driving; the legacy defaults otherwise — moments frame-for-frame,
             // base at the project speed or Advanced ramp.
             let warpWindows = warpSchedules.flatMap { index < $0.count ? $0[index] : nil }
-            let segmentOutput = try await blendVideo(
-                url: segmentURL,
-                ramp: isRampOn ? .constant(1) : ramp,
-                fps: fps,
-                linear: linear,
-                trimHeadTailSeconds: 0,
-                clipIndex: index,
-                customWindows: (warpWindows?.isEmpty == false) ? warpWindows : nil
-            )
+            // One job pass per segment: a finished segment — blended and, on a
+            // mixed-resolution shoot, normalised — is kept, and a resumed run
+            // skips it.
+            let segmentOutput = try await blendPass("clip-\(index)", clipIndex: index, job: job) { segmentation in
+                var blended = try await self.blendVideo(
+                    url: segmentURL,
+                    ramp: isRampOn ? .constant(1) : ramp,
+                    fps: fps,
+                    linear: linear,
+                    trimHeadTailSeconds: 0,
+                    clipIndex: index,
+                    customWindows: (warpWindows?.isEmpty == false) ? warpWindows : nil,
+                    segmentation: segmentation
+                )
+                // Crop THEN shrink, per segment, before anything is stitched.
+                // Nothing here runs for a single-resolution shoot:
+                // `normalization` is nil then and the tail passes work exactly
+                // as they always have.
+                if let normalization {
+                    let normalized = try await self.normalizedSegment(
+                        blended.url,
+                        segmentIndex: index,
+                        normalization: normalization,
+                        outputFPS: fps)
+                    if normalized != blended.url,
+                       blended.url.deletingLastPathComponent().standardizedFileURL
+                        == FileManager.default.temporaryDirectory.standardizedFileURL {
+                        try? FileManager.default.removeItem(at: blended.url)
+                    }
+                    blended.url = normalized
+                }
+                return blended
+            }
             // Legacy path only: a burst segment's frames go out one-for-one at
             // the output rate, landing frameRate/fps times slow — the gap the
             // stitch ramp eases across. A warp render already carries its
             // speeds and eases inside the schedules, so nothing is retimed.
             let slowFactor = Double(segment.frameRate) / fps
-            // Crop THEN shrink, per segment, before anything is stitched.
-            // Nothing here runs for a single-resolution shoot: `normalization`
-            // is nil then and the tail passes work exactly as they always have.
-            var pieceURL = segmentOutput.url
-            if let normalization {
-                pieceURL = try await normalizedSegment(
-                    segmentOutput.url,
-                    segmentIndex: index,
-                    normalization: normalization,
-                    outputFPS: fps)
-                if pieceURL != segmentOutput.url,
-                   segmentOutput.url.deletingLastPathComponent().standardizedFileURL
-                    == FileManager.default.temporaryDirectory.standardizedFileURL {
-                    try? FileManager.default.removeItem(at: segmentOutput.url)
-                }
-            }
+            let pieceURL = segmentOutput.url
             processedPieces.append(StitchPiece(
                 url: pieceURL,
                 slowFactor: warpSchedules == nil && isRampOn && slowFactor > 1 ? slowFactor : nil))
@@ -6683,7 +6825,8 @@ final class AppModel: ObservableObject {
         burstRamp: Double,
         willBakeGrade: Bool,
         willSlice: Bool = false,
-        warpSchedules: [[Int]]? = nil
+        warpSchedules: [[Int]]? = nil,
+        job: BlendJobRun? = nil
     ) async throws -> ProcessingOutput {
         guard let sourceURL = source.primaryVideoURL else { throw LapseError.noInputFrames }
 
@@ -6696,9 +6839,11 @@ final class AppModel: ObservableObject {
                 hasStitch: false, hasGrade: willBakeGrade, hasSlice: willSlice))
             processingPhase = .blending(clip: 1, of: 1)
             statusMessage = "Blending the warped timeline..."
-            return try await blendVideo(
-                url: sourceURL, ramp: ramp, fps: fps, linear: linear,
-                trimHeadTailSeconds: 0, customWindows: schedule)
+            return try await blendPass("main", clipIndex: 0, job: job) { segmentation in
+                try await self.blendVideo(
+                    url: sourceURL, ramp: ramp, fps: fps, linear: linear,
+                    trimHeadTailSeconds: 0, customWindows: schedule, segmentation: segmentation)
+            }
         }
 
         let pieces = try await markerSequencePieces(for: source, sourceURL: sourceURL)
@@ -6706,7 +6851,11 @@ final class AppModel: ObservableObject {
             beginProgressPlan(.make(
                 clipFrames: [1], hasStitch: false, hasGrade: willBakeGrade, hasSlice: willSlice))
             processingPhase = .blending(clip: 1, of: 1)
-            return try await blendVideo(url: sourceURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
+            return try await blendPass("main", clipIndex: 0, job: job) { segmentation in
+                try await self.blendVideo(
+                    url: sourceURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0,
+                    segmentation: segmentation)
+            }
         }
 
         // Marker mode records the whole run at the base rate; a marked interval
@@ -6734,23 +6883,29 @@ final class AppModel: ObservableObject {
                 ? "Rendering marker interval \(index + 1) / \(pieces.count) at playback speed..."
                 : "Blending marker interval \(index + 1) / \(pieces.count)..."
 
-            let clipURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("LetsLapse-marker-piece-\(UUID().uuidString).mov")
-            try await extractVideoRange(
-                sourceURL,
-                from: piece.range.lowerBound,
-                to: piece.range.upperBound,
-                outputURL: clipURL
-            )
-
-            let pieceOutput = try await blendVideo(
-                url: clipURL,
-                ramp: piece.isRampOn ? .constant(1) : ramp,
-                fps: fps,
-                linear: linear,
-                trimHeadTailSeconds: 0,
-                clipIndex: index
-            )
+            // One job pass per interval, extraction included: a finished
+            // interval is kept and a resumed run skips it. (An interval cut
+            // short is cut again — its extract is a fresh file, so its pieces
+            // don't carry over; intervals are seconds long.)
+            let pieceOutput = try await blendPass("piece-\(index)", clipIndex: index, job: job) { segmentation in
+                let clipURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("LetsLapse-marker-piece-\(UUID().uuidString).mov")
+                try await self.extractVideoRange(
+                    sourceURL,
+                    from: piece.range.lowerBound,
+                    to: piece.range.upperBound,
+                    outputURL: clipURL
+                )
+                return try await self.blendVideo(
+                    url: clipURL,
+                    ramp: piece.isRampOn ? .constant(1) : ramp,
+                    fps: fps,
+                    linear: linear,
+                    trimHeadTailSeconds: 0,
+                    clipIndex: index,
+                    segmentation: segmentation
+                )
+            }
             processedPieces.append(StitchPiece(
                 url: pieceOutput.url,
                 slowFactor: piece.isRampOn && slowFactor > 1 ? slowFactor : nil))
@@ -7240,7 +7395,8 @@ final class AppModel: ObservableObject {
         customWindows: [Int]? = nil,
         customWindowTimes: [Double]? = nil,
         profile: VideoEncodePolicy.Profile = .h264High8Bit,
-        overlayBake: OverlayExportBake? = nil
+        overlayBake: OverlayExportBake? = nil,
+        segmentation: BlendSegmentation? = nil
     ) async throws -> ProcessingOutput {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(UUID().uuidString).mp4")
@@ -7273,6 +7429,7 @@ final class AppModel: ObservableObject {
                     customWindowTimes: customWindowTimes,
                     loadFrame: PhotoGrader.stabilisedLoader(lock, base: Self.gradedFrameLoader(grade, over: urls)),
                     overlayComposite: overlayBake?.stackerHook(),
+                    segmentation: segmentation,
                     progress: progress)
             }
             // The engine path: linear half-float decode straight to the
@@ -7292,6 +7449,7 @@ final class AppModel: ObservableObject {
                 decodeLinear: support.decode,
                 outputGrade: support.hook,
                 overlayComposite: overlayBake?.stackerHook(),
+                segmentation: segmentation,
                 progress: progress)
         }.value
         var summary = "\(urls.count) photos → \(result.outputFrames) frames · \(result.width)×\(result.height)"
@@ -9310,6 +9468,9 @@ final class AppModel: ObservableObject {
         }
         sweepTrashAtLaunch()
         ProjectArchive.sweepStaleExports()
+        // Blends a quit, a crash or a background kill interrupted, waiting to
+        // be offered back.
+        refreshPendingBlendJobs()
         if libraryExportStale {
             libraryExportStale = false
             persister.regenerateExport(reconcilingBlends: libraryExportCountsDiffered)
@@ -11760,5 +11921,560 @@ extension LapseCollection {
         copy.deletedAt = nil
         copy.deletedBy = nil
         return copy
+    }
+}
+
+// MARK: - Blend jobs: pause, resume, outlive the app
+
+/// The flow's blend runs as a JOB (`BlendJobs.swift`): a folder that records
+/// what it is making and the finished pieces of it, so a pause, a background,
+/// a quit or a crash costs the piece in flight rather than the run.
+extension AppModel {
+    /// Roughly how much work goes into each piece of a job's output — the
+    /// most a kill can lose. `LL_BLEND_SEGMENT_SECONDS` shortens it on a bench.
+    private var blendSegmentSeconds: TimeInterval {
+        #if DEBUG
+        if let raw = ProcessInfo.processInfo.environment["LL_BLEND_SEGMENT_SECONDS"],
+           let seconds = Double(raw), seconds >= 0 {
+            return seconds
+        }
+        #endif
+        return 10
+    }
+
+    /// Starts a run's job, or takes a held one back up.
+    fileprivate func beginBlendJob(
+        captureID: UUID, resuming resumed: (record: BlendJobRecord, folder: URL)?
+    ) -> BlendJobRun {
+        let capture = self.capture(id: captureID)
+        let record: BlendJobRecord
+        let folder: URL
+        if let resumed {
+            record = resumed.record
+            folder = resumed.folder
+        } else {
+            record = BlendJobRecord(
+                id: UUID(), captureID: captureID,
+                projectName: capture?.displayTitle ?? "",
+                createdAt: Date(), updatedAt: Date(), hold: nil,
+                recipe: currentBlendJobRecipe(), passes: [:],
+                fraction: 0, framesDone: nil, framesTotal: nil,
+                launchToken: Self.launchToken)
+            folder = BlendJobFiles.folder(projectFolder: projectFolderURL(for: captureID), jobID: record.id)
+        }
+        let recipeKey = blendJobLookKey(for: capture, stabilised: applyStabilisation && framingLock != nil)
+        let job = BlendJobRun(
+            record: record, folder: folder,
+            recipeKey: recipeKey, segmentSeconds: blendSegmentSeconds)
+        job.update { record in
+            record.hold = nil
+            record.launchToken = Self.launchToken
+            record.recipeKey = recipeKey
+        }
+        blendJobPausing = false
+        job.onCheckpointSaved = { [weak self, weak job] in
+            Task { @MainActor in
+                guard let self, let job, self.blendJobRun === job else { return }
+                self.noteBlendJobProgress(job)
+            }
+        }
+        blendJobRun = job
+        blendJobHold = nil
+        pendingBlendJobs.removeAll { $0.id == record.id }
+        setBlendKeepsScreenAwake(true)
+        installBlendJobLifecycleIfNeeded()
+        LLog("blend job \(record.id.uuidString.prefix(8)): \(resumed == nil ? "started" : "resumed at \(Int(record.fraction * 100))%")"
+             + " · \(capture?.displayTitle ?? "?")")
+        armBlendPauseHook(job)
+        return job
+    }
+
+    /// The whole run's bar, beside the job's checkpoints — what the relaunch
+    /// offer quotes after a kill.
+    private func noteBlendJobProgress(_ job: BlendJobRun) {
+        job.update { record in
+            record.fraction = progress
+            record.framesDone = processingFramesDone
+            record.framesTotal = processingFramesTotal
+        }
+    }
+
+    /// The run is over — finished, cancelled or failed — and its folder goes.
+    fileprivate func endBlendJob(_ job: BlendJobRun) {
+        job.discard()
+        if blendJobRun === job {
+            blendJobRun = nil
+            blendJobHold = nil
+            blendJobPausing = false
+            blendResumedNoticeUntil = nil
+        }
+        endBackgroundGrace()
+    }
+
+    /// The run stopped for a pause: the job stays, with how far it got.
+    fileprivate func holdBlendJob(_ job: BlendJobRun, _ hold: BlendJobHold, after error: Error) {
+        job.update { record in
+            record.hold = hold
+            record.fraction = progress
+            record.framesDone = processingFramesDone
+            record.framesTotal = processingFramesTotal
+        }
+        blendJobHold = hold
+        blendJobPausing = false
+        blendResumedNoticeUntil = nil
+        processingETADate = nil
+        let detail = Self.isPause(error) ? "" : " — stopped by: \(error.localizedDescription)"
+        LLog("blend job \(job.record.id.uuidString.prefix(8)): held (\(hold.rawValue)) at \(Int(progress * 100))%\(detail)")
+        endBackgroundGrace()
+        #if os(iOS)
+        // Back in front before the pause landed (a quick app switch): go on —
+        // on the next turn of the main queue, once the task that held the job
+        // has finished and run its own cleanup (which would otherwise give
+        // back the screen-awake hold and the activity the new run just took).
+        if hold == .background, UIApplication.shared.applicationState == .active {
+            DispatchQueue.main.async { [weak self] in
+                self?.resumeHeldBlendJob(automatically: true)
+            }
+        }
+        #endif
+    }
+
+    /// One blend pass of a job: skipped when it already finished, and its
+    /// output kept in the job when it finishes now, so a resume skips it.
+    private func blendPass(
+        _ key: String, clipIndex: Int, job: BlendJobRun?,
+        _ body: (BlendSegmentation?) async throws -> ProcessingOutput
+    ) async throws -> ProcessingOutput {
+        guard let job else { return try await body(nil) }
+        if let finished = job.finishedPass(key) {
+            reportClipProgress(clipIndex, fraction: 1)
+            LLog("blend job \(job.record.id.uuidString.prefix(8)): pass \(key) already finished — kept")
+            return ProcessingOutput(
+                kind: finished.output.isImage ? .image : .video,
+                url: finished.url, image: nil, summary: finished.output.summary,
+                inputFrames: finished.output.inputFrames, outputFrames: finished.output.outputFrames,
+                width: finished.output.width, height: finished.output.height,
+                geometryBaked: finished.output.geometryBaked)
+        }
+        var output = try await body(job.segmentation(forPass: key))
+        // Kept only when it is our own temp file: the Mac runner's output
+        // lives in its own job folder, where the runner expects to find it.
+        guard output.kind == .video,
+              output.url.deletingLastPathComponent().standardizedFileURL
+                == FileManager.default.temporaryDirectory.standardizedFileURL else { return output }
+        output.url = try job.keep(output.url, as: BlendJobPassOutput(
+            fileName: "\(key)-output.\(output.url.pathExtension)",
+            isImage: false, summary: output.summary,
+            inputFrames: output.inputFrames, outputFrames: output.outputFrames,
+            width: output.width, height: output.height,
+            geometryBaked: output.geometryBaked), forPass: key)
+        return output
+    }
+
+    fileprivate static func isPause(_ error: Error) -> Bool {
+        if case LapseError.paused = error { return true }
+        return false
+    }
+
+    fileprivate static func isCancel(_ error: Error) -> Bool {
+        if case LapseError.cancelled = error { return true }
+        return false
+    }
+
+    // MARK: Pause, resume, discard
+
+    /// Whether the flow's blend is a job that is running (not held) — what
+    /// Pause can act on.
+    var isBlendJobRunning: Bool { blendJobRun != nil && blendJobHold == nil }
+
+    /// Pause the flow's running job — the Processing screen's Pause. The
+    /// blend engines stop after the frame they are making and keep it; a tail
+    /// pass (reframe, crop, grade, slicing — a short re-encode of the finished
+    /// clip) has no such stop and is simply run again, so it is stopped here.
+    func pauseBlendJob() {
+        guard let job = blendJobRun, blendJobHold == nil, !blendJobPausing else { return }
+        blendJobPausing = true
+        job.requestPause(.person)
+        switch processingPhase {
+        case .preparing, .blending, .posterFrames, .saving:
+            break
+        case .combining, .grading, .slicing:
+            blendTask?.cancel()
+        }
+    }
+
+    /// Picks up the flow's held job — the paused screen's Resume, and the
+    /// return to the foreground after a background pause (`automatically`,
+    /// which the screen acknowledges for a few seconds).
+    func resumeHeldBlendJob(automatically: Bool = false) {
+        guard let job = blendJobRun, blendJobHold != nil else { return }
+        runBlend(resuming: (job.record, job.folder))
+        if automatically {
+            blendResumedNoticeUntil = Date().addingTimeInterval(4)
+        }
+    }
+
+    /// Picks up a job this launch didn't start: the relaunch offer's Resume,
+    /// a project's paused row. The Adjust recipe goes back exactly as the run
+    /// had it, the framing lock is waited for (it loads asynchronously and
+    /// the recipe's stabilisation needs it), and the run is rebuilt from
+    /// there.
+    func resumeBlendJob(_ summary: BlendJobSummary) async {
+        guard blendJobRun == nil, stage != .processing else { return }
+        guard let record = BlendJobFiles.load(folder: summary.folder),
+              let capture = capture(id: record.captureID) else {
+            pendingBlendJobs.removeAll { $0.id == summary.id }
+            return
+        }
+        openCapture(capture)
+        guard currentCaptureID == capture.id else { return }
+        applyBlendJobRecipe(record.recipe)
+        await framingLockLoad?.value
+        applyStabilisation = record.recipe.applyStabilisation && framingLock != nil
+        requestedTab = .create
+        runBlend(resuming: (record, summary.folder))
+    }
+
+    /// The launch offer's Resume.
+    func acceptBlendResumeOffer() {
+        guard let offer = blendResumeOffer else { return }
+        blendResumeOffer = nil
+        Task { [weak self] in await self?.resumeBlendJob(offer) }
+    }
+
+    /// The launch offer's Later: the job waits on its project, and is never
+    /// offered at launch again.
+    func deferBlendResumeOffer() {
+        guard let offer = blendResumeOffer else { return }
+        blendResumeOffer = nil
+        BlendJobFiles.park(folder: offer.folder)
+        if let index = pendingBlendJobs.firstIndex(where: { $0.id == offer.id }) {
+            pendingBlendJobs[index].hold = .person
+        }
+        LLog("blend job \(offer.id.uuidString.prefix(8)): parked on its project")
+    }
+
+    /// The launch offer's Discard.
+    func discardBlendResumeOffer() {
+        guard let offer = blendResumeOffer else { return }
+        blendResumeOffer = nil
+        discardBlendJob(offer)
+    }
+
+    /// The job waiting on a project, if any — its paused card.
+    func pendingBlendJob(for captureID: UUID) -> BlendJobSummary? {
+        pendingBlendJobs.first { $0.captureID == captureID }
+    }
+
+    /// Whether a waiting job can pick up where it stopped: its project's
+    /// originals are still here, and nothing its frames depend on has changed
+    /// since it ran (`blendJobLookKey`). When not, its card offers Start Again.
+    /// The engines check again, piece by piece, whatever this says — a job
+    /// resumed over a change restarts the passes it touched rather than
+    /// joining frames made two ways.
+    func blendJobCanResume(_ summary: BlendJobSummary) -> Bool {
+        #if DEBUG
+        // `LL_BLEND_CANT_RESUME=1` stages the card's Start Again state for
+        // its mirror (project-detail.video.blend-restart) — a real one needs
+        // a stills project whose look changed while its job was paused.
+        if ProcessInfo.processInfo.environment["LL_BLEND_CANT_RESUME"] != nil { return false }
+        #endif
+        guard let capture = capture(id: summary.captureID),
+              availability(of: .newBlend, for: capture).isAvailable else { return false }
+        guard let recorded = summary.recipeKey else { return true }
+        return recorded == blendJobLookKey(for: capture, stabilised: summary.stabilised)
+    }
+
+    /// Start Again: the same blend, from the beginning — the saved pieces go,
+    /// the recipe stays.
+    func restartBlendJob(_ summary: BlendJobSummary) async {
+        guard var record = BlendJobFiles.load(folder: summary.folder) else {
+            pendingBlendJobs.removeAll { $0.id == summary.id }
+            return
+        }
+        for key in record.passes.keys {
+            try? FileManager.default.removeItem(at: summary.folder.appendingPathComponent(key, isDirectory: true))
+            if let output = record.passes[key]?.output {
+                try? FileManager.default.removeItem(at: summary.folder.appendingPathComponent(output.fileName))
+            }
+        }
+        record.passes = [:]
+        record.fraction = 0
+        record.framesDone = nil
+        try? BlendJobFiles.save(record, folder: summary.folder)
+        var fresh = summary
+        fresh.fraction = 0
+        await resumeBlendJob(fresh)
+    }
+
+    /// Throws a job away — the offer's Discard, a project row's Discard.
+    func discardBlendJob(_ summary: BlendJobSummary) {
+        try? FileManager.default.removeItem(at: summary.folder)
+        pendingBlendJobs.removeAll { $0.id == summary.id }
+        LLog("blend job \(summary.id.uuidString.prefix(8)): discarded")
+    }
+
+    /// Finds the jobs on disk this launch isn't running. Off the main actor:
+    /// it lists every project folder.
+    func refreshPendingBlendJobs() {
+        let root = projectsRootURL
+        Task { [weak self] in
+            let found = await Task.detached(priority: .utility) {
+                BlendJobFiles.findAll(projectsRoot: root)
+            }.value
+            guard let self else { return }
+            let running = self.blendJobRun?.record.id
+            self.pendingBlendJobs = found
+                .filter { $0.record.id != running }
+                .map { BlendJobSummary(record: $0.record, folder: $0.folder) }
+            if !self.blendOfferMade {
+                self.blendOfferMade = true
+                self.blendResumeOffer = self.pendingBlendJobs.first { $0.wasInterrupted }
+            }
+            if !self.pendingBlendJobs.isEmpty {
+                LLog("blend jobs waiting: " + self.pendingBlendJobs.map {
+                    "\($0.id.uuidString.prefix(8)) \($0.hold.rawValue) \(Int($0.fraction * 100))% · \($0.projectName)"
+                }.joined(separator: "; "))
+            }
+            self.applyBlendResumeHook()
+        }
+    }
+
+    // MARK: The recipe
+
+    /// The Adjust state a run reads, raw — so a resume rebuilds the run
+    /// through exactly the code that built it.
+    fileprivate func currentBlendJobRecipe() -> BlendJobRecipe {
+        BlendJobRecipe(
+            constantWindow: constantWindow,
+            photoBlendDepth: photoBlendDepth,
+            outputFPS: outputFPS,
+            linearLight: linearLight,
+            useRamp: useRamp,
+            rampStart: rampStart,
+            rampEnd: rampEnd,
+            curve: curve.rawValue,
+            trimVideoEnds: trimVideoEnds,
+            trimHeadTailSeconds: trimHeadTailSeconds,
+            blendSourceCodec: blendSourceCodec?.rawValue,
+            warp: warp,
+            reframe: reframe,
+            blendCanvasRatio: blendCanvasRatio?.rawValue,
+            blendCanvasOffset: blendCanvasOffset,
+            exportShortEdge: exportShortEdge,
+            timeSlice: timeSlice,
+            timeSliceVariations: timeSliceVariations,
+            blendProfile: blendProfileOverride.map { $0 == .hevcMain10 ? "hevc10" : "h264" },
+            excludedFrameIndices: excludedFrameIndices.sorted(),
+            applyStabilisation: applyStabilisation)
+    }
+
+    fileprivate func applyBlendJobRecipe(_ recipe: BlendJobRecipe) {
+        constantWindow = recipe.constantWindow
+        photoBlendDepth = recipe.photoBlendDepth
+        outputFPS = recipe.outputFPS
+        linearLight = recipe.linearLight
+        useRamp = recipe.useRamp
+        rampStart = recipe.rampStart
+        rampEnd = recipe.rampEnd
+        if let savedCurve = BlendCurve(rawValue: recipe.curve) { curve = savedCurve }
+        trimVideoEnds = recipe.trimVideoEnds
+        trimHeadTailSeconds = recipe.trimHeadTailSeconds
+        blendSourceCodec = recipe.blendSourceCodec.flatMap(OutputCodec.init(rawValue:))
+        warp = recipe.warp
+        reframe = recipe.reframe
+        blendCanvasRatio = recipe.blendCanvasRatio.flatMap(CanvasRatio.init(rawValue:))
+        blendCanvasOffset = recipe.blendCanvasOffset
+        exportShortEdge = recipe.exportShortEdge
+        timeSlice = recipe.timeSlice
+        timeSliceVariations = recipe.timeSliceVariations
+        blendProfileOverride = recipe.blendProfile.map { $0 == "hevc10" ? .hevcMain10 : .h264High8Bit }
+        excludedFrameIndices = Set(recipe.excludedFrameIndices)
+    }
+
+    /// What a stills blend's every frame depends on that the engine can't
+    /// see: the project's look, its text and masks, its framing lock. Folded
+    /// into each pass key, so a project edited while its job was held
+    /// restarts the pass rather than joining frames made two ways. A movie's
+    /// look is a tail pass over the finished clip and plays no part.
+    fileprivate func blendJobLookKey(for capture: CaptureProject?, stabilised: Bool) -> String {
+        guard let capture, capture.kind != .video else { return "" }
+        struct Look: Encodable {
+            var preset: String?
+            var adjustments: PhotoAdjustments?
+            var state: PresetState?
+            var timeline: GradeTimeline?
+            var white: WhiteBalanceSource?
+            var turns: Int?
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let look = (try? encoder.encode(Look(
+            preset: capture.selectedPreset, adjustments: capture.adjustments,
+            state: capture.presetState, timeline: capture.gradeTimeline,
+            white: capture.whiteBalanceSource, turns: capture.quarterTurns)))
+            .map { String(decoding: $0, as: UTF8.self) } ?? "?"
+        func stamp(_ url: URL) -> String {
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            guard let size = values?.fileSize else { return "none" }
+            return "\(size)@\(values?.contentModificationDate?.timeIntervalSince1970 ?? 0)"
+        }
+        let folder = projectFolderURL(for: capture)
+        return [
+            look,
+            "overlays:" + stamp(folder.appendingPathComponent("overlays.json")),
+            "shapes:" + stamp(folder.appendingPathComponent("shapes.json")),
+            "framing:" + stamp(sourceFolderURL(for: capture).appendingPathComponent(FramingReview.fileName)),
+            "stabilised:\(stabilised)",
+        ].joined(separator: "|")
+    }
+
+    // MARK: Keeping the job alive
+
+    /// A blend keeps the screen from locking (Steven, 2026-09-30): an
+    /// auto-lock backgrounds the app, and iOS runs no GPU work there. Given
+    /// back only when nothing else holds it — the capture screen and a nearby
+    /// send keep it for the whole time they are up. On the Mac, App Nap is
+    /// kept off instead.
+    fileprivate func setBlendKeepsScreenAwake(_ on: Bool) {
+        #if os(iOS)
+        if on {
+            UIApplication.shared.isIdleTimerDisabled = true
+        } else if !activeLibraryActivities.contains(.capture),
+                  !activeLibraryActivities.contains(.servingNearby) {
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        #else
+        if on, blendNapActivity == nil {
+            blendNapActivity = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiated, reason: "Rendering a blend")
+        } else if !on, let activity = blendNapActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            blendNapActivity = nil
+        }
+        #endif
+    }
+
+    private func installBlendJobLifecycleIfNeeded() {
+        guard blendLifecycleObservers.isEmpty else { return }
+        let center = NotificationCenter.default
+        #if os(iOS)
+        blendLifecycleObservers = [
+            center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.blendJobWillResignActive() }
+            },
+            center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.blendJobDidEnterBackground() }
+            },
+            center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.blendJobDidBecomeActive() }
+            },
+            center.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.blendJobWillTerminate() }
+            },
+        ]
+        #else
+        blendLifecycleObservers = [
+            center.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.blendJobWillTerminate() }
+            },
+        ]
+        #endif
+    }
+
+    #if os(iOS)
+    /// Control Center, a call, the app switcher: the GPU still answers, so
+    /// the piece in flight is closed NOW — a background that follows then
+    /// costs almost nothing.
+    private func blendJobWillResignActive() {
+        guard blendJobHold == nil else { return }
+        blendJobRun?.control.requestCheckpoint()
+    }
+
+    /// iOS runs no GPU work in the background: pause, with the few seconds
+    /// iOS grants to close the piece and write the record.
+    private func blendJobDidEnterBackground() {
+        guard let job = blendJobRun, blendJobHold == nil else { return }
+        beginBackgroundGrace()
+        job.requestPause(.background)
+        LLog("blend job \(job.record.id.uuidString.prefix(8)): pausing — the app went to the background")
+    }
+
+    private func blendJobDidBecomeActive() {
+        guard blendJobHold == .background else { return }
+        LLog("blend job: back in front — resuming")
+        resumeHeldBlendJob(automatically: true)
+    }
+
+    private func beginBackgroundGrace() {
+        guard blendBackgroundTask == .invalid else { return }
+        blendBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Pause the blend") { [weak self] in
+            MainActor.assumeIsolated { self?.endBackgroundGrace() }
+        }
+    }
+    #endif
+
+    fileprivate func endBackgroundGrace() {
+        #if os(iOS)
+        guard blendBackgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(blendBackgroundTask)
+        blendBackgroundTask = .invalid
+        #endif
+    }
+
+    /// The app is quitting with a job running: say so on its record, which
+    /// already names every finished piece. Best effort — a kill sends nothing,
+    /// and a record left saying "running" reads as interrupted at the next
+    /// launch anyway.
+    private func blendJobWillTerminate() {
+        guard let job = blendJobRun, blendJobHold == nil else { return }
+        job.update { record in
+            record.hold = .interrupted
+            record.fraction = progress
+            record.framesDone = processingFramesDone
+            record.framesTotal = processingFramesTotal
+        }
+        LLog("blend job \(job.record.id.uuidString.prefix(8)): interrupted by quit at \(Int(progress * 100))%")
+    }
+
+    // MARK: DEBUG hooks
+
+    /// `LL_BLEND_PAUSE_AT=<0…1>` presses Pause once the run's bar passes that
+    /// fraction — once per process, so a resumed run in the same launch goes
+    /// on. The Pause button's twin for a headless bench.
+    private func armBlendPauseHook(_ job: BlendJobRun) {
+        #if DEBUG
+        guard !blendPauseHookFired,
+              let raw = ProcessInfo.processInfo.environment["LL_BLEND_PAUSE_AT"],
+              let target = Double(raw) else { return }
+        blendPauseHookFired = true
+        Task { @MainActor [weak self, weak job] in
+            while let self, let job, self.blendJobRun === job, self.blendJobHold == nil {
+                if self.progress >= target {
+                    LLog("LL_BLEND_PAUSE_AT=\(raw): pausing at \(Int(self.progress * 100))%")
+                    self.pauseBlendJob()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+        }
+        #endif
+    }
+
+    /// `LL_BLEND_RESUME=latest|<job id prefix>` presses the relaunch offer's
+    /// Resume on a job found at launch.
+    private func applyBlendResumeHook() {
+        #if DEBUG
+        guard let raw = ProcessInfo.processInfo.environment["LL_BLEND_RESUME"],
+              blendJobRun == nil else { return }
+        let match = raw == "latest"
+            ? pendingBlendJobs.first
+            : pendingBlendJobs.first { $0.id.uuidString.lowercased().hasPrefix(raw.lowercased()) }
+        guard let match else {
+            LLog("LL_BLEND_RESUME=\(raw): no waiting job matches")
+            return
+        }
+        Task { @MainActor [weak self] in await self?.resumeBlendJob(match) }
+        #endif
     }
 }

@@ -11,6 +11,59 @@ live inline.
 
 ## Open
 
+### Blend jobs: pause, resume, outlive the app — built 2026-09-30, pause/background checked on the 18 Pro
+
+A blend used to die with the app: backgrounded (iOS runs no GPU work there; a
+phone left to auto-lock backgrounds itself), quit or crashed, the run and its
+recipe were gone and the half-written `.mp4` had no index. Now every run is a
+job folder (`Projects/<id>/.jobs/blend-<id>/`, `App/BlendJobs.swift`) whose
+engines write finished pieces every ~10 s of work and a checkpoint after each
+(`Kit/.../BlendSegments.swift`, 12 tests: exact on ProRes, H.264 and HEVC
+Main10 within codec tolerance, stills paths, resume twice, stale pieces,
+changed recipe, cancel). UI signed off design-first the same day (seven
+mirrors, `docs/design/iOS/processing*.svg`, `blend-resume-offer`,
+`project-detail.video.blend-{paused,restart}`). Verified on the Mac (pause →
+quit → relaunch → resume; `kill -9` → resume; quit → offer → resume; the
+card) and the iPhone 16 Pro Simulator (Pause, Resume, Resume Later, the card,
+background → auto-pause → return → auto-resume, kill → offer → Later /
+Resume, Start Again), outputs matching an unbroken render.
+
+**On the 18 Pro (iOS 27, Release, 2026-09-30 10:13):** a stills job ("Stack
+29. 9. at 17:24", 404 photos → 202 frames at 4032×3024) paused by hand twice
+and sent to the home screen twice: each background paused cleanly in ~1.1 s
+(no GPU error behind it), each return resumed by itself, the job saved and its
+folder went. The clip decodes to the same 202 frames at the same times as the
+uninterrupted blend of the same recipe from 29.9 (mean PSNR 55.4 dB, lowest
+41.6). Steven: "looks good from my tests".
+
+Owed:
+- **The rest on a phone:** the relaunch offer after a force-quit (and its look
+  on iOS 26/27 — only seen on the 18.6 Simulator), Resume Later and the card,
+  a video-source job, and a lock with the screen held awake.
+- **Joined pieces carry hidden duplicate index entries.** A clip joined from
+  pieces by the passthrough export holds extra sample-table entries — flagged
+  discard by ffprobe (112 on the 18 Pro clip, 143 and 183 on the Mac bench
+  clips), pointing at bytes already in the file (no size cost) and hidden by
+  edit lists. AVFoundation never vends them: the save check
+  (`RenderVerifier`), the time slicer (`AssetFrameProvider`) and the tail
+  passes all count the right frames (checked), and players decode them
+  correctly. A tool that walks the raw sample table sees too many. A cleaner
+  join (reader → passthrough writer with retimed samples, or
+  `AVMutableMovie`) is the fix if it ever matters.
+- **Not checkpointed, re-run on resume:** the single-image stack
+  (`stackPhotos`), the time-slice poster fast path, the Mac's constant-window
+  runner (`MacVideoJobRunner` keeps its own PNG-scratch resume), and the tail
+  passes (reframe, crop, grade, slicing — short re-encodes of the finished
+  clip). A long single-image stack of thousands of stills is the one that
+  could still cost minutes.
+- **Background GPU (nice-to-have, parked):** iOS 26's
+  `BGContinuedProcessingTask` with `requiredResources = .gpu` could keep a
+  blend running behind the lock screen on devices that allow it — needs its
+  own identifier family, the entitlement, a `supportedResources` check and the
+  2026-09-25 registration rules (`bgcontinuedprocessing-registration-crash`).
+- **Discard asks nothing.** The card's and the offer's Discard throw the
+  saved pieces away at once, as drawn; a confirm is one line if it bites.
+
 ### Landscape "missing progress/burst bars" (raised with the horizon level) — needs the mode
 
 Raised with the 2026-09-30 horizon-level report. The level itself is fixed
@@ -25,6 +78,12 @@ portrait whenever the scene was not `.foregroundActive` (launch, Control
 Center, an alert), so a landscape launch's orientation state and shutter
 cluster started a quarter turn wrong until something asked again —
 device-unverified.
+
+### `ShapeDetectionModeTests.testExternalEnginesKnowTheirRigDetector` fails
+
+Fails on a clean checkout of `ed94c6f` as well (seen 2026-09-30): the engine
+lists come back in a different order every run — a set compared as an array —
+and `.all` is missing from the actual side. Unrelated to the blend work.
 
 ### PicPlace quiet sync and the "can't reach" gate — built 2026-09-29, device check owed
 

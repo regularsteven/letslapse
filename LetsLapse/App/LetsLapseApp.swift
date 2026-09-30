@@ -691,6 +691,32 @@ struct ContentView: View {
                     + ". Settings ▸ Storage has the details.")
         }
         #endif
+        // The launch offer (blend-resume-offer.portrait.svg): the blend the
+        // last close interrupted. Never over the camera — a phone that opened
+        // straight into it at launch gets the offer once it closes — and
+        // never over a render already under way.
+        .alert(
+            "Resume blending?",
+            isPresented: Binding(
+                get: {
+                    model.blendResumeOffer != nil
+                        && !model.activeLibraryActivities.contains(.capture)
+                        && model.stage != .processing
+                },
+                set: { _ in }),
+            presenting: model.blendResumeOffer
+        ) { _ in
+            Button("Resume") { model.acceptBlendResumeOffer() }
+            Button("Discard", role: .destructive) { model.discardBlendResumeOffer() }
+            // Later IS the alert's dismissal, so it carries the cancel role —
+            // which puts it last. Drawn second (the signed-off order), it was
+            // a plain button, and iOS then added a Cancel of its own (seen on
+            // the 18.6 Simulator, 2026-09-30) whose dismissal would have
+            // raised the offer straight back.
+            Button("Later", role: .cancel) { model.deferBlendResumeOffer() }
+        } message: { offer in
+            Text("“\(offer.projectName)” was \(Int((offer.fraction * 100).rounded()))% blended when LetsLapse closed. It picks up where it stopped.")
+        }
         .tint(LL.accent)
         #if DEBUG
         .onAppear(perform: applyUIPreviewHooks)
@@ -807,7 +833,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE", "LL_PILL_SHEET"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE", "LL_PILL_SHEET", "LL_BLEND_RESUME", "LL_BLEND_CANT_RESUME"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }

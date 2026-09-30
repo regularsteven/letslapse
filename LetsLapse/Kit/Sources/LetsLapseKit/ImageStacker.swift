@@ -240,6 +240,8 @@ public final class ImageStacker {
         /// Same contract as `stackSequenceLinear`'s hook: composites overlays
         /// onto the finished output frame just before the writer.
         overlayComposite: ((CVPixelBuffer, Double, CVPixelBufferPool) throws -> CVPixelBuffer?)? = nil,
+        /// A resumable run — same contract as `VideoBlender.blend`'s.
+        segmentation: BlendSegmentation? = nil,
         progress: ((Double) -> Void)? = nil
     ) throws -> StackSequenceResult {
         guard imageURLs.count >= 2 else {
@@ -262,56 +264,45 @@ public final class ImageStacker {
             try loadFrame?(url) ?? ImageStacker.loadImage(at: url)
         }
 
+        let run = try StillsRun(
+            engine: "stills-gamma-v1|linear:\(linearLight)",
+            imageURLs: imageURLs, schedule: schedule, windowStartTimes: windowStartTimes,
+            outputFPS: outputFPS, requestedCodec: "h264", segmentation: segmentation)
+
         // Size the writer from the first still (orientation already baked in).
         let firstImage = try load(imageURLs[0])
         let width = firstImage.width
         let height = firstImage.height
+        try run.checkSize(width: width, height: height)
 
-        try? FileManager.default.removeItem(at: outputURL)
-        let writer: AVAssetWriter
-        do {
-            writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
-        } catch {
-            throw LapseError.writerFailed(error.localizedDescription)
-        }
         let encodePolicy = VideoEncodePolicy(
             profile: .h264High8Bit, width: width, height: height, fps: outputFPS)
-        let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: encodePolicy.videoSettings)
-        writerInput.expectsMediaDataInRealTime = false
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: writerInput,
-            sourcePixelBufferAttributes: encodePolicy.pixelBufferAttributes)
-        guard writer.canAdd(writerInput) else {
-            throw LapseError.writerFailed("cannot attach video input")
+        let writer = SegmentedMovieWriter(
+            output: outputURL, fileType: .mp4, segmentation: segmentation, resumed: run.resume
+        ) { url in
+            try ImageStacker.makeEndpoint(url: url, policy: encodePolicy)
         }
-        writer.add(writerInput)
-        guard writer.startWriting() else {
-            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not start encoding"))
-        }
-        writer.startSession(atSourceTime: .zero)
-
-        defer {
-            if writer.status == .writing { writer.cancelWriting() }
-        }
+        defer { writer.abandon() }
 
         let srgb = linearLight
         // The per-window primitive — shared with the poster fast path, so a
         // poster's frame and this file's frame are the same render.
         let windowRenderer = try BlendWindowRenderer.gamma(
             core: core, width: width, height: height, policy: encodePolicy, linearLight: srgb)
-        var inputIndex = 0
-        var outputFrames = 0
+        var inputIndex = run.resume?.consumedInputFrames ?? 0
+        var outputFrames = run.resume?.nextOutputFrame ?? 0
 
-        for window in schedule {
+        while outputFrames < schedule.count {
+            try run.checkCancelled()
+            let window = schedule[outputFrames]
             let windowStart = inputIndex
             // Finalize happens inside the renderer's own drain, for the reason
             // the linear path documents: autoreleased Core Image temporaries
             // from the overlay bake otherwise accumulate across the entire
             // render and get the app jetsam-killed on iOS partway through a
             // long shoot.
-            guard let pool = adaptor.pixelBufferPool else {
-                throw LapseError.writerFailed("no pixel buffer pool (writer status \(writer.status.rawValue))")
-            }
+            let pool = try writer.pool(
+                forOutputFrame: outputFrames, firstInputFrame: windowStart, at: run.time(outputFrames))
             // The frame's source position, mid-window — the value the linear
             // path hands its grade and overlay hooks.
             let sourcePosition = ImageStacker.sourcePosition(
@@ -335,39 +326,45 @@ public final class ImageStacker {
                 overlayComposite: overlayComposite)
             inputIndex += window
 
+            // Wall-clock timing where the shoot recorded it, the constant
+            // frame-index layout otherwise.
             try autoreleasepool {
-                while !writerInput.isReadyForMoreMediaData {
-                    if writer.status == .failed {
-                        throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "encoder failed"))
-                    }
-                    usleep(2000)
-                }
-                // Wall-clock timing where the shoot recorded it, the constant
-                // frame-index layout otherwise.
-                let seconds = windowStartTimes.flatMap { $0.indices.contains(outputFrames) ? $0[outputFrames] : nil }
-                    ?? Double(outputFrames) / outputFPS
-                let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
-                guard adaptor.append(appendBuffer, withPresentationTime: time) else {
-                    throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "frame append failed"))
-                }
-                outputFrames += 1
+                try writer.append(appendBuffer, at: run.time(outputFrames))
             }
+            outputFrames += 1
             core.flushTextureCache()
             progress?(min(0.99, Double(inputIndex) / Double(imageURLs.count)))
+            try run.betweenFrames(
+                writer: writer, outputFrames: outputFrames, inputFrames: inputIndex,
+                width: width, height: height, codec: "h264")
         }
 
         guard outputFrames > 0 else { throw LapseError.noInputFrames }
 
-        writerInput.markAsFinished()
-        let finished = DispatchSemaphore(value: 0)
-        writer.finishWriting { finished.signal() }
-        finished.wait()
-        guard writer.status == .completed else {
-            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not finalize file"))
-        }
+        try writer.finish(consumedInputFrames: inputIndex)
         progress?(1.0)
 
         return StackSequenceResult(outputFrames: outputFrames, width: width, height: height)
+    }
+
+    /// A writer for one file of a stills blend, input attached — the
+    /// segmented writer starts it.
+    fileprivate static func makeEndpoint(url: URL, policy: VideoEncodePolicy) throws -> SegmentedMovieWriter.Endpoint {
+        let writer: AVAssetWriter
+        do {
+            writer = try AVAssetWriter(outputURL: url, fileType: policy.fileType)
+        } catch {
+            throw LapseError.writerFailed(error.localizedDescription)
+        }
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: policy.videoSettings)
+        input.expectsMediaDataInRealTime = false
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: input, sourcePixelBufferAttributes: policy.pixelBufferAttributes)
+        guard writer.canAdd(input) else {
+            throw LapseError.writerFailed("cannot attach video input")
+        }
+        writer.add(input)
+        return SegmentedMovieWriter.Endpoint(writer: writer, input: input, adaptor: adaptor)
     }
 
     /// The tone-engine era `stackSequence`: frames arrive as scene-linear
@@ -402,6 +399,8 @@ public final class ImageStacker {
         /// the original untouched. The buffer it returns is re-tagged and
         /// appended in the original's place.
         overlayComposite: ((CVPixelBuffer, Double, CVPixelBufferPool) throws -> CVPixelBuffer?)? = nil,
+        /// A resumable run — same contract as `VideoBlender.blend`'s.
+        segmentation: BlendSegmentation? = nil,
         progress: ((Double) -> Void)? = nil
     ) throws -> StackSequenceResult {
         guard imageURLs.count >= 2 else {
@@ -416,49 +415,48 @@ public final class ImageStacker {
             : windowPresentationTimes(
                 imageURLs: imageURLs, frameTimes: frameTimes, schedule: schedule, outputFPS: outputFPS)
 
+        let requested = profile == .hevcMain10 ? "hevc" : "h264"
+        let run = try StillsRun(
+            engine: "stills-linear-v1",
+            imageURLs: imageURLs, schedule: schedule, windowStartTimes: windowStartTimes,
+            outputFPS: outputFPS, requestedCodec: requested, segmentation: segmentation)
+
         let firstTexture = try decodeLinear(imageURLs[0])
         let width = firstTexture.width
         let height = firstTexture.height
-
-        try? FileManager.default.removeItem(at: outputURL)
-        func makeWriter(_ policy: VideoEncodePolicy) throws
-            -> (AVAssetWriter, AVAssetWriterInput, AVAssetWriterInputPixelBufferAdaptor) {
-            let writer: AVAssetWriter
-            do {
-                writer = try AVAssetWriter(outputURL: outputURL, fileType: policy.fileType)
-            } catch {
-                throw LapseError.writerFailed(error.localizedDescription)
-            }
-            let input = AVAssetWriterInput(mediaType: .video, outputSettings: policy.videoSettings)
-            input.expectsMediaDataInRealTime = false
-            let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-                assetWriterInput: input, sourcePixelBufferAttributes: policy.pixelBufferAttributes)
-            guard writer.canAdd(input) else {
-                throw LapseError.writerFailed("cannot attach video input")
-            }
-            writer.add(input)
-            guard writer.startWriting() else {
-                throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not start encoding"))
-            }
-            return (writer, input, adaptor)
-        }
+        try run.checkSize(width: width, height: height)
 
         var policy = VideoEncodePolicy(profile: profile, width: width, height: height, fps: outputFPS)
-        let writer: AVAssetWriter
-        let writerInput: AVAssetWriterInput
-        let adaptor: AVAssetWriterInputPixelBufferAdaptor
-        do {
-            (writer, writerInput, adaptor) = try makeWriter(policy)
-        } catch where profile == .hevcMain10 {
-            // The compatibility floor: every supported device encodes H.264.
+        // A pass that fell back to H.264 once stays there: every piece of it
+        // must share one codec.
+        if profile == .hevcMain10, run.resume?.codec == "h264" {
             policy = policy.fallbackToH264()
-            try? FileManager.default.removeItem(at: outputURL)
-            (writer, writerInput, adaptor) = try makeWriter(policy)
         }
-        writer.startSession(atSourceTime: .zero)
-        defer {
-            if writer.status == .writing { writer.cancelWriting() }
+        let policyBox = PolicyBox(policy)
+        let writer = SegmentedMovieWriter(
+            output: outputURL, fileType: policy.fileType, segmentation: segmentation, resumed: run.resume
+        ) { url in
+            try ImageStacker.makeEndpoint(url: url, policy: policyBox.policy)
         }
+        defer { writer.abandon() }
+
+        // Open the first piece now, before the renderer: the renderer is
+        // built for the policy, and if the Main10 writer refuses to start the
+        // blend falls back to H.264 here rather than failing.
+        let startFrame = run.resume?.nextOutputFrame ?? 0
+        let startInput = run.resume?.consumedInputFrames ?? 0
+        if startFrame < schedule.count {
+            do {
+                _ = try writer.pool(forOutputFrame: startFrame, firstInputFrame: startInput, at: run.time(startFrame))
+            } catch where policyBox.policy.profile == .hevcMain10 {
+                // The compatibility floor: every supported device encodes H.264.
+                writer.abandon()
+                policyBox.policy = policyBox.policy.fallbackToH264()
+                _ = try writer.pool(forOutputFrame: startFrame, firstInputFrame: startInput, at: run.time(startFrame))
+            }
+        }
+        policy = policyBox.policy
+        let codecName = policy.profile == .hevcMain10 ? "hevc" : "h264"
 
         // The per-window primitive. Extracted rather than duplicated
         // (docs/time-slicing-poster-fast-path.md §3.3): the poster fast path
@@ -466,14 +464,15 @@ public final class ImageStacker {
         // this file's frame minus the codec.
         let windowRenderer = try BlendWindowRenderer.linear(
             core: core, width: width, height: height, policy: policy)
-        var inputIndex = 0
-        var outputFrames = 0
+        var inputIndex = startInput
+        var outputFrames = startFrame
 
-        for window in schedule {
+        while outputFrames < schedule.count {
+            try run.checkCancelled()
+            let window = schedule[outputFrames]
             let windowStart = inputIndex
-            guard let pool = adaptor.pixelBufferPool else {
-                throw LapseError.writerFailed("no pixel buffer pool (writer status \(writer.status.rawValue))")
-            }
+            let pool = try writer.pool(
+                forOutputFrame: outputFrames, firstInputFrame: windowStart, at: run.time(outputFrames))
             // The middle of the window this frame averaged, as a fraction
             // of the whole sequence: the moment the output frame shows.
             let sourcePosition = ImageStacker.sourcePosition(
@@ -498,33 +497,19 @@ public final class ImageStacker {
             inputIndex += window
 
             try autoreleasepool {
-                while !writerInput.isReadyForMoreMediaData {
-                    if writer.status == .failed {
-                        throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "encoder failed"))
-                    }
-                    usleep(2000)
-                }
-                let seconds = windowStartTimes.flatMap { $0.indices.contains(outputFrames) ? $0[outputFrames] : nil }
-                    ?? Double(outputFrames) / outputFPS
-                let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
-                guard adaptor.append(appendBuffer, withPresentationTime: time) else {
-                    throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "frame append failed"))
-                }
-                outputFrames += 1
+                try writer.append(appendBuffer, at: run.time(outputFrames))
             }
+            outputFrames += 1
             core.flushTextureCache()
             progress?(min(0.99, Double(inputIndex) / Double(imageURLs.count)))
+            try run.betweenFrames(
+                writer: writer, outputFrames: outputFrames, inputFrames: inputIndex,
+                width: width, height: height, codec: codecName)
         }
 
         guard outputFrames > 0 else { throw LapseError.noInputFrames }
 
-        writerInput.markAsFinished()
-        let finished = DispatchSemaphore(value: 0)
-        writer.finishWriting { finished.signal() }
-        finished.wait()
-        guard writer.status == .completed else {
-            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not finalize file"))
-        }
+        try writer.finish(consumedInputFrames: inputIndex)
         progress?(1.0)
 
         return StackSequenceResult(outputFrames: outputFrames, width: width, height: height)
@@ -723,6 +708,99 @@ public final class ImageStacker {
 }
 
 // MARK: - One window, rendered
+
+/// The bookkeeping both stills paths share for a resumable run: the pass key,
+/// the checkpoint worth resuming, each output frame's time, and the
+/// between-frames question — close the piece, report, pause.
+private final class StillsRun {
+    let segmentation: BlendSegmentation?
+    let passKey: String?
+    let resume: BlendCheckpoint?
+    private let schedule: [Int]
+    private let windowStartTimes: [Double]?
+    private let outputFPS: Double
+    private let totalInputs: Int
+
+    init(
+        engine: String, imageURLs: [URL], schedule: [Int], windowStartTimes: [Double]?,
+        outputFPS: Double, requestedCodec: String, segmentation: BlendSegmentation?
+    ) throws {
+        self.segmentation = segmentation
+        self.schedule = schedule
+        self.windowStartTimes = windowStartTimes
+        self.outputFPS = outputFPS
+        self.totalInputs = imageURLs.count
+        guard let segmentation else {
+            passKey = nil
+            resume = nil
+            return
+        }
+        // Every still by name, and the first and last by size and date —
+        // enough to notice a changed set without a stat per frame.
+        let identity = [
+            "\(imageURLs.count)",
+            BlendSegments.digest(imageURLs.map(\.lastPathComponent)),
+            imageURLs.first.map(BlendSegments.fileIdentity) ?? "",
+            imageURLs.last.map(BlendSegments.fileIdentity) ?? "",
+        ].joined(separator: ":")
+        let key = BlendSegments.passKey(
+            engine: [
+                engine, identity,
+                "windows:\(BlendSegments.digest(schedule))",
+                "times:\(BlendSegments.digest(windowStartTimes ?? []))",
+                "fps:\(outputFPS)", "codec:\(requestedCodec)",
+            ].joined(separator: "|"),
+            recipeKey: segmentation.recipeKey)
+        passKey = key
+        resume = BlendSegments.validResume(segmentation.resume, passKey: key, directory: segmentation.directory)
+        try BlendSegments.prepare(directory: segmentation.directory, keeping: resume)
+    }
+
+    /// Output frame `k`'s presentation time: the capture clock where the
+    /// shoot recorded it, the constant frame-index layout otherwise.
+    func time(_ frame: Int) -> CMTime {
+        let seconds = windowStartTimes.flatMap { $0.indices.contains(frame) ? $0[frame] : nil }
+            ?? Double(frame) / outputFPS
+        return CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
+    }
+
+    func checkSize(width: Int, height: Int) throws {
+        if let resume, resume.width != width || resume.height != height {
+            throw LapseError.sizeMismatch(
+                expectedWidth: resume.width, expectedHeight: resume.height,
+                actualWidth: width, actualHeight: height)
+        }
+    }
+
+    func checkCancelled() throws {
+        if segmentation?.control.isCancelled == true { throw LapseError.cancelled }
+    }
+
+    /// After output frame `outputFrames - 1`: close the piece when it is due
+    /// or a pause is asked for (never after the last frame — that one is the
+    /// finish), report the checkpoint, and stop for a pause.
+    func betweenFrames(
+        writer: SegmentedMovieWriter, outputFrames: Int, inputFrames: Int,
+        width: Int, height: Int, codec: String
+    ) throws {
+        guard let segmentation, let passKey, outputFrames < schedule.count else { return }
+        let pausing = segmentation.control.isPauseRequested
+        guard pausing || writer.pieceIsDue() else { return }
+        try writer.closePiece(endTime: time(outputFrames), consumedInputFrames: inputFrames)
+        segmentation.onCheckpoint(BlendCheckpoint(
+            passKey: passKey, segments: writer.segments,
+            nextOutputFrame: outputFrames, consumedInputFrames: inputFrames,
+            resumeInputTime: nil, width: width, height: height, codec: codec,
+            fraction: min(0.99, Double(inputFrames) / Double(max(totalInputs, 1)))))
+        if pausing { throw LapseError.paused }
+    }
+}
+
+/// The HEVC→H.264 fallback's policy, read by the writer's piece factory.
+private final class PolicyBox {
+    var policy: VideoEncodePolicy
+    init(_ policy: VideoEncodePolicy) { self.policy = policy }
+}
 
 /// One output frame of a stills blend, rendered on its own: the window's
 /// frames accumulated, the mean finalised at half-float precision, graded

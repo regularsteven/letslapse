@@ -2,6 +2,12 @@ import SwiftUI
 
 /// Stages, not logs: a progress ring over the footage and a four-step
 /// checklist. Raw job folders and log lines live in Settings → Diagnostics.
+///
+/// A blend is a JOB that can pause and resume (2026-09-30, `BlendJobs.swift`;
+/// mirrors `processing{,.pausing,.paused,.resumed}.portrait.svg`): Pause
+/// stops it after the frame being made with everything finished kept; the
+/// paused screen offers Resume, Resume Later (the job waits on its project)
+/// and Cancel.
 struct ProcessingView: View {
     @EnvironmentObject var model: AppModel
     /// The run-rate values — ring fraction, frame counts, ETA, the hero —
@@ -28,22 +34,90 @@ struct ProcessingView: View {
 
             Spacer(minLength: 0)
 
-            VStack(spacing: 8) {
-                Button {
-                    model.cancelProcessing()
-                } label: {
-                    Text("Cancel")
-                }
-                .buttonStyle(LLSecondaryButtonStyle(tint: .red))
-
-                Text("Cancelling discards this blended clip. Your original is safe.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.bottom, 12)
+            controls
+                .padding(.bottom, 12)
         }
         .padding(.horizontal, 16)
         .background(LL.screenBackground.ignoresSafeArea())
+    }
+
+    // MARK: - Controls
+
+    private var isPaused: Bool { model.blendJobHold != nil }
+
+    /// Running: Pause · Cancel. Paused: Resume over Resume Later · Cancel —
+    /// the pair sits exactly where Pause · Cancel sat.
+    @ViewBuilder
+    private var controls: some View {
+        VStack(spacing: 8) {
+            if isPaused {
+                VStack(spacing: 12) {
+                    Button {
+                        model.resumeHeldBlendJob()
+                    } label: {
+                        Label("Resume", systemImage: "play.fill")
+                    }
+                    .buttonStyle(LLPrimaryButtonStyle())
+
+                    HStack(spacing: 12) {
+                        Button("Resume Later") {
+                            // The job stays on its project, where its card
+                            // offers it again.
+                            model.finishFlow(openProject: true)
+                        }
+                        .buttonStyle(LLSecondaryButtonStyle(tint: .primary))
+
+                        Button("Cancel") {
+                            model.cancelProcessing()
+                        }
+                        .buttonStyle(LLSecondaryButtonStyle(tint: .red))
+                    }
+                }
+                caption("Resume Later keeps this blend on the project until you come back to it. Cancel discards it — your original is safe.")
+            } else {
+                HStack(spacing: 12) {
+                    pauseButton
+
+                    Button("Cancel") {
+                        model.cancelProcessing()
+                    }
+                    .buttonStyle(LLSecondaryButtonStyle(tint: .red))
+                }
+                caption(model.isBlendJobRunning
+                    ? "Pause keeps what's blended so far. Cancel discards it — your original is safe."
+                    : "Cancelling discards this blended clip. Your original is safe.")
+            }
+        }
+    }
+
+    /// Pause, and — the moment after — "Pausing…" while the engine closes the
+    /// piece it is writing (usually under a second).
+    private var pauseButton: some View {
+        let pausing = model.blendJobPausing
+        return Button {
+            model.pauseBlendJob()
+        } label: {
+            if pausing {
+                HStack(spacing: 7) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color.secondary)
+                    Text("Pausing…")
+                }
+            } else {
+                Label("Pause", systemImage: "pause.fill")
+            }
+        }
+        .buttonStyle(LLSecondaryButtonStyle(tint: pausing ? Color.secondary.opacity(0.7) : .primary))
+        .disabled(pausing || !model.isBlendJobRunning)
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Preview + ring
@@ -65,7 +139,21 @@ struct ProcessingView: View {
             .overlay(Color.black.opacity(0.55))
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-            LLRigProgress(progress: progressModel.fraction)
+            LLRigProgress(progress: progressModel.fraction, paused: isPaused)
+        }
+        .overlay(alignment: .bottom) {
+            if isPaused {
+                HStack(spacing: 5) {
+                    Image(systemName: "pause.fill")
+                    Text("Paused")
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 5)
+                .background(Color.black.opacity(0.5), in: Capsule())
+                .padding(.bottom, 14)
+            }
         }
     }
 
@@ -89,6 +177,13 @@ struct ProcessingView: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.green)
+                    .frame(width: 18)
+            } else if stage == current, isPaused {
+                // Held, not moving: grey, where amber means running (the
+                // status scheme of 2026-09-26).
+                Image(systemName: "pause.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
                     .frame(width: 18)
             } else if stage == current {
                 Circle()
@@ -133,6 +228,21 @@ struct ProcessingView: View {
     // MARK: - ETA
 
     private func timeRemainingText(at now: Date) -> String {
+        if isPaused {
+            let percent = Int((min(1, max(0, progressModel.fraction)) * 100).rounded())
+            return "Paused at \(percent)% — resuming picks up where it stopped"
+        }
+        if model.blendJobPausing {
+            return "Saving progress…"
+        }
+        if let until = model.blendResumedNoticeUntil, now < until {
+            // The note takes the clip position's place: both do not fit.
+            let rest = progressModel.etaDate.map { eta in
+                let remaining = eta.timeIntervalSince(now)
+                return remaining > 0 ? remainingPhrase(remaining) : "Almost done"
+            } ?? phaseLabel
+            return "Picked up where it left off · \(rest)"
+        }
         if let eta = progressModel.etaDate {
             let remaining = eta.timeIntervalSince(now)
             let phrase = remaining > 0 ? remainingPhrase(remaining) : "Almost done"

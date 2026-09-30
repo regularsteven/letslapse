@@ -32,6 +32,10 @@ public enum LapseError: Error, LocalizedError {
     case imageEncodeFailed(String)
     case timeSliceInvalid(String)
     case cancelled
+    /// A resumable blend stopped at a person's (or the app's) request with
+    /// every finished frame kept — see `BlendRunControl.requestPause()`. Not
+    /// a failure: the checkpoint it last reported picks the pass up again.
+    case paused
 
     public var errorDescription: String? {
         switch self {
@@ -61,6 +65,8 @@ public enum LapseError: Error, LocalizedError {
             return "Time slicing refused: \(why)"
         case .cancelled:
             return "The blend was cancelled."
+        case .paused:
+            return "The blend was paused."
         }
     }
 }

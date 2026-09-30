@@ -16,6 +16,10 @@ struct LLRigProgress: View {
     /// legible well before the mark stops reading — 120 is the floor that keeps
     /// the digits comfortable, and is the size the design uses in-app.
     var size: CGFloat = 120
+    /// A paused job (design 2026-09-30, processing.paused): the mark holds
+    /// still with no sweep — nothing is running, and a sweep would say it
+    /// was — and the readout keeps the job's real percentage, dimmed.
+    var paused: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var start = Date()
@@ -41,7 +45,9 @@ struct LLRigProgress: View {
                 .frame(width: size * 1.56, height: size * 1.56)
 
             ZStack {
-                if reduceMotion {
+                if paused {
+                    LLRigMark(build: 1, time: Self.stillTime, style: .gauge, sweep: false)
+                } else if reduceMotion {
                     LLRigMark(build: 1, time: Self.stillTime, style: .gauge, sweep: true)
                 } else {
                     TimelineView(.animation) { context in
@@ -54,6 +60,7 @@ struct LLRigProgress: View {
                 }
 
                 readout
+                    .opacity(paused ? 0.5 : 1)
                     .position(
                         x: size * LLRigMark.lensUnitCentre.x,
                         y: size * LLRigMark.lensUnitCentre.y)
@@ -62,7 +69,7 @@ struct LLRigProgress: View {
         }
         .frame(width: size * 1.56, height: size * 1.56)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Rendering")
+        .accessibilityLabel(paused ? "Paused" : "Rendering")
         .accessibilityValue("\(percent) percent")
         .accessibilityAddTraits(.updatesFrequently)
         .onAppear { start = Date() }
