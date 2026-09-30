@@ -939,6 +939,7 @@ Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, 
 | `LL_PUSH` = *SettingsDestination* | push a Settings sub-screen (`largeOriginals`, `performance`, `diagnostics`, `blendLearning`, `manageResolutions`) |
 | `LL_SPEED` = *N* | force constant speed N× |
 | `LL_AUTO` = `process` | auto-start processing 1.5 s after configure |
+| `LL_LEVEL` = *deg*[`@`*turns*] \| `sweep` \| `flat` | with `LL_GRID=level`: freeze the level's reading (`@turns` holds the phone that many quarter turns from the chrome — a rotation lock), swing it ±6° to prove it live, or stage no reading |
 | `LL_CAPTURE` = `1` | auto-open the capture screen |
 | `LL_LAUNCH` = `1` | force the cold-launch animation back on (to capture the launch screen itself) |
 | `LL_ADJUST` = `latest` \| `demo` | open the newest video capture on the warp timeline; `demo` wraps it in a fabricated two-moment 8:16 sequence so the timeline shows structure without a real burst shoot (screenshots only — don't Create from it) |

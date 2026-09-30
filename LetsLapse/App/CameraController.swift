@@ -11145,13 +11145,22 @@ func currentCaptureOrientation() -> AVCaptureVideoOrientation {
 }
 
 /// The foreground scene's interface orientation — which way the chrome is
-/// drawn, rotation lock included; portrait when no scene is active. The
-/// shutter cluster pins itself to the home-indicator edge with it.
+/// drawn, rotation lock included; portrait only when no scene is in front at
+/// all. The shutter cluster pins itself to the home-indicator edge with it,
+/// and the level draws its reference by it.
+///
+/// An *inactive* foreground scene counts: it is still drawn in its own
+/// orientation. The scene is inactive while the app launches (the capture
+/// screen can open itself before activation), under Control Center or a
+/// notification pulled over it, and behind a system alert; answering
+/// portrait there put a landscape launch's orientation state, its shutter
+/// cluster's edge and the level a quarter turn wrong until something else
+/// happened to ask again.
 func currentInterfaceOrientation() -> UIInterfaceOrientation {
-    UIApplication.shared.connectedScenes
-        .compactMap { $0 as? UIWindowScene }
-        .first { $0.activationState == .foregroundActive }?
-        .interfaceOrientation ?? .portrait
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let scene = scenes.first { $0.activationState == .foregroundActive }
+        ?? scenes.first { $0.activationState == .foregroundInactive }
+    return scene?.interfaceOrientation ?? .portrait
 }
 
 /// Map an interface orientation to a capture orientation. Straight case-for-case

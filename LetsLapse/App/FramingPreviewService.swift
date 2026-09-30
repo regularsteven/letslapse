@@ -3,6 +3,7 @@ import AVFoundation
 import CoreImage
 import CoreMotion
 import Foundation
+import LetsLapseKit
 import UIKit
 
 /// Serves the Watch a look through the lens, and how level the phone is.
@@ -183,8 +184,8 @@ final class FramingFrameTap: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
 /// The angle has to come from here rather than the wrist: the watch's own
 /// attitude describes an arm, and an arm's tilt has nothing to do with the
 /// horizon in the frame. This reads device motion only while someone is
-/// actually looking at a framing preview, so it costs nothing the rest of the
-/// time.
+/// actually looking at a level — the remote's framing preview, or the capture
+/// screen's Grid+Level — so it costs nothing the rest of the time.
 @MainActor
 final class LevelSensor {
     static let shared = LevelSensor()
@@ -194,6 +195,9 @@ final class LevelSensor {
     /// Stops after this long without a read, so a remote that walks away
     /// doesn't leave the accelerometer running.
     private let idleTimeout: TimeInterval = 6
+    /// Twenty readings a second: the on-screen level redraws at this rate,
+    /// and at the old ten it trailed a turning hand visibly.
+    static let updateInterval: TimeInterval = 1.0 / 20
 
     private init() {}
 
@@ -201,7 +205,64 @@ final class LevelSensor {
     /// `LL_LEVEL=<degrees>` freezes `rollDegrees` for a simulator screenshot
     /// — the simulator has no accelerometer to physically tilt.
     static var debugOverrideDegrees: Double?
+    /// `LL_LEVEL=<degrees>@<hold quarter turns>` stages a hold the chrome is
+    /// not drawn in (the rotation lock's case); nil means the chrome follows.
+    static var debugOverrideHoldQuarterTurns: Int?
+    /// `LL_LEVEL=sweep` swings the reading ±6° every four seconds, so a
+    /// simulator can prove the level is live; `LL_LEVEL=flat` stages the
+    /// no-reading state.
+    enum DebugMode { case sweep, flat }
+    static var debugMode: DebugMode?
+    private static let debugEpoch = Date()
     #endif
+
+    /// The capture screen's level: the same gravity as `rollDegrees`, turned
+    /// into where the reference and the horizon lie on a screen drawn at
+    /// `interfaceQuarterTurns` (`HorizonLevel`). Starts the sensor on first
+    /// ask and returns nil until there is a reading — and while the phone
+    /// lies flat — so the level can show that it has none instead of a green
+    /// "0°", the one wrong answer that looks right.
+    ///
+    /// **Ask it every frame the level draws.** The first level read this once
+    /// inside a `GeometryReader` closure that captured nothing, which SwiftUI
+    /// never re-ran: it drew the pre-sensor nil as a level 0° for good, and
+    /// with no further reads the idle timeout switched the sensor off
+    /// (verified in a scratch app 2026-09-30, iOS 18.6 and 27).
+    func level(interfaceQuarterTurns: Int) -> HorizonLevel? {
+        #if DEBUG
+        switch Self.debugMode {
+        case .flat:
+            return nil
+        case .sweep:
+            let seconds = Date().timeIntervalSince(Self.debugEpoch)
+            return HorizonLevel(
+                offLevelDegrees: 6 * sin(seconds * .pi / 2),
+                holdQuarterTurns: QuarterTurns.normalized(interfaceQuarterTurns),
+                referenceDegrees: 0
+            )
+        case nil:
+            break
+        }
+        if let override = Self.debugOverrideDegrees {
+            let hold = Self.debugOverrideHoldQuarterTurns ?? interfaceQuarterTurns
+            return HorizonLevel(
+                offLevelDegrees: override,
+                holdQuarterTurns: QuarterTurns.normalized(hold),
+                referenceDegrees: HorizonLevel.referenceDegrees(
+                    holdQuarterTurns: hold,
+                    interfaceQuarterTurns: interfaceQuarterTurns
+                )
+            )
+        }
+        #endif
+        start()
+        guard let gravity = motion.deviceMotion?.gravity else { return nil }
+        return HorizonLevel.reading(
+            gravityX: gravity.x,
+            gravityY: gravity.y,
+            interfaceQuarterTurns: interfaceQuarterTurns
+        )
+    }
 
     /// Signed degrees of camera roll: negative when the phone is tilted
     /// anticlockwise. Starts the sensor on first ask and returns nil until it
@@ -230,7 +291,7 @@ final class LevelSensor {
     private func start() {
         startedAt = Date()
         guard !motion.isDeviceMotionActive, motion.isDeviceMotionAvailable else { return }
-        motion.deviceMotionUpdateInterval = 1.0 / 10
+        motion.deviceMotionUpdateInterval = Self.updateInterval
         motion.startDeviceMotionUpdates()
         Task { @MainActor [weak self] in
             while !Task.isCancelled {

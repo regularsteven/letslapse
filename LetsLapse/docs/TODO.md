@@ -11,6 +11,21 @@ live inline.
 
 ## Open
 
+### Landscape "missing progress/burst bars" (raised with the horizon level) — needs the mode
+
+Raised with the 2026-09-30 horizon-level report. The level itself is fixed
+(`LevelIndicatorBar`, Kit `HorizonLevel`) and passed Steven's 18 Pro test the
+same day. The missing bars were not found: in the current code landscape
+draws the burst pill in Photo and Interval and the recording readout in Video
+(`landscapeLayout` → `burstStatusPill`, `landscapeIntervalRow`,
+`landscapeRecordingReadout`) — the job needs the mode and a screenshot. One
+orientation weakness that may be behind "unsettled when launching in
+landscape" was fixed with the level: `currentInterfaceOrientation()` answered
+portrait whenever the scene was not `.foregroundActive` (launch, Control
+Center, an alert), so a landscape launch's orientation state and shutter
+cluster started a quarter turn wrong until something asked again —
+device-unverified.
+
 ### PicPlace quiet sync and the "can't reach" gate — built 2026-09-29, device check owed
 
 After the Mac ran hot and the Project Syncing sheet flashed on 2026-09-28 (a

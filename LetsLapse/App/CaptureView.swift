@@ -3374,7 +3374,12 @@ struct CaptureView: View {
     /// `LL_GRID=grid|level` stages Photo's grid/level cycle directly, and
     /// `LL_LEVEL=<degrees>` (paired with `LL_GRID=level`) freezes the
     /// horizon reading itself — the simulator has no accelerometer to
-    /// physically tilt. Pair with `LL_CAPTURE=1 LL_MODE=photo`.
+    /// physically tilt. `LL_LEVEL=<degrees>@<quarter turns>` holds the phone
+    /// that far clockwise from upright while the chrome stays as drawn (a
+    /// rotation lock: `3@1` is portrait chrome, phone on its side);
+    /// `LL_LEVEL=sweep` swings the reading ±6° so two screenshots a second
+    /// apart prove the level is live; `LL_LEVEL=flat` stages no reading.
+    /// Pair with `LL_CAPTURE=1 LL_MODE=photo`.
     private func applyGridPreviewHook() {
         switch ProcessInfo.processInfo.environment["LL_GRID"] {
         case "grid": gridOverlay = .grid
@@ -3382,8 +3387,16 @@ struct CaptureView: View {
         default: break
         }
         #if os(iOS)
-        if let raw = ProcessInfo.processInfo.environment["LL_LEVEL"], let degrees = Double(raw) {
-            LevelSensor.debugOverrideDegrees = degrees
+        guard let raw = ProcessInfo.processInfo.environment["LL_LEVEL"] else { return }
+        switch raw {
+        case "sweep": LevelSensor.debugMode = .sweep
+        case "flat": LevelSensor.debugMode = .flat
+        default:
+            let parts = raw.split(separator: "@", maxSplits: 1)
+            if let degrees = parts.first.flatMap({ Double($0) }) {
+                LevelSensor.debugOverrideDegrees = degrees
+                LevelSensor.debugOverrideHoldQuarterTurns = parts.count > 1 ? Int(parts[1]) : nil
+            }
         }
         #endif
     }
@@ -6563,37 +6576,25 @@ private struct RuleOfThirdsGrid: View {
 
 /// Photo mode's Grid+Level: a horizon-level indicator drawn at the
 /// viewfinder's centre, over the same fitted frame `RuleOfThirdsGrid` uses.
-/// Reads `LevelSensor.shared.rollDegrees`, which is normalised against the
-/// nearest square hold rather than portrait specifically — so this same bar
-/// and the same colour logic are correct in both portrait and landscape
-/// shooting with no orientation-specific code here at all. iOS/iPadOS only:
-/// macOS has no CoreMotion, so `GridOverlayState.levelAvailable` keeps this
-/// view from ever mounting there.
+/// iOS/iPadOS only: macOS has no CoreMotion, so
+/// `GridOverlayState.levelAvailable` keeps this view from ever mounting there.
+///
+/// **The reading is taken in the timeline's own closure and handed down as a
+/// value.** Until 2026-09-30 it was read inside a `GeometryReader` closure
+/// that captured nothing, so SwiftUI saw an unchanged view on every tick and
+/// never ran it again: the level drew its first answer — nil, before the
+/// sensor had a sample, shown as a green "0°" — and froze there, and with no
+/// further reads the sensor's idle timeout switched Core Motion off. It only
+/// moved when a rotation rebuilt the layout, which read as "the level does not
+/// update when the screen turns". Now every tick asks, and `LevelIndicatorBar`
+/// redraws because its input changed.
 private struct LevelIndicatorOverlay: View {
     var body: some View {
         #if os(iOS)
-        TimelineView(.periodic(from: .now, by: 0.1)) { _ in
-            GeometryReader { geometry in
-                let roll = LevelSensor.shared.rollDegrees ?? 0
-                let tint = Self.tint(forDegreesOffLevel: abs(roll))
-                let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                ZStack {
-                    Capsule().fill(tint).frame(width: 38, height: 2).position(x: center.x - 73, y: center.y)
-                    Capsule().fill(tint).frame(width: 38, height: 2).position(x: center.x + 73, y: center.y)
-                    // Rotates with the phone; reads level when it lines up
-                    // with the two fixed reference ticks either side.
-                    Capsule()
-                        .fill(tint)
-                        .frame(width: 88, height: 2)
-                        .rotationEffect(.degrees(-roll))
-                        .position(center)
-                    Text(Self.rollLabel(roll))
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(tint)
-                        .position(x: center.x, y: center.y + 20)
-                }
-                .animation(.linear(duration: 0.1), value: roll)
-            }
+        TimelineView(.periodic(from: .now, by: LevelSensor.updateInterval)) { _ in
+            LevelIndicatorBar(level: LevelSensor.shared.level(
+                interfaceQuarterTurns: Self.quarterTurns(currentInterfaceOrientation())
+            ))
         }
         .allowsHitTesting(false)
         #else
@@ -6602,6 +6603,62 @@ private struct LevelIndicatorOverlay: View {
     }
 
     #if os(iOS)
+    /// The clockwise quarter turns of the phone at which `orientation` is
+    /// drawn upright — `.landscapeLeft` is the phone turned clockwise onto its
+    /// side (see `HorizonLevel`). Asked live on every tick rather than taken
+    /// from the screen's `orientation` state, so the level is right from the
+    /// first frame of a landscape launch and through a turn.
+    private static func quarterTurns(_ orientation: UIInterfaceOrientation) -> Int {
+        switch orientation {
+        case .landscapeLeft: return 1
+        case .portraitUpsideDown: return 2
+        case .landscapeRight: return 3
+        default: return 0
+        }
+    }
+    #endif
+}
+
+#if os(iOS)
+/// The level itself: two fixed reference ticks either side of a bar that
+/// turns with the horizon, and the reading under them. The whole assembly
+/// turns to the picture's horizontal axis (`HorizonLevel.referenceDegrees`) —
+/// no turn at all while the chrome follows the phone, a quarter turn under a
+/// rotation lock with the phone on its side, so the reference is always the
+/// axis the photo will be level against. With no reading (no sample yet, or
+/// the phone lying flat) the ticks stay, dimmed, over "—": never a bar that
+/// claims level.
+private struct LevelIndicatorBar: View {
+    let level: HorizonLevel?
+
+    var body: some View {
+        // No GeometryReader: the assembly is centred by the flexible frame,
+        // and every read of `level` happens here in `body`, which re-runs
+        // whenever the value handed in changes.
+        let tint = level.map { Self.tint(forDegreesOffLevel: abs($0.offLevelDegrees)) }
+            ?? Color.white.opacity(0.45)
+        ZStack {
+            Capsule().fill(tint).frame(width: 38, height: 2).offset(x: -73)
+            Capsule().fill(tint).frame(width: 38, height: 2).offset(x: 73)
+            if let level {
+                // Turns with the horizon; reads level when it lines up with
+                // the two fixed reference ticks either side.
+                Capsule()
+                    .fill(tint)
+                    .frame(width: 88, height: 2)
+                    .rotationEffect(.degrees(-level.offLevelDegrees))
+                    .animation(.linear(duration: LevelSensor.updateInterval), value: level.offLevelDegrees)
+            }
+            Text(level.map { Self.rollLabel($0.offLevelDegrees) } ?? "—")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(tint)
+                .offset(y: 20)
+        }
+        .rotationEffect(.degrees(level?.referenceDegrees ?? 0))
+        .animation(.easeInOut(duration: 0.25), value: level?.referenceDegrees)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     /// Green within the handoff's own ±1° snap threshold, warming through
     /// amber and orange to red the further off level the phone is. A
     /// starting proposal (see `DesignSystem.swift`), not yet measured
@@ -6618,8 +6675,8 @@ private struct LevelIndicatorOverlay: View {
     private static func rollLabel(_ degrees: Double) -> String {
         abs(degrees) < 0.05 ? "0°" : String(format: "%+.1f°", degrees)
     }
-    #endif
 }
+#endif
 
 /// Chip presses repaint instantly: the default plain style's animated
 /// pressed fade left the amber selection under the measurement mask for
