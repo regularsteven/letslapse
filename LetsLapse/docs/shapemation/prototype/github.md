@@ -22,5 +22,5 @@ date: 2026-09-20T16:20:00+02:00
 | Output (frame) · scrub | LetsLapse/docs/design/macOS/shapemation.builder.output.frame.svg |
 | Done card | LetsLapse/docs/design/macOS/shapemation.builder.done.svg |
 | Sequence board · model | LetsLapse/docs/shapemation/prototype-brief.md, LetsLapse/docs/shapemation/output-frame.md |
-| Kit data | LetsLapse/docs/design/kit/compositions/manifest.json, LetsLapse/docs/design/kit/README.md |
+| Kit data | letslapse-generator: kit/compositions/manifest.json, kit/README.md (was LetsLapse/docs/design/kit/; see LetsLapse/docs/design/generator.md) |
 | Tokens | LetsLapse/docs/design/README.md |

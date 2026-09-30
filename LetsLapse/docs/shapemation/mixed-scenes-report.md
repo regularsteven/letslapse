@@ -11,10 +11,10 @@ and the clips are in `$S/clips/` (not in the repo — eight mp4s, 24 MB):
 
 ```
 cd Kit && swift build -c release --product lapse && cd ..
-tools/.venv/bin/python tools/shapesynth/shapesynth.py recipes --mixed 40 --seed 19          # ONCE, already done: the kit holds mixed.random.01…40 and refuses a second append (exit 1)
+tools/.venv/bin/python tools/shapesynth/shapesynth.py recipes --mixed 40 --seed 19          # ONCE, already done: the kit holds mixed.random.01…40 (since 2026-09-30 drawn in letslapse-generator: llgen generate --preset legacy-mixed)
 tools/.venv/bin/python tools/shapesynth/shapesynth.py selftest                              # selftest: 1489 passed, 0 failed
-tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit docs/design/kit --out $S/scenes --sequence all --pool mixed-all --scale 2
-tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit docs/design/kit --out $S/scenes --sequence all --pool mixed-perturbed --scale 2 --sigma-centre 0.05 --sigma-rotation 2 --seed 7
+tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit ../../letslapse-generator/kit --out $S/scenes --sequence all --pool mixed-all --scale 2
+tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit ../../letslapse-generator/kit --out $S/scenes --sequence all --pool mixed-perturbed --scale 2 --sigma-centre 0.05 --sigma-rotation 2 --seed 7
 Kit/.build/release/lapse shapemation stage $S/scenes --out $S/projects --project                                                  # 200 projects, every one `rectangle`
 ls -d $S/projects/mixed-all/*                                                            > $S/mixed-all/selected.txt        # 100
 tools/.venv/bin/python tools/shapesynth/shapesynth.py select $S/projects/mixed-all --where tram=front   > $S/mixed-front/selected.txt     # 25

@@ -12,7 +12,8 @@ import CoreGraphics
 final class ShapemationLeastCropTests: XCTestCase {
     typealias LC = ShapemationLeastCrop
 
-    /// `docs/design/kit/compositions/manifest.json`: id, frame, the tram face's bbox.
+    /// The scene kit's `compositions/manifest.json` (letslapse-generator's `kit/`,
+    /// `docs/design/generator.md`; `docs/design/kit/` until 2026-09-30): id, frame, the tram face's bbox.
     private static let badApple: [(String, Double, Double, Double, Double, Double, Double)] = [
         ("mixed.random.01", 1200, 1200, 262.2, 724.7, 51.5, 73.9),
         ("mixed.random.02", 1200, 1200, 282.8, 711.1, 51.6, 74),

@@ -3,7 +3,7 @@
 *2026-09-20, evening. Reviewed: the Claude Design bundle `Shape-mation interaction
 prototype-handoff.zip` (Steven's Downloads) — `Shape-mation Prototype.dc.html`,
 `ShapemationSteps.dc.html`, `model.js`, `support.js`, the kit's 100 compositions
-(manifest identical to `../design/kit/compositions/`). Built from
+(manifest identical to the kit's `compositions/` — `../design/kit/` then, the letslapse-generator repository's `kit/` since 2026-09-30). Built from
 [`prototype-brief.md`](prototype-brief.md). Nothing was implemented; the prototype
 was read, not run in a browser. This document adds what the hand-off marks OPEN
 "for the developer": `model.js`, unchanged, run over the real tram library

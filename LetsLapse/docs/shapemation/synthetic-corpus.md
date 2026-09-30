@@ -4,7 +4,8 @@ The contract for the brief's §8 and §9 step 1 (`brief.md`), decided 2026-09-19
 with Steven: a Swift `lapse shapemation` subcommand in the Kit does the
 register writing, the plan and the score (one code path — the same
 `DetectedShape` factories and the same `ShapemationPlan.make` the app uses);
-the scenes are Steven's design kit (`docs/design/kit`: `build.js` composes
+the scenes are Steven's design kit (`docs/design/kit` then; since 2026-09-30 the
+letslapse-generator repository's `kit/`, `../design/generator.md`: `build.js` composes
 `recipes.json` into `compositions/*.svg` + `manifest.json`, the Prague T3 tram
 on a one-point-perspective road with the face polygon, margins and 3×3 cells
 already on every root — b46fc48); Python in `tools/.venv` rasterises them,
@@ -75,8 +76,8 @@ either way) and:
 - `sequence.approach` ∈ [0, 1] is where the scene sits in its run — the
   subject's true scale grows monotonically with it — so a size sort or an
   alignment chain can be scored against the true order (WP3).
-- The scenes are the design kit's compositions (`docs/design/kit`,
-  `tools/shapesynth/README.md`; since 2026-09-19): `subject.scene` and
+- The scenes are the design kit's compositions (letslapse-generator's `kit/`,
+  `../design/generator.md`, `tools/shapesynth/README.md`; since 2026-09-19): `subject.scene` and
   `subject.sky` name the kit scene and sky, `subject.part` is `tram-face`
   and `subject.viewpoint` the kit's tram view — one of `front`, `left`,
   `right`, `high`, `low`; the generator refuses any other. `subject.family`
@@ -294,7 +295,7 @@ posed tram set: 5.7 px median, 0 with `--family rectangle`).
 
 ## 6. The sweep and the break point (Python)
 
-`tools/shapesynth/shapesynth.py sweep --axis scale|centre|rotation|joint --values 0,0.02,0.05,0.1,0.2 [--kit docs/design/kit] [--sequence city.clear.approach|<prefix>|all] --seed 1 --lapse Kit/.build/release/lapse`
+`tools/shapesynth/shapesynth.py sweep --axis scale|centre|rotation|joint --values 0,0.02,0.05,0.1,0.2 [--kit <letslapse-generator>/kit] [--sequence city.clear.approach|<prefix>|all] --seed 1 --lapse Kit/.build/release/lapse`
 
 generates one set per value from the kit sequence named (`--sequence`, the
 default `city.clear.approach`; a prefix such as `single` or `all` for
@@ -352,7 +353,7 @@ Kit/Sources/lapse/ShapemationCommand.swift     stage · plan · score · pack ·
 Kit/Sources/LetsLapseKit/Shapes/ShapemationStaging.swift   one scene → one project folder (+ the document with --project)
 Kit/Sources/LetsLapseKit/Library/StandaloneProject.swift   the project.json / assets.ndjson writer shared with import-lightroom
 Kit/Tests/LetsLapseKitTests/ShapemationPlanScoreTests.swift · ShapemationStageTests.swift
-docs/design/kit/                                the generator: build.js composes recipes.json → compositions/*.svg + manifest.json
+letslapse-generator/kit/                        the generator (its own repository since 2026-09-30, docs/design/generator.md): recipes.json → compositions/*.svg + manifest.json
 tools/shapesynth/                               Python: kit.py (reads the kit, writes the manifests), rasterise.py,
                                                 perturb.py, shapesynth.py (generate · sweep · selftest), README.md
 tools/shapesynth/work/                          git-ignored outputs

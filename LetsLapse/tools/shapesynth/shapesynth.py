@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """Kit compositions → synthetic scenes + dial sweeps for Shape-mation (docs/shapemation/synthetic-corpus.md).
 
-The scene kit at docs/design/kit IS the generator (`node docs/design/kit/build.js`
-composes recipes.json into compositions/*.svg + manifest.json). This tool
+The scene kit IS the generator — since 2026-09-30 its own repository,
+letslapse-generator (docs/design/generator.md), whose kit/ holds recipes.json,
+compositions/*.svg and manifest.json (`llgen build-kit` rebuilds them). This tool
 rasterises those compositions, writes the scene manifests of contract §2 with
 the kit's face bbox as the truth quad, perturbs them with the three dials and
 runs the sweeps.
 
 Usage (from LetsLapse/):
-  tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit docs/design/kit --out <dir> \
+  tools/.venv/bin/python tools/shapesynth/shapesynth.py generate [--kit <generator>/kit] --out <dir> \
         [--sequence city.clear.approach|single|all] [--scale 2] [--seed S] \
         [--sigma-scale σ] [--sigma-centre σ] [--sigma-rotation σ] [--orientation 1|6] [--set-suffix <s>] [--pool <set>]
   tools/.venv/bin/python tools/shapesynth/shapesynth.py select <scenes-or-projects-dir> [--where tram=front] [--where cell=centre] …
-  tools/.venv/bin/python tools/shapesynth/shapesynth.py recipes --mixed 40 --seed 19 [--kit docs/design/kit] [--dry-run]
-  tools/.venv/bin/python tools/shapesynth/shapesynth.py sweep --kit docs/design/kit --axis scale|centre|rotation|joint \
+  tools/.venv/bin/python tools/shapesynth/shapesynth.py sweep [--kit <generator>/kit] --axis scale|centre|rotation|joint \
         --values 0,0.02,0.05,0.1,0.2 [--sequence city.clear.approach] --seed 1 --lapse Kit/.build/release/lapse [--out work/<name>]
-  tools/.venv/bin/python tools/shapesynth/shapesynth.py selftest --kit docs/design/kit    # generator only, no lapse needed
+  tools/.venv/bin/python tools/shapesynth/shapesynth.py selftest [--kit <generator>/kit]  # generator only, no lapse needed
+
+--kit defaults to $LETSLAPSE_GENERATOR/kit, else ../letslapse-generator/kit beside
+this repository.
 
 `generate` writes <out>/<set>/<id>/frame.jpg + scene.json (+ scene.svg, the
 composition) per contract §2; <set> is the kit sequence (the id minus its
@@ -24,8 +27,9 @@ selected composition ranked by face share, smallest first (the mixed-scene
 corpus: the object constant, everything else changing). `select` prints the
 folders under a scenes or projects dir whose scene.json matches --where
 clauses (tram, scene, sky, cell, aspect, set, id), in set + rank order, so a
-variant of a pool is a shell substitution. `recipes` appends the seeded
-`mixed.random.*` batch to the kit (recipes_mixed.py). `sweep` generates one set per value,
+variant of a pool is a shell substitution. The seeded `mixed.random.*` batch
+is drawn by the generator (`llgen generate --preset legacy-mixed`; `recipes`
+here only says so). `sweep` generates one set per value,
 stages and scores them with the Kit's `lapse shapemation` (with the
 sequence's family unless --score-flags names one) and writes results.json +
 report.md with the per-value table and the BREAK POINT lines of §6. Its
@@ -57,7 +61,10 @@ import perturb  # noqa: E402
 import rasterise  # noqa: E402
 
 DEFAULT_WORK = os.path.join(HERE, "work")
-DEFAULT_KIT = os.path.normpath(os.path.join(HERE, "..", "..", "docs", "design", "kit"))
+# The kit lives in the letslapse-generator repository (docs/design/generator.md):
+# $LETSLAPSE_GENERATOR, else a checkout beside this repository.
+DEFAULT_KIT = os.path.normpath(os.path.join(
+    os.environ.get("LETSLAPSE_GENERATOR") or os.path.join(HERE, "..", "..", "..", "..", "letslapse-generator"), "kit"))
 DEFAULT_LAPSE = os.path.normpath(os.path.join(HERE, "..", "..", "Kit", ".build", "release", "lapse"))
 DEFAULT_SEQUENCE = "city.clear.approach"
 DEFAULT_SCALE = 2.0          # kit px → raster px: 1800×1200 → 3600×2400, 1200×1800 → 2400×3600
@@ -219,11 +226,10 @@ def cmd_select(args) -> int:
 
 
 def cmd_recipes(args) -> int:
-    import recipes_mixed
-    argv = ["--kit", args.kit, "--count", str(args.mixed), "--seed", str(args.seed)]
-    if args.dry_run:
-        argv.append("--dry-run")
-    return recipes_mixed.main(argv)
+    # recipes_mixed.py moved into letslapse-generator on 2026-09-30, with the kit it writes to
+    print(f"recipes moved to letslapse-generator: from that checkout, `llgen generate --preset legacy-mixed "
+          f"--seed {args.seed} --count {args.mixed} --out <dir>` draws the batch (docs/design/generator.md)", file=sys.stderr)
+    return 2
 
 
 # ---------------------------------------------------------------------------
@@ -888,7 +894,7 @@ def main(argv=None) -> int:
                    help=f"a filter, repeatable (all must hold; comma = any of); keys: {', '.join(SELECT_KEYS)}")
     p.set_defaults(fn=cmd_select)
 
-    p = sub.add_parser("recipes", help="append a seeded `mixed.random.<nn>` batch to the kit's recipes.json (recipes_mixed.py)")
+    p = sub.add_parser("recipes", help="moved: `llgen generate --preset legacy-mixed` in letslapse-generator")
     p.add_argument("--kit", default=DEFAULT_KIT)
     p.add_argument("--mixed", type=int, default=40, metavar="N", help="how many recipes (default 40)")
     p.add_argument("--seed", type=int, default=19)

@@ -5,7 +5,11 @@ import path from 'node:path';
 
 const HOME = process.env.HOME;
 const ROOT = path.join(HOME, 'Library/Developer/LetsLapseRun/libraries/tram-root/Projects');
-const KIT = '/Users/stevenwright/Documents/dev/letslapse/LetsLapse/docs/design/kit/compositions/manifest.json';
+// The scene kit lives in the letslapse-generator repository (docs/design/generator.md): $LETSLAPSE_GENERATOR,
+// else a checkout beside this repository.
+const KIT = process.env.LETSLAPSE_GENERATOR
+  ? path.join(process.env.LETSLAPSE_GENERATOR, 'kit/compositions/manifest.json')
+  : new URL('../../../../../letslapse-generator/kit/compositions/manifest.json', import.meta.url).pathname;
 const OUT = process.argv[2] || '.';
 
 const pct = v => (Math.round(v * 1000) / 10).toFixed(1) + ' %';

@@ -8,7 +8,8 @@ Everything from "first synthetic run" down was measured on a **placeholder
 tram** the first agent drew itself (`tools/shapesynth/parts/subjects.py`: a
 1.0 × 0.65 body rectangle with a pantograph, flat sky and ground, one affine
 placement) because it never read Steven's scene kit at `docs/design/kit`
-(b46fc48). That kit — `build.js` composing `recipes.json` into 60
+(b46fc48; since 2026-09-30 the letslapse-generator repository's `kit/`,
+`../design/generator.md`). That kit — `build.js` composing `recipes.json` into 60
 compositions with the Prague T3 tram at five views, six skies, five scenes,
 and the face polygon, bbox, margins and 3×3 cells on every root — is the
 generator from now on; the placeholder parts and `compose.py` are deleted,
@@ -20,8 +21,8 @@ residual whatever is drawn), but they are not the kit's numbers. These are:
 ```
 cd Kit && swift build -c release --product lapse && cd ..                                   # 38 s
 tools/.venv/bin/python tools/shapesynth/shapesynth.py selftest                               # 916 passed, 0 failed
-tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit docs/design/kit --out tools/shapesynth/work/kit --sequence all --scale 2
-tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit docs/design/kit --out tools/shapesynth/work/kit --sequence city.clear.approach --scale 2 --sigma-centre 0.05 --seed 5 --set-suffix=-c05
+tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit ../../letslapse-generator/kit --out tools/shapesynth/work/kit --sequence all --scale 2
+tools/.venv/bin/python tools/shapesynth/shapesynth.py generate --kit ../../letslapse-generator/kit --out tools/shapesynth/work/kit --sequence city.clear.approach --scale 2 --sigma-centre 0.05 --seed 5 --set-suffix=-c05
 Kit/.build/release/lapse shapemation stage tools/shapesynth/work/kit --out tools/shapesynth/work/kit-projects --project      # 72 scenes, every one `rectangle`
 Kit/.build/release/lapse shapemation score tools/shapesynth/work/kit-projects/<set>/* --family rectangle
 ```

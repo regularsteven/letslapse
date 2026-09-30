@@ -6,7 +6,9 @@ the Notes pages — Hand-off, Assumptions, States, Decisions, Departures),
 `ShapemationSteps.dc.html` (every step, including the Sequence board),
 `model.js` (brief §4 as one computation) and `support.js` (the dc-runtime;
 it loads React and Babel from unpkg, so it needs a network). `kit` is a
-symlink to `../../design/kit` — the prototype reads
+symlink to `../../../../../letslapse-generator/kit` — the scene kit, which moved to
+its own repository on 2026-09-30 (`../../design/generator.md`); check it out
+beside this one. The prototype reads
 `kit/compositions/manifest.json` and the SVGs by that path. `github.md` and
 `HANDOFF-README.md` are the export's own notes (its `branch: main` is Claude
 Design's sync target, not this repo's — the design docs live on `ios-app`).

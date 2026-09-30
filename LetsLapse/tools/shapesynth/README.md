@@ -5,8 +5,9 @@ break point, §8 layout). Answers the brief's §8 question: how far can the
 register's shape drift from the truth before the plan's alignment breaks —
 and which of the three dials breaks it first?
 
-**The kit is the generator.** `docs/design/kit/` (its README has the recipe
-fields) holds the Prague T3 tram at five views, six skies and five scenes
+**The kit is the generator.** Since 2026-09-30 it is its own repository,
+letslapse-generator (`docs/design/generator.md`); its `kit/` (the README there
+has the recipe fields) holds the Prague T3 tram at five views, six skies and five scenes
 (100 compositions: 48 in four approach sequences, 12 singles, 40
 `mixed.random.*`); `build.js` composes `recipes.json` into
 `compositions/<id>.svg` + `compositions/manifest.json` through a
@@ -14,12 +15,10 @@ one-point-perspective road camera in metres, and every composition root
 carries the tram FACE polygon
 (`<polygon data-role="shape">`), its bounds (`data-shape-bbox`), per-side
 margins, the 3×3 cell overlaps and the cell — the brief's §5/§6 inputs,
-pre-computed. Nothing is drawn here. To add a scene, add a recipe line and
-rebuild:
-
-```
-node docs/design/kit/build.js        # objects/, skies/, scenes/, compositions/*.svg + manifest.json
-```
+pre-computed. Nothing is drawn here. To add a scene, add a recipe line in the
+generator's `kit/recipes.json` and rebuild there (`llgen build-kit`, the
+Python port of `build.js`). `--kit` defaults to `$LETSLAPSE_GENERATOR/kit`,
+else `letslapse-generator/kit` checked out beside this repository.
 
 shapesynth **rasterises** the compositions, writes the scene manifests,
 **perturbs** the truth with the three dials, **stages** and **sweeps**.
@@ -40,7 +39,6 @@ $PY tools/shapesynth/shapesynth.py generate --out tools/shapesynth/work/kit --se
 $PY tools/shapesynth/shapesynth.py generate --out tools/shapesynth/work/kit --sequence single --orientation 6 --set-suffix=-o6
 $PY tools/shapesynth/shapesynth.py generate --out tools/shapesynth/work/mixed --sequence all --pool mixed-all           # 100 photos, ONE set, ranked by face share
 $PY tools/shapesynth/shapesynth.py select tools/shapesynth/work/mixed --where tram=front --where cell=centre           # folders, one per line
-$PY tools/shapesynth/shapesynth.py recipes --mixed 40 --seed 19 --kit <copy of docs/design/kit> --dry-run             # the mixed.random batch
 cd Kit && swift build -c release --product lapse && cd ..                              # the CLI of contract §3–§5
 $PY tools/shapesynth/shapesynth.py sweep --axis scale    --values 0,0.02,0.05,0.1,0.2 --seed 1 --lapse Kit/.build/release/lapse
 $PY tools/shapesynth/shapesynth.py sweep --axis centre   --values 0,0.01,0.02,0.05,0.1 --seed 1
@@ -73,7 +71,7 @@ by AX). Measured 2026-09-19: the app rendered the twelve `city.clear.approach`
 projects to a 1920×1280, 300-frame clip, largest first — the same plan
 `render --sort capture` makes in approach order.
 
-`--kit` defaults to `docs/design/kit`; `--sequence` is a kit sequence
+`--kit` defaults to the generator's `kit/` (above); `--sequence` is a kit sequence
 (`city.clear.approach`, the sweep's default), a dotted prefix (`single` is
 every single) or `all`. `--scale` (default 2) is raster px per kit px, so a
 1800×1200 composition becomes a 3600×2400 frame and the portrait 1200×1800
@@ -148,8 +146,10 @@ Steven, 2026-09-19: a single-scene approach clip is not a true test — real
 captures put the same object into DIFFERENT scenes, and the object (and so
 its recorded shape) is the one constant. Three doors:
 
-- `recipes --mixed 40 --seed 19` (`recipes_mixed.py`) appends a seeded
-  `mixed.random.01…40` batch to the kit's `recipes.json`: aspect over all
+- The seeded `mixed.random.01…40` batch in the kit's `recipes.json` — drawn
+  by `recipes_mixed.py` here until 2026-09-30, now by the generator
+  (`llgen generate --preset legacy-mixed`, seed 19 × 40 redraws it exactly;
+  `shapesynth.py recipes` only points there): aspect over all
   five, scene × sky uniform, track left/right (the depot also ±5.25), camera
   left/centre/right, `size` log-uniform 0.08…0.75, `cx` uniform 0.15…0.85,
   the five tram angles cycling so each appears eight times — explicitly, so
@@ -158,16 +158,16 @@ its recorded shape) is the one constant. Three doors:
   batch; `tram`/`viewpoint` is the drawn label, not where the photographer
   stood (kept as drawn, ids are referenced; a next batch should cycle only
   `high`/`low` and let the geometry label the rest). Every candidate
-  is composed through the kit's own `build.js` and refused when the face is
+  is composed through the kit's composer and refused when the face is
   not inside the frame by 2 % per side (a `high` camera drops a near face
   below the frame; a portrait frame cannot hold a 0.75 face at cx 0.15);
   refused slots redraw from the same stream, so a seed is a batch. The batch
   is numbered by face SHARE (the Kit's sort key: face major ÷ frame short
   edge), not `size`, which is a fraction of the frame height and ranks a
-  portrait face under a landscape one. Idempotent: a kit that already holds
-  `mixed.random.*` is left alone (exit 1). Rebuild in a COPY of the kit
-  (`build.js` re-serialises every composition, and the checked-in 60 carry a
-  block a tool injected) and copy back only the new SVGs + `manifest.json`.
+  portrait face under a landscape one. A new batch takes a new seed and
+  prefix (the committed ids are referenced); rebuild the kit in a scratch
+  folder, never over the committed compositions (60 of them carry a block a
+  tool injected).
 - `generate … --sequence all --pool mixed-all` lands every selected
   composition in ONE set, `sequence.index` = rank by share ascending (0 =
   smallest face), `of` = count, `approach` = rank ÷ (count − 1); the ids

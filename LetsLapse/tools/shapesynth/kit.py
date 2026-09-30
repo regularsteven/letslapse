@@ -1,4 +1,4 @@
-"""The scene kit (docs/design/kit) read as a corpus: one composition = one scene.
+"""The scene kit (letslapse-generator's kit/, docs/design/generator.md) read as a corpus: one composition = one scene.
 
 The kit is the generator. `build.js` composes `recipes.json` into
 `compositions/<id>.svg` + `compositions/manifest.json`; each composition's
@@ -145,7 +145,8 @@ def load_kit(kit_dir: str) -> list[Sequence]:
     kit_dir = os.path.abspath(kit_dir)
     manifest_path = os.path.join(kit_dir, "compositions", "manifest.json")
     if not os.path.exists(manifest_path):
-        raise FileNotFoundError(f"no compositions/manifest.json under {kit_dir} — `node {os.path.join(kit_dir, 'build.js')}` writes it")
+        raise FileNotFoundError(f"no compositions/manifest.json under {kit_dir} — is letslapse-generator checked out beside this "
+                                f"repository, or $LETSLAPSE_GENERATOR set? (docs/design/generator.md)")
     with open(manifest_path, "r", encoding="utf-8") as f:
         entries = json.load(f)
     groups: dict[str, list[Composition]] = {}

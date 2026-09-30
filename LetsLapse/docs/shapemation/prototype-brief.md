@@ -77,13 +77,14 @@ house style):
 
 ## 3. The assets: the scene kit
 
-`docs/design/kit/` ([README](../design/kit/README.md)) generates synthetic
+The scene kit — `kit/` in the letslapse-generator repository since 2026-09-30
+([generator.md](../design/generator.md); `docs/design/kit/` when this was written) — generates synthetic
 photos — a sky + a scene + a Prague T3 tram placed by a one-point-perspective
 camera, always on its rails, every number exact — so the prototype has a
 diverse, truthful set without a real capture and **never detects anything**.
 
-`docs/design/kit/compositions/` holds **100 self-contained SVGs** (1.8 MB;
-`<img src>` or inline) and [`manifest.json`](../design/kit/compositions/manifest.json),
+Its `kit/compositions/` holds **100 self-contained SVGs** (1.8 MB;
+`<img src>` or inline) and `manifest.json`,
 one entry per file:
 
 | Field | Meaning | Use it for |
@@ -400,8 +401,8 @@ on a handle; is pose worth its handles when the angle-strobe is solved by
 
 1. **The prototype**: one folder under `docs/shapemation/prototype/` that
    runs from the repo with no build step — `index.html` plus JS/CSS, reading
-   `../../design/kit/compositions/manifest.json` and the SVGs by relative
-   path (or a copied subset if a build is unavoidable; say so).
+   `kit/compositions/manifest.json` and the SVGs by relative path (`kit` is a
+   symlink to the generator's kit) (or a copied subset if a build is unavoidable; say so).
 2. **A states list**: every screen and every state it can be in (empty,
    filtered-to-zero, all-green, some-flagged, rejected, a key being dragged,
    re-render), one line each, with how to reach it.
@@ -449,7 +450,7 @@ prototype's code is not carried over.
 Related, for reference: [`brief.md`](brief.md) · [`gap-map.md`](gap-map.md)
 · [`output-frame.md`](output-frame.md) · [`output-frame-report.md`](output-frame-report.md)
 · [`mixed-scenes-report.md`](mixed-scenes-report.md) · [`synthetic-corpus.md`](synthetic-corpus.md)
-· [`../design/kit/README.md`](../design/kit/README.md) · [`../design/README.md`](../design/README.md)
+· [`../design/generator.md`](../design/generator.md) · [`../design/README.md`](../design/README.md)
 · the mirrors `docs/design/iOS/shapemation*.svg` and `docs/design/macOS/shapemation*.svg`
 and their rows in [`../design/iOS/INDEX.md`](../design/iOS/INDEX.md) and
 [`../design/macOS/INDEX.md`](../design/macOS/INDEX.md).
