@@ -458,8 +458,9 @@ sources and `CLAUDE.md` says four — three is what actually compiles.
 - **A foreground `sleep` is blocked in this harness**, and a backgrounded shell
   script full of them produces no output at all. That is why the driver is
   python3 with `time.sleep` — do not "simplify" it into shell.
-- **Watch simulators need Simulator.app open first.** `simctl boot <watch-udid>`
-  with Simulator.app not running crash-loops the sim's system shell
+- **Watch simulators need Simulator.app open first** — on Xcode 27 that is
+  Device Hub (`open -b com.apple.dt.Devices`), which replaced it. `simctl boot <watch-udid>`
+  with neither running crash-loops the sim's system shell
   (`com.apple.Carousel`), spamming the crash reporter. iOS sims boot headless
   fine. The driver never boots anything on its own.
 - **Ad-hoc signing poisons the camera permission.** Do not build the Mac app

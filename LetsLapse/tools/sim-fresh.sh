@@ -3,6 +3,7 @@
 #
 #   tools/sim-fresh.sh                      erase "iPhone 16 Pro", build, install, launch
 #   tools/sim-fresh.sh --device "iPhone 17 Pro"
+#   tools/sim-fresh.sh --device <udid> --keep   an exact device, e.g. a "LetsLapse Fresh" made earlier
 #   tools/sim-fresh.sh --new                create a new device ("LetsLapse Fresh") instead of erasing
 #   tools/sim-fresh.sh --keep               do not erase (reinstall over the existing library)
 #   tools/sim-fresh.sh --no-build           reuse the last build
@@ -10,7 +11,8 @@
 # The steps, in order: shut the device down · erase it (or create a new one) ·
 # build the app for the Simulator, signed to run locally (an unsigned build
 # carries no entitlements and the Simulator's keychain refuses the PicPlace
-# sign-in with -34018) · boot it and open Simulator.app · trust the Valet CA so
+# sign-in with -34018) · boot it and open its window (Simulator.app, or Device
+# Hub on Xcode 27, which replaced it) · trust the Valet CA so
 # https://picplace.test works · install · launch. Sign in is yours: Settings ›
 # PicPlace › Sign in with PicPlace (the Debug build on the Simulator talks to
 # picplace.test). Everything is idempotent; re-run it whenever you want a
@@ -54,6 +56,10 @@ runtime = sorted(runtimes, key=lambda r: [int(x) for x in r["version"].split("."
 print(subprocess.check_output(["xcrun", "simctl", "create", new_name, dtype, runtime]).decode().strip())
 PY
   )
+elif [[ "$DEVICE_NAME" =~ '^[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$' ]]; then
+  UDID="$DEVICE_NAME"
+  xcrun simctl list devices available | grep -qF "($UDID)" \
+    || { echo "no available simulator with id $UDID — xcrun simctl list devices available" >&2; exit 1; }
 else
   UDID=$(xcrun simctl list devices available | grep -F "$DEVICE_NAME (" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
   [ -n "$UDID" ] || { echo "no available simulator named '$DEVICE_NAME' — xcrun simctl list devices available" >&2; exit 1; }
@@ -84,7 +90,10 @@ fi
 # 5. Up.
 step "Booting"
 xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
-open -a Simulator
+# Xcode 27 replaced Simulator.app with Device Hub (com.apple.dt.Devices); a
+# missing window is never a reason to stop — the device is already booted.
+open -b com.apple.iphonesimulator 2>/dev/null || open -b com.apple.dt.Devices 2>/dev/null \
+  || echo "   (neither Simulator.app nor Device Hub found — the device runs headless)" >&2
 xcrun simctl bootstatus "$UDID" -b >/dev/null
 
 # 6. The certificate picplace.test answers with.

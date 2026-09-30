@@ -334,7 +334,7 @@ def booted_sim():
     matches.sort(key=lambda m: (not m[0].startswith("iPhone"), m[0]))
     if not matches:
         sys.exit("driver: no booted simulator — `xcrun simctl boot <udid>` first "
-                 "(iOS sims boot headless fine; a WATCH sim needs `open -a Simulator` first "
+                 "(iOS sims boot headless fine; a WATCH sim needs Device Hub (Xcode 27; Simulator.app before) open first "
                  "or its system shell crash-loops)")
     name, udid = matches[0]
     print(f"driver: using booted simulator {name} ({udid})", file=sys.stderr)
