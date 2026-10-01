@@ -63,8 +63,10 @@ review of it the same evening measured the 1,405-project account on
 picplace.test and Steven's production Mac library (1,553 records) and agreed
 the list below. The goal is a migration of hundreds of thousands of photos
 (multiple TB) to Hetzner through PicPlace; nothing here changes what a person
-sees, only what it costs. The server side of the list is
-`~/Sites/picplace/docs/letslapse-sync-cost.md`.
+sees, only what it costs. The server side is the PicPlace developer's, as
+asks: `docs/picplace-sync-cost-server-asks.md` (gzip, 503 on a storage
+failure, `/status` totals, the unchanged manifest write, the request limit;
+then the index read, records as rows and verification, to design together).
 
 **Scale figures the jobs are judged against** (measured, linear extrapolation):
 the whole-account index is 1.44 MB / 167 ms / ~15 KB of PHP memory per project
@@ -133,7 +135,7 @@ server-side copies.
   account every check; at PHP's 128 MB it fails near 6,000 projects (512 MB:
   ~30,000), and every device's check then fails. Agreed direction: a cheap
   change token in `/status` so an unchanged account skips the index entirely;
-  then a bucketed, paged full pass (see the server doc's proposal: buckets by
+  then a bucketed, paged full pass (the asks doc's section A: buckets by
   capture month with per-bucket tokens, cursor pages within a bucket). Not
   "ask for only this library": the client reads the whole account on purpose
   (departures to other libraries), so scoping is a merge-logic change.
