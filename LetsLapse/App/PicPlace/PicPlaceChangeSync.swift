@@ -200,9 +200,18 @@ extension PicPlaceController {
             await reportAppVersionIfChanged()
             // Stage C: a binding whose server library is missing is put
             // right before the pass reads everything as filed elsewhere.
-            if serverHasLibraries, let status: PPStatus = try? await client.get("status") {
+            // The same read when this session has not heard about libraries
+            // yet: a check that starts before the handshake's answer must ask
+            // for itself, never take "not known" for "this server has none".
+            if serverHasLibraries || !librariesKnown, let status: PPStatus = try? await client.get("status") {
                 noteLibraries(status)
                 await repairBindingLibraryIfMissing(status)
+            }
+            // A library's rows cannot be told from the account's until then:
+            // without the answer the pass would read every row as this
+            // library's and pull the others' previews (2026-10-01).
+            if scope != nil, !librariesKnown {
+                throw PicPlaceSyncRun.Failed(caption: "PicPlace has not said which libraries the account has yet.")
             }
             // The whole index, tombstones included, every time: the merge
             // table needs every row — a project only THIS device edited sits
@@ -453,10 +462,15 @@ extension PicPlaceController {
             // The library's collections travel too, where PicPlace keeps them.
             if syncsCollections { await pullCollections() }
             #if DEBUG
-            // `LL_PICPLACE_DOWNLOAD=<uuid>` moves a project's originals down
-            // after the check (stage 5).
-            if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_DOWNLOAD"], let id = UUID(uuidString: raw), let capture = model.capture(id: id) {
-                downloadOriginals(capture)
+            // `LL_PICPLACE_DOWNLOAD=<uuid>[,<uuid>…]` moves those projects'
+            // originals down after the check (stage 5); a uuid may be the
+            // project's own id or its origin, and the hook runs once.
+            if !Self.downloadHookRan, let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_DOWNLOAD"] {
+                Self.downloadHookRan = true
+                for which in raw.split(separator: ",") {
+                    guard let capture = model.hookCapture(String(which)) else { LLog("LL_PICPLACE_DOWNLOAD: no such project \(which)"); continue }
+                    downloadOriginals(capture)
+                }
             }
             // `LL_PICPLACE_UPLOAD` presses Upload at launch instead
             // (`runUploadHookOnce`): a person's Upload does not wait for a
@@ -519,6 +533,7 @@ extension PicPlaceController {
     #if DEBUG
     /// The free-up hooks run after the first check of a process, not every one.
     static var freeUpHooksRan = false
+    static var downloadHookRan = false
     /// `LL_PICPLACE_UPLOAD` presses Upload once per process.
     static var uploadHookRan = false
     #endif
@@ -605,7 +620,7 @@ extension PicPlaceController {
         }
         let assets = (detail.assets ?? []).filter { $0.status == "confirmed" }
         if let manifestAssetID = manifest["manifest_asset"] as? String {
-            let data = try await download(assetID: manifestAssetID, projectUUID: uuid)
+            let data = try await download(assetID: manifestAssetID, projectUUID: uuid, name: "manifest.json")
             guard let real = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 throw PicPlaceSyncRun.Failed(caption: "The manifest asset of \(row.name) is not a project document.")
             }
@@ -615,7 +630,7 @@ extension PicPlaceController {
         let document = try ProjectDocumentFormat.makeDecoder().decode(ProjectDocument.self, from: manifestData)
 
         if let bundle = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName }) {
-            let data = try await download(assetID: bundle.id, projectUUID: uuid)
+            let data = try await download(assetID: bundle.id, projectUUID: uuid, name: "records.aar")
             let tmp = folder.appendingPathComponent("tmp", isDirectory: true)
             try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
             let archive = tmp.appendingPathComponent(PicPlaceSyncInventory.bundleName)
@@ -624,7 +639,7 @@ extension PicPlaceController {
             try? FileManager.default.removeItem(at: tmp)
         }
         if let poster = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName }) {
-            let data = try await download(assetID: poster.id, projectUUID: uuid)
+            let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg")
             try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
         }
         try model.applyPulledUpdate(projectID: capture.id, originID: originID, capture: document.capture, blends: document.blends)
@@ -661,7 +676,7 @@ extension PicPlaceController {
         record.serverConfirmedSeen = (detail.assets ?? []).filter { $0.status == "confirmed" }.count
         records[originID] = record
         guard let poster = (detail.assets ?? []).first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName && $0.status == "confirmed" }) else { return false }
-        let data = try await download(assetID: poster.id, projectUUID: uuid)
+        let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg")
         try data.write(to: model.projectFolderURL(for: capture).appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
         model.noteFilesChanged(for: capture.id)
         model.noteIndexChanged()

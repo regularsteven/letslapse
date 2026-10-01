@@ -1124,8 +1124,12 @@ struct ContentView: View {
         // one a Finder double-click or the picker opens, so the duplicate
         // question (by origin, Phase 1 W3) and the install can be driven
         // headless against a scratch library.
-        if let path = environment["LL_IMPORT_ARCHIVE"], !path.isEmpty {
-            model.openArchive(at: URL(fileURLWithPath: path))
+        // Several, `:`-separated, open one after another — `openArchive`
+        // queues them (the sync-cost bench's step 3, 2026-09-30).
+        if let paths = environment["LL_IMPORT_ARCHIVE"], !paths.isEmpty {
+            for path in paths.split(separator: ":") {
+                model.openArchive(at: URL(fileURLWithPath: String(path)))
+            }
         }
         // LL_DELETE=latest|<capture-uuid> — deletes that project through the
         // real path (tombstone → persist → `.trash`), for the W9 checks.
@@ -1191,21 +1195,34 @@ struct ContentView: View {
                 }
             }
         }
-        // LL_APPLY_PRESET=latest|<capture-uuid>:<Natural|Cinema|Matte|Vivid|
-        // Original> — applies that built-in preset to the project through
-        // the real grade path (`applyPreset` → `updateCapture`, queued), two
-        // seconds after launch so the launch pass has finished: the M2 check
-        // that a grade settle rewrites one document and one index row.
-        if let raw = environment["LL_APPLY_PRESET"], let colon = raw.lastIndex(of: ":"),
-           let preset = PhotoPreset(rawValue: String(raw[raw.index(after: colon)...])) {
-            let which = String(raw[..<colon])
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                let capture = which == "latest"
-                    ? model.newestCapture()
-                    : UUID(uuidString: which).flatMap { id in model.capture(id: id) }
-                guard let capture else { LLog("LL_APPLY_PRESET: no such project \(which)"); return }
-                model.applyPreset(preset, for: capture)
-                LLog("LL_APPLY_PRESET applied \(preset.rawValue) to \(capture.id.uuidString.prefix(8))")
+        // LL_APPLY_PRESET=latest|<uuid>:<Natural|Cinema|Matte|Vivid|Original>
+        // [@<seconds>][;…] — applies that built-in preset to the project
+        // through the real grade path (`applyPreset` → `updateCapture`,
+        // queued), two seconds after launch so the launch pass has finished
+        // (or `@` that many seconds): the M2 check that a grade settle
+        // rewrites one document and one index row. Several entries, `;`-
+        // separated, are the sync-cost bench's "edit three photos" step
+        // (2026-09-30); a uuid may be the project's own id or its origin
+        // (the id a pulled copy shares with every device).
+        if let raw = environment["LL_APPLY_PRESET"] {
+            for entry in raw.split(separator: ";") {
+                var text = String(entry)
+                var delay = 2.0
+                if let at = text.lastIndex(of: "@"), let seconds = Double(text[text.index(after: at)...]) {
+                    delay = seconds
+                    text = String(text[..<at])
+                }
+                guard let colon = text.lastIndex(of: ":"),
+                      let preset = PhotoPreset(rawValue: String(text[text.index(after: colon)...])) else {
+                    LLog("LL_APPLY_PRESET: unreadable entry \(entry)")
+                    continue
+                }
+                let which = String(text[..<colon])
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    guard let capture = model.hookCapture(which) else { LLog("LL_APPLY_PRESET: no such project \(which)"); return }
+                    model.applyPreset(preset, for: capture)
+                    LLog("LL_APPLY_PRESET applied \(preset.rawValue) to \(capture.id.uuidString.prefix(8))")
+                }
             }
         }
         // LL_ROTATE=latest|<capture-uuid>[:<turns>] — Rotate 90° that many
@@ -2095,3 +2112,18 @@ struct LibraryNoticeBanner: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+#if DEBUG
+extension AppModel {
+    /// The project a launch hook names: `latest`, the project's own id, or
+    /// its origin id (what a pulled copy shares with the device it came
+    /// from — the bench addresses projects by origin on both devices).
+    func hookCapture(_ which: String) -> CaptureProject? {
+        if which == "latest" { return newestCapture() }
+        guard let id = UUID(uuidString: which) else { return nil }
+        if let capture = capture(id: id) { return capture }
+        guard let index = libraryIndex, let local = (try? index.projectID(originID: id)) ?? nil else { return nil }
+        return capture(id: local)
+    }
+}
+#endif

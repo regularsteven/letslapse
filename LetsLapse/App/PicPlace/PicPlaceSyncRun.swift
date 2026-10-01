@@ -621,8 +621,14 @@ struct PicPlaceSyncRun {
             }
             #endif
             (data, response) = try await PicPlaceTransfer.withRetries("PUT \(pending.item.name)") {
+                #if DEBUG
+                let started = Date()
+                #endif
                 let (data, response) = try await Self.uploadSession.upload(for: request, fromFile: pending.item.url)
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                #if DEBUG
+                PicPlaceTransfer.trace("PUT", pending.item.name, status: status, bytes: Int(pending.item.bytes), since: started)
+                #endif
                 if status == 429 || (500 ..< 600).contains(status) {
                     throw PicPlaceTransfer.Refused(status: status, detail: String(data: data, encoding: .utf8).map { String($0.prefix(120)) } ?? "")
                 }

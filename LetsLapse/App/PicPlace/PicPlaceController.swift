@@ -207,6 +207,13 @@ final class PicPlaceController: ObservableObject {
     @Published private(set) var connectCaseText: String?
     /// What the last `/status` said about the account's libraries (stage C).
     @Published private(set) var serverHasLibraries = false
+    /// Whether a `/status` of this session has said if the server has
+    /// libraries at all. Until one has, `serverHasLibraries` is not "no" but
+    /// "not known" — and a library's scope must never be read as the whole
+    /// account in that state (2026-10-01: an iOS launch's foreground check
+    /// merged before the handshake's answer landed and pulled every other
+    /// library's previews into the open one, launch after launch).
+    private(set) var librariesKnown = false
     @Published private(set) var serverLibraries: [PPLibrary] = []
     /// Whether the server answers `POST /projects/assets` (2026-09-24).
     private(set) var serverListsAssetsInBatches = false
@@ -852,6 +859,7 @@ final class PicPlaceController: ObservableObject {
     /// What the server keeps apart (stage C): the feature and the list.
     func noteLibraries(_ status: PPStatus) {
         serverHasLibraries = status.hasLibraries
+        librariesKnown = true
         serverLibraries = status.libraries ?? []
         // Not a library matter, but read off the same answer: many
         // projects' asset lists in one request — what the check asks when a

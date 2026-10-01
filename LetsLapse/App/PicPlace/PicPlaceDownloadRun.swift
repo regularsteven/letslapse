@@ -163,8 +163,14 @@ struct PicPlaceDownloadRun {
         let temporary: URL
         do {
             temporary = try await PicPlaceTransfer.withRetries("GET \(item.name)") {
+                #if DEBUG
+                let started = Date()
+                #endif
                 let (temporary, response) = try await Self.session.download(for: request)
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                #if DEBUG
+                PicPlaceTransfer.trace("GET", item.name, status: status, bytes: Int(item.bytes), since: started)
+                #endif
                 guard (200 ..< 300).contains(status) else {
                     try? FileManager.default.removeItem(at: temporary)
                     throw PicPlaceTransfer.Refused(status: status, detail: "")

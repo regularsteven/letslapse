@@ -695,6 +695,9 @@ actor PicPlaceClient {
             }
             let data: Data
             let response: URLResponse
+            #if DEBUG
+            let traceStarted = Date()
+            #endif
             do {
                 #if DEBUG
                 if let outage, outage.from <= Date(), Date() < outage.until {
@@ -722,6 +725,18 @@ actor PicPlaceClient {
                 noteAnswered(false)
                 throw PicPlaceOfflineError(underlying: nil)
             }
+            #if DEBUG
+            // `LL_PICPLACE_TRACE=1` — one line per API request in the console
+            // log: method, path and query, status, time, body bytes each
+            // way. The sync-cost bench (`tools/sync-cost-bench/`) reads it
+            // back, so a run's requests are mapped by name rather than by
+            // order from CFNetwork's redacted summaries (2026-09-30).
+            if PicPlaceTransfer.tracing {
+                let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+                let ms = Int((Date().timeIntervalSince(traceStarted) * 1000).rounded())
+                LLog("picplace trace: \(method) \(path)\(query) → \(http.statusCode) \(ms) ms up=\(request.httpBody?.count ?? 0) down=\(data.count)")
+            }
+            #endif
             noteAnswered(true)
             noteRateLimit(http)
 

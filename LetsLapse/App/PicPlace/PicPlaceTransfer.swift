@@ -41,6 +41,19 @@ enum PicPlaceTransfer {
         }
     }
 
+    #if DEBUG
+    /// `LL_PICPLACE_TRACE=1` — the API client and every storage transfer
+    /// write one `picplace trace:` line per request (see `PicPlaceAPI`).
+    static let tracing = ProcessInfo.processInfo.environment["LL_PICPLACE_TRACE"] != nil
+
+    /// A storage PUT or GET's trace line: what moved, how long it took.
+    static func trace(_ verb: String, _ name: String, status: Int, bytes: Int, since started: Date) {
+        guard tracing else { return }
+        let ms = Int((Date().timeIntervalSince(started) * 1000).rounded())
+        LLog("picplace trace: STORAGE \(verb) \(name) → \(status) \(ms) ms bytes=\(bytes)")
+    }
+    #endif
+
     /// Storage answered with a status the transfer cannot use; the body
     /// throws it so the loop can tell a `503` from a `403`.
     struct Refused: Error {

@@ -143,6 +143,13 @@ extension PicPlaceController {
         var progress = InitialSyncProgress()
         initialSyncProgress = progress
         do {
+            // The first connection scopes by library too: it asks which
+            // libraries the account has when this session has not heard yet
+            // (see `librariesKnown`), and does not run without the answer.
+            if !librariesKnown, let status: PPStatus = try? await client.get("status") { noteLibraries(status) }
+            if scope != nil, !librariesKnown {
+                throw PicPlaceSyncRun.Failed(caption: "PicPlace has not said which libraries the account has yet.")
+            }
             let index: PPProjectIndex = try await client.get("projects")
             // Stage C: only the rows of the library this one is a copy of;
             // a row of the account filed elsewhere is noted on its local
@@ -345,7 +352,7 @@ extension PicPlaceController {
         let assets = (detail.assets ?? []).filter { $0.status == "confirmed" }
         // The overflow shape: the manifest is an asset the stub points at.
         if let manifestAssetID = manifest["manifest_asset"] as? String {
-            let data = try await download(assetID: manifestAssetID, projectUUID: uuid)
+            let data = try await download(assetID: manifestAssetID, projectUUID: uuid, name: "manifest.json")
             guard let real = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 throw PicPlaceSyncRun.Failed(caption: "The manifest asset of \(row.name) is not a project document.")
             }
@@ -362,7 +369,7 @@ extension PicPlaceController {
             var files = 0
             var bytes: Int64 = 0
             if let bundle = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName }) {
-                let data = try await download(assetID: bundle.id, projectUUID: uuid)
+                let data = try await download(assetID: bundle.id, projectUUID: uuid, name: "records.aar")
                 let tmp = folder.appendingPathComponent("tmp", isDirectory: true)
                 try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
                 let archive = tmp.appendingPathComponent(PicPlaceSyncInventory.bundleName)
@@ -377,7 +384,7 @@ extension PicPlaceController {
                 // `note` at the root, `source` under source/): collect the
                 // ones the registry knows as records or sidecars, into place.
                 for loose in assets where PicPlaceSyncInventory.role(for: loose.name) == .bundle {
-                    let data = try await download(assetID: loose.id, projectUUID: uuid)
+                    let data = try await download(assetID: loose.id, projectUUID: uuid, name: loose.name)
                     let destination = folder.appendingPathComponent(loose.name)
                     try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try data.write(to: destination, options: .atomic)
@@ -385,7 +392,7 @@ extension PicPlaceController {
                 }
             }
             if let poster = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName }) {
-                let data = try await download(assetID: poster.id, projectUUID: uuid)
+                let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg")
                 try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
                 files += 1; bytes += Int64(data.count)
             }
@@ -410,7 +417,7 @@ extension PicPlaceController {
     }
 
     /// One asset's bytes through a presigned GET minted for it.
-    func download(assetID: String, projectUUID: String) async throws -> Data {
+    func download(assetID: String, projectUUID: String, name: String = "") async throws -> Data {
         let urls: [String: [PPDownloadURL]] = try await client.post("projects/\(projectUUID)/assets/urls", json: ["assets": [assetID]])
         guard let item = urls["assets"]?.first else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted no download URL.") }
         if let error = item.error { throw PicPlaceSyncRun.Failed(caption: item.message ?? error) }
@@ -419,8 +426,14 @@ extension PicPlaceController {
         request.httpMethod = item.method ?? "GET"
         do {
             return try await PicPlaceTransfer.withRetries("GET \(assetID.prefix(8))") {
+                #if DEBUG
+                let started = Date()
+                #endif
                 let (data, response) = try await URLSession.shared.data(for: request)
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                #if DEBUG
+                PicPlaceTransfer.trace("GET", name.isEmpty ? assetID : name, status: status, bytes: data.count, since: started)
+                #endif
                 guard (200 ..< 300).contains(status) else { throw PicPlaceTransfer.Refused(status: status, detail: "") }
                 return data
             }
