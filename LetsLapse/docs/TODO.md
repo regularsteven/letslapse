@@ -119,6 +119,16 @@ report `docs/fieldtests/2026-10-01-sync-cost-bench-after-jobs/`):
   there"). **Owed with the server:** `resurrect: true` on that push once
   PicPlace answers `409 project_deleted` to any other
   (`docs/picplace-sync-cost-server-asks.md`, the developer's reply).
+- *Device check against picplace.co* (the same evening, three devices):
+  `docs/fieldtests/2026-10-01-device-check.md`. It held — one check per
+  launch, six requests per originals upload, a 17 GB timelapse at the line's
+  speed, verification through the batched sweep — and found two things, both
+  fixed: a preview re-fetched its records and poster every time another device
+  uploaded that project's originals (`settleAssetCountMoves`), and the
+  read-ahead asked about projects it would never look at. **Still owed from
+  it:** the index read twice at a launch, the size of the look at a large
+  project waiting to be verified, an edit between devices, two libraries on a
+  device.
 Byte counts of that run are not comparable with the first: the same photos
 were already on the account, so originals and identical posters became
 server-side copies.

@@ -197,6 +197,7 @@ extension PicPlaceController {
         // A person's press lets the queue run as the press itself would.
         let manual = reason == "manual"
         var posterCandidates: [(origin: UUID, id: UUID)] = []
+        var countMoves: [(row: PPProject, localID: UUID)] = []
         // A person's press retries every failed push now; the automatic
         // checks wait for each one's backoff.
         let now = Date()
@@ -410,14 +411,11 @@ extension PicPlaceController {
                         posterCandidates.append((origin, localID))
                     } else if project.sourcesMissing, record?.policy == "pull" || record?.serverConfirmedSeen != nil,
                               record?.serverConfirmedSeen != row.assets.confirmed {
-                        guard let capture = model.capture(id: localID) else { continue }
-                        do {
-                            try await pullUpdate(row, into: capture)
-                            outcome.updated += 1
-                            LLog("picplace: \(project.displayTitle) — records fetched again (the server holds \(row.assets.confirmed) confirmed asset(s), this device had seen \(record?.serverConfirmedSeen.map(String.init) ?? "none"))")
-                        } catch {
-                            outcome.failures.append("\(row.name): \(Self.describe(error))")
-                        }
+                        // Settled after the pass, a hundred projects per
+                        // request (`settleAssetCountMoves`): most often the
+                        // count moved because another device uploaded the
+                        // ORIGINALS, and nothing this device holds changed.
+                        countMoves.append((row, localID))
                     } else if project.sourcesMissing, !project.hasPoster,
                               (record?.posterCheckedAt).map({ ($0 < (row.updatedAt ?? .distantFuture)) }) ?? true {
                         guard let capture = model.capture(id: localID) else { continue }
@@ -450,6 +448,7 @@ extension PicPlaceController {
             }
 
             await settlePosters(posterCandidates, manual: manual, outcome: &outcome)
+            await settleAssetCountMoves(countMoves, outcome: &outcome)
 
             // New here since the last check: up they go (records and a poster).
             // A record whose every push failed is not a push: the project
@@ -633,6 +632,75 @@ extension PicPlaceController {
         }
         if outcome.postersKnown > 0 {
             LLog("picplace: poster check — \(outcome.postersKnown) of \(candidates.count) already on PicPlace, noted without sending")
+        }
+    }
+
+    /// Preview-only projects, in step by revision, whose confirmed-asset
+    /// count on PicPlace moved since this device last took their records.
+    /// Until 2026-10-01 each took its records again — the project, two URLs,
+    /// the bundle and the POSTER, about 400 KB — and by far the commonest
+    /// cause is another device uploading the originals, which changes
+    /// neither: the 16 Pro sending its backlog had the iPad and the 18 Pro
+    /// fetch every project's unchanged poster a second time, one every three
+    /// seconds. Now their asset lists are read a hundred projects per
+    /// request; where the objects that are NOT heavy are as many as before
+    /// and the poster here is byte for byte the server's, only the record's
+    /// figures move. Anything else — a poster that arrived, a bundle a
+    /// finished push added, a project PicPlace did not answer for — takes
+    /// its records again, as before.
+    func settleAssetCountMoves(_ moves: [(row: PPProject, localID: UUID)], outcome: inout CheckOutcome) async {
+        guard !moves.isEmpty else { return }
+        var lists: [UUID: [PPAsset]] = [:]
+        if serverListsAssetsInBatches {
+            var pending = moves.map { $0.row.uuid.lowercased() }
+            while !pending.isEmpty {
+                let chunk = Array(pending.prefix(100))
+                guard let answer: PPAssetLists = try? await client.post("projects/assets", json: ["uuids": chunk]) else { break }
+                for entry in answer.projects where entry.error == nil {
+                    if let origin = UUID(uuidString: entry.uuid) { lists[origin] = entry.assets ?? [] }
+                }
+                let next = (answer.next ?? []).map { $0.lowercased() }
+                pending = (next.count < chunk.count ? next : []) + Array(pending.dropFirst(chunk.count))
+            }
+        }
+        var noted = 0
+        for move in moves {
+            guard let capture = model.capture(id: move.localID), let origin = UUID(uuidString: move.row.uuid) else { continue }
+            let row = move.row
+            if let assets = lists[origin]?.filter({ $0.status == "confirmed" }), var record = records[origin],
+               let seen = record.serverConfirmedSeen, assets.count == row.assets.confirmed {
+                let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
+                let lightBefore = seen - (record.serverHeavyFiles ?? 0)
+                let serverPoster = assets.first { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName }?.sha256
+                let posterURL = model.projectFolderURL(for: capture).appendingPathComponent(ProjectFileRegistry.posterName)
+                let localPoster = await Task.detached(priority: .utility) { try? PicPlaceSyncRun.sha256(of: posterURL) }.value
+                if assets.count - heavy.count == lightBefore, serverPoster == localPoster {
+                    record.serverConfirmedSeen = assets.count
+                    record.notePresence(row.presence, excluding: profile?.deviceID)
+                    record.serverHeavyFiles = heavy.count
+                    record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }
+                    record.serverSourceFiles = heavy.filter { PicPlaceSyncInventory.heavyKind($0.name) == .source }.count
+                    if model.sourcesMissing(capture) {
+                        record.heavyFiles = heavy.count
+                        record.heavyBytes = record.serverHeavyBytes
+                    }
+                    records[origin] = record
+                    serverHeavy[origin] = nil
+                    noted += 1
+                    continue
+                }
+            }
+            do {
+                try await pullUpdate(row, into: capture)
+                outcome.updated += 1
+                LLog("picplace: \(capture.displayTitle) — records fetched again (the server holds \(row.assets.confirmed) confirmed asset(s), this device had seen \(records[origin]?.serverConfirmedSeen.map(String.init) ?? "none"))")
+            } catch {
+                outcome.failures.append("\(row.name): \(Self.describe(error))")
+            }
+        }
+        if noted > 0 {
+            saveSyncState()
+            LLog("picplace: \(noted) preview(s) — PicPlace gained heavy files for them (another device's upload); noted, nothing fetched")
         }
     }
 

@@ -956,7 +956,7 @@ extension PicPlaceController {
             let blendsThere = blendListing.isEmpty || record.blendsDigest == digest
             if wholeSet {
                 if blendsThere, heavySetMissing[origin] == wholeDigest { continue }
-                let known = await heavyListReadAhead(for: origin, after: position, in: rows)
+                let known = await heavyListReadAhead(for: origin, after: position, in: rows, sentSetsOnly: true)
                 switch await heavySetOnPicPlace(listing, origin: origin, folder: folder, assets: known) {
                 case .verified:
                     records[origin]?.heavyDigest = wholeDigest
@@ -1108,15 +1108,26 @@ extension PicPlaceController {
     /// for it: the caller reads the project on its own. A list is used once,
     /// and nothing older than five minutes is used at all (an upload in
     /// between can take that long).
-    private func heavyListReadAhead(for origin: UUID, after position: Int, in rows: [LibraryIndex.ProjectRow]) async -> [PPAsset]? {
+    private func heavyListReadAhead(for origin: UUID, after position: Int, in rows: [LibraryIndex.ProjectRow],
+                                    sentSetsOnly: Bool = false) async -> [PPAsset]? {
         if Date().timeIntervalSince(heavyAheadReadAt) > 300 { heavyAhead = [:] }
         if heavyAhead[origin] == nil {
             var asking = [origin]
             for later in rows[(position + 1)...] where asking.count < 100 {
                 guard let other = model.capture(id: later.id) else { continue }
                 let otherOrigin = model.originID(of: other)
+                // Never a preview pulled from PicPlace whose originals were
+                // never brought here: it has nothing heavy to verify, and on a
+                // device that is mostly previews the read-ahead would fetch a
+                // hundred lists to use one (the 16 Pro, 2026-10-01: 574 KB).
                 guard heavyAhead[otherOrigin] == nil, let record = records[otherOrigin], record.recordsReachedServer,
-                      record.elsewhereLibrary == nil, record.heavyDigest == nil else { continue }
+                      record.elsewhereLibrary == nil, record.heavyDigest == nil,
+                      !(record.policy == "pull" && record.originalsMovedAt == nil) else { continue }
+                // The blends queue only ever looks at a set this device sent
+                // or fetched, or one another device sent: with originals off
+                // nothing else will be asked about, and reading ahead for it
+                // fetched a hundred lists to use one (the 18 Pro, 780 KB).
+                if sentSetsOnly, record.originalsMovedAt == nil, (record.serverHeavyFiles ?? 0) == 0 { continue }
                 asking.append(otherOrigin)
             }
             let read = await heavyAssetLists(for: asking)
