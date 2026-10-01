@@ -1,0 +1,33 @@
+{
+  "format" : 1,
+  "meta" : {
+    "checkedAt" : "2026-09-30T16:32:09.419Z",
+    "serverTime" : "2026-09-30T16:32:09Z"
+  },
+  "records" : {
+    "648a0a63-a016-4fea-9296-fc1a4c3b233e" : {
+      "alsoOn" : [
+        "macbookpro"
+      ],
+      "bytes" : 246184,
+      "files" : 2,
+      "heavyBytes" : 408461,
+      "heavyDigest" : "450afa86317078160dd7b43e353f737e26bae58abd19e0b0b5d180a5d188ac53",
+      "heavyFiles" : 1,
+      "originalsMovedAt" : "2026-09-30T16:29:00.337Z",
+      "originalsOn" : [
+        "macbookpro"
+      ],
+      "policy" : "pull",
+      "posterToken" : "e6|Cinema|n",
+      "revision" : 1790784573671,
+      "server" : "https://picplace.test",
+      "serverConfirmedSeen" : 3,
+      "serverHeavyBytes" : 408461,
+      "serverHeavyFiles" : 1,
+      "serverSourceFiles" : 1,
+      "syncedAt" : "2026-09-30T16:28:52.777Z",
+      "uploaded" : 0
+    }
+  }
+}

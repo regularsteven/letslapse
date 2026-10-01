@@ -1,0 +1,46 @@
+# Simulator console log — picplace/storage/assets/presets lines only (camera and orientation lines removed), OAuth query strings trimmed
+17:41:09.078 🎥LL 135.803 storage: first launch — library folder 457D3FBD-E366-4669-BB5B-81419A24B657 made
+17:41:09.194 🎥LL 135.921 storage: library identity minted at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/80D57101-5A0C-4613-97C4-6DB5A31ECF7E/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657 — C64F71C3-2636-4ECC-BC1D-2169A3F4401B “LetsLapse Fresh”
+17:41:09.204 🎥LL 135.931 picplace: session none — no tokens
+17:41:09.208 🎥LL 135.936 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+17:41:31.453 🎥LL 158.181 assets: backfill scan — 0 of 0 project(s) need work, 0.03 s off main
+17:49:19.070 🎥LL 625.796 picplace: sign-in opens https://picplace.test/oauth/authorize?…
+17:49:31.421 🎥LL 638.148 library export: regenerated from the documents in 0.00 s (176 bytes)
+17:50:20.762 🎥LL 687.489 picplace: pacing requests under 300/min (255/min for sync work)
+17:50:20.784 🎥LL 687.510 nearby: key nk_044ac2a46f154684 held for picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae
+17:50:21.793 🎥LL 688.520 picplace tally: 0 of 0 project(s) read in 0.00 s off main
+17:50:26.210 🎥LL 692.937 storage: library at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/80D57101-5A0C-4613-97C4-6DB5A31ECF7E/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657 renamed “synth”
+17:50:26.211 🎥LL 692.937 storage: library at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/80D57101-5A0C-4613-97C4-6DB5A31ECF7E/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657 is now 8F3AA852-AFE5-43C9-80A5-CAAAF9F40C19 “synth”
+17:50:26.216 🎥LL 692.943 picplace: library bound to @synth on picplace.test as “synth” 8f3aa852-afe5-43c9-80a5-caaaf9f40c19 — fresh
+17:50:26.299 🎥LL 693.025 picplace: free-up estimate — 0 of 0 project(s) candidates in 0.00 s, listed in 0.01 s, judged in 0.00 s, all off main: 0 on PicPlace, 0 queued, 0 not up
+17:50:26.341 🎥LL 693.067 picplace: initial sync (clean) — 0 to pull, 0 to push, 0 in step, 0 deferred
+17:50:26.342 🎥LL 693.068 picplace: initial sync done (clean)
+17:50:28.947 🎥LL 695.674 status: swept 0 project(s) in 0.00 s — 0 walked, 0 unchanged
+17:53:09.454 🎥LL 856.181 picplace: told PicPlace this device runs 0.1.0 (1) 2026-09-30 15:37 UTC
+17:53:09.813 🎥LL 856.539 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+17:56:09.359 🎥LL  36.084 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+17:59:09.376 🎥LL 216.101 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:02:09.357 🎥LL 396.080 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:05:09.338 🎥LL 576.061 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:08:09.341 🎥LL 756.064 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:11:09.334 🎥LL 936.056 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:14:09.341 🎥LL 116.063 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:17:09.344 🎥LL 296.065 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:20:09.350 🎥LL 476.071 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:23:09.345 🎥LL 656.065 picplace check pass: 0 of 0 project(s) read in 0.00 s off main
+18:23:09.346 🎥LL 656.066 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:26:09.347 🎥LL 836.067 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:28:50.995 🎥LL 997.714 picplace: 1 of the library's 1 project(s) on PicPlace are not here: frame (648a0a63, photo)
+18:28:52.946 🎥LL 999.665 picplace: pulled frame (648a0a63) — 2 object(s), 246184 bytes; 1 heavy file(s) stay on PicPlace
+18:28:52.947 🎥LL 999.667 picplace: check (manual) — 1 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:28:54.126 🎥LL   0.845 picplace tally: 1 of 1 project(s) read in 0.00 s off main
+18:29:00.252 🎥LL   6.972 picplace: continued task asked for — Downloading “frame”
+18:29:00.253 🎥LL   6.972 picplace: continued task refused for Downloading “frame”: BGTaskScheduler is not available on this platform.
+18:29:00.340 🎥LL   7.060 assets: 648A0A63 recorded 0 of 0 pending (1 assets)
+18:29:00.376 🎥LL   7.096 picplace: downloaded the originals of frame: 1 file(s), 408461 bytes
+18:29:00.385 🎥LL   7.104 presets: 0 custom preset(s) at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/80D57101-5A0C-4613-97C4-6DB5A31ECF7E/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/custom_presets.json
+18:29:09.302 🎥LL  16.022 picplace check pass: 1 of 1 project(s) read in 0.00 s off main
+18:29:09.322 🎥LL  16.042 picplace: poster check — 1 of 1 already on PicPlace, noted without sending
+18:29:09.323 🎥LL  16.042 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 1 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:29:09.357 🎥LL  16.076 picplace: frame — all 1 heavy file(s) here verified on PicPlace: backed up
+18:32:09.419 🎥LL 196.138 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)

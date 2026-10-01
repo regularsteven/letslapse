@@ -1,0 +1,3705 @@
+{
+ "steps": [
+  {
+   "name": "sim-a-baseline",
+   "device": "Simulator",
+   "description": "Simulator on library A: one launch, its checks",
+   "started": "2026-10-01T14:31:45",
+   "ended": "2026-10-01T14:32:56",
+   "seconds": 70.6,
+   "hooks": {
+    "LL_TAB": "gallery"
+   },
+   "log": "raw/01-sim-a-baseline.log",
+   "api": [
+    {
+     "t": "14:31:47.788",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 192,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:31:47.865",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 59,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:31:47.876",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 34,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "14:31:47.937",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 49,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:31:47.945",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 60,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:31:47.999",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 57,
+     "up": 0,
+     "down": 121066
+    },
+    {
+     "t": "14:31:48.035",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 86,
+     "up": 0,
+     "down": 123158
+    },
+    {
+     "t": "14:31:48.139",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 48,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:31:48.197",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 49,
+     "up": 0,
+     "down": 2731
+    }
+   ],
+   "storage": [],
+   "highlights": [
+    "14:31:47.905 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:31:48.089 picplace: check (foreground) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20579,
+    "since": 20579,
+    "events": [],
+    "projects": {
+     "live": 121,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 122
+     },
+     "manifest_bytes": 65356
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 33557468
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 603417
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 145652205
+     }
+    ],
+    "presences": {
+     "original": 118,
+     "preview": 122
+    },
+    "index": {
+     "rows": 123,
+     "name_null": 122,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20579,
+    "since": 20579,
+    "events": [],
+    "projects": {
+     "live": 121,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 122
+     },
+     "manifest_bytes": 65356
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 33557468
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 603417
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 145652205
+     }
+    ],
+    "presences": {
+     "original": 118,
+     "preview": 122
+    },
+    "index": {
+     "rows": 123,
+     "name_null": 122,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 115,
+   "mac_projects_after": 115,
+   "sim_projects_before": 114,
+   "sim_projects_after": 114,
+   "mac_sync_state_bytes": 73199,
+   "sim_sync_state_bytes": 63559,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "sim-new-library",
+   "device": "Simulator",
+   "description": "create library \u201csynth three\u201d on PicPlace from the phone's Libraries section (the real door), which switches to it",
+   "started": "2026-10-01T14:32:59",
+   "ended": "2026-10-01T14:34:11",
+   "seconds": 72.7,
+   "hooks": {
+    "LL_TAB": "settings",
+    "LL_SCROLL": "libraries",
+    "LL_LIBRARY": "new:synth three"
+   },
+   "log": "raw/02-sim-new-library.log",
+   "api": [
+    {
+     "t": "14:33:01.404",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 175,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:33:01.417",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 175,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:33:01.489",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 52,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:33:01.499",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 57,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:33:01.568",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 46,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "14:33:01.586",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 60,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:33:01.594",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 66,
+     "up": 0,
+     "down": 121066
+    },
+    {
+     "t": "14:33:01.631",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 55,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:33:01.678",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 42,
+     "up": 0,
+     "down": 121066
+    },
+    {
+     "t": "14:33:01.706",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 75,
+     "up": 0,
+     "down": 123158
+    },
+    {
+     "t": "14:33:01.788",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 47,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:33:01.830",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 40,
+     "up": 0,
+     "down": 2731
+    },
+    {
+     "t": "14:33:03.207",
+     "method": "PUT",
+     "path": "libraries/90836859-7f63-4355-98fd-1e758ad6518e",
+     "pattern": "PUT libraries/{u}",
+     "status": 201,
+     "ms": 62,
+     "up": 44,
+     "down": 545
+    },
+    {
+     "t": "14:33:03.341",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 68,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:33:03.494",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 23,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "14:33:03.505",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 41,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:33:03.525",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 29,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:33:03.536",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 29,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:33:03.567",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 41,
+     "up": 0,
+     "down": 121066
+    },
+    {
+     "t": "14:33:03.599",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 61,
+     "up": 0,
+     "down": 121066
+    },
+    {
+     "t": "14:33:03.673",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 44,
+     "up": 0,
+     "down": 121066
+    },
+    {
+     "t": "14:33:03.756",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 34,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:33:03.793",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 35,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:33:03.849",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 54,
+     "up": 0,
+     "down": 121066
+    }
+   ],
+   "storage": [],
+   "highlights": [
+    "14:33:01.485 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:33:01.740 picplace: check (foreground) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "14:33:03.214 picplace: library \u201csynth three\u201d 90836859-7f63-4355-98fd-1e758ad6518e created on picplace.test and placed in Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C",
+    "14:33:03.253 luts: 0 imported LUT(s) at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/luts",
+    "14:33:03.253 luts: 0 imported LUT(s) at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/luts",
+    "14:33:03.506 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:33:03.705 picplace: initial sync (clean) \u2014 0 to pull, 0 to push, 0 in step, 0 deferred",
+    "14:33:03.706 picplace: initial sync done (clean)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20579,
+    "since": 20579,
+    "events": [],
+    "projects": {
+     "live": 121,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 122
+     },
+     "manifest_bytes": 65356
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 33557468
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 603417
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 145652205
+     }
+    ],
+    "presences": {
+     "original": 118,
+     "preview": 122
+    },
+    "index": {
+     "rows": 123,
+     "name_null": 122,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20579,
+    "since": 20579,
+    "events": [],
+    "projects": {
+     "live": 121,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 122
+     },
+     "manifest_bytes": 65356
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 33557468
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 603417
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 145652205
+     }
+    ],
+    "presences": {
+     "original": 118,
+     "preview": 122
+    },
+    "index": {
+     "rows": 123,
+     "name_null": 122,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 115,
+   "mac_projects_after": 115,
+   "sim_projects_before": 114,
+   "sim_projects_after": 114,
+   "mac_sync_state_bytes": 73199,
+   "sim_sync_state_bytes": 63559,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "sim-b-import",
+   "device": "Simulator",
+   "description": "library B: import 5 photo(s) whose bytes library A already holds, and 2 .lapse project(s) library A already holds (twins by origin); originals on",
+   "started": "2026-10-01T14:34:14",
+   "ended": "2026-10-01T14:35:25",
+   "seconds": 70.6,
+   "hooks": {
+    "LL_TAB": "gallery",
+    "LL_IMPORT_STILLS": "/Users/stevenwright/Documents/dev/letslapse-testing/camera-dngs/Photo of rocks.dng:/Users/stevenwright/Documents/dev/letslapse-testing/flat-jpegs/8b672eb3-5221-4df3-beef-d69b6f1c292c.jpg:/Users/steven\u2026",
+    "LL_IMPORT_ANSWER": "photos",
+    "LL_IMPORT_ARCHIVE": "/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/archives/broad-mix--buildings.03.lapse:/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/archives/broad-mix--buildings.04.\u2026"
+   },
+   "log": "raw/03-sim-b-import.log",
+   "api": [
+    {
+     "t": "14:34:16.841",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 162,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:34:17.265",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 70,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:34:17.274",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 32,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "14:34:17.392",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 59,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:34:17.394",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 63,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:34:17.474",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 56,
+     "up": 0,
+     "down": 121066
+    },
+    {
+     "t": "14:34:17.511",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 92,
+     "up": 0,
+     "down": 123158
+    },
+    {
+     "t": "14:34:17.606",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 53,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:34:17.668",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 60,
+     "up": 0,
+     "down": 3253
+    },
+    {
+     "t": "14:34:17.670",
+     "method": "POST",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 24,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "14:34:17.739",
+     "method": "PUT",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 51,
+     "up": 651,
+     "down": 841
+    },
+    {
+     "t": "14:34:17.774",
+     "method": "POST",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 32,
+     "up": 342,
+     "down": 2620
+    },
+    {
+     "t": "14:34:17.847",
+     "method": "POST",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 48,
+     "up": 256,
+     "down": 1074
+    },
+    {
+     "t": "14:34:17.870",
+     "method": "POST",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 21,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:17.898",
+     "method": "DELETE",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 27,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:18.089",
+     "method": "POST",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 32,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "14:34:18.137",
+     "method": "PUT",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 40,
+     "up": 699,
+     "down": 857
+    },
+    {
+     "t": "14:34:18.168",
+     "method": "POST",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 30,
+     "up": 343,
+     "down": 2611
+    },
+    {
+     "t": "14:34:18.226",
+     "method": "POST",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 40,
+     "up": 256,
+     "down": 1075
+    },
+    {
+     "t": "14:34:18.246",
+     "method": "POST",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 20,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:18.263",
+     "method": "DELETE",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 17,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:18.417",
+     "method": "POST",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 29,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "14:34:18.473",
+     "method": "PUT",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 47,
+     "up": 699,
+     "down": 857
+    },
+    {
+     "t": "14:34:18.501",
+     "method": "POST",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 27,
+     "up": 343,
+     "down": 2619
+    },
+    {
+     "t": "14:34:18.546",
+     "method": "POST",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 31,
+     "up": 256,
+     "down": 1075
+    },
+    {
+     "t": "14:34:18.565",
+     "method": "POST",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 18,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:18.586",
+     "method": "DELETE",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 20,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:18.636",
+     "method": "POST",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 23,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "14:34:18.680",
+     "method": "PUT",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 37,
+     "up": 651,
+     "down": 841
+    },
+    {
+     "t": "14:34:18.714",
+     "method": "POST",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 32,
+     "up": 342,
+     "down": 2610
+    },
+    {
+     "t": "14:34:18.766",
+     "method": "POST",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 38,
+     "up": 256,
+     "down": 1074
+    },
+    {
+     "t": "14:34:18.790",
+     "method": "POST",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 23,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:18.811",
+     "method": "DELETE",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 21,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:18.971",
+     "method": "POST",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 35,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "14:34:19.025",
+     "method": "PUT",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 45,
+     "up": 633,
+     "down": 835
+    },
+    {
+     "t": "14:34:19.063",
+     "method": "POST",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 37,
+     "up": 343,
+     "down": 2619
+    },
+    {
+     "t": "14:34:19.122",
+     "method": "POST",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 39,
+     "up": 256,
+     "down": 1075
+    },
+    {
+     "t": "14:34:19.147",
+     "method": "POST",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 24,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:19.169",
+     "method": "DELETE",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 22,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:19.212",
+     "method": "GET",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 32,
+     "up": 0,
+     "down": 2274
+    },
+    {
+     "t": "14:34:19.238",
+     "method": "POST",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 19,
+     "up": 20,
+     "down": 234
+    },
+    {
+     "t": "14:34:19.262",
+     "method": "PUT",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 21,
+     "up": 584,
+     "down": 1042
+    },
+    {
+     "t": "14:34:19.293",
+     "method": "POST",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 30,
+     "up": 195,
+     "down": 681
+    },
+    {
+     "t": "14:34:19.309",
+     "method": "POST",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 13,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:19.323",
+     "method": "DELETE",
+     "path": "projects/2d4080c7-d130-4f33-bc5a-9c29146aecba/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 13,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:19.344",
+     "method": "GET",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 17,
+     "up": 0,
+     "down": 2340
+    },
+    {
+     "t": "14:34:19.362",
+     "method": "POST",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 15,
+     "up": 20,
+     "down": 234
+    },
+    {
+     "t": "14:34:19.396",
+     "method": "PUT",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 31,
+     "up": 650,
+     "down": 1064
+    },
+    {
+     "t": "14:34:19.434",
+     "method": "POST",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 37,
+     "up": 209,
+     "down": 717
+    },
+    {
+     "t": "14:34:19.459",
+     "method": "POST",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 21,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:19.478",
+     "method": "DELETE",
+     "path": "projects/226f7b56-4833-439f-b968-77cb5829b5d8/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 19,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:19.507",
+     "method": "GET",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 23,
+     "up": 0,
+     "down": 2340
+    },
+    {
+     "t": "14:34:19.532",
+     "method": "POST",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 20,
+     "up": 20,
+     "down": 234
+    },
+    {
+     "t": "14:34:19.563",
+     "method": "PUT",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 27,
+     "up": 650,
+     "down": 1064
+    },
+    {
+     "t": "14:34:19.601",
+     "method": "POST",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 37,
+     "up": 209,
+     "down": 717
+    },
+    {
+     "t": "14:34:19.626",
+     "method": "POST",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 19,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:19.643",
+     "method": "DELETE",
+     "path": "projects/68d0433f-4c5e-4b7c-bb5c-b92cf288ee41/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 17,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:19.673",
+     "method": "GET",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 22,
+     "up": 0,
+     "down": 2291
+    },
+    {
+     "t": "14:34:19.697",
+     "method": "POST",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 19,
+     "up": 20,
+     "down": 234
+    },
+    {
+     "t": "14:34:19.727",
+     "method": "PUT",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 26,
+     "up": 602,
+     "down": 1048
+    },
+    {
+     "t": "14:34:19.762",
+     "method": "POST",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 33,
+     "up": 192,
+     "down": 684
+    },
+    {
+     "t": "14:34:19.788",
+     "method": "POST",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 17,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:19.804",
+     "method": "DELETE",
+     "path": "projects/7a060703-91e3-44d6-82ef-7c084c40dc6d/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 16,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:19.834",
+     "method": "GET",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 20,
+     "up": 0,
+     "down": 2291
+    },
+    {
+     "t": "14:34:19.857",
+     "method": "POST",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 18,
+     "up": 20,
+     "down": 234
+    },
+    {
+     "t": "14:34:19.892",
+     "method": "PUT",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 29,
+     "up": 602,
+     "down": 1048
+    },
+    {
+     "t": "14:34:19.926",
+     "method": "POST",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 33,
+     "up": 192,
+     "down": 684
+    },
+    {
+     "t": "14:34:19.956",
+     "method": "POST",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 18,
+     "up": 44,
+     "down": 217
+    },
+    {
+     "t": "14:34:19.973",
+     "method": "DELETE",
+     "path": "projects/f721a8a8-cd42-4305-98d9-9988317c4ce2/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 17,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "14:34:23.075",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 80,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:34:23.132",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 43,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:34:23.205",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 67,
+     "up": 0,
+     "down": 125181
+    }
+   ],
+   "storage": [
+    {
+     "t": "14:34:17.794",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 14,
+     "bytes": 752
+    },
+    {
+     "t": "14:34:17.797",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 17,
+     "bytes": 292786
+    },
+    {
+     "t": "14:34:18.174",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 5,
+     "bytes": 1272
+    },
+    {
+     "t": "14:34:18.182",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 13,
+     "bytes": 419575
+    },
+    {
+     "t": "14:34:18.507",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 5,
+     "bytes": 1269
+    },
+    {
+     "t": "14:34:18.513",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 11,
+     "bytes": 384685
+    },
+    {
+     "t": "14:34:18.720",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 6,
+     "bytes": 755
+    },
+    {
+     "t": "14:34:18.726",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 12,
+     "bytes": 347251
+    },
+    {
+     "t": "14:34:19.071",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 7,
+     "bytes": 1251
+    },
+    {
+     "t": "14:34:19.080",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 16,
+     "bytes": 411049
+    }
+   ],
+   "highlights": [
+    "14:34:16.838 assets: 1A61EF9E recorded 1 of 1 pending (1 assets)",
+    "14:34:17.232 assets: EF95F9F3 recorded 1 of 1 pending (1 assets)",
+    "14:34:17.284 assets: 2D4080C7 recorded 1 of 1 pending (1 assets)",
+    "14:34:17.383 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:34:17.393 assets: 226F7B56 recorded 1 of 1 pending (1 assets)",
+    "14:34:17.426 assets: 68D0433F recorded 1 of 1 pending (1 assets)",
+    "14:34:17.453 assets: 7A060703 recorded 1 of 1 pending (1 assets)",
+    "14:34:17.469 assets: F721A8A8 recorded 1 of 1 pending (1 assets)",
+    "14:34:17.547 picplace: check (foreground) \u2014 0 pulled, 0 updated, 5 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 2 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "14:34:17.780 picplace: broad-mix--arches.04 \u2014 uploading 2 of 2 file(s), 294 KB",
+    "14:34:18.169 picplace: 8b672eb3-5221-4df3-beef-d69b6f1c292c \u2014 uploading 2 of 2 file(s), 421 KB",
+    "14:34:18.501 picplace: ae1fa114-51a5-4f29-b101-94eaead64d00 \u2014 uploading 2 of 2 file(s), 386 KB",
+    "14:34:18.714 picplace: broad-mix--arches.03 \u2014 uploading 2 of 2 file(s), 348 KB",
+    "14:34:19.064 picplace: Photo of rocks \u2014 uploading 2 of 2 file(s), 412 KB",
+    "14:34:19.177 picplace: push queue \u2014 5 sent, 0 failed"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20579,
+    "since": 20579,
+    "events": [],
+    "projects": {
+     "live": 121,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 122
+     },
+     "manifest_bytes": 65356
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 33557468
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 603417
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 123,
+      "bytes": 145652205
+     }
+    ],
+    "presences": {
+     "original": 118,
+     "preview": 122
+    },
+    "index": {
+     "rows": 123,
+     "name_null": 122,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20604,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 115,
+   "mac_projects_after": 115,
+   "sim_projects_before": 0,
+   "sim_projects_after": 7,
+   "mac_sync_state_bytes": 73199,
+   "sim_sync_state_bytes": 4073,
+   "new_mac_projects": [],
+   "new_sim_projects": [
+    {
+     "id": "1a61ef9e-f318-419a-ac60-2e112fc118ec",
+     "origin": "950eed02-c9aa-49ee-beb8-f1616beafc7f",
+     "title": "buildings.03.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/Projects/1A61EF9E-F318-419A-AC60-2E112FC118EC",
+     "bytes": 624432
+    },
+    {
+     "id": "7a060703-91e3-44d6-82ef-7c084c40dc6d",
+     "origin": "7a060703-91e3-44d6-82ef-7c084c40dc6d",
+     "title": "broad-mix--arches.03.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/Projects/7A060703-91E3-44D6-82EF-7C084C40DC6D",
+     "bytes": 883609
+    },
+    {
+     "id": "68d0433f-4c5e-4b7c-bb5c-b92cf288ee41",
+     "origin": "68d0433f-4c5e-4b7c-bb5c-b92cf288ee41",
+     "title": "ae1fa114-51a5-4f29-b101-94eaead64d00.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/Projects/68D0433F-4C5E-4B7C-BB5C-B92CF288EE41",
+     "bytes": 5360368
+    },
+    {
+     "id": "f721a8a8-cd42-4305-98d9-9988317c4ce2",
+     "origin": "f721a8a8-cd42-4305-98d9-9988317c4ce2",
+     "title": "broad-mix--arches.04.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/Projects/F721A8A8-CD42-4305-98D9-9988317C4CE2",
+     "bytes": 729385
+    },
+    {
+     "id": "226f7b56-4833-439f-b968-77cb5829b5d8",
+     "origin": "226f7b56-4833-439f-b968-77cb5829b5d8",
+     "title": "8b672eb3-5221-4df3-beef-d69b6f1c292c.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/Projects/226F7B56-4833-439F-B968-77CB5829B5D8",
+     "bytes": 5238717
+    },
+    {
+     "id": "2d4080c7-d130-4f33-bc5a-9c29146aecba",
+     "origin": "2d4080c7-d130-4f33-bc5a-9c29146aecba",
+     "title": "Photo of rocks.dng",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/Projects/2D4080C7-D130-4F33-BC5A-9C29146AECBA",
+     "bytes": 12444957
+    },
+    {
+     "id": "ef95f9f3-9371-496b-b0cd-e7f139bd92e0",
+     "origin": "b4f62627-782d-4e21-8b07-12bf3e6dbb52",
+     "title": "buildings.04.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/Projects/EF95F9F3-9371-496B-B0CD-E7F139BD92E0",
+     "bytes": 407198
+    }
+   ]
+  },
+  {
+   "name": "mac-a-check",
+   "device": "Mac",
+   "description": "Mac on library A after library B gained projects: does anything of B arrive?",
+   "started": "2026-10-01T14:35:28",
+   "ended": "2026-10-01T14:36:38",
+   "seconds": 70.3,
+   "hooks": {
+    "LL_TAB": "projects"
+   },
+   "log": "raw/04-mac-a-check.log",
+   "api": [
+    {
+     "t": "14:35:30.531",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 76,
+     "up": 0,
+     "down": 2827
+    },
+    {
+     "t": "14:35:30.851",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 35,
+     "up": 198,
+     "down": 445
+    },
+    {
+     "t": "14:35:30.887",
+     "method": "GET",
+     "path": "nearby/key",
+     "pattern": "GET nearby/key",
+     "status": 200,
+     "ms": 12,
+     "up": 0,
+     "down": 135
+    },
+    {
+     "t": "14:35:30.891",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 39,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "14:35:30.944",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 51,
+     "up": 0,
+     "down": 125181
+    },
+    {
+     "t": "14:35:30.990",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 17,
+     "up": 198,
+     "down": 445
+    },
+    {
+     "t": "14:35:31.016",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 25,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "14:35:31.047",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 30,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "14:35:31.089",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 41,
+     "up": 0,
+     "down": 127273
+    },
+    {
+     "t": "14:35:31.167",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 45,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "14:35:31.210",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 41,
+     "up": 0,
+     "down": 3257
+    }
+   ],
+   "storage": [],
+   "highlights": [
+    "14:35:30.874 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:35:31.121 picplace: check (launch) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20604,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20604,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 115,
+   "mac_projects_after": 115,
+   "sim_projects_before": 7,
+   "sim_projects_after": 7,
+   "mac_sync_state_bytes": 73199,
+   "sim_sync_state_bytes": 4073,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "sim-b-check",
+   "device": "Simulator",
+   "description": "library B idle check: what a small library pays for the account's big one",
+   "started": "2026-10-01T14:36:41",
+   "ended": "2026-10-01T14:37:52",
+   "seconds": 70.6,
+   "hooks": {
+    "LL_TAB": "gallery"
+   },
+   "log": "raw/05-sim-b-check.log",
+   "api": [
+    {
+     "t": "14:36:43.757",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 136,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:36:43.875",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 56,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:36:43.919",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 34,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "14:36:43.943",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 50,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:36:43.971",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 44,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:36:43.983",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 36,
+     "up": 0,
+     "down": 127273
+    },
+    {
+     "t": "14:36:44.029",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 48,
+     "up": 0,
+     "down": 125181
+    },
+    {
+     "t": "14:36:44.058",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 34,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:36:44.092",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 31,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:36:44.093",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 31,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:36:44.124",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 28,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:36:44.160",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 35,
+     "up": 0,
+     "down": 127273
+    },
+    {
+     "t": "14:36:44.227",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 34,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:36:44.268",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 38,
+     "up": 0,
+     "down": 3260
+    }
+   ],
+   "storage": [],
+   "highlights": [
+    "14:36:43.933 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:36:44.023 picplace: check (foreground) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 2 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "14:36:44.192 picplace: check (launch) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 2 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20604,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20604,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 115,
+   "mac_projects_after": 115,
+   "sim_projects_before": 7,
+   "sim_projects_after": 7,
+   "mac_sync_state_bytes": 73199,
+   "sim_sync_state_bytes": 4073,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "mac-a-after-move",
+   "device": "Mac",
+   "description": "Mac on A after \u201c16c080c7-a9b0-426c-8a53-a6975815bda7.jpg\u201d (89345046) was filed under B on the server",
+   "started": "2026-10-01T14:37:55",
+   "ended": "2026-10-01T14:39:03",
+   "seconds": 68.3,
+   "hooks": {
+    "LL_TAB": "projects"
+   },
+   "log": "raw/06-mac-a-after-move.log",
+   "api": [
+    {
+     "t": "14:37:56.030",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 58,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "14:37:56.370",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 30,
+     "up": 198,
+     "down": 445
+    },
+    {
+     "t": "14:37:56.414",
+     "method": "GET",
+     "path": "nearby/key",
+     "pattern": "GET nearby/key",
+     "status": 200,
+     "ms": 23,
+     "up": 0,
+     "down": 135
+    },
+    {
+     "t": "14:37:56.423",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 51,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "14:37:56.463",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 39,
+     "up": 0,
+     "down": 125181
+    },
+    {
+     "t": "14:37:56.520",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 28,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "14:37:56.552",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 31,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "14:37:56.588",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 35,
+     "up": 0,
+     "down": 127273
+    },
+    {
+     "t": "14:37:56.653",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 32,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "14:37:56.685",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 31,
+     "up": 0,
+     "down": 3257
+    }
+   ],
+   "storage": [],
+   "highlights": [
+    "14:37:56.391 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:37:56.620 picplace: check (launch) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20604,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20604,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 115,
+   "mac_projects_after": 115,
+   "sim_projects_before": 7,
+   "sim_projects_after": 7,
+   "mac_sync_state_bytes": 73201,
+   "sim_sync_state_bytes": 4073,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "sim-b-after-move",
+   "device": "Simulator",
+   "description": "library B after the move: the project arrives",
+   "started": "2026-10-01T14:39:06",
+   "ended": "2026-10-01T14:40:15",
+   "seconds": 68.6,
+   "hooks": {
+    "LL_TAB": "gallery"
+   },
+   "log": "raw/07-sim-b-after-move.log",
+   "api": [
+    {
+     "t": "14:39:08.903",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 158,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:39:08.921",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 44,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:39:08.973",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 21,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "14:39:08.978",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 48,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:39:09.029",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 42,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:39:09.042",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 44,
+     "up": 0,
+     "down": 127273
+    },
+    {
+     "t": "14:39:09.081",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 48,
+     "up": 0,
+     "down": 125181
+    },
+    {
+     "t": "14:39:09.133",
+     "method": "GET",
+     "path": "projects/89345046-965f-4821-aaae-c10546fbd60d",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 21,
+     "up": 0,
+     "down": 3903
+    },
+    {
+     "t": "14:39:09.156",
+     "method": "POST",
+     "path": "projects/89345046-965f-4821-aaae-c10546fbd60d/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 19,
+     "up": 51,
+     "down": 1215
+    },
+    {
+     "t": "14:39:09.183",
+     "method": "POST",
+     "path": "projects/89345046-965f-4821-aaae-c10546fbd60d/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 19,
+     "up": 51,
+     "down": 1187
+    },
+    {
+     "t": "14:39:09.218",
+     "method": "POST",
+     "path": "projects/89345046-965f-4821-aaae-c10546fbd60d/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 21,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "14:39:09.262",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 40,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:39:09.310",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 40,
+     "up": 0,
+     "down": 3260
+    }
+   ],
+   "storage": [
+    {
+     "t": "14:39:09.162",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 3,
+     "bytes": 1285
+    },
+    {
+     "t": "14:39:09.190",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 7,
+     "bytes": 383050
+    }
+   ],
+   "highlights": [
+    "14:39:08.995 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:39:09.220 picplace: pulled 16c080c7-a9b0-426c-8a53-a6975815bda7 (89345046) \u2014 2 object(s), 384335 bytes; 1 heavy file(s) stay on PicPlace",
+    "14:39:09.222 picplace: check (foreground) \u2014 1 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 2 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20604,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20606,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 2,
+      "bytes_in": 0,
+      "bytes_out": 384335
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 115,
+   "mac_projects_after": 115,
+   "sim_projects_before": 7,
+   "sim_projects_after": 8,
+   "mac_sync_state_bytes": 73201,
+   "sim_sync_state_bytes": 4626,
+   "new_mac_projects": [],
+   "new_sim_projects": [
+    {
+     "id": "89345046-965f-4821-aaae-c10546fbd60d",
+     "origin": "89345046-965f-4821-aaae-c10546fbd60d",
+     "title": "16c080c7-a9b0-426c-8a53-a6975815bda7.jpg",
+     "preset": "Cinema",
+     "modifiedAt": "2026-10-01T05:56:40.521Z",
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/5C9621FA-4402-4F1C-B36E-3A231EE1A72F/Library/Application Support/LetsLapse/Libraries/7D3A5393-EF80-49AE-ADAD-BDF2634DA92C/Projects/89345046-965F-4821-AAAE-C10546FBD60D",
+     "bytes": 387451
+    }
+   ]
+  },
+  {
+   "name": "sim-a-after-move",
+   "device": "Simulator",
+   "description": "the Simulator back on library A: its preview of the moved project",
+   "started": "2026-10-01T14:40:18",
+   "ended": "2026-10-01T14:41:29",
+   "seconds": 70.7,
+   "hooks": {
+    "LL_TAB": "gallery"
+   },
+   "log": "raw/08-sim-a-after-move.log",
+   "api": [
+    {
+     "t": "14:40:20.567",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 168,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:40:20.582",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 41,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:40:20.651",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 46,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:40:20.660",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 37,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "14:40:20.730",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 59,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:40:20.743",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 76,
+     "up": 0,
+     "down": 127273
+    },
+    {
+     "t": "14:40:20.826",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 48,
+     "up": 0,
+     "down": 125181
+    },
+    {
+     "t": "14:40:20.857",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 52,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:40:20.900",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 38,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:40:20.901",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 41,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:40:20.933",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 32,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:40:20.974",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 38,
+     "up": 0,
+     "down": 127273
+    },
+    {
+     "t": "14:40:21.040",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 34,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:40:21.074",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 32,
+     "up": 0,
+     "down": 3260
+    }
+   ],
+   "storage": [],
+   "highlights": [
+    "14:40:20.673 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:40:20.803 picplace: check (foreground) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "14:40:21.004 picplace: check (launch) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20606,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 2,
+      "bytes_in": 0,
+      "bytes_out": 384335
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20606,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 2,
+      "bytes_in": 0,
+      "bytes_out": 384335
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 115,
+   "mac_projects_after": 115,
+   "sim_projects_before": 114,
+   "sim_projects_after": 114,
+   "mac_sync_state_bytes": 73201,
+   "sim_sync_state_bytes": 63559,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "sim-b-idle",
+   "device": "Simulator",
+   "description": "library B once more with nothing changed: do the same conflicts or notices repeat?",
+   "started": "2026-10-01T14:41:31",
+   "ended": "2026-10-01T14:42:42",
+   "seconds": 70.6,
+   "hooks": {
+    "LL_TAB": "gallery"
+   },
+   "log": "raw/09-sim-b-idle.log",
+   "api": [
+    {
+     "t": "14:41:34.146",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 174,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:41:34.159",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 58,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:41:34.222",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 20,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "14:41:34.227",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 52,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:41:34.280",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 43,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:41:34.288",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 45,
+     "up": 0,
+     "down": 127273
+    },
+    {
+     "t": "14:41:34.358",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 30,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:41:34.363",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 40,
+     "up": 0,
+     "down": 125181
+    },
+    {
+     "t": "14:41:34.391",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 31,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:41:34.422",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 29,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:41:34.451",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 27,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:41:34.493",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 37,
+     "up": 0,
+     "down": 127273
+    },
+    {
+     "t": "14:41:34.554",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 31,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "14:41:34.588",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 32,
+     "up": 0,
+     "down": 3260
+    }
+   ],
+   "storage": [],
+   "highlights": [
+    "14:41:34.238 picplace: pacing requests under 300/min (255/min for sync work)",
+    "14:41:34.327 picplace: check (foreground) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 2 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "14:41:34.522 picplace: check (launch) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 2 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20606,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 2,
+      "bytes_in": 0,
+      "bytes_out": 384335
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20606,
+    "since": 20579,
+    "events": {
+     "manifest_written": {
+      "n": 10,
+      "bytes_in": 4914,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 10,
+      "bytes_in": 1860645,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 5,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 2,
+      "bytes_in": 0,
+      "bytes_out": 384335
+     }
+    },
+    "projects": {
+     "live": 126,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 127
+     },
+     "manifest_bytes": 67813
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 35412814
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 608716
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 128,
+      "bytes": 168441909
+     }
+    ],
+    "presences": {
+     "original": 123,
+     "preview": 122
+    },
+    "index": {
+     "rows": 128,
+     "name_null": 127,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 115,
+   "mac_projects_after": 115,
+   "sim_projects_before": 8,
+   "sim_projects_after": 8,
+   "mac_sync_state_bytes": 73201,
+   "sim_sync_state_bytes": 4626,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  }
+ ],
+ "started": "2026-10-01T14:31:44",
+ "args": {
+  "cmd": "libraries",
+  "photos": "['/Users/stevenwright/Documents/dev/letslapse-testing/camera-dngs/Photo of rocks.dng', '/Users/stevenwright/Documents/dev/letslapse-testing/flat-jpegs/8b672eb3-5221-4df3-beef-d69b6f1c292c.jpg', '/Users/stevenwright/Documents/dev/letslapse-testing/flat-jpegs/ae1fa114-51a5-4f29-b101-94eaead64d00.jpg', '/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/photos/broad-mix--arches.03.jpg', '/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/photos/broad-mix--arches.04.jpg']",
+  "lapse": "['/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/archives/broad-mix--buildings.03.lapse', '/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/archives/broad-mix--buildings.04.lapse']",
+  "mac_root": "/Users/stevenwright/Pictures/LetsLapse/synth",
+  "sim": "C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996",
+  "server": "https://picplace.test",
+  "storage": "http://127.0.0.1:3900",
+  "picplace": "/Users/stevenwright/Sites/picplace",
+  "user": "synth",
+  "token": "None",
+  "out": "LetsLapse/docs/fieldtests/2026-10-01-two-library-bench-after-fix",
+  "edits": "3",
+  "presets": "None",
+  "sim_edit": "download",
+  "steps": "None",
+  "quiet": "45",
+  "step_timeout": "1800",
+  "install_sim": "False",
+  "force": "False",
+  "device_id": "None",
+  "library_name": "synth three",
+  "sim_library": "457D3FBD-E366-4669-BB5B-81419A24B657",
+  "resume_b": "None"
+ },
+ "scenario": "libraries",
+ "photos": [
+  "/Users/stevenwright/Documents/dev/letslapse-testing/camera-dngs/Photo of rocks.dng",
+  "/Users/stevenwright/Documents/dev/letslapse-testing/flat-jpegs/8b672eb3-5221-4df3-beef-d69b6f1c292c.jpg",
+  "/Users/stevenwright/Documents/dev/letslapse-testing/flat-jpegs/ae1fa114-51a5-4f29-b101-94eaead64d00.jpg",
+  "/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/photos/broad-mix--arches.03.jpg",
+  "/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/photos/broad-mix--arches.04.jpg"
+ ],
+ "lapses": [
+  "/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/archives/broad-mix--buildings.03.lapse",
+  "/Users/stevenwright/Documents/dev/letslapse-testing/synth-lapse/archives/broad-mix--buildings.04.lapse"
+ ],
+ "out": "LetsLapse/docs/fieldtests/2026-10-01-two-library-bench-after-fix",
+ "ledger_start": {
+  "user": "synth",
+  "ledger_max_id": 20579,
+  "since": 0,
+  "events": {
+   "asset_replaced": {
+    "n": 16,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "copy_confirmed": {
+    "n": 6,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "download_url_issued": {
+    "n": 952,
+    "bytes_in": 0,
+    "bytes_out": 152031049
+   },
+   "manifest_deleted": {
+    "n": 3,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "manifest_written": {
+    "n": 256,
+    "bytes_in": 128105,
+    "bytes_out": 0
+   },
+   "project_deleted": {
+    "n": 3,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "project_restored": {
+    "n": 1,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "upload_confirmed": {
+    "n": 379,
+    "bytes_in": 167350491,
+    "bytes_out": 0
+   }
+  },
+  "projects": {
+   "live": 121,
+   "trashed": 2,
+   "by_type": {
+    "interval": 1,
+    "photo": 122
+   },
+   "manifest_bytes": 65356
+  },
+  "assets": [
+   {
+    "kind": "preview",
+    "status": "confirmed",
+    "n": 123,
+    "bytes": 33557468
+   },
+   {
+    "kind": "records",
+    "status": "confirmed",
+    "n": 123,
+    "bytes": 603417
+   },
+   {
+    "kind": "source",
+    "status": "confirmed",
+    "n": 123,
+    "bytes": 145652205
+   }
+  ],
+  "presences": {
+   "original": 118,
+   "preview": 122
+  },
+  "index": {
+   "rows": 123,
+   "name_null": 122,
+   "records_indexed": 0
+  },
+  "uploads_pending": 0
+ },
+ "libraries_before": [
+  {
+   "uuid": "8f3aa852-afe5-43c9-80a5-caaaf9f40c19",
+   "name": "synth",
+   "projects": {
+    "count": 114,
+    "by_type": {
+     "photo": 114,
+     "interval": 0,
+     "video": 0
+    }
+   },
+   "used_bytes": 155443892,
+   "originals": 114,
+   "created_by": {
+    "id": "01a0f2f0-4276-71c9-a524-44f07fd10869",
+    "name": "macbookpro",
+    "platform": "macos",
+    "revoked_at": null
+   },
+   "updated_by": {
+    "id": "01a0f2f0-4276-71c9-a524-44f07fd10869",
+    "name": "macbookpro",
+    "platform": "macos",
+    "revoked_at": null
+   },
+   "created_at": "2026-09-30T15:31:08+00:00",
+   "updated_at": "2026-09-30T15:31:08+00:00",
+   "deleted_at": null,
+   "deleted_by": null
+  },
+  {
+   "uuid": "4e593426-7411-47ef-88a6-ff9013ca3d1a",
+   "name": "synth two",
+   "projects": {
+    "count": 7,
+    "by_type": {
+     "photo": 7,
+     "interval": 0,
+     "video": 0
+    }
+   },
+   "used_bytes": 23099178,
+   "originals": 7,
+   "created_by": {
+    "id": "01a0f302-793c-7229-978a-9b6e33985a8a",
+    "name": "LetsLapse Fresh",
+    "platform": "ios",
+    "revoked_at": null
+   },
+   "updated_by": {
+    "id": "01a0f302-793c-7229-978a-9b6e33985a8a",
+    "name": "LetsLapse Fresh",
+    "platform": "ios",
+    "revoked_at": null
+   },
+   "created_at": "2026-10-01T11:52:03+00:00",
+   "updated_at": "2026-10-01T11:52:03+00:00",
+   "deleted_at": null,
+   "deleted_by": null
+  }
+ ],
+ "library_a": "457D3FBD-E366-4669-BB5B-81419A24B657",
+ "library_b": "7D3A5393-EF80-49AE-ADAD-BDF2634DA92C",
+ "moved": {
+  "origin": "89345046-965f-4821-aaae-c10546fbd60d",
+  "title": "16c080c7-a9b0-426c-8a53-a6975815bda7.jpg",
+  "result": {
+   "moved": 1,
+   "unchanged": 0,
+   "unknown": []
+  }
+ },
+ "libraries_after": [
+  {
+   "uuid": "8f3aa852-afe5-43c9-80a5-caaaf9f40c19",
+   "name": "synth",
+   "projects": {
+    "count": 114,
+    "by_type": {
+     "photo": 114,
+     "interval": 0,
+     "video": 0
+    }
+   },
+   "used_bytes": 155443892,
+   "originals": 114,
+   "created_by": {
+    "id": "01a0f2f0-4276-71c9-a524-44f07fd10869",
+    "name": "macbookpro",
+    "platform": "macos",
+    "revoked_at": null
+   },
+   "updated_by": {
+    "id": "01a0f2f0-4276-71c9-a524-44f07fd10869",
+    "name": "macbookpro",
+    "platform": "macos",
+    "revoked_at": null
+   },
+   "created_at": "2026-09-30T15:31:08+00:00",
+   "updated_at": "2026-09-30T15:31:08+00:00",
+   "deleted_at": null,
+   "deleted_by": null
+  },
+  {
+   "uuid": "90836859-7f63-4355-98fd-1e758ad6518e",
+   "name": "synth three",
+   "projects": {
+    "count": 6,
+    "by_type": {
+     "photo": 6,
+     "interval": 0,
+     "video": 0
+    }
+   },
+   "used_bytes": 29658346,
+   "originals": 6,
+   "created_by": {
+    "id": "01a0f302-793c-7229-978a-9b6e33985a8a",
+    "name": "LetsLapse Fresh",
+    "platform": "ios",
+    "revoked_at": null
+   },
+   "updated_by": {
+    "id": "01a0f302-793c-7229-978a-9b6e33985a8a",
+    "name": "LetsLapse Fresh",
+    "platform": "ios",
+    "revoked_at": null
+   },
+   "created_at": "2026-10-01T12:33:03+00:00",
+   "updated_at": "2026-10-01T12:33:03+00:00",
+   "deleted_at": null,
+   "deleted_by": null
+  },
+  {
+   "uuid": "4e593426-7411-47ef-88a6-ff9013ca3d1a",
+   "name": "synth two",
+   "projects": {
+    "count": 6,
+    "by_type": {
+     "photo": 6,
+     "interval": 0,
+     "video": 0
+    }
+   },
+   "used_bytes": 18093638,
+   "originals": 6,
+   "created_by": {
+    "id": "01a0f302-793c-7229-978a-9b6e33985a8a",
+    "name": "LetsLapse Fresh",
+    "platform": "ios",
+    "revoked_at": null
+   },
+   "updated_by": {
+    "id": "01a0f302-793c-7229-978a-9b6e33985a8a",
+    "name": "LetsLapse Fresh",
+    "platform": "ios",
+    "revoked_at": null
+   },
+   "created_at": "2026-10-01T11:52:03+00:00",
+   "updated_at": "2026-10-01T11:52:03+00:00",
+   "deleted_at": null,
+   "deleted_by": null
+  }
+ ],
+ "ledger_end": {
+  "user": "synth",
+  "ledger_max_id": 20606,
+  "since": 0,
+  "events": {
+   "asset_replaced": {
+    "n": 16,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "copy_confirmed": {
+    "n": 11,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "download_url_issued": {
+    "n": 954,
+    "bytes_in": 0,
+    "bytes_out": 152415384
+   },
+   "manifest_deleted": {
+    "n": 3,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "manifest_written": {
+    "n": 266,
+    "bytes_in": 133019,
+    "bytes_out": 0
+   },
+   "project_deleted": {
+    "n": 3,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "project_restored": {
+    "n": 1,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "upload_confirmed": {
+    "n": 389,
+    "bytes_in": 169211136,
+    "bytes_out": 0
+   }
+  },
+  "projects": {
+   "live": 126,
+   "trashed": 2,
+   "by_type": {
+    "interval": 1,
+    "photo": 127
+   },
+   "manifest_bytes": 67813
+  },
+  "assets": [
+   {
+    "kind": "preview",
+    "status": "confirmed",
+    "n": 128,
+    "bytes": 35412814
+   },
+   {
+    "kind": "records",
+    "status": "confirmed",
+    "n": 128,
+    "bytes": 608716
+   },
+   {
+    "kind": "source",
+    "status": "confirmed",
+    "n": 128,
+    "bytes": 168441909
+   }
+  ],
+  "presences": {
+   "original": 123,
+   "preview": 122
+  },
+  "index": {
+   "rows": 128,
+   "name_null": 127,
+   "records_indexed": 0
+  },
+  "uploads_pending": 0
+ },
+ "finished": "2026-10-01T14:42:45"
+}

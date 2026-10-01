@@ -1,0 +1,37 @@
+14:05:40.879 🎥LL 827.189 device id 03533CE8-339D-4689-896F-D1DC75FCF25E
+14:05:40.879 🎥LL 827.190 thermal: nominal at launch
+14:05:40.958 🎥LL 827.268 library lock: taken (pid 93355)
+14:05:40.959 🎥LL 827.270 storage: root came from the launch arguments — the libraries list is kept for this run only
+14:05:41.372 🎥LL 827.682 library: walked 120 documents in 0.016 s — 120 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 0 asset files and 0 shape registers re-indexed
+14:05:41.388 🎥LL 827.698 picplace: injected tokens — the stored session is not read
+14:05:41.388 🎥LL 827.698 picplace: session none — no tokens, library bound to @synth on picplace.test
+14:05:41.389 🎥LL 827.699 picplace: auto-sync switches for this device and library — changes on, originals ON, Wi-Fi only on
+14:05:41.448 🎥LL 827.758 picplace trace: GET status → 200 55 ms up=0 down=2646
+14:05:41.779 🎥LL 828.089 picplace trace: POST device → 200 28 ms up=198 down=445
+14:05:41.812 🎥LL 828.123 picplace: pacing requests under 300/min (255/min for sync work)
+14:05:41.816 🎥LL 828.127 picplace trace: GET status → 200 36 ms up=0 down=2728
+14:05:41.827 🎥LL 828.138 picplace trace: GET nearby/key → 200 15 ms up=0 down=135
+14:05:41.828 🎥LL 828.138 nearby: key nk_044ac2a46f154684 held for picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae
+14:05:41.829 🎥LL 828.139 nearby: on — key nk_044ac2a46f154684, serving and browsing
+14:05:41.835 🎥LL 828.145 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+14:05:41.835 🎥LL 828.146 nearby: listening as “LetsLapse 1070BA4C”
+14:05:41.838 🎥LL 828.148 nearby: listener failed — -65555: NoAuth
+14:05:41.857 🎥LL 828.167 picplace trace: GET projects → 200 39 ms up=0 down=121072
+14:05:41.928 🎥LL 828.238 picplace trace: GET status → 200 43 ms up=0 down=2728
+14:05:41.969 🎥LL 828.279 picplace trace: GET status → 200 40 ms up=0 down=2728
+14:05:42.021 🎥LL 828.332 picplace trace: GET projects?include_deleted=1 → 200 51 ms up=0 down=123164
+14:05:42.050 🎥LL 828.360 picplace check pass: 115 of 115 project(s) read in 0.00 s off main
+14:05:42.051 🎥LL 828.361 picplace: 89345046 is in synth two on PicPlace, not in this one — left alone here
+14:05:42.053 🎥LL 828.364 picplace: check (launch) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+14:05:42.101 🎥LL 828.412 picplace trace: GET status → 200 47 ms up=0 down=2728
+14:05:42.133 🎥LL 828.443 picplace trace: GET status → 200 30 ms up=0 down=2728
+14:05:47.113 🎥LL 833.423 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+14:05:47.116 🎥LL 833.426 nearby: listening as “LetsLapse 1070BA4C”
+14:05:47.118 🎥LL 833.429 nearby: listener failed — -65555: NoAuth
+14:05:57.288 🎥LL 843.598 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+14:05:57.289 🎥LL 843.599 nearby: listening as “LetsLapse 1070BA4C”
+14:05:57.291 🎥LL 843.602 nearby: listener failed — -65555: NoAuth
+14:06:02.384 🎥LL 848.694 assets: backfill scan — 0 of 115 project(s) need work, 0.06 s off main
+14:06:18.383 🎥LL 864.693 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+14:06:18.384 🎥LL 864.694 nearby: listening as “LetsLapse 1070BA4C”
+14:06:18.387 🎥LL 864.697 nearby: listener failed — -65555: NoAuth

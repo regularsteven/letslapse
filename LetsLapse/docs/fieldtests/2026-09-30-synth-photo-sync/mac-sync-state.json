@@ -1,0 +1,31 @@
+{
+  "format" : 1,
+  "meta" : {
+    "checkedAt" : "2026-09-30T16:28:11.931Z",
+    "serverTime" : "2026-09-30T16:28:11Z"
+  },
+  "records" : {
+    "648a0a63-a016-4fea-9296-fc1a4c3b233e" : {
+      "alsoOn" : [
+
+      ],
+      "bytes" : 408461,
+      "files" : 1,
+      "heavyBytes" : 0,
+      "heavyDigest" : "450afa86317078160dd7b43e353f737e26bae58abd19e0b0b5d180a5d188ac53",
+      "heavyFiles" : 0,
+      "originalsMovedAt" : "2026-09-30T16:27:12.173Z",
+      "originalsOn" : [
+
+      ],
+      "policy" : "originals",
+      "posterToken" : "e6|Cinema|n",
+      "revision" : 1790784573671,
+      "server" : "https://picplace.test",
+      "serverHeavyBytes" : 408461,
+      "serverHeavyFiles" : 1,
+      "syncedAt" : "2026-09-30T16:27:12.172Z",
+      "uploaded" : 1
+    }
+  }
+}

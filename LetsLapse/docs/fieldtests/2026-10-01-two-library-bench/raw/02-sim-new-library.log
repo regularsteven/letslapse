@@ -1,0 +1,69 @@
+13:52:00.408 🎥LL   6.718 watch-link activated state=2 reachable=false error=none
+13:52:00.535 🎥LL   6.845 device id D71224C0-F8C5-4705-984D-042382F5D823
+13:52:00.535 🎥LL   6.845 thermal: nominal at launch
+13:52:00.668 🎥LL   6.978 picplace: session picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae — tokens found, library bound to @synth on picplace.test
+13:52:00.672 🎥LL   6.983 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+13:52:00.678 🎥LL   6.989 watch-link appActive=true
+13:52:01.241 🎥LL   7.551 library: walked 116 documents in 0.026 s — 116 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 0 asset files and 0 shape registers re-indexed
+13:52:01.242 🎥LL   7.552 nearby: on — key nk_044ac2a46f154684, serving and browsing
+13:52:01.358 🎥LL   7.669 nearby: listening as “LetsLapse 27776C54”
+13:52:01.382 🎥LL   7.692 free-up pass: 115 of 115 project(s) read in 0.03 s off main (3 frame walks)
+13:52:01.444 🎥LL   7.754 picplace trace: GET status → 200 170 ms up=0 down=2204
+13:52:01.457 🎥LL   7.768 picplace trace: GET status → 200 197 ms up=0 down=2204
+13:52:01.512 🎥LL   7.822 picplace: free-up estimate — 115 of 115 project(s) candidates in 0.11 s, listed in 0.09 s, judged in 0.04 s, all off main: 3 on PicPlace, 0 queued, 0 not up
+13:52:01.512 🎥LL   7.822 picplace: pacing requests under 300/min (255/min for sync work)
+13:52:01.537 🎥LL   7.848 picplace trace: GET status → 200 63 ms up=0 down=2204
+13:52:01.547 🎥LL   7.857 picplace trace: GET projects?include_deleted=1 → 200 76 ms up=0 down=118916
+13:52:01.589 🎥LL   7.899 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+13:52:01.619 🎥LL   7.928 picplace trace: POST device → 200 34 ms up=201 down=448
+13:52:01.643 🎥LL   7.953 picplace trace: GET projects → 200 59 ms up=0 down=115885
+13:52:01.681 🎥LL   7.991 picplace trace: GET status → 200 79 ms up=0 down=2204
+13:52:01.687 🎥LL   7.997 picplace trace: GET status → 200 56 ms up=0 down=2204
+13:52:01.727 🎥LL   8.037 picplace trace: GET status → 200 37 ms up=0 down=2204
+13:52:01.733 🎥LL   8.043 picplace trace: GET projects → 200 39 ms up=0 down=115885
+13:52:01.802 🎥LL   8.112 picplace trace: GET status → 200 40 ms up=0 down=2204
+13:52:01.845 🎥LL   8.156 picplace trace: GET status → 200 42 ms up=0 down=2204
+13:52:01.908 🎥LL   8.218 picplace trace: GET projects?include_deleted=1 → 200 61 ms up=0 down=118916
+13:52:01.947 🎥LL   8.257 picplace: check (launch) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+13:52:02.004 🎥LL   8.315 picplace trace: GET status → 200 49 ms up=0 down=2204
+13:52:02.046 🎥LL   8.357 picplace trace: GET status → 200 40 ms up=0 down=2204
+13:52:03.259 🎥LL   9.569 picplace trace: PUT libraries/4e593426-7411-47ef-88a6-ff9013ca3d1a → 201 60 ms up=42 down=543
+13:52:03.273 🎥LL   9.583 storage: library folder D890C309-EC0B-4E71-813F-9F1CB4BB74D6 made — “synth two” 4E593426-7411-47EF-88A6-FF9013CA3D1A
+13:52:03.280 🎥LL   9.590 picplace: library “synth two” 4e593426-7411-47ef-88a6-ff9013ca3d1a created on picplace.test and placed in Libraries/D890C309-EC0B-4E71-813F-9F1CB4BB74D6
+13:52:03.284 🎥LL   9.595 picplace: stood down for a library switch
+13:52:03.285 🎥LL   9.595 nearby: off
+13:52:03.320 🎥LL   9.630 library export: regenerated from the documents in 0.03 s (78813 bytes)
+13:52:03.320 🎥LL   9.630 model: stood down for a library switch
+13:52:03.320 🎥LL   9.630 storage: root is now /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/FC3F00DF-A287-4A2E-8EF7-C5BA12F4DBEF/Library/Application Support/LetsLapse/Libraries/D890C309-EC0B-4E71-813F-9F1CB4BB74D6
+13:52:03.326 🎥LL   9.635 presets: 0 custom preset(s) at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/FC3F00DF-A287-4A2E-8EF7-C5BA12F4DBEF/Library/Application Support/LetsLapse/Libraries/D890C309-EC0B-4E71-813F-9F1CB4BB74D6/custom_presets.json
+13:52:03.326 🎥LL   9.636 presets: 0 custom preset(s) at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/FC3F00DF-A287-4A2E-8EF7-C5BA12F4DBEF/Library/Application Support/LetsLapse/Libraries/D890C309-EC0B-4E71-813F-9F1CB4BB74D6/custom_presets.json
+13:52:03.336 🎥LL   9.646 ladders: 0 user ladder(s) at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/FC3F00DF-A287-4A2E-8EF7-C5BA12F4DBEF/Library/Application Support/LetsLapse/Libraries/D890C309-EC0B-4E71-813F-9F1CB4BB74D6/light_ladders.json
+13:52:03.336 🎥LL   9.646 ladders: 0 user ladder(s) at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/FC3F00DF-A287-4A2E-8EF7-C5BA12F4DBEF/Library/Application Support/LetsLapse/Libraries/D890C309-EC0B-4E71-813F-9F1CB4BB74D6/light_ladders.json
+13:52:03.337 🎥LL   9.646 luts: 0 imported LUT(s) at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/FC3F00DF-A287-4A2E-8EF7-C5BA12F4DBEF/Library/Application Support/LetsLapse/Libraries/D890C309-EC0B-4E71-813F-9F1CB4BB74D6/luts
+13:52:03.337 🎥LL   9.647 luts: 0 imported LUT(s) at /Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/FC3F00DF-A287-4A2E-8EF7-C5BA12F4DBEF/Library/Application Support/LetsLapse/Libraries/D890C309-EC0B-4E71-813F-9F1CB4BB74D6/luts
+13:52:03.338 🎥LL   9.648 device id D71224C0-F8C5-4705-984D-042382F5D823
+13:52:03.338 🎥LL   9.648 thermal: nominal at launch
+13:52:03.340 🎥LL   9.650 picplace: session picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae — tokens found, library bound to @synth on picplace.test
+13:52:03.341 🎥LL   9.651 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+13:52:03.341 🎥LL   9.651 nearby: on — key nk_044ac2a46f154684, serving and browsing
+13:52:03.351 🎥LL   9.661 storage: switched to library “synth two” (D890C309-EC0B-4E71-813F-9F1CB4BB74D6) — generation 1
+13:52:03.434 🎥LL   9.744 picplace trace: GET status → 200 69 ms up=0 down=2724
+13:52:03.551 🎥LL   9.861 nearby: listening as “LetsLapse B213C152”
+13:52:03.553 🎥LL   9.863 model: released
+13:52:03.566 🎥LL   9.876 free-up pass: 0 of 0 project(s) read in 0.00 s off main
+13:52:03.569 🎥LL   9.880 picplace: free-up estimate — 0 of 0 project(s) candidates in 0.01 s, listed in 0.00 s, judged in 0.00 s, all off main: 0 on PicPlace, 0 queued, 0 not up
+13:52:03.592 🎥LL   9.902 picplace trace: POST device → 200 25 ms up=201 down=448
+13:52:03.602 🎥LL   9.913 picplace trace: GET status → 200 50 ms up=0 down=2724
+13:52:03.609 🎥LL   9.919 picplace: pacing requests under 300/min (255/min for sync work)
+13:52:03.622 🎥LL   9.932 picplace trace: GET status → 200 28 ms up=0 down=2724
+13:52:03.632 🎥LL   9.942 picplace trace: GET status → 200 22 ms up=0 down=2724
+13:52:03.660 🎥LL   9.970 picplace trace: GET projects → 200 36 ms up=0 down=115885
+13:52:03.689 🎥LL   9.999 picplace trace: GET projects → 200 55 ms up=0 down=115885
+13:52:03.761 🎥LL  10.072 picplace trace: GET projects → 200 46 ms up=0 down=115885
+13:52:03.792 🎥LL  10.102 picplace: initial sync (clean) — 0 to pull, 0 to push, 0 in step, 0 deferred
+13:52:03.792 🎥LL  10.103 picplace: initial sync done (clean)
+13:52:03.845 🎥LL  10.156 picplace trace: GET status → 200 37 ms up=0 down=2724
+13:52:03.884 🎥LL  10.194 picplace trace: GET status → 200 36 ms up=0 down=2724
+13:52:03.937 🎥LL  10.247 picplace trace: GET projects → 200 51 ms up=0 down=115885
+13:52:08.612 🎥LL  14.922 storage: model of generation 0 released
+13:52:24.268 🎥LL  30.579 assets: backfill scan — 0 of 0 project(s) need work, 0.00 s off main

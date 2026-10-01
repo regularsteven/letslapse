@@ -11,6 +11,123 @@ live inline.
 
 ## Open
 
+### PicPlace libraries leaked into each other at an iOS launch (found and fixed 2026-10-01, uncommitted)
+
+The two-library bench (`docs/fieldtests/2026-10-01-two-library-bench/`, Mac on
+`synth`, Simulator on a new library `synth two` of the same account) showed a
+phone pulling the OTHER library's previews, then removing them, launch after
+launch:
+- **The race.** An iOS launch runs a *foreground* check and a *launch* check.
+  The foreground one can merge before the handshake's `/status` has set
+  `serverHasLibraries`; the check only reads `/status` itself when that flag is
+  already true (`PicPlaceChangeSync.swift:203`), and `PPProject.isIn(scope:)`
+  treats every row as in scope while it is false (`PicPlaceAPI.swift:172`). So
+  the whole account is pulled into the open library: 113–114 previews, ~460
+  requests, ~30 MB, each time the race is lost (three launches of four on B;
+  B's 6 projects leaked into A the same way).
+- **The undo.** The next check that knows about libraries removes them
+  ("N preview(s) of other libraries' projects removed") and logs
+  "N queued to send" on the way. The next launch pulls them again.
+- **The conflict noise.** With everything in scope, a twin of another
+  library's project (`buildings.02`, imported into B from a `.lapse` A already
+  holds) is reported as an `unrelated` conflict on every such check — the shape
+  of the ~60 repeated conflicts in the production Mac log.
+- The Mac never showed it (its launch check waits for the handshake). The
+  server's filing was right throughout.
+- **Fixed the same day:** `librariesKnown` on the controller (set by the first
+  `/status` of the session); the check and the first connection read
+  `/status` themselves while it is false, and neither runs for a bound library
+  without the answer. Re-run on the fixed build
+  (`docs/fieldtests/2026-10-01-two-library-bench-after-fix/`, a third library
+  made through the phone's door after a real sign-out and sign-in through the
+  web sheet): nine launches, no pull of another library, no conflict, the
+  moved project pulled once by the library it moved to. **Owed:** a device
+  check on a real iPhone with two libraries, and Steven's production library —
+  its repeated `unrelated` conflicts should stop if this was their cause.
+
+Also seen, to decide: **a tombstone and a re-import.** `buildings.01.lapse`
+carries the origin of a project deleted that morning. On the Mac the check
+ran first and moved the fresh import to the trash ("was deleted on PicPlace");
+on the Simulator the push ran first and resurrected the tombstone. Same
+action, opposite outcomes, by timing. What worked: content dedupe across
+libraries (5 originals became server-side copies, nothing re-uploaded), a
+move between libraries seen from the Mac ("is in synth two … left alone
+here", no cost), and a twin by origin in another library being left unsynced.
+
+### PicPlace sync cost: the agreed client jobs from the one-photo trace (2026-09-30)
+
+One photo was traced end to end on the `synth` test library: Mac import and
+preset → picplace.test → web → Simulator pull. The report is
+`docs/fieldtests/2026-09-30-synth-photo-sync.md` (raw data beside it). A
+review of it the same evening measured the 1,405-project account on
+picplace.test and Steven's production Mac library (1,553 records) and agreed
+the list below. The goal is a migration of hundreds of thousands of photos
+(multiple TB) to Hetzner through PicPlace; nothing here changes what a person
+sees, only what it costs. The server side of the list is
+`~/Sites/picplace/docs/letslapse-sync-cost.md`.
+
+**Scale figures the jobs are judged against** (measured, linear extrapolation):
+the whole-account index is 1.44 MB / 167 ms / ~15 KB of PHP memory per project
+at 1,405 projects (each row carries a presence entry per device, ~1 KB); a new
+photo costs 16 API requests, so 300,000 photos take 13 days at the 255/min
+budget (5.7 days at 7); the first pull of 695 previews to a second device took
+21.5 min on picplace.co, paced by the budget; `sync-state.json` is 741 KB and
+rewritten whole on every save; the check's library pass is 0.3 s.
+
+**The before/after:** `tools/sync-cost-bench/` (2026-09-30) — import photos and
+`.lapse` projects on the Mac, edit three of each, let the Simulator pull, edit
+three there, see what the Mac re-pulls; every request named by the app's own
+`LL_PICPLACE_TRACE` lines, a data-pack report per run. Run it once before the
+first job lands and after each one.
+
+**Agreed, not started — client (`App/PicPlace/`):**
+- **One `/status` per check.** `repairBindingLibraryIfMissing` re-reads it
+  unconditionally at its end (`PicPlaceController.swift:947`) and
+  `refreshUsage` reads it again (`:962`); pass the check's status through. An
+  idle check goes from 5 requests to 2.
+- **One push cycle for a new project when originals are on** (`.everything`
+  instead of minimal then originals): 16 → 7 API requests, manifest written once.
+  Skip the `GET /projects/{u}` before a first-ever originals upload
+  (`PicPlaceAutoSync.swift:1089`); negotiate already dedupes.
+- **No per-project verification polling.** `verifyAfterUpload` reads
+  `GET /projects/{u}` up to 43 times over 30 min per uploaded project
+  (`PicPlaceAutoSync.swift:1005`). Garage verifies at confirm so the bench
+  never shows it; Hetzner reads objects back, so a migration would start one
+  poller per project. Replace with one batched `POST /projects/assets` sweep
+  (100 uuids) on a shared timer.
+- **The originals queue's "already there?" check through the same batched
+  read**, not `heavySetOnPicPlace`'s per-project `GET /projects/{u}` (the
+  server fetches the manifest from object storage on every one of those).
+- **Mint a pull's download URLs in one `assets/urls` call**
+  (`PicPlaceLibrarySync.swift:414`): 4 → 3 API requests per pulled project.
+- **Coalesce `saveSyncState()`** (30 call sites; whole file, pretty-printed,
+  atomic): at most one write every few seconds plus one at the end of a queue.
+- **Storage down = hold the whole queue.** When the server answers `503` +
+  `Retry-After` (its side of this list), treat it like the can't-reach gate:
+  one hold, one next-try time, not four retries per project on its own backoff.
+
+**Agreed in principle, to design before the migration:**
+- **The index read.** `GET /projects?include_deleted=1` returns the whole
+  account every check; at PHP's 128 MB it fails near 6,000 projects (512 MB:
+  ~30,000), and every device's check then fails. Agreed direction: a cheap
+  change token in `/status` so an unchanged account skips the index entirely;
+  then a bucketed, paged full pass (see the server doc's proposal: buckets by
+  capture month with per-bucket tokens, cursor pages within a bucket). Not
+  "ask for only this library": the client reads the whole account on purpose
+  (departures to other libraries), so scoping is a merge-logic change.
+
+**Parked, to return to:** verification by read-back on Hetzner (probe whether
+a wrong `Content-MD5` is refused at PUT); multipart uploads (5 GB cap, no
+resume — ProRes shoots will need it); confirm's one storage HEAD per file in
+sequence for long timelapses; bulk create/negotiate endpoints; posters as the
+preview every device pulls (378 KB average → ~113 GB per device at 300k —
+Steven wants a proper thumbnail / poster / working-file distribution design).
+
+**Traps for whoever picks this up:** picplace.test compresses JSON and speaks
+HTTP/2; picplace.co does neither (the gzip line is the first server job).
+Garage verifies checksums at confirm; Hetzner does not. Test anything about
+verification, compression or latency against picplace.co.
+
 ### Synthetic generator: the follow-ups from its move and its new subjects (2026-09-30)
 
 The scene kit left `docs/design/kit` for its own repository,

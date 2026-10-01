@@ -1,0 +1,29 @@
+13:50:47.980 🎥LL 934.290 watch-link activated state=2 reachable=false error=none
+13:50:48.162 🎥LL 934.472 device id D71224C0-F8C5-4705-984D-042382F5D823
+13:50:48.162 🎥LL 934.472 thermal: nominal at launch
+13:50:48.380 🎥LL 934.690 picplace: session picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae — tokens found, library bound to @synth on picplace.test
+13:50:48.396 🎥LL 934.706 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+13:50:48.406 🎥LL 934.716 watch-link appActive=true
+13:50:48.649 🎥LL 934.958 library: walked 116 documents in 0.031 s — 116 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 0 asset files and 0 shape registers re-indexed
+13:50:48.651 🎥LL 934.961 nearby: on — key nk_044ac2a46f154684, serving and browsing
+13:50:48.741 🎥LL 935.051 nearby: listening as “LetsLapse 0E0E4ACC”
+13:50:48.813 🎥LL 935.123 status: swept 115 project(s) in 0.12 s — 3 walked, 112 unchanged
+13:50:48.989 🎥LL 935.300 picplace trace: POST device → 200 34 ms up=201 down=448
+13:50:48.993 🎥LL 935.303 picplace: told PicPlace this device runs 0.1.0 (1) 2026-10-01 11:50 UTC
+13:50:49.010 🎥LL 935.320 picplace trace: GET status → 200 54 ms up=0 down=2204
+13:50:49.042 🎥LL 935.353 picplace trace: GET projects?include_deleted=1 → 200 49 ms up=0 down=118916
+13:50:49.078 🎥LL 935.388 picplace trace: POST device → 200 50 ms up=201 down=448
+13:50:49.098 🎥LL 935.408 picplace: pacing requests under 300/min (255/min for sync work)
+13:50:49.104 🎥LL 935.414 picplace check pass: 115 of 115 project(s) read in 0.02 s off main
+13:50:49.110 🎥LL 935.420 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+13:50:49.122 🎥LL 935.432 picplace trace: GET status → 200 39 ms up=0 down=2204
+13:50:49.145 🎥LL 935.455 picplace trace: GET status → 200 33 ms up=0 down=2204
+13:50:49.160 🎥LL 935.470 picplace trace: GET projects → 200 34 ms up=0 down=115885
+13:50:49.193 🎥LL 935.503 picplace trace: GET status → 200 46 ms up=0 down=2204
+13:50:49.240 🎥LL 935.550 picplace trace: GET status → 200 39 ms up=0 down=2204
+13:50:49.272 🎥LL 935.582 picplace trace: GET status → 200 30 ms up=0 down=2204
+13:50:49.310 🎥LL 935.620 picplace trace: GET projects?include_deleted=1 → 200 36 ms up=0 down=118916
+13:50:49.342 🎥LL 935.652 picplace: check (launch) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+13:50:49.378 🎥LL 935.688 picplace trace: GET status → 200 34 ms up=0 down=2204
+13:50:49.409 🎥LL 935.719 picplace trace: GET status → 200 29 ms up=0 down=2204
+13:51:09.285 🎥LL 955.595 assets: backfill scan — 0 of 115 project(s) need work, 0.05 s off main

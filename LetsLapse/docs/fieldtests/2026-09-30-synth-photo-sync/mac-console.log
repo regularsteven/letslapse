@@ -1,0 +1,72 @@
+# Mac synth library console logs (Logs/console-*.log), nearby NoAuth retry lines removed (124 of 244 lines in the second file), OAuth query strings trimmed
+## console-20260930-163313.log
+16:33:13.570 🎥LL  60.304 device id 03533CE8-339D-4689-896F-D1DC75FCF25E
+16:33:13.570 🎥LL  60.304 thermal: nominal at launch
+16:33:13.646 🎥LL  60.380 library lock: taken (pid 89919)
+16:33:13.654 🎥LL  60.388 picplace: session none — no tokens
+16:33:13.655 🎥LL  60.389 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+16:33:34.254 🎥LL  80.988 assets: backfill scan — 0 of 0 project(s) need work, 0.00 s off main
+16:35:06.443 🎥LL 173.177 picplace: sign-in opens https://picplace.test/oauth/authorize?…
+16:35:09.768 🎥LL 176.502 picplace: received letslapse://oauth/callback → completing sign-in
+16:35:38.459 🎥LL 205.193 picplace: sign-in opens https://picplace.test/oauth/authorize?…
+16:35:41.618 🎥LL 208.352 picplace: received letslapse://oauth/callback → completing sign-in
+16:36:02.912 🎥LL 229.648 library export: regenerated from the documents in 0.00 s (176 bytes)
+## console-20260930-163610.log
+16:36:10.923 🎥LL 237.660 device id 03533CE8-339D-4689-896F-D1DC75FCF25E
+16:36:10.924 🎥LL 237.660 thermal: nominal at launch
+16:36:11.020 🎥LL 237.756 library lock: taken (pid 90535)
+16:36:11.023 🎥LL 237.759 library: a generated export but no project documents — an empty library
+16:36:11.024 🎥LL 237.760 library export: regenerated from the documents in 0.00 s (176 bytes)
+16:36:11.027 🎥LL 237.763 picplace: session none — no tokens
+16:36:11.028 🎥LL 237.764 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+16:36:28.535 🎥LL 255.272 picplace: sign-in opens https://picplace.test/oauth/authorize?…
+16:36:32.299 🎥LL 259.036 assets: backfill scan — 0 of 0 project(s) need work, 0.00 s off main
+16:37:07.819 🎥LL 294.556 picplace: sign-in opens https://picplace.test/oauth/authorize?…
+17:29:41.893 🎥LL 448.624 picplace: sign-in opens https://picplace.test/oauth/authorize?…
+17:30:21.981 🎥LL 488.712 picplace: sign-in opens https://picplace.test/oauth/authorize?…
+17:30:26.732 🎥LL 493.463 picplace: received letslapse://oauth/callback → completing sign-in
+17:30:27.094 🎥LL 493.824 picplace: pacing requests under 300/min (255/min for sync work)
+17:30:27.116 🎥LL 493.846 nearby: key nk_044ac2a46f154684 held for picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae
+17:30:28.141 🎥LL 494.871 picplace tally: 0 of 0 project(s) read in 0.00 s off main
+17:31:08.335 🎥LL 535.066 picplace: library bound to @synth on picplace.test as “synth” 8f3aa852-afe5-43c9-80a5-caaaf9f40c19 — clean
+17:31:08.621 🎥LL 535.352 nearby: on — key nk_044ac2a46f154684, serving and browsing
+17:31:08.657 🎥LL 535.387 picplace: free-up estimate — 0 of 0 project(s) candidates in 0.00 s, listed in 0.03 s, judged in 0.00 s, all off main: 0 on PicPlace, 0 queued, 0 not up
+17:31:08.665 🎥LL 535.395 picplace: initial sync (clean) — 0 to pull, 0 to push, 0 in step, 0 deferred
+17:31:08.665 🎥LL 535.395 picplace: initial sync done (clean)
+17:32:14.254 🎥LL 600.983 picplace: told PicPlace this device runs 0.1.0 (1) 2026-09-29 14:18 UTC
+17:32:14.344 🎥LL 601.073 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+17:37:47.616 🎥LL 934.344 thermal: → fair
+17:42:37.625 🎥LL 224.352 thermal: → nominal
+17:48:11.621 🎥LL 558.348 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:03:11.340 🎥LL 458.063 picplace check pass: 0 of 0 project(s) read in 0.00 s off main
+18:03:11.345 🎥LL 458.068 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:08:47.555 🎥LL 794.277 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:08:49.853 🎥LL 796.576 status: swept 0 project(s) in 0.00 s — 0 walked, 0 unchanged
+18:09:22.364 🎥LL 829.087 presets: 0 custom preset(s) at /Users/stevenwright/Pictures/LetsLapse/synth/custom_presets.json
+18:09:22.375 🎥LL 829.097 assets: 648A0A63 recorded 1 of 1 pending (1 assets)
+18:09:22.392 🎥LL 829.114 project sizes: measuring 1
+18:09:54.704 🎥LL 861.426 picplace: poster for 648A0A63-A016-4FEA-9296-FC1A4C3B233E: 245448 bytes
+18:09:54.783 🎥LL 861.505 picplace: records bundle for 648A0A63-A016-4FEA-9296-FC1A4C3B233E: 5 members → 736 bytes
+18:09:55.150 🎥LL 861.872 picplace: PUT projects/648a0a63-a016-4fea-9296-fc1a4c3b233e → 500; trying again
+18:09:57.452 🎥LL 864.174 picplace: PUT projects/648a0a63-a016-4fea-9296-fc1a4c3b233e → 500; trying again
+18:10:01.844 🎥LL 868.566 picplace: PUT projects/648a0a63-a016-4fea-9296-fc1a4c3b233e → 500; trying again
+18:10:08.599 🎥LL 875.321 picplace: sync of frame (648A0A63, minimal) failed: PicPlaceAPIError(status: 500, code: nil, message: "Unable to write file at location: u/a65072a3-ffc2-4b22-bf7e-a50ab20c19ae/p/648a0a63-a016-4fea-9296-fc1a4c3b233e/manifest/648a0a63-a016-4fea-9296-fc1a4c3b233e.json. Error executing \"PutObject\" on \"http://127.0.0.1:3900/picplace-dev/u/a65072a3-ffc2-4b22-bf7e-a50ab20c19ae/p/648a0a63-a016-4fea-9296-fc1a4c3b233e/manifest/648a0a63-a016-4fea-9296-fc1a4c3b233e.json\"; AWS HTTP error:\ncURL error 55: Send failure: Broken pipe (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for http://127.0.0.1:3900/picplace-dev/u/a65072a3-ffc2-4b22-bf7e-a50ab20c19ae/p/648a0a63-a016-4fea-9296-fc1a4c3b233e/manifest/648a0a63-a016-4fea-9296-fc1a4c3b233e.json", claim: nil)
+18:10:08.618 🎥LL 875.340 picplace: push queue — 0 sent, 1 failed
+18:10:08.618 🎥LL 875.341 picplace: sending done — 0 of 1 sent, 1 failed
+18:10:11.814 🎥LL 878.537 picplace check pass: 1 of 1 project(s) read in 0.00 s off main
+18:10:11.816 🎥LL 878.538 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 1 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:11:16.048 🎥LL 942.770 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 1 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:11:17.069 🎥LL 943.792 picplace: poster for 648A0A63-A016-4FEA-9296-FC1A4C3B233E: 245448 bytes
+18:11:17.103 🎥LL 943.825 picplace: records bundle for 648A0A63-A016-4FEA-9296-FC1A4C3B233E: 5 members → 736 bytes
+18:11:17.357 🎥LL 944.079 picplace: PUT projects/648a0a63-a016-4fea-9296-fc1a4c3b233e → 500; trying again
+18:11:19.727 🎥LL 946.449 picplace: PUT projects/648a0a63-a016-4fea-9296-fc1a4c3b233e → 500; trying again
+18:11:23.878 🎥LL 950.600 picplace: PUT projects/648a0a63-a016-4fea-9296-fc1a4c3b233e → 500; trying again
+18:11:30.274 🎥LL 956.996 picplace: sync of frame (648A0A63, minimal) failed: PicPlaceAPIError(status: 500, code: nil, message: "Unable to write file at location: u/a65072a3-ffc2-4b22-bf7e-a50ab20c19ae/p/648a0a63-a016-4fea-9296-fc1a4c3b233e/manifest/648a0a63-a016-4fea-9296-fc1a4c3b233e.json. Error executing \"PutObject\" on \"http://127.0.0.1:3900/picplace-dev/u/a65072a3-ffc2-4b22-bf7e-a50ab20c19ae/p/648a0a63-a016-4fea-9296-fc1a4c3b233e/manifest/648a0a63-a016-4fea-9296-fc1a4c3b233e.json\"; AWS HTTP error:\ncURL error 55: Send failure: Broken pipe (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for http://127.0.0.1:3900/picplace-dev/u/a65072a3-ffc2-4b22-bf7e-a50ab20c19ae/p/648a0a63-a016-4fea-9296-fc1a4c3b233e/manifest/648a0a63-a016-4fea-9296-fc1a4c3b233e.json", claim: nil)
+18:27:11.402 🎥LL 898.122 picplace: check (timer) — 0 pulled, 0 updated, 1 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+18:27:11.470 🎥LL 898.190 picplace: poster for 648A0A63-A016-4FEA-9296-FC1A4C3B233E: 245448 bytes
+18:27:11.513 🎥LL 898.233 picplace: records bundle for 648A0A63-A016-4FEA-9296-FC1A4C3B233E: 5 members → 736 bytes
+18:27:11.663 🎥LL 898.383 picplace: frame — uploading 2 of 2 file(s), 246 KB
+18:27:11.857 🎥LL 898.577 picplace: push queue — 1 sent, 0 failed
+18:27:11.857 🎥LL 898.577 picplace: sending done — 1 of 1 sent
+18:27:12.026 🎥LL 898.746 picplace: frame — uploading 1 of 1 file(s), 408 KB
+18:28:11.933 🎥LL 958.652 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)

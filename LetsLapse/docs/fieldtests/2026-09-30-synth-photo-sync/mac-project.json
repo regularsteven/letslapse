@@ -1,0 +1,79 @@
+{
+  "blends" : [
+
+  ],
+  "capture" : {
+    "addedAt" : "2026-09-30T16:09:22.363Z",
+    "adjustments" : {
+      "blacks" : 0,
+      "clarity" : 0,
+      "colorNoise" : 0,
+      "colorNoiseReduction" : 0,
+      "contrast" : 0,
+      "exposure" : 0,
+      "highlights" : 0,
+      "noiseDetail" : 0.5,
+      "noiseReduction" : 0,
+      "saturation" : 0,
+      "shadows" : 0,
+      "sharpen" : 0,
+      "sharpenMasking" : 0,
+      "temperature" : 0,
+      "texture" : 0,
+      "tint" : 0,
+      "v" : 2,
+      "vibrance" : 0,
+      "vignetteIntensity" : 0,
+      "whites" : 0
+    },
+    "createdAt" : "2026-09-30T10:30:25.776Z",
+    "id" : "648A0A63-A016-4FEA-9296-FC1A4C3B233E",
+    "kind" : "photos",
+    "mode" : "Photo · Imported",
+    "modifiedAt" : "2026-09-30T16:09:33.671Z",
+    "modifiedBy" : "03533CE8-339D-4689-896F-D1DC75FCF25E",
+    "originDeviceID" : "03533CE8-339D-4689-896F-D1DC75FCF25E",
+    "originID" : "648A0A63-A016-4FEA-9296-FC1A4C3B233E",
+    "originalName" : "frame.jpg",
+    "presetState" : {
+      "id" : "1E750000-0000-4000-8000-000000000002",
+      "kind" : "named",
+      "snapshot" : {
+        "adjustments" : {
+          "blacks" : 0,
+          "clarity" : 0,
+          "colorNoise" : 0,
+          "colorNoiseReduction" : 0,
+          "contrast" : 0,
+          "exposure" : 0,
+          "highlights" : 0,
+          "noiseDetail" : 0.5,
+          "noiseReduction" : 0,
+          "saturation" : 0,
+          "shadows" : 0,
+          "sharpen" : 0,
+          "sharpenMasking" : 0,
+          "temperature" : 0,
+          "texture" : 0,
+          "tint" : 0,
+          "v" : 2,
+          "vibrance" : 0,
+          "vignetteIntensity" : 0,
+          "whites" : 0
+        },
+        "basePreset" : "Cinema",
+        "isBuiltIn" : true,
+        "name" : "Cinema"
+      }
+    },
+    "selectedPreset" : "Cinema",
+    "sizeBytes" : 434176,
+    "sizeMeasuredAt" : "2026-09-30T16:09:22.543Z",
+    "sourceFileNames" : [
+      "source/frame.jpg"
+    ],
+    "sourceHeight" : 1152,
+    "sourceWidth" : 1728
+  },
+  "formatVersion" : 2
+}
