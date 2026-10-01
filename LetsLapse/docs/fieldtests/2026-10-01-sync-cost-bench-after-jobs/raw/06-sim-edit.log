@@ -1,0 +1,64 @@
+15:04:42.505 🎥LL 368.809 watch-link activated state=2 reachable=false error=none
+15:04:42.629 🎥LL 368.933 device id D71224C0-F8C5-4705-984D-042382F5D823
+15:04:42.629 🎥LL 368.933 thermal: nominal at launch
+15:04:42.764 🎥LL 369.069 picplace: session picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae — tokens found, library bound to @synth on picplace.test
+15:04:42.769 🎥LL 369.073 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+15:04:42.775 🎥LL 369.079 watch-link appActive=true
+15:04:42.984 🎥LL 369.288 library: walked 129 documents in 0.035 s — 129 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 3 asset files and 0 shape registers re-indexed
+15:04:42.986 🎥LL 369.291 nearby: on — key nk_4aa08c046242f739, serving and browsing
+15:04:43.082 🎥LL 369.386 nearby: listening as “LetsLapse 0BE66F54”
+15:04:43.202 🎥LL 369.506 picplace trace: GET status → 200 195 ms up=0 down=3260
+15:04:43.235 🎥LL 369.538 picplace trace: GET status → 200 58 ms up=0 down=3260
+15:04:43.239 🎥LL 369.543 status: swept 128 project(s) in 0.22 s — 3 walked, 125 unchanged
+15:04:43.252 🎥LL 369.556 picplace: pacing requests under 300/min (255/min for sync work)
+15:04:43.286 🎥LL 369.590 picplace trace: POST device → 200 22 ms up=201 down=448
+15:04:43.311 🎥LL 369.615 picplace trace: GET projects?include_deleted=1 → 200 61 ms up=0 down=141564
+15:04:43.351 🎥LL 369.655 picplace trace: GET projects → 200 59 ms up=0 down=139472
+15:04:43.385 🎥LL 369.689 picplace check pass: 128 of 128 project(s) read in 0.03 s off main
+15:04:43.413 🎥LL 369.717 picplace trace: POST projects/assets → 200 23 ms up=70 down=664
+15:04:43.417 🎥LL 369.721 picplace: poster check — 1 of 1 already on PicPlace, noted without sending
+15:04:43.418 🎥LL 369.722 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 1 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+15:04:44.893 🎥LL 371.193 project 315E7935 edited: adjustments, modifiedAt, modifiedBy, presetState, selectedPreset
+15:04:44.893 🎥LL 371.197 LL_APPLY_PRESET applied Cinema to 315E7935
+15:04:46.990 🎥LL 373.293 project C56A4F63 edited: adjustments, modifiedAt, modifiedBy, presetState, selectedPreset
+15:04:46.991 🎥LL 373.295 LL_APPLY_PRESET applied Matte to C56A4F63
+15:04:49.092 🎥LL 375.395 project 40550511 edited: adjustments, modifiedAt, modifiedBy, presetState, selectedPreset
+15:04:49.092 🎥LL 375.396 LL_APPLY_PRESET applied Vivid to 40550511
+15:05:04.345 🎥LL 390.649 assets: backfill scan — 0 of 128 project(s) need work, 0.07 s off main
+15:05:06.973 🎥LL 393.277 picplace: poster for 315E7935-AEF1-40E6-926F-0A5D617961EB: 269690 bytes
+15:05:07.017 🎥LL 393.321 picplace trace: POST projects/315e7935-aef1-40e6-926f-0a5d617961eb/claim → 200 44 ms up=20 down=234
+15:05:07.032 🎥LL 393.336 picplace: records bundle for 315E7935-AEF1-40E6-926F-0A5D617961EB: 5 members → 1306 bytes
+15:05:07.084 🎥LL 393.388 picplace trace: PUT projects/315e7935-aef1-40e6-926f-0a5d617961eb → 200 50 ms up=1483 down=1266
+15:05:07.152 🎥LL 393.457 picplace trace: POST projects/315e7935-aef1-40e6-926f-0a5d617961eb/assets → 200 65 ms up=343 down=2112
+15:05:07.169 🎥LL 393.467 picplace: 6daeaac6-dcb8-4cac-b873-cd9bb4536bc9 — uploading 1 of 2 file(s), 1 KB; 1 already on PicPlace
+15:05:07.176 🎥LL 393.480 picplace trace: STORAGE PUT records.aar → 200 7 ms bytes=1306
+15:05:07.231 🎥LL 393.535 picplace trace: POST projects/315e7935-aef1-40e6-926f-0a5d617961eb/assets/confirm → 200 53 ms up=134 down=550
+15:05:07.271 🎥LL 393.575 picplace trace: POST projects/315e7935-aef1-40e6-926f-0a5d617961eb/presence → 200 32 ms up=44 down=417
+15:05:07.304 🎥LL 393.608 picplace trace: DELETE projects/315e7935-aef1-40e6-926f-0a5d617961eb/claim → 200 30 ms up=0 down=14
+15:05:07.445 🎥LL 393.749 picplace: poster for C56A4F63-C775-4E58-97F4-3A5C33B1B311: 379412 bytes
+15:05:07.486 🎥LL 393.790 picplace trace: POST projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311/claim → 200 40 ms up=20 down=234
+15:05:07.493 🎥LL 393.797 picplace: records bundle for C56A4F63-C775-4E58-97F4-3A5C33B1B311: 5 members → 1280 bytes
+15:05:07.540 🎥LL 393.844 picplace trace: PUT projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311 → 200 46 ms up=1480 down=1266
+15:05:07.587 🎥LL 393.891 picplace trace: POST projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311/assets → 200 46 ms up=343 down=2107
+15:05:07.590 🎥LL 393.894 picplace: 8b672eb3-5221-4df3-beef-d69b6f1c292c — uploading 1 of 2 file(s), 1 KB; 1 already on PicPlace
+15:05:07.592 🎥LL 393.896 picplace trace: STORAGE PUT records.aar → 200 2 ms bytes=1280
+15:05:07.620 🎥LL 393.924 picplace trace: POST projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311/assets/confirm → 200 27 ms up=134 down=550
+15:05:07.635 🎥LL 393.939 picplace trace: POST projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311/presence → 200 15 ms up=44 down=417
+15:05:07.650 🎥LL 393.954 picplace trace: DELETE projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311/claim → 200 15 ms up=0 down=14
+15:05:07.651 🎥LL 393.956 picplace: push queue — 2 sent, 0 failed
+15:05:07.652 🎥LL 393.956 picplace: sending done — 2 of 2 sent
+15:05:09.505 🎥LL 395.809 picplace: poster for 40550511-27F9-4011-8B48-73664BF4CF9C: 458706 bytes
+15:05:09.555 🎥LL 395.859 picplace trace: POST projects/40550511-27f9-4011-8b48-73664bf4cf9c/claim → 200 49 ms up=20 down=234
+15:05:09.564 🎥LL 395.868 picplace: records bundle for 40550511-27F9-4011-8B48-73664BF4CF9C: 5 members → 1268 bytes
+15:05:09.611 🎥LL 395.915 picplace trace: PUT projects/40550511-27f9-4011-8b48-73664bf4cf9c → 200 45 ms up=1432 down=1251
+15:05:09.669 🎥LL 395.973 picplace trace: POST projects/40550511-27f9-4011-8b48-73664bf4cf9c/assets → 200 56 ms up=343 down=2107
+15:05:09.672 🎥LL 395.976 picplace: Photo 29. 7. at 1554 — uploading 1 of 2 file(s), 1 KB; 1 already on PicPlace
+15:05:09.678 🎥LL 395.982 picplace trace: STORAGE PUT records.aar → 200 5 ms bytes=1268
+15:05:09.727 🎥LL 396.031 picplace trace: POST projects/40550511-27f9-4011-8b48-73664bf4cf9c/assets/confirm → 200 48 ms up=134 down=550
+15:05:09.758 🎥LL 396.062 picplace trace: POST projects/40550511-27f9-4011-8b48-73664bf4cf9c/presence → 200 30 ms up=44 down=417
+15:05:09.788 🎥LL 396.092 picplace trace: DELETE projects/40550511-27f9-4011-8b48-73664bf4cf9c/claim → 200 28 ms up=0 down=14
+15:05:09.797 🎥LL 396.101 picplace: push queue — 1 sent, 0 failed
+15:05:09.797 🎥LL 396.101 picplace: sending done — 1 of 1 sent
+15:05:12.887 🎥LL 399.191 picplace trace: GET status → 200 77 ms up=0 down=3260
+15:05:12.993 🎥LL 399.297 picplace trace: GET projects → 200 82 ms up=0 down=139484
+15:05:14.163 🎥LL 400.467 picplace tally: 128 of 128 project(s) read in 0.01 s off main

@@ -107,6 +107,9 @@ extension PicPlaceController {
                         do { try model.deleteCapture(capture); LLog("picplace hook: deleted \(capture.displayTitle) locally") }
                         catch { LLog("picplace hook: delete failed: \(error)") }
                     }
+                    // The launch check must carry these deletes: it is not
+                    // skipped for a check that finished a moment ago.
+                    if !targets.isEmpty { lastCheck = nil }
                 }
                 #endif
                 checkForChanges(reason: "launch")
@@ -368,8 +371,13 @@ extension PicPlaceController {
         do {
             var files = 0
             var bytes: Int64 = 0
-            if let bundle = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName }) {
-                let data = try await download(assetID: bundle.id, projectUUID: uuid, name: "records.aar")
+            let bundleAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName })
+            let posterAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName })
+            let looseAssets = bundleAsset == nil ? assets.filter { PicPlaceSyncInventory.role(for: $0.name) == .bundle } : []
+            // Every URL this pull needs, in one request.
+            let minted = await mintDownloads(([bundleAsset?.id, posterAsset?.id].compactMap { $0 }) + looseAssets.map(\.id), projectUUID: uuid)
+            if let bundle = bundleAsset {
+                let data = try await download(assetID: bundle.id, projectUUID: uuid, name: "records.aar", minted: minted)
                 let tmp = folder.appendingPathComponent("tmp", isDirectory: true)
                 try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
                 let archive = tmp.appendingPathComponent(PicPlaceSyncInventory.bundleName)
@@ -383,16 +391,16 @@ extension PicPlaceController {
                 // records as loose objects (kinded by their folder then —
                 // `note` at the root, `source` under source/): collect the
                 // ones the registry knows as records or sidecars, into place.
-                for loose in assets where PicPlaceSyncInventory.role(for: loose.name) == .bundle {
-                    let data = try await download(assetID: loose.id, projectUUID: uuid, name: loose.name)
+                for loose in looseAssets {
+                    let data = try await download(assetID: loose.id, projectUUID: uuid, name: loose.name, minted: minted)
                     let destination = folder.appendingPathComponent(loose.name)
                     try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try data.write(to: destination, options: .atomic)
                     files += 1; bytes += Int64(data.count)
                 }
             }
-            if let poster = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName }) {
-                let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg")
+            if let poster = posterAsset {
+                let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg", minted: minted)
                 try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
                 files += 1; bytes += Int64(data.count)
             }
@@ -416,10 +424,32 @@ extension PicPlaceController {
         }
     }
 
-    /// One asset's bytes through a presigned GET minted for it.
-    func download(assetID: String, projectUUID: String, name: String = "") async throws -> Data {
-        let urls: [String: [PPDownloadURL]] = try await client.post("projects/\(projectUUID)/assets/urls", json: ["assets": [assetID]])
-        guard let item = urls["assets"]?.first else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted no download URL.") }
+    /// Download URLs for several of a project's assets in ONE request, by
+    /// asset id (2026-10-01: a pull minted one URL per request — the bundle,
+    /// then the poster — which was one of the four API requests every pulled
+    /// project cost). Empty on any failure or for fewer than two ids: each
+    /// download then mints its own, as before.
+    func mintDownloads(_ assetIDs: [String], projectUUID: String) async -> [String: PPDownloadURL] {
+        guard assetIDs.count > 1 else { return [:] }
+        guard let urls: [String: [PPDownloadURL]] = try? await client.post("projects/\(projectUUID)/assets/urls", json: ["assets": assetIDs]),
+              let items = urls["assets"], items.count == assetIDs.count else { return [:] }
+        var minted: [String: PPDownloadURL] = [:]
+        // By the id each answer carries; by position for a server that sends none.
+        for (asked, item) in zip(assetIDs, items) { minted[item.id ?? asked] = item }
+        return minted
+    }
+
+    /// One asset's bytes through a presigned GET — minted for it here, or
+    /// taken from `minted` when the caller asked for several at once.
+    func download(assetID: String, projectUUID: String, name: String = "", minted: [String: PPDownloadURL] = [:]) async throws -> Data {
+        let single: PPDownloadURL?
+        if let ready = minted[assetID], ready.error == nil, ready.url != nil {
+            single = ready
+        } else {
+            let urls: [String: [PPDownloadURL]] = try await client.post("projects/\(projectUUID)/assets/urls", json: ["assets": [assetID]])
+            single = urls["assets"]?.first
+        }
+        guard let item = single else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted no download URL.") }
         if let error = item.error { throw PicPlaceSyncRun.Failed(caption: item.message ?? error) }
         guard let string = item.url, let url = URL(string: string) else { throw PicPlaceSyncRun.Failed(caption: "PicPlace minted an unusable download URL.") }
         var request = URLRequest(url: url)

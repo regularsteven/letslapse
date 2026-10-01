@@ -1,0 +1,114 @@
+14:54:24.000 🎥LL 750.308 watch-link activated state=2 reachable=false error=none
+14:54:24.208 🎥LL 750.517 device id D71224C0-F8C5-4705-984D-042382F5D823
+14:54:24.209 🎥LL 750.518 thermal: nominal at launch
+14:54:24.415 🎥LL 750.724 picplace: session picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae — tokens found, library bound to @synth on picplace.test
+14:54:24.428 🎥LL 750.737 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+14:54:24.439 🎥LL 750.748 watch-link appActive=true
+14:54:24.665 🎥LL 750.973 library: walked 115 documents in 0.032 s — 115 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 0 asset files and 0 shape registers re-indexed
+14:54:24.668 🎥LL 750.977 nearby: on — key nk_4aa08c046242f739, serving and browsing
+14:54:24.764 🎥LL 751.073 nearby: listening as “LetsLapse 76402395”
+14:54:24.822 🎥LL 751.131 picplace trace: GET status → 200 119 ms up=0 down=3260
+14:54:24.833 🎥LL 751.142 status: swept 114 project(s) in 0.12 s — 0 walked, 114 unchanged
+14:54:24.839 🎥LL 751.148 picplace trace: POST device → 200 32 ms up=201 down=448
+14:54:24.841 🎥LL 751.150 picplace: told PicPlace this device runs 0.1.0 (1) 2026-10-01 12:50 UTC
+14:54:24.878 🎥LL 751.187 picplace trace: GET status → 200 38 ms up=0 down=3260
+14:54:24.890 🎥LL 751.200 picplace: pacing requests under 300/min (255/min for sync work)
+14:54:24.895 🎥LL 751.204 picplace trace: POST device → 200 26 ms up=201 down=448
+14:54:24.944 🎥LL 751.253 picplace trace: GET projects?include_deleted=1 → 200 55 ms up=0 down=138733
+14:54:24.989 🎥LL 751.298 picplace trace: GET projects → 200 89 ms up=0 down=136641
+14:54:25.015 🎥LL 751.324 picplace check pass: 114 of 114 project(s) read in 0.03 s off main
+14:54:25.028 🎥LL 751.337 picplace: 14 of the library's 128 project(s) on PicPlace are not here: 5b503e1f-30b9-4037-91ce-8d5a6e7fe856 (6c2e2ffe, photo); 3db344e3-5a1b-4be4-816e-b5d3ffb97d11 (fea07e71, photo); 16c080c7-a9b0-426c-8a53-a6975815bda7 (75aad84d, photo); broad-mix--arches.04 (f38aded4, photo); broad-mix--arches.02 (b1ec6378, photo); broad-mix--arches.05 (ac515fbc, photo); broad-mix--arches.01 (ac36ef87, photo); 8b672eb3-5221-4df3-beef-d69b6f1c292c (c56a4f63, photo); broad-mix--arches.03 (33e4a6f7, photo); ae1fa114-51a5-4f29-b101-94eaead64d00 (18ca48f4, photo); Photo 29. 7. at 1614 (cfd1a883, photo); Photo 29. 7. at 1554 (40550511, photo); Photo of rocks (33d01990, photo); 6daeaac6-dcb8-4cac-b873-cd9bb4536bc9 (315e7935, photo)
+14:54:25.065 🎥LL 751.373 picplace trace: GET projects/6c2e2ffe-bafb-433b-9d69-d9ceb6e121b6 → 200 37 ms up=0 down=3675
+14:54:25.093 🎥LL 751.402 picplace trace: POST projects/6c2e2ffe-bafb-433b-9d69-d9ceb6e121b6/assets/urls → 200 22 ms up=90 down=2390
+14:54:25.103 🎥LL 751.412 picplace trace: STORAGE GET records.aar → 200 6 ms bytes=1255
+14:54:25.119 🎥LL 751.428 picplace trace: STORAGE GET poster.jpg → 200 14 ms bytes=388848
+14:54:25.179 🎥LL 751.488 picplace trace: POST projects/6c2e2ffe-bafb-433b-9d69-d9ceb6e121b6/presence → 200 46 ms up=43 down=416
+14:54:25.181 🎥LL 751.490 picplace: pulled 5b503e1f-30b9-4037-91ce-8d5a6e7fe856 (6c2e2ffe) — 2 object(s), 390103 bytes; 1 heavy file(s) stay on PicPlace
+14:54:25.220 🎥LL 751.529 picplace trace: GET projects/fea07e71-a233-4d5e-8ac4-7c7e6bcf84cf → 200 38 ms up=0 down=3675
+14:54:25.247 🎥LL 751.556 picplace trace: POST projects/fea07e71-a233-4d5e-8ac4-7c7e6bcf84cf/assets/urls → 200 26 ms up=90 down=2390
+14:54:25.257 🎥LL 751.566 picplace trace: STORAGE GET records.aar → 200 7 ms bytes=1271
+14:54:25.273 🎥LL 751.582 picplace trace: STORAGE GET poster.jpg → 200 14 ms bytes=334977
+14:54:25.297 🎥LL 751.606 picplace trace: POST projects/fea07e71-a233-4d5e-8ac4-7c7e6bcf84cf/presence → 200 22 ms up=43 down=416
+14:54:25.302 🎥LL 751.611 picplace: pulled 3db344e3-5a1b-4be4-816e-b5d3ffb97d11 (fea07e71) — 2 object(s), 336248 bytes; 1 heavy file(s) stay on PicPlace
+14:54:25.324 🎥LL 751.633 picplace trace: GET projects/75aad84d-4630-422a-917f-27a3c0ad2ce0 → 200 22 ms up=0 down=3678
+14:54:25.353 🎥LL 751.663 picplace trace: POST projects/75aad84d-4630-422a-917f-27a3c0ad2ce0/assets/urls → 200 26 ms up=90 down=2390
+14:54:25.356 🎥LL 751.665 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=1282
+14:54:25.369 🎥LL 751.678 picplace trace: STORAGE GET poster.jpg → 200 11 ms bytes=383050
+14:54:25.395 🎥LL 751.704 picplace trace: POST projects/75aad84d-4630-422a-917f-27a3c0ad2ce0/presence → 200 24 ms up=43 down=416
+14:54:25.396 🎥LL 751.705 picplace: pulled 16c080c7-a9b0-426c-8a53-a6975815bda7 (75aad84d) — 2 object(s), 384332 bytes; 1 heavy file(s) stay on PicPlace
+14:54:25.419 🎥LL 751.728 picplace trace: GET projects/f38aded4-6dad-4a76-a71b-b1ee925f6fee → 200 23 ms up=0 down=2777
+14:54:25.443 🎥LL 751.752 picplace trace: POST projects/f38aded4-6dad-4a76-a71b-b1ee925f6fee/assets/urls → 200 23 ms up=90 down=2389
+14:54:25.446 🎥LL 751.755 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=754
+14:54:25.459 🎥LL 751.768 picplace trace: STORAGE GET poster.jpg → 200 11 ms bytes=292732
+14:54:25.484 🎥LL 751.793 picplace trace: POST projects/f38aded4-6dad-4a76-a71b-b1ee925f6fee/presence → 200 22 ms up=43 down=416
+14:54:25.484 🎥LL 751.793 picplace: pulled broad-mix--arches.04 (f38aded4) — 2 object(s), 293486 bytes; 1 heavy file(s) stay on PicPlace
+14:54:25.508 🎥LL 751.817 picplace trace: GET projects/b1ec6378-195e-40c6-ab20-c07fa85c57bf → 200 24 ms up=0 down=2777
+14:54:25.535 🎥LL 751.845 picplace trace: POST projects/b1ec6378-195e-40c6-ab20-c07fa85c57bf/assets/urls → 200 26 ms up=90 down=2389
+14:54:25.538 🎥LL 751.847 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=758
+14:54:25.545 🎥LL 751.854 picplace trace: STORAGE GET poster.jpg → 200 5 ms bytes=300277
+14:54:25.562 🎥LL 751.871 picplace trace: POST projects/b1ec6378-195e-40c6-ab20-c07fa85c57bf/presence → 200 14 ms up=43 down=416
+14:54:25.566 🎥LL 751.875 picplace: pulled broad-mix--arches.02 (b1ec6378) — 2 object(s), 301035 bytes; 1 heavy file(s) stay on PicPlace
+14:54:25.594 🎥LL 751.903 picplace trace: GET projects/ac515fbc-d82e-477d-b7fa-fd8c53633c1c → 200 28 ms up=0 down=2778
+14:54:25.619 🎥LL 751.928 picplace trace: POST projects/ac515fbc-d82e-477d-b7fa-fd8c53633c1c/assets/urls → 200 24 ms up=90 down=2389
+14:54:25.622 🎥LL 751.931 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=755
+14:54:25.630 🎥LL 751.939 picplace trace: STORAGE GET poster.jpg → 200 6 ms bytes=460876
+14:54:25.650 🎥LL 751.959 picplace trace: POST projects/ac515fbc-d82e-477d-b7fa-fd8c53633c1c/presence → 200 17 ms up=43 down=416
+14:54:25.652 🎥LL 751.961 picplace: pulled broad-mix--arches.05 (ac515fbc) — 2 object(s), 461631 bytes; 1 heavy file(s) stay on PicPlace
+14:54:25.676 🎥LL 751.985 picplace trace: GET projects/ac36ef87-33f3-47fb-bc9f-f3d5ca04b92a → 200 24 ms up=0 down=2777
+14:54:25.702 🎥LL 752.012 picplace trace: POST projects/ac36ef87-33f3-47fb-bc9f-f3d5ca04b92a/assets/urls → 200 25 ms up=90 down=2389
+14:54:25.705 🎥LL 752.015 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=757
+14:54:25.713 🎥LL 752.022 picplace trace: STORAGE GET poster.jpg → 200 5 ms bytes=291527
+14:54:25.732 🎥LL 752.042 picplace trace: POST projects/ac36ef87-33f3-47fb-bc9f-f3d5ca04b92a/presence → 200 16 ms up=43 down=416
+14:54:25.740 🎥LL 752.049 picplace: pulled broad-mix--arches.01 (ac36ef87) — 2 object(s), 292284 bytes; 1 heavy file(s) stay on PicPlace
+14:54:25.765 🎥LL 752.074 picplace trace: GET projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311 → 200 25 ms up=0 down=2844
+14:54:25.797 🎥LL 752.106 picplace trace: POST projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311/assets/urls → 200 30 ms up=90 down=2390
+14:54:25.799 🎥LL 752.108 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=1271
+14:54:25.808 🎥LL 752.117 picplace trace: STORAGE GET poster.jpg → 200 5 ms bytes=370287
+14:54:25.831 🎥LL 752.140 picplace trace: POST projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311/presence → 200 17 ms up=43 down=416
+14:54:25.833 🎥LL 752.142 picplace: pulled 8b672eb3-5221-4df3-beef-d69b6f1c292c (c56a4f63) — 2 object(s), 371558 bytes; 1 heavy file(s) stay on PicPlace
+14:54:25.857 🎥LL 752.166 picplace trace: GET projects/33e4a6f7-0013-4603-881a-e878a500e99d → 200 24 ms up=0 down=2777
+14:54:25.884 🎥LL 752.193 picplace trace: POST projects/33e4a6f7-0013-4603-881a-e878a500e99d/assets/urls → 200 26 ms up=90 down=2389
+14:54:25.887 🎥LL 752.196 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=755
+14:54:25.900 🎥LL 752.209 picplace trace: STORAGE GET poster.jpg → 200 10 ms bytes=347324
+14:54:25.921 🎥LL 752.230 picplace trace: POST projects/33e4a6f7-0013-4603-881a-e878a500e99d/presence → 200 18 ms up=43 down=416
+14:54:25.929 🎥LL 752.239 picplace: pulled broad-mix--arches.03 (33e4a6f7) — 2 object(s), 348079 bytes; 1 heavy file(s) stay on PicPlace
+14:54:25.958 🎥LL 752.267 picplace trace: GET projects/18ca48f4-ed4d-49a4-bdc7-4b0cc815eaf9 → 200 28 ms up=0 down=2844
+14:54:25.986 🎥LL 752.295 picplace trace: POST projects/18ca48f4-ed4d-49a4-bdc7-4b0cc815eaf9/assets/urls → 200 27 ms up=90 down=2390
+14:54:25.989 🎥LL 752.298 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=1271
+14:54:25.998 🎥LL 752.307 picplace trace: STORAGE GET poster.jpg → 200 6 ms bytes=326277
+14:54:26.017 🎥LL 752.326 picplace trace: POST projects/18ca48f4-ed4d-49a4-bdc7-4b0cc815eaf9/presence → 200 16 ms up=43 down=416
+14:54:26.021 🎥LL 752.330 picplace: pulled ae1fa114-51a5-4f29-b101-94eaead64d00 (18ca48f4) — 2 object(s), 327548 bytes; 1 heavy file(s) stay on PicPlace
+14:54:26.045 🎥LL 752.354 picplace trace: GET projects/cfd1a883-3aff-4954-a497-2aa96b2212b4 → 200 24 ms up=0 down=2789
+14:54:26.062 🎥LL 752.371 picplace tally: 124 of 124 project(s) read in 0.02 s off main
+14:54:26.064 🎥LL 752.373 picplace trace: POST projects/cfd1a883-3aff-4954-a497-2aa96b2212b4/assets/urls → 200 18 ms up=90 down=2390
+14:54:26.067 🎥LL 752.376 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=1260
+14:54:26.075 🎥LL 752.384 picplace trace: STORAGE GET poster.jpg → 200 6 ms bytes=271344
+14:54:26.091 🎥LL 752.400 picplace trace: POST projects/cfd1a883-3aff-4954-a497-2aa96b2212b4/presence → 200 14 ms up=43 down=416
+14:54:26.094 🎥LL 752.403 picplace: pulled Photo 29. 7. at 1614 (cfd1a883) — 2 object(s), 272604 bytes; 1 heavy file(s) stay on PicPlace
+14:54:26.116 🎥LL 752.425 picplace trace: GET projects/40550511-27f9-4011-8b48-73664bf4cf9c → 200 22 ms up=0 down=2789
+14:54:26.142 🎥LL 752.451 picplace trace: POST projects/40550511-27f9-4011-8b48-73664bf4cf9c/assets/urls → 200 25 ms up=90 down=2390
+14:54:26.145 🎥LL 752.454 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=1256
+14:54:26.153 🎥LL 752.462 picplace trace: STORAGE GET poster.jpg → 200 6 ms bytes=444432
+14:54:26.171 🎥LL 752.480 picplace trace: POST projects/40550511-27f9-4011-8b48-73664bf4cf9c/presence → 200 15 ms up=43 down=416
+14:54:26.172 🎥LL 752.482 picplace: pulled Photo 29. 7. at 1554 (40550511) — 2 object(s), 445688 bytes; 1 heavy file(s) stay on PicPlace
+14:54:26.194 🎥LL 752.503 picplace trace: GET projects/33d01990-7822-4571-897d-8d3842b4f075 → 200 21 ms up=0 down=2765
+14:54:26.216 🎥LL 752.525 picplace trace: POST projects/33d01990-7822-4571-897d-8d3842b4f075/assets/urls → 200 21 ms up=90 down=2390
+14:54:26.218 🎥LL 752.527 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=1254
+14:54:26.232 🎥LL 752.541 picplace trace: STORAGE GET poster.jpg → 200 12 ms bytes=411060
+14:54:26.250 🎥LL 752.559 picplace trace: POST projects/33d01990-7822-4571-897d-8d3842b4f075/presence → 200 15 ms up=43 down=416
+14:54:26.250 🎥LL 752.559 picplace: pulled Photo of rocks (33d01990) — 2 object(s), 412314 bytes; 1 heavy file(s) stay on PicPlace
+14:54:26.271 🎥LL 752.580 picplace trace: GET projects/315e7935-aef1-40e6-926f-0a5d617961eb → 200 21 ms up=0 down=2844
+14:54:26.293 🎥LL 752.602 picplace trace: POST projects/315e7935-aef1-40e6-926f-0a5d617961eb/assets/urls → 200 21 ms up=90 down=2390
+14:54:26.296 🎥LL 752.605 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=1291
+14:54:26.302 🎥LL 752.611 picplace trace: STORAGE GET poster.jpg → 200 4 ms bytes=272430
+14:54:26.318 🎥LL 752.627 picplace trace: POST projects/315e7935-aef1-40e6-926f-0a5d617961eb/presence → 200 14 ms up=43 down=416
+14:54:26.322 🎥LL 752.631 picplace: pulled 6daeaac6-dcb8-4cac-b873-cd9bb4536bc9 (315e7935) — 2 object(s), 273721 bytes; 1 heavy file(s) stay on PicPlace
+14:54:26.323 🎥LL 752.633 picplace: check (foreground) — 14 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+14:54:27.386 🎥LL 753.695 picplace tally: 128 of 128 project(s) read in 0.01 s off main
+14:54:44.863 🎥LL 771.172 assets: backfill scan — 0 of 128 project(s) need work, 0.07 s off main
+14:57:24.537 🎥LL 930.846 picplace trace: GET status → 200 104 ms up=0 down=3260
+14:57:24.659 🎥LL 930.968 picplace trace: GET projects?include_deleted=1 → 200 96 ms up=0 down=141561
+14:57:24.718 🎥LL 931.027 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+15:00:24.532 🎥LL 110.836 picplace trace: GET status → 200 94 ms up=0 down=3260
+15:00:24.630 🎥LL 110.934 picplace trace: GET projects?include_deleted=1 → 200 84 ms up=0 down=141561
+15:00:24.687 🎥LL 110.991 picplace: check (timer) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)

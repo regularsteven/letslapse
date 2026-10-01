@@ -125,6 +125,15 @@ extension PicPlaceController {
         // Foreground checks are rate-limited: the Mac fires didBecomeActive
         // on every window switch.
         if reason == "foreground", let last = lastCheckAt, Date().timeIntervalSince(last) < 60 { return }
+        // An iOS launch is also a "became active": its foreground check has
+        // usually just finished when the launch check is asked for, and a
+        // second pass seconds later reads the same answers (2026-10-01:
+        // about 12 requests per launch where 5 would do). Only a check that
+        // COMPLETED counts — one that failed leaves the launch check to run.
+        if reason == "launch", let done = lastCheck?.checkedAt, Date().timeIntervalSince(done) < 60 {
+            LLog("picplace: check (launch) — a check finished \(Int(Date().timeIntervalSince(done))) s ago; not repeated")
+            return
+        }
         lastCheckAt = Date()
         checkTask = Task { [weak self] in
             guard let self else { return }
@@ -203,9 +212,11 @@ extension PicPlaceController {
             // The same read when this session has not heard about libraries
             // yet: a check that starts before the handshake's answer must ask
             // for itself, never take "not known" for "this server has none".
+            var checkStatus: PPStatus?
             if serverHasLibraries || !librariesKnown, let status: PPStatus = try? await client.get("status") {
+                noteLimits(status)
                 noteLibraries(status)
-                await repairBindingLibraryIfMissing(status)
+                checkStatus = await repairBindingLibraryIfMissing(status)
             }
             // A library's rows cannot be told from the account's until then:
             // without the answer the pass would read every row as this
@@ -453,8 +464,15 @@ extension PicPlaceController {
             for conflict in conflicts {
                 LLog("picplace: conflict — \(conflict.name) (\(conflict.originID.uuidString.prefix(8))) \(conflict.kind): local \(conflict.localRevision.map(String.init) ?? "-") vs server \(conflict.serverRevision)\(conflict.serverDevice.map { " from \($0)" } ?? "")")
             }
-            // The index was read a moment ago: the usage line needs only /status.
-            refreshUsage(rows: index.projects)
+            // The index and `/status` were both read a moment ago: the usage
+            // line asks for neither again. (A server without libraries had no
+            // status read here, and reads one.)
+            if let checkStatus {
+                let rows = index.projects
+                Task { [weak self] in await self?.refreshUsage(status: checkStatus, rows: rows) }
+            } else {
+                refreshUsage(rows: index.projects)
+            }
             scheduleOriginalsQueue()
             scheduleBlendsQueue()
             // A look after an upload the app was closed in the middle of.
@@ -629,8 +647,12 @@ extension PicPlaceController {
         let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.withoutEscapingSlashes])
         let document = try ProjectDocumentFormat.makeDecoder().decode(ProjectDocument.self, from: manifestData)
 
-        if let bundle = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName }) {
-            let data = try await download(assetID: bundle.id, projectUUID: uuid, name: "records.aar")
+        let bundleAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName })
+        let posterAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName })
+        // Both URLs in one request (`mintDownloads`).
+        let minted = await mintDownloads([bundleAsset?.id, posterAsset?.id].compactMap { $0 }, projectUUID: uuid)
+        if let bundle = bundleAsset {
+            let data = try await download(assetID: bundle.id, projectUUID: uuid, name: "records.aar", minted: minted)
             let tmp = folder.appendingPathComponent("tmp", isDirectory: true)
             try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
             let archive = tmp.appendingPathComponent(PicPlaceSyncInventory.bundleName)
@@ -638,8 +660,8 @@ extension PicPlaceController {
             try DirectoryArchive.extract(archive, to: folder)
             try? FileManager.default.removeItem(at: tmp)
         }
-        if let poster = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName }) {
-            let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg")
+        if let poster = posterAsset {
+            let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg", minted: minted)
             try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
         }
         try model.applyPulledUpdate(projectID: capture.id, originID: originID, capture: document.capture, blends: document.blends)

@@ -1,0 +1,55 @@
+15:03:28.854 🎥LL 295.158 watch-link activated state=2 reachable=false error=none
+15:03:28.983 🎥LL 295.286 device id D71224C0-F8C5-4705-984D-042382F5D823
+15:03:28.983 🎥LL 295.287 thermal: nominal at launch
+15:03:29.118 🎥LL 295.422 picplace: session picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae — tokens found, library bound to @synth on picplace.test
+15:03:29.122 🎥LL 295.426 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+15:03:29.128 🎥LL 295.432 watch-link appActive=true
+15:03:29.340 🎥LL 295.643 library: walked 129 documents in 0.036 s — 129 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 0 asset files and 0 shape registers re-indexed
+15:03:29.342 🎥LL 295.646 nearby: on — key nk_4aa08c046242f739, serving and browsing
+15:03:29.450 🎥LL 295.754 nearby: listening as “LetsLapse 2261EB8E”
+15:03:29.556 🎥LL 295.860 picplace trace: GET status → 200 187 ms up=0 down=3260
+15:03:29.623 🎥LL 295.927 status: swept 128 project(s) in 0.24 s — 0 walked, 128 unchanged
+15:03:29.631 🎥LL 295.935 picplace trace: GET status → 200 62 ms up=0 down=3260
+15:03:29.659 🎥LL 295.964 picplace trace: POST device → 200 32 ms up=201 down=448
+15:03:29.676 🎥LL 295.981 picplace: pacing requests under 300/min (255/min for sync work)
+15:03:29.723 🎥LL 296.027 picplace trace: GET projects?include_deleted=1 → 200 57 ms up=0 down=141561
+15:03:29.763 🎥LL 296.067 picplace trace: GET projects → 200 87 ms up=0 down=139469
+15:03:29.791 🎥LL 296.095 picplace check pass: 128 of 128 project(s) read in 0.03 s off main
+15:03:29.792 🎥LL 296.097 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+15:03:29.799 🎥LL 296.103 picplace: continued task asked for — Downloading “6daeaac6-dcb8-4cac-b873-cd9bb4536bc9”
+15:03:29.799 🎥LL 296.103 picplace: continued task asked for — Downloading “8b672eb3-5221-4df3-beef-d69b6f1c292c”
+15:03:29.799 🎥LL 296.103 picplace: continued task asked for — Downloading “Photo 29. 7. at 1554”
+15:03:29.799 🎥LL 296.103 picplace: continued task refused for Downloading “6daeaac6-dcb8-4cac-b873-cd9bb4536bc9”: BGTaskScheduler is not available on this platform.
+15:03:29.799 🎥LL 296.103 picplace: continued task refused for Downloading “8b672eb3-5221-4df3-beef-d69b6f1c292c”: BGTaskScheduler is not available on this platform.
+15:03:29.799 🎥LL 296.104 picplace: continued task refused for Downloading “Photo 29. 7. at 1554”: BGTaskScheduler is not available on this platform.
+15:03:29.842 🎥LL 296.146 picplace trace: GET projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311 → 200 41 ms up=0 down=3046
+15:03:29.845 🎥LL 296.149 picplace trace: GET projects/40550511-27f9-4011-8b48-73664bf4cf9c → 200 45 ms up=0 down=2991
+15:03:29.845 🎥LL 296.150 picplace trace: GET projects/315e7935-aef1-40e6-926f-0a5d617961eb → 200 45 ms up=0 down=3046
+15:03:29.865 🎥LL 296.169 picplace trace: POST projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311/assets/urls → 200 19 ms up=51 down=1254
+15:03:29.867 🎥LL 296.172 picplace trace: POST projects/40550511-27f9-4011-8b48-73664bf4cf9c/assets/urls → 200 20 ms up=51 down=1245
+15:03:29.893 🎥LL 296.197 picplace trace: GET status → 200 90 ms up=0 down=3260
+15:03:29.903 🎥LL 296.207 picplace trace: POST projects/315e7935-aef1-40e6-926f-0a5d617961eb/assets/urls → 200 56 ms up=51 down=1254
+15:03:29.920 🎥LL 296.224 picplace trace: STORAGE GET source/8b672eb3-5221-4df3-beef-d69b6f1c292c.jpg → 200 52 ms bytes=4816209
+15:03:29.934 🎥LL 296.238 picplace trace: STORAGE GET source/6daeaac6-dcb8-4cac-b873-cd9bb4536bc9.jpg → 200 30 ms bytes=2738711
+15:03:29.935 🎥LL 296.239 assets: C56A4F63 recorded 0 of 0 pending (1 assets)
+15:03:29.961 🎥LL 296.266 picplace trace: POST projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311/presence → 200 32 ms up=44 down=417
+15:03:29.965 🎥LL 296.269 picplace: downloaded the originals and blends of 8b672eb3-5221-4df3-beef-d69b6f1c292c: 1 file(s), 4816209 bytes
+15:03:29.965 🎥LL 296.270 picplace trace: STORAGE GET source/Photo 29. 7. at 1554.dng → 200 98 ms bytes=12246862
+15:03:29.966 🎥LL 296.270 assets: 315E7935 recorded 0 of 0 pending (1 assets)
+15:03:29.970 🎥LL 296.274 picplace trace: GET projects?include_deleted=1 → 200 65 ms up=0 down=141561
+15:03:29.996 🎥LL 296.300 assets: 40550511 recorded 0 of 0 pending (1 assets)
+15:03:30.006 🎥LL 296.310 picplace trace: POST projects/315e7935-aef1-40e6-926f-0a5d617961eb/presence → 200 42 ms up=44 down=417
+15:03:30.010 🎥LL 296.314 picplace: downloaded the originals and blends of 6daeaac6-dcb8-4cac-b873-cd9bb4536bc9: 1 file(s), 2738711 bytes
+15:03:30.025 🎥LL 296.330 picplace check pass: 128 of 128 project(s) read in 0.01 s off main
+15:03:30.026 🎥LL 296.331 picplace trace: POST projects/40550511-27f9-4011-8b48-73664bf4cf9c/presence → 200 20 ms up=44 down=417
+15:03:30.027 🎥LL 296.331 picplace: downloaded the originals and blends of Photo 29. 7. at 1554: 1 file(s), 12246862 bytes
+15:03:30.044 🎥LL 296.349 picplace trace: POST projects/assets → 200 18 ms up=109 down=1302
+15:03:30.048 🎥LL 296.352 picplace: poster check — 2 of 2 already on PicPlace, noted without sending
+15:03:30.048 🎥LL 296.352 picplace: check (launch) — 0 pulled, 0 updated, 0 queued to send, 2 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+15:03:30.090 🎥LL 296.394 picplace trace: GET projects/315e7935-aef1-40e6-926f-0a5d617961eb → 200 24 ms up=0 down=3047
+15:03:30.092 🎥LL 296.396 picplace: 6daeaac6-dcb8-4cac-b873-cd9bb4536bc9 — all 1 heavy file(s) here verified on PicPlace: backed up
+15:03:30.119 🎥LL 296.423 picplace trace: GET projects/c56a4f63-c775-4e58-97f4-3a5c33b1b311 → 200 21 ms up=0 down=3047
+15:03:30.121 🎥LL 296.425 picplace: 8b672eb3-5221-4df3-beef-d69b6f1c292c — all 1 heavy file(s) here verified on PicPlace: backed up
+15:03:30.146 🎥LL 296.450 picplace trace: GET projects/40550511-27f9-4011-8b48-73664bf4cf9c → 200 22 ms up=0 down=2992
+15:03:30.148 🎥LL 296.452 picplace: Photo 29. 7. at 1554 — all 1 heavy file(s) here verified on PicPlace: backed up
+15:03:49.720 🎥LL 316.025 assets: backfill scan — 0 of 128 project(s) need work, 0.05 s off main

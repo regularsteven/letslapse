@@ -393,9 +393,37 @@ final class PicPlaceController: ObservableObject {
     /// The server's watermark from the last index read (stage 4).
     var syncMeta = PicPlaceSyncState.Meta()
 
+    /// Asks for the sync state to be written — soon, once. The file is one
+    /// document rewritten whole (741 KB at 1,553 records), and a run of
+    /// pushes or pulls asked for it once per project and more (2026-10-01:
+    /// thirty call sites); the asks of a second and a half now share one
+    /// write. Leaving the app, quitting and a library switch write at once
+    /// (`flushSyncState`). A kill inside the window loses at most that
+    /// window's records, which the file's own contract covers: this device's
+    /// row in the server's `presence[]` carries the same revision.
     func saveSyncState() {
+        syncStateDirty = true
+        guard syncStateWrite == nil else { return }
+        syncStateWrite = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            self?.syncStateWrite = nil
+            self?.flushSyncState()
+        }
+    }
+
+    /// Writes the sync state now if anything asked since the last write.
+    func flushSyncState() {
+        syncStateWrite?.cancel()
+        syncStateWrite = nil
+        guard syncStateDirty else { return }
+        syncStateDirty = false
         PicPlaceSyncState.save(records, meta: syncMeta, root: root)
     }
+
+    private var syncStateDirty = false
+    private var syncStateWrite: Task<Void, Never>?
+    private var syncStateObservers: [NSObjectProtocol] = []
 
     /// What a Sync sends. Stage 2: the minimal set; the originals follow per
     /// project in stage 5. `LL_PICPLACE_POLICY=minimal|originals|everything`
@@ -423,6 +451,17 @@ final class PicPlaceController: ObservableObject {
 
     init(model: AppModel) {
         self.model = model
+        // The coalesced sync-state write lands before the app can be suspended or quit.
+        #if os(iOS)
+        let leaving = [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification, UIApplication.willTerminateNotification]
+        #else
+        let leaving = [NSApplication.willResignActiveNotification, NSApplication.willTerminateNotification]
+        #endif
+        syncStateObservers = leaving.map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.flushSyncState() }
+            }
+        }
         binding = PicPlaceBindingRecord.read(inRoot: root)
         if binding == nil, PicPlaceBindingRecord.exists(inRoot: root) {
             LLog("picplace: \(PicPlaceBindingRecord.fileName) exists but could not be read — treating the library as unbound; the file is left as it is")
@@ -875,7 +914,7 @@ final class PicPlaceController: ObservableObject {
         #endif
     }
 
-    private func noteLimits(_ status: PPStatus) {
+    func noteLimits(_ status: PPStatus) {
         if let cap = status.limits?.manifestMaxBytes, cap > 0 { manifestMaxBytes = cap }
         let perMinute = status.limits?.requestsPerMinute?.device
         Task { await client.setRateLimit(requestsPerMinute: perMinute) }
@@ -913,18 +952,25 @@ final class PicPlaceController: ObservableObject {
     /// assignment only when the default library's count moved.
     private var unfiledCountSeen: Int?
 
-    func repairBindingLibraryIfMissing(_ status: PPStatus) async {
+    /// Returns the freshest `/status` it holds: the one given, or the one
+    /// read after a repair changed the account's libraries — the only time
+    /// it reads again (2026-10-01: it re-read after every call, repaired or
+    /// not, which was two of the five requests of every idle check).
+    @discardableResult
+    func repairBindingLibraryIfMissing(_ status: PPStatus) async -> PPStatus {
         // A binding without a library is `.needsLibrary`: the person chooses
         // on the sheet (`connectLibrary(target:)` fills the binding in);
         // nothing is minted or assigned on their behalf.
-        guard status.hasLibraries, canSync, let record = binding, let library = record.library else { return }
+        guard status.hasLibraries, canSync, let record = binding, let library = record.library else { return status }
         let uuid = library.uuid.uuidString.lowercased()
         var libraries = status.libraries ?? []
+        var changed = false
         do {
             if !libraries.contains(where: { $0.libraryUUID == library.uuid }) {
                 let created: PPLibraryResponse = try await client.put("libraries/\(uuid)", json: ["name": library.name, "adopt_default": false])
                 LLog("picplace: library “\(library.name)” \(uuid) was not on \(sessionHost) — created (\(created.library.count) projects there)")
                 libraries.append(created.library)
+                changed = true
             }
             let unfiled = libraries.first { $0.isDefault }?.count ?? 0
             if unfiled > 0, unfiled != unfiledCountSeen {
@@ -948,14 +994,23 @@ final class PicPlaceController: ObservableObject {
                     for origin in mine.compactMap(UUID.init(uuidString:)) { clearElsewhere(origin) }
                     saveSyncState()
                     unfiledCountSeen = nil
+                    changed = true
                 } else {
                     LLog("picplace: none of the account's \(unfiled) unfiled project(s) is held here — left unfiled")
                 }
             }
-            if let refreshed: PPStatus = try? await client.get("status") { noteLibraries(refreshed) } else { serverLibraries = libraries }
+            // The account's libraries moved: read their counts again. Nothing
+            // moved: the caller's answer is still the answer.
+            guard changed else { return status }
+            if let refreshed: PPStatus = try? await client.get("status") {
+                noteLibraries(refreshed)
+                return refreshed
+            }
+            serverLibraries = libraries
         } catch {
             LLog("picplace: could not put the library's scope right on \(sessionHost): \(error)")
         }
+        return status
     }
 
     /// The Settings card's "On PicPlace" line: how many of this account's
@@ -970,8 +1025,8 @@ final class PicPlaceController: ObservableObject {
                 let status: PPStatus = try await client.get("status")
                 noteLimits(status)
                 noteLibraries(status)
-                await repairBindingLibraryIfMissing(status)
-                await refreshUsage(status: status, rows: rows)
+                let latest = await repairBindingLibraryIfMissing(status)
+                await refreshUsage(status: latest, rows: rows)
             } catch {
                 // A disabled account or a revoked device ends the nearby
                 // key's use here; anything else is the next read's.
@@ -992,7 +1047,10 @@ final class PicPlaceController: ObservableObject {
         }
     }
 
-    private func refreshUsage(status: PPStatus, rows given: [PPProject]? = nil) async {
+    /// The same from a `/status` the caller already holds — the check's own,
+    /// read at its start (2026-10-01: the check read it again here, and the
+    /// repair read it a fourth time).
+    func refreshUsage(status: PPStatus, rows given: [PPProject]? = nil) async {
         // The index, not just the count: which of the account's projects are
         // NOT in this library is the number that explains the total.
         // The check's index carries tombstones; a deleted project is not one
@@ -1622,6 +1680,9 @@ final class PicPlaceController: ObservableObject {
     /// over the other folder.
     func shutDown() {
         isShutDown = true
+        flushSyncState()
+        syncStateObservers.forEach(NotificationCenter.default.removeObserver)
+        syncStateObservers = []
         autoTimer?.invalidate()
         autoTimer = nil
         (pathMonitorBox as? NWPathMonitor)?.cancel()

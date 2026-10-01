@@ -80,13 +80,35 @@ three there, see what the Mac re-pulls; every request named by the app's own
 `LL_PICPLACE_TRACE` lines, a data-pack report per run. Run it once before the
 first job lands and after each one.
 
+**Done 2026-10-01** (measured with the bench, same 14 photos, before → after;
+report `docs/fieldtests/2026-10-01-sync-cost-bench-after-jobs/`):
+- *One `/status` per check* — the repair re-reads only after it changed
+  something, and the check hands its own answer to the usage line. An idle
+  check 5 → 2 requests; a Mac launch 11 → 7; importing 14 photos 198 → 178;
+  editing 3 photos 31 → 23; the Mac picking up 3 edits 22 → 15.
+- *A pull's download URLs in one request* (`mintDownloads`): 4 → 3 API requests
+  per pulled project (the Simulator's log of the stalled first launch,
+  `raw/03b-sim-pull-first-launch.log`: 14 pulls, 14 of each request).
+- *Sync-state writes coalesced*: one write per second and a half of asks,
+  flushed on resign-active, background, quit and a library switch.
+- *An iOS launch runs one check, not two*: the launch check is not repeated
+  when a check completed within the last minute. A Simulator launch 12 → 6.
+Byte counts of that run are not comparable with the first: the same photos
+were already on the account, so originals and identical posters became
+server-side copies.
+
 **Agreed, not started — client (`App/PicPlace/`):**
+*(the first, fifth and sixth bullets below are the ones done above)*
 - **One `/status` per check.** `repairBindingLibraryIfMissing` re-reads it
   unconditionally at its end (`PicPlaceController.swift:947`) and
   `refreshUsage` reads it again (`:962`); pass the check's status through. An
   idle check goes from 5 requests to 2.
 - **One push cycle for a new project when originals are on** (`.everything`
   instead of minimal then originals): 16 → 7 API requests, manifest written once.
+  Looked at 2026-10-01 and left: the record bookkeeping after a heavy push
+  (`serverHeavyFiles = record.files`, `heavyDigest`, `verifyAfterUpload`)
+  assumes the push carried only heavy files, and those fields gate free up
+  space — it needs its own careful pass, not a quick change.
   Skip the `GET /projects/{u}` before a first-ever originals upload
   (`PicPlaceAutoSync.swift:1089`); negotiate already dedupes.
 - **No per-project verification polling.** `verifyAfterUpload` reads

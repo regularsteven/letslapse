@@ -480,7 +480,7 @@ class Bench:
         if holders and not self.args.force:
             raise SystemExit("bench: another LetsLapse is running on this Mac — if it holds the library the bench's copy opens read-only. "
                              "Quit it (or pass --force if it is on another library):\n  " + "\n  ".join(holders))
-        sim = Sim(self.args.sim)
+        sim = Sim(self.args.sim, active=getattr(self.args, "sim_library", None))
         if any(s[1] == "Simulator" for s in steps):
             if self.args.install_sim:
                 if not SIM_APP.exists():
@@ -496,6 +496,19 @@ class Bench:
         ledger_now = ledger(self.picplace, self.args.user, 0)
         self.state["ledger_start"] = ledger_now
         since = ledger_now["ledger_max_id"]
+        if self.args.steps and self.state_path.exists():
+            # A subset of steps on a run that stopped: keep what it recorded,
+            # and take the edit targets from its import steps.
+            previous = json.loads(self.state_path.read_text())
+            for key in ("steps", "started", "ledger_start"):
+                self.state[key] = previous.get(key, self.state.get(key))
+            since = self.state["ledger_start"]["ledger_max_id"]
+            for old_step in previous.get("steps", []):
+                if old_step["name"] == "mac-import-photos":
+                    edited_photos = [{"origin": o} for o in old_step.get("edited", [])]
+                    sim_targets = [{"origin": o} for o in old_step.get("sim_targets", [])]
+                if old_step["name"] == "mac-import-lapse":
+                    edited_lapse = [{"origin": o} for o in old_step.get("edited", [])]
         n = self.args.edits
         presets = (self.args.presets.split(",") if self.args.presets else PRESETS)
 
@@ -525,9 +538,14 @@ class Bench:
                 require = lambda lines: any("push queue —" in l for l in lines)
             elif name == "sim-pull":
                 hooks = {"LL_TAB": "gallery"}
-                want = len(project_records(mac.projects)) - len(project_records(sim.projects))
-                log(f"{name}: expecting {want} pull(s)")
-                require = lambda lines, want=want: sum(1 for l in lines if "picplace: pulled " in l) >= want
+                # What the Mac holds and the Simulator does not, by origin —
+                # less anything the Mac holds that is filed in another library
+                # (it will never arrive), so the step waits for a completed
+                # check rather than an exact count.
+                here = {r["origin"] for r in project_records(sim.projects).values()}
+                want = sum(1 for r in project_records(mac.projects).values() if r["origin"] not in here)
+                log(f"{name}: up to {want} pull(s) expected")
+                require = lambda lines: any("picplace: check (" in l and " — " in l for l in lines)
             elif name == "sim-download":
                 hooks = {"LL_TAB": "gallery", "LL_PICPLACE_DOWNLOAD": ",".join(t["origin"] for t in sim_targets)}
                 require = lambda lines: sum(1 for l in lines if "downloaded the originals" in l) >= len(sim_targets)
@@ -874,13 +892,13 @@ def main():
         p.add_argument("--step-timeout", type=int, default=1800)
         p.add_argument("--install-sim", action="store_true", help="install the Debug Simulator build first")
         p.add_argument("--force", action="store_true", help="run even if another LetsLapse is running on this Mac")
+        p.add_argument("--sim-library", help="the Simulator's library folder id, when it holds several (library A in the two-library scenario)")
         p.add_argument("--device-id", help="launch the Mac copy as this device id (a scratch copy of a library as a second device)")
 
     p = sub.add_parser("run"); common(p); p.set_defaults(func=lambda a: Bench(a).run())
     p = sub.add_parser("libraries", help="the two-library scenario: Mac on A, Simulator on a new library B")
     common(p)
     p.add_argument("--library-name", default="synth two")
-    p.add_argument("--sim-library", help="the Simulator's library A folder id, when it holds several")
     p.add_argument("--resume-b", help="carry on a stopped run from the move: library B's folder id in the Simulator")
     p.set_defaults(func=lambda a: Bench(a).run_libraries())
     p = sub.add_parser("plan"); common(p)
