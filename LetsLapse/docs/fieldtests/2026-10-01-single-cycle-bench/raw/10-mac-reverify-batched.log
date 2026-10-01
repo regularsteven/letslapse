@@ -1,0 +1,96 @@
+16:02:19.419 🎥LL 825.717 device id 7B7B7B7B-0000-4000-8000-0000000000BE
+16:02:19.419 🎥LL 825.717 thermal: nominal at launch
+16:02:19.499 🎥LL 825.797 library lock: taken (pid 19179)
+16:02:19.501 🎥LL 825.799 storage: root came from the launch arguments — the libraries list is kept for this run only
+16:02:19.735 🎥LL 826.033 library: walked 145 documents in 0.022 s — 145 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 1 asset files and 0 shape registers re-indexed
+16:02:19.755 🎥LL 826.053 picplace: injected tokens — the stored session is not read
+16:02:19.755 🎥LL 826.053 picplace: session none — no tokens, library bound to @synth on picplace.test
+16:02:19.756 🎥LL 826.054 picplace: auto-sync switches for this device and library — changes on, originals ON, Wi-Fi only on
+16:02:20.165 🎥LL 826.463 picplace trace: GET status → 200 69 ms up=0 down=2827
+16:02:20.271 🎥LL 826.569 picplace trace: POST device → 200 29 ms up=198 down=445
+16:02:20.299 🎥LL 826.597 picplace: pacing requests under 300/min (255/min for sync work)
+16:02:20.312 🎥LL 826.610 picplace trace: GET nearby/key → 200 13 ms up=0 down=135
+16:02:20.313 🎥LL 826.611 nearby: key nk_4aa08c046242f739 held for picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae
+16:02:20.314 🎥LL 826.612 nearby: on — key nk_4aa08c046242f739, serving and browsing
+16:02:20.318 🎥LL 826.616 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+16:02:20.318 🎥LL 826.616 nearby: listening as “LetsLapse BBA551F5”
+16:02:20.320 🎥LL 826.619 nearby: listener failed — -65555: NoAuth
+16:02:20.329 🎥LL 826.627 picplace trace: GET projects → 200 57 ms up=0 down=150577
+16:02:20.377 🎥LL 826.675 picplace trace: POST device → 200 11 ms up=198 down=445
+16:02:20.378 🎥LL 826.676 picplace: told PicPlace this device runs 0.1.0 (1) 2026-10-01 14:02 UTC
+16:02:20.412 🎥LL 826.710 picplace trace: GET status → 200 34 ms up=0 down=3257
+16:02:20.457 🎥LL 826.756 picplace trace: GET projects?include_deleted=1 → 200 45 ms up=0 down=152669
+16:02:20.494 🎥LL 826.792 picplace check pass: 140 of 140 project(s) read in 0.00 s off main
+16:02:20.495 🎥LL 826.793 picplace: check (launch) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+16:02:20.548 🎥LL 826.846 picplace trace: POST projects/assets → 200 49 ms up=3938 down=64439
+16:02:20.551 🎥LL 826.849 picplace trace: POST projects/assets → 200 51 ms up=3938 down=65158
+16:02:20.553 🎥LL 826.851 picplace: unique-1549-11 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.554 🎥LL 826.853 picplace: unique-1549-10 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.556 🎥LL 826.854 picplace: unique-1549-9 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.557 🎥LL 826.855 picplace: unique-1549-8 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.559 🎥LL 826.857 picplace: unique-1549-7 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.561 🎥LL 826.860 picplace: broad-mix--arches.05 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.564 🎥LL 826.862 picplace: broad-mix--arches.03 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.566 🎥LL 826.864 picplace: broad-mix--arches.04 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.569 🎥LL 826.867 picplace: broad-mix--arches.01 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.571 🎥LL 826.869 picplace: broad-mix--arches.02 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.574 🎥LL 826.872 picplace: broad-mix--arches.05 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.576 🎥LL 826.874 picplace: broad-mix--arches.01 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.579 🎥LL 826.877 picplace: broad-mix--arches.04 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.581 🎥LL 826.879 picplace: broad-mix--arches.03 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.584 🎥LL 826.882 picplace: broad-mix--arches.02 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.588 🎥LL 826.886 picplace: 6daeaac6-dcb8-4cac-b873-cd9bb4536bc9 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.589 🎥LL 826.887 picplace: unique-1549-4 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.593 🎥LL 826.891 picplace: 6daeaac6-dcb8-4cac-b873-cd9bb4536bc9 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.594 🎥LL 826.892 picplace: unique-1549-6 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.601 🎥LL 826.899 picplace: ae1fa114-51a5-4f29-b101-94eaead64d00 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.607 🎥LL 826.905 picplace: ae1fa114-51a5-4f29-b101-94eaead64d00 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.608 🎥LL 826.906 picplace: unique-1549-1 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.614 🎥LL 826.912 picplace: 16c080c7-a9b0-426c-8a53-a6975815bda7 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.618 🎥LL 826.916 picplace: 3db344e3-5a1b-4be4-816e-b5d3ffb97d11 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.621 🎥LL 826.919 picplace: unique-1549-2 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.627 🎥LL 826.926 picplace: 3db344e3-5a1b-4be4-816e-b5d3ffb97d11 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.629 🎥LL 826.927 picplace: unique-1549-3 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.633 🎥LL 826.931 picplace: 5b503e1f-30b9-4037-91ce-8d5a6e7fe856 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.637 🎥LL 826.935 picplace: 5b503e1f-30b9-4037-91ce-8d5a6e7fe856 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.644 🎥LL 826.943 picplace: 8b672eb3-5221-4df3-beef-d69b6f1c292c — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.646 🎥LL 826.945 picplace: unique-1549-5 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.652 🎥LL 826.950 picplace: 8b672eb3-5221-4df3-beef-d69b6f1c292c — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.662 🎥LL 826.960 picplace: Photo 29. 7. at 1614 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.673 🎥LL 826.971 picplace: Photo 29. 7. at 1614 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.680 🎥LL 826.978 picplace: Photo 29. 7. at 1554 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.687 🎥LL 826.985 picplace: Photo 29. 7. at 1554 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.699 🎥LL 826.997 picplace: Photo of rocks — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.711 🎥LL 827.009 picplace: Photo of rocks — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.714 🎥LL 827.012 picplace: single.oldtown.dusk.near — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.716 🎥LL 827.014 picplace: building.01 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.719 🎥LL 827.017 picplace: windows.06 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.721 🎥LL 827.020 picplace: windows.05 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.724 🎥LL 827.022 picplace: windows.04 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.726 🎥LL 827.024 picplace: windows.03 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.729 🎥LL 827.027 picplace: windows.02 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.731 🎥LL 827.029 picplace: windows.01 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.734 🎥LL 827.032 picplace: tram.01 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.736 🎥LL 827.034 picplace: trams-nature.04 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.739 🎥LL 827.037 picplace: trams-nature.03 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.741 🎥LL 827.039 picplace: trams-nature.02 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.743 🎥LL 827.042 picplace: trams-nature.01 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.746 🎥LL 827.044 picplace: trams-city.09 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.749 🎥LL 827.047 picplace: trams-city.08 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.751 🎥LL 827.049 picplace: trams-city.07 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.753 🎥LL 827.051 picplace: trams-city.06 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.756 🎥LL 827.054 picplace: trams-city.05 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.758 🎥LL 827.056 picplace: trams-city.04 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.761 🎥LL 827.059 picplace: trams-city.03 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.764 🎥LL 827.062 picplace: trams-city.02 — all 1 heavy file(s) here verified on PicPlace: backed up
+16:02:20.794 🎥LL 827.092 picplace trace: POST projects/assets → 200 30 ms up=77 down=670
+16:02:25.607 🎥LL 831.905 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+16:02:25.607 🎥LL 831.905 nearby: listening as “LetsLapse BBA551F5”
+16:02:25.609 🎥LL 831.907 nearby: listener failed — -65555: NoAuth
+16:02:36.251 🎥LL 842.549 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+16:02:36.251 🎥LL 842.549 nearby: listening as “LetsLapse BBA551F5”
+16:02:36.254 🎥LL 842.552 nearby: listener failed — -65555: NoAuth
+16:02:40.981 🎥LL 847.279 assets: backfill scan — 0 of 140 project(s) need work, 0.04 s off main
+16:02:57.513 🎥LL 863.811 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+16:02:57.513 🎥LL 863.811 nearby: listening as “LetsLapse BBA551F5”
+16:02:57.516 🎥LL 863.814 nearby: listener failed — -65555: NoAuth

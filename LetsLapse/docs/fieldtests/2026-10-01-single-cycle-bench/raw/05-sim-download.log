@@ -1,0 +1,48 @@
+15:55:40.809 🎥LL 427.108 watch-link activated state=2 reachable=false error=none
+15:55:40.940 🎥LL 427.239 device id D71224C0-F8C5-4705-984D-042382F5D823
+15:55:40.940 🎥LL 427.240 thermal: nominal at launch
+15:55:41.077 🎥LL 427.377 picplace: session picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae — tokens found, library bound to @synth on picplace.test
+15:55:41.081 🎥LL 427.381 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+15:55:41.087 🎥LL 427.387 watch-link appActive=true
+15:55:41.290 🎥LL 427.589 library: walked 140 documents in 0.031 s — 140 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 0 asset files and 0 shape registers re-indexed
+15:55:41.290 🎥LL 427.590 library: library.json lists 129 captures and 0 blends, the index 140 and 0 — the documents will be checked against the index and the export regenerated
+15:55:41.292 🎥LL 427.592 nearby: on — key nk_4aa08c046242f739, serving and browsing
+15:55:41.303 🎥LL 427.603 library: the documents and the index agree on every blend (checked in 0.01 s) — the export's counts were stale
+15:55:41.343 🎥LL 427.643 library export: regenerated from the documents in 0.04 s (104433 bytes)
+15:55:41.363 🎥LL 427.662 nearby: listening as “LetsLapse 18A65A5C”
+15:55:41.429 🎥LL 427.729 status: swept 139 project(s) in 0.11 s — 11 walked, 128 unchanged
+15:55:41.467 🎥LL 427.766 picplace trace: GET status → 200 73 ms up=0 down=3260
+15:55:41.482 🎥LL 427.781 picplace trace: GET status → 200 170 ms up=0 down=3260
+15:55:41.493 🎥LL 427.793 picplace: pacing requests under 300/min (255/min for sync work)
+15:55:41.533 🎥LL 427.832 picplace trace: POST device → 200 21 ms up=201 down=448
+15:55:41.563 🎥LL 427.863 picplace trace: GET projects?include_deleted=1 → 200 72 ms up=0 down=152654
+15:55:41.610 🎥LL 427.909 picplace trace: GET projects → 200 72 ms up=0 down=150562
+15:55:41.641 🎥LL 427.941 picplace check pass: 139 of 139 project(s) read in 0.03 s off main (4 frame walks)
+15:55:41.643 🎥LL 427.943 picplace: check (foreground) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+15:55:41.667 🎥LL 427.966 picplace: continued task asked for — Downloading “unique-1549-2”
+15:55:41.667 🎥LL 427.966 picplace: continued task asked for — Downloading “unique-1549-3”
+15:55:41.667 🎥LL 427.966 picplace: continued task asked for — Downloading “unique-1549-4”
+15:55:41.667 🎥LL 427.967 picplace: continued task refused for Downloading “unique-1549-2”: BGTaskScheduler is not available on this platform.
+15:55:41.667 🎥LL 427.967 picplace: continued task refused for Downloading “unique-1549-3”: BGTaskScheduler is not available on this platform.
+15:55:41.668 🎥LL 427.967 picplace: continued task refused for Downloading “unique-1549-4”: BGTaskScheduler is not available on this platform.
+15:55:41.669 🎥LL 427.969 picplace: check (launch) — a check finished 0 s ago; not repeated
+15:55:41.721 🎥LL 428.020 picplace trace: GET projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6 → 200 53 ms up=0 down=2954
+15:55:41.725 🎥LL 428.024 picplace trace: GET projects/c985fa55-18bd-497f-90c3-17b72c6f7b60 → 200 57 ms up=0 down=2954
+15:55:41.725 🎥LL 428.025 picplace trace: GET projects/aac77dc9-02ca-4835-b857-6659e6d3a65b → 200 58 ms up=0 down=2954
+15:55:41.755 🎥LL 428.054 picplace trace: POST projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/assets/urls → 200 28 ms up=51 down=1208
+15:55:41.758 🎥LL 428.057 picplace trace: POST projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/assets/urls → 200 31 ms up=51 down=1208
+15:55:41.758 🎥LL 428.058 picplace trace: POST projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/assets/urls → 200 32 ms up=51 down=1208
+15:55:41.810 🎥LL 428.110 picplace trace: STORAGE GET source/unique-1549-4.jpg → 200 52 ms bytes=2738735
+15:55:41.824 🎥LL 428.124 picplace trace: STORAGE GET source/unique-1549-2.jpg → 200 66 ms bytes=4977297
+15:55:41.824 🎥LL 428.124 picplace trace: STORAGE GET source/unique-1549-3.jpg → 200 66 ms bytes=5008150
+15:55:41.832 🎥LL 428.132 assets: 2921BE8A recorded 0 of 0 pending (1 assets)
+15:55:41.850 🎥LL 428.150 assets: C985FA55 recorded 0 of 0 pending (1 assets)
+15:55:41.852 🎥LL 428.151 assets: AAC77DC9 recorded 0 of 0 pending (1 assets)
+15:55:41.869 🎥LL 428.169 picplace trace: POST projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/presence → 200 40 ms up=44 down=417
+15:55:41.880 🎥LL 428.180 picplace: downloaded the originals and blends of unique-1549-4: 1 file(s), 2738735 bytes
+15:55:41.881 🎥LL 428.180 picplace trace: POST projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/presence → 200 32 ms up=44 down=417
+15:55:41.881 🎥LL 428.181 picplace trace: POST projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/presence → 200 32 ms up=44 down=417
+15:55:41.882 🎥LL 428.182 picplace: downloaded the originals and blends of unique-1549-3: 1 file(s), 5008150 bytes
+15:55:41.882 🎥LL 428.182 picplace: downloaded the originals and blends of unique-1549-2: 1 file(s), 4977297 bytes
+15:55:42.735 🎥LL 429.035 picplace tally: 139 of 139 project(s) read in 0.01 s off main
+15:56:01.443 🎥LL 447.742 assets: backfill scan — 0 of 139 project(s) need work, 0.06 s off main

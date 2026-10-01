@@ -1,0 +1,4290 @@
+{
+ "steps": [
+  {
+   "name": "mac-baseline",
+   "device": "Mac",
+   "description": "launch, one check, quit",
+   "started": "2026-10-01T15:49:45",
+   "ended": "2026-10-01T15:51:41",
+   "seconds": 116.3,
+   "hooks": {
+    "LL_TAB": "projects"
+   },
+   "log": "raw/01-mac-baseline.log",
+   "api": [
+    {
+     "t": "15:49:47.776",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 135,
+     "up": 0,
+     "down": 2827
+    },
+    {
+     "t": "15:49:47.856",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 40,
+     "up": 198,
+     "down": 445
+    },
+    {
+     "t": "15:49:47.925",
+     "method": "GET",
+     "path": "nearby/key",
+     "pattern": "GET nearby/key",
+     "status": 200,
+     "ms": 40,
+     "up": 0,
+     "down": 135
+    },
+    {
+     "t": "15:49:48.059",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 202,
+     "up": 0,
+     "down": 139484
+    },
+    {
+     "t": "15:49:48.150",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 48,
+     "up": 198,
+     "down": 445
+    },
+    {
+     "t": "15:49:48.242",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 90,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:49:48.332",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 89,
+     "up": 0,
+     "down": 141576
+    },
+    {
+     "t": "15:50:54.813",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 68,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:50:54.888",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 65,
+     "up": 0,
+     "down": 141576
+    }
+   ],
+   "storage": [],
+   "highlights": [
+    "15:49:47.884 picplace: pacing requests under 300/min (255/min for sync work)",
+    "15:49:48.374 picplace: check (launch) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "15:50:54.935 picplace: check (foreground) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20737,
+    "since": 20737,
+    "events": [],
+    "projects": {
+     "live": 140,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 141
+     },
+     "manifest_bytes": 79713
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 142,
+      "bytes": 40328914
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 142,
+      "bytes": 623942
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 142,
+      "bytes": 232816116
+     }
+    ],
+    "presences": {
+     "original": 140,
+     "preview": 133
+    },
+    "index": {
+     "rows": 142,
+     "name_null": 141,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20737,
+    "since": 20737,
+    "events": [],
+    "projects": {
+     "live": 140,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 141
+     },
+     "manifest_bytes": 79713
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 142,
+      "bytes": 40328914
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 142,
+      "bytes": 623942
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 142,
+      "bytes": 232816116
+     }
+    ],
+    "presences": {
+     "original": 140,
+     "preview": 133
+    },
+    "index": {
+     "rows": 142,
+     "name_null": 141,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 129,
+   "mac_projects_after": 129,
+   "sim_projects_before": 128,
+   "sim_projects_after": 128,
+   "mac_sync_state_bytes": 82394,
+   "sim_sync_state_bytes": 71850,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "mac-import-photos",
+   "device": "Mac",
+   "description": "import 11 photo(s) as separate projects; push, originals up",
+   "started": "2026-10-01T15:51:44",
+   "ended": "2026-10-01T15:52:58",
+   "seconds": 74.2,
+   "hooks": {
+    "LL_TAB": "projects",
+    "LL_IMPORT_STILLS": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-1.jpg:/private/tmp/claude-501/-Users-stevenwright-Document\u2026",
+    "LL_IMPORT_ANSWER": "photos"
+   },
+   "log": "raw/02-mac-import-photos.log",
+   "api": [
+    {
+     "t": "15:51:45.724",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 89,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:51:45.995",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 31,
+     "up": 198,
+     "down": 445
+    },
+    {
+     "t": "15:51:46.106",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 77,
+     "up": 0,
+     "down": 139484
+    },
+    {
+     "t": "15:51:46.140",
+     "method": "GET",
+     "path": "nearby/key",
+     "pattern": "GET nearby/key",
+     "status": 200,
+     "ms": 52,
+     "up": 0,
+     "down": 135
+    },
+    {
+     "t": "15:51:46.355",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 34,
+     "up": 198,
+     "down": 445
+    },
+    {
+     "t": "15:51:46.428",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 51,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:51:46.484",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 55,
+     "up": 0,
+     "down": 141576
+    },
+    {
+     "t": "15:51:46.983",
+     "method": "POST",
+     "path": "projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 37,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:51:47.258",
+     "method": "PUT",
+     "path": "projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 75,
+     "up": 630,
+     "down": 828
+    },
+    {
+     "t": "15:51:47.315",
+     "method": "POST",
+     "path": "projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 55,
+     "up": 517,
+     "down": 3259
+    },
+    {
+     "t": "15:51:47.423",
+     "method": "POST",
+     "path": "projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 65,
+     "up": 256,
+     "down": 1090
+    },
+    {
+     "t": "15:51:47.454",
+     "method": "POST",
+     "path": "projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 31,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:51:47.481",
+     "method": "DELETE",
+     "path": "projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 26,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:51:47.586",
+     "method": "POST",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 34,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:51:47.645",
+     "method": "PUT",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 50,
+     "up": 630,
+     "down": 828
+    },
+    {
+     "t": "15:51:47.699",
+     "method": "POST",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 53,
+     "up": 517,
+     "down": 3937
+    },
+    {
+     "t": "15:51:47.831",
+     "method": "POST",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 79,
+     "up": 378,
+     "down": 1615
+    },
+    {
+     "t": "15:51:47.868",
+     "method": "POST",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 36,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:51:47.899",
+     "method": "DELETE",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 29,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:51:48.037",
+     "method": "POST",
+     "path": "projects/6a2e2843-d701-4253-93da-fe05438607e6/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 52,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:51:48.100",
+     "method": "PUT",
+     "path": "projects/6a2e2843-d701-4253-93da-fe05438607e6",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 56,
+     "up": 630,
+     "down": 828
+    },
+    {
+     "t": "15:51:48.148",
+     "method": "POST",
+     "path": "projects/6a2e2843-d701-4253-93da-fe05438607e6/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 47,
+     "up": 517,
+     "down": 3930
+    },
+    {
+     "t": "15:51:48.267",
+     "method": "POST",
+     "path": "projects/6a2e2843-d701-4253-93da-fe05438607e6/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 67,
+     "up": 378,
+     "down": 1615
+    },
+    {
+     "t": "15:51:48.300",
+     "method": "POST",
+     "path": "projects/6a2e2843-d701-4253-93da-fe05438607e6/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 32,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:51:48.328",
+     "method": "DELETE",
+     "path": "projects/6a2e2843-d701-4253-93da-fe05438607e6/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 26,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:51:48.440",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 33,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:51:48.506",
+     "method": "PUT",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 58,
+     "up": 630,
+     "down": 828
+    },
+    {
+     "t": "15:51:48.551",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 44,
+     "up": 517,
+     "down": 3933
+    },
+    {
+     "t": "15:51:48.680",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 76,
+     "up": 378,
+     "down": 1615
+    },
+    {
+     "t": "15:51:48.723",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 42,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:51:48.762",
+     "method": "DELETE",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 37,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:51:48.903",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 46,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:51:48.973",
+     "method": "PUT",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 61,
+     "up": 630,
+     "down": 828
+    },
+    {
+     "t": "15:51:49.023",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 50,
+     "up": 517,
+     "down": 3936
+    },
+    {
+     "t": "15:51:49.157",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 81,
+     "up": 378,
+     "down": 1615
+    },
+    {
+     "t": "15:51:49.188",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 29,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:51:49.214",
+     "method": "DELETE",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 25,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:51:49.326",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 37,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:51:49.379",
+     "method": "PUT",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 45,
+     "up": 630,
+     "down": 828
+    },
+    {
+     "t": "15:51:49.425",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 45,
+     "up": 517,
+     "down": 3927
+    },
+    {
+     "t": "15:51:49.529",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 67,
+     "up": 378,
+     "down": 1615
+    },
+    {
+     "t": "15:51:49.555",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 24,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:51:49.580",
+     "method": "DELETE",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 24,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:51:52.802",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 51,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:51:52.855",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 49,
+     "up": 0,
+     "down": 144314
+    },
+    {
+     "t": "15:52:07.446",
+     "method": "POST",
+     "path": "projects/d5207961-8ddf-431c-9159-e94262122d4b/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 34,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:52:07.505",
+     "method": "PUT",
+     "path": "projects/d5207961-8ddf-431c-9159-e94262122d4b",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 50,
+     "up": 630,
+     "down": 828
+    },
+    {
+     "t": "15:52:07.565",
+     "method": "POST",
+     "path": "projects/d5207961-8ddf-431c-9159-e94262122d4b/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 58,
+     "up": 515,
+     "down": 3250
+    },
+    {
+     "t": "15:52:07.644",
+     "method": "POST",
+     "path": "projects/d5207961-8ddf-431c-9159-e94262122d4b/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 59,
+     "up": 256,
+     "down": 1088
+    },
+    {
+     "t": "15:52:07.676",
+     "method": "POST",
+     "path": "projects/d5207961-8ddf-431c-9159-e94262122d4b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 30,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:52:07.705",
+     "method": "DELETE",
+     "path": "projects/d5207961-8ddf-431c-9159-e94262122d4b/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 26,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:52:07.770",
+     "method": "POST",
+     "path": "projects/2821386c-b1fc-409d-ae19-d058e6434cce/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 25,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:52:07.827",
+     "method": "PUT",
+     "path": "projects/2821386c-b1fc-409d-ae19-d058e6434cce",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 47,
+     "up": 630,
+     "down": 828
+    },
+    {
+     "t": "15:52:07.874",
+     "method": "POST",
+     "path": "projects/2821386c-b1fc-409d-ae19-d058e6434cce/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 46,
+     "up": 515,
+     "down": 3250
+    },
+    {
+     "t": "15:52:07.924",
+     "method": "POST",
+     "path": "projects/2821386c-b1fc-409d-ae19-d058e6434cce/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 39,
+     "up": 256,
+     "down": 1088
+    },
+    {
+     "t": "15:52:07.949",
+     "method": "POST",
+     "path": "projects/2821386c-b1fc-409d-ae19-d058e6434cce/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 25,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:52:07.974",
+     "method": "DELETE",
+     "path": "projects/2821386c-b1fc-409d-ae19-d058e6434cce/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 24,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:52:08.042",
+     "method": "POST",
+     "path": "projects/3913b08c-083a-4e03-b177-8cbd985e2b70/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 25,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:52:08.099",
+     "method": "PUT",
+     "path": "projects/3913b08c-083a-4e03-b177-8cbd985e2b70",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 47,
+     "up": 630,
+     "down": 828
+    },
+    {
+     "t": "15:52:08.152",
+     "method": "POST",
+     "path": "projects/3913b08c-083a-4e03-b177-8cbd985e2b70/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 51,
+     "up": 515,
+     "down": 3255
+    },
+    {
+     "t": "15:52:08.219",
+     "method": "POST",
+     "path": "projects/3913b08c-083a-4e03-b177-8cbd985e2b70/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 47,
+     "up": 256,
+     "down": 1088
+    },
+    {
+     "t": "15:52:08.247",
+     "method": "POST",
+     "path": "projects/3913b08c-083a-4e03-b177-8cbd985e2b70/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 26,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:52:08.272",
+     "method": "DELETE",
+     "path": "projects/3913b08c-083a-4e03-b177-8cbd985e2b70/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 24,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:52:08.337",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 22,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:52:08.391",
+     "method": "PUT",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 45,
+     "up": 633,
+     "down": 829
+    },
+    {
+     "t": "15:52:08.451",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 58,
+     "up": 516,
+     "down": 3258
+    },
+    {
+     "t": "15:52:08.523",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 51,
+     "up": 256,
+     "down": 1089
+    },
+    {
+     "t": "15:52:08.553",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 30,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:52:08.580",
+     "method": "DELETE",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 27,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:52:08.647",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 404,
+     "ms": 26,
+     "up": 20,
+     "down": 15502
+    },
+    {
+     "t": "15:52:08.704",
+     "method": "PUT",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9",
+     "pattern": "PUT projects/{u}",
+     "status": 201,
+     "ms": 41,
+     "up": 633,
+     "down": 829
+    },
+    {
+     "t": "15:52:08.758",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 52,
+     "up": 516,
+     "down": 3257
+    },
+    {
+     "t": "15:52:08.827",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 47,
+     "up": 256,
+     "down": 1089
+    },
+    {
+     "t": "15:52:08.856",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 28,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:52:08.882",
+     "method": "DELETE",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 26,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:52:12.161",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 74,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:52:12.244",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 79,
+     "up": 0,
+     "down": 148337
+    }
+   ],
+   "storage": [
+    {
+     "t": "15:51:47.322",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 6,
+     "bytes": 1250
+    },
+    {
+     "t": "15:51:47.356",
+     "verb": "PUT",
+     "name": "source/unique-1549-6.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 40,
+     "bytes": 4972776
+    },
+    {
+     "t": "15:51:47.709",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 9,
+     "bytes": 1262
+    },
+    {
+     "t": "15:51:47.722",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 22,
+     "bytes": 410580
+    },
+    {
+     "t": "15:51:47.750",
+     "verb": "PUT",
+     "name": "source/unique-1549-1.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 50,
+     "bytes": 4619883
+    },
+    {
+     "t": "15:51:48.158",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 6,
+     "bytes": 1250
+    },
+    {
+     "t": "15:51:48.169",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 17,
+     "bytes": 370287
+    },
+    {
+     "t": "15:51:48.199",
+     "verb": "PUT",
+     "name": "source/unique-1549-5.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 47,
+     "bytes": 4816233
+    },
+    {
+     "t": "15:51:48.558",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 6,
+     "bytes": 1228
+    },
+    {
+     "t": "15:51:48.570",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 17,
+     "bytes": 379137
+    },
+    {
+     "t": "15:51:48.602",
+     "verb": "PUT",
+     "name": "source/unique-1549-3.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 50,
+     "bytes": 5008150
+    },
+    {
+     "t": "15:51:49.030",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 6,
+     "bytes": 1248
+    },
+    {
+     "t": "15:51:49.039",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 15,
+     "bytes": 368159
+    },
+    {
+     "t": "15:51:49.073",
+     "verb": "PUT",
+     "name": "source/unique-1549-2.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 48,
+     "bytes": 4977297
+    },
+    {
+     "t": "15:51:49.435",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 9,
+     "bytes": 1268
+    },
+    {
+     "t": "15:51:49.445",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 19,
+     "bytes": 272430
+    },
+    {
+     "t": "15:51:49.461",
+     "verb": "PUT",
+     "name": "source/unique-1549-4.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 35,
+     "bytes": 2738735
+    },
+    {
+     "t": "15:52:07.573",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 4,
+     "bytes": 744
+    },
+    {
+     "t": "15:52:07.583",
+     "verb": "PUT",
+     "name": "source/unique-1549-7.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 14,
+     "bytes": 434502
+    },
+    {
+     "t": "15:52:07.879",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 2,
+     "bytes": 748
+    },
+    {
+     "t": "15:52:07.883",
+     "verb": "PUT",
+     "name": "source/unique-1549-8.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 7,
+     "bytes": 470717
+    },
+    {
+     "t": "15:52:08.159",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 4,
+     "bytes": 745
+    },
+    {
+     "t": "15:52:08.169",
+     "verb": "PUT",
+     "name": "source/unique-1549-9.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 14,
+     "bytes": 534736
+    },
+    {
+     "t": "15:52:08.459",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 5,
+     "bytes": 747
+    },
+    {
+     "t": "15:52:08.470",
+     "verb": "PUT",
+     "name": "source/unique-1549-10.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 15,
+     "bytes": 434977
+    },
+    {
+     "t": "15:52:08.765",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 4,
+     "bytes": 748
+    },
+    {
+     "t": "15:52:08.778",
+     "verb": "PUT",
+     "name": "source/unique-1549-11.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 17,
+     "bytes": 717873
+    }
+   ],
+   "highlights": [
+    "15:51:45.901 assets: B07D0DEE recorded 1 of 1 pending (1 assets)",
+    "15:51:46.036 assets: AAC77DC9 recorded 1 of 1 pending (1 assets)",
+    "15:51:46.088 picplace: pacing requests under 300/min (255/min for sync work)",
+    "15:51:46.155 assets: C985FA55 recorded 1 of 1 pending (1 assets)",
+    "15:51:46.272 assets: 2921BE8A recorded 1 of 1 pending (1 assets)",
+    "15:51:46.384 assets: 6A2E2843 recorded 1 of 1 pending (1 assets)",
+    "15:51:46.488 assets: C5EAFEF5 recorded 1 of 1 pending (1 assets)",
+    "15:51:46.591 picplace: check (launch) \u2014 0 pulled, 0 updated, 6 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "15:51:46.592 assets: D5207961 recorded 1 of 1 pending (1 assets)",
+    "15:51:46.709 assets: 2821386C recorded 1 of 1 pending (1 assets)",
+    "15:51:46.833 assets: 3913B08C recorded 1 of 1 pending (1 assets)",
+    "15:51:46.951 assets: F991BA5B recorded 1 of 1 pending (1 assets)",
+    "15:51:47.071 assets: F7AF9AD0 recorded 1 of 1 pending (1 assets)",
+    "15:51:47.316 picplace: unique-1549-6 \u2014 uploading 2 of 3 file(s), 5 MB; 1 already on PicPlace",
+    "15:51:47.700 picplace: unique-1549-1 \u2014 uploading 3 of 3 file(s), 5 MB",
+    "15:51:48.151 picplace: unique-1549-5 \u2014 uploading 3 of 3 file(s), 5,2 MB",
+    "15:51:48.552 picplace: unique-1549-3 \u2014 uploading 3 of 3 file(s), 5,4 MB",
+    "15:51:49.024 picplace: unique-1549-2 \u2014 uploading 3 of 3 file(s), 5,3 MB",
+    "15:51:49.426 picplace: unique-1549-4 \u2014 uploading 3 of 3 file(s), 3 MB",
+    "15:51:49.586 picplace: push queue \u2014 6 sent, 0 failed",
+    "15:52:07.568 picplace: unique-1549-7 \u2014 uploading 2 of 3 file(s), 435 KB; 1 already on PicPlace",
+    "15:52:07.876 picplace: unique-1549-8 \u2014 uploading 2 of 3 file(s), 471 KB; 1 already on PicPlace",
+    "15:52:08.155 picplace: unique-1549-9 \u2014 uploading 2 of 3 file(s), 535 KB; 1 already on PicPlace",
+    "15:52:08.454 picplace: unique-1549-10 \u2014 uploading 2 of 3 file(s), 436 KB; 1 already on PicPlace",
+    "15:52:08.761 picplace: unique-1549-11 \u2014 uploading 2 of 3 file(s), 719 KB; 1 already on PicPlace",
+    "15:52:08.887 picplace: push queue \u2014 5 sent, 0 failed"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20737,
+    "since": 20737,
+    "events": [],
+    "projects": {
+     "live": 140,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 141
+     },
+     "manifest_bytes": 79713
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 142,
+      "bytes": 40328914
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 142,
+      "bytes": 623942
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 142,
+      "bytes": 232816116
+     }
+    ],
+    "presences": {
+     "original": 140,
+     "preview": 133
+    },
+    "index": {
+     "rows": 142,
+     "name_null": 141,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20781,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 11,
+      "bytes_in": 5141,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 6,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 27,
+      "bytes_in": 31537710,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 84854
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44148520
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635180
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 151,
+     "preview": 133
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 129,
+   "mac_projects_after": 140,
+   "sim_projects_before": 128,
+   "sim_projects_after": 128,
+   "mac_sync_state_bytes": 89359,
+   "sim_sync_state_bytes": 71850,
+   "new_mac_projects": [
+    {
+     "id": "b07d0dee-22cb-4705-b9fc-25d1cedb643b",
+     "origin": "b07d0dee-22cb-4705-b9fc-25d1cedb643b",
+     "title": "unique-1549-1.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/B07D0DEE-22CB-4705-B9FC-25D1CEDB643B",
+     "bytes": 5033411
+    },
+    {
+     "id": "c5eafef5-ab98-4fb1-9284-3c48350bc7be",
+     "origin": "c5eafef5-ab98-4fb1-9284-3c48350bc7be",
+     "title": "unique-1549-6.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/C5EAFEF5-AB98-4FB1-9284-3C48350BC7BE",
+     "bytes": 5301915
+    },
+    {
+     "id": "2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "origin": "2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "title": "unique-1549-4.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/2921BE8A-4BC2-4D8E-AB87-78ECA66E31D6",
+     "bytes": 3014091
+    },
+    {
+     "id": "f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9",
+     "origin": "f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9",
+     "title": "unique-1549-11.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/F7AF9AD0-A0D2-4CC7-B6C8-D7FA668EA6F9",
+     "bytes": 1180377
+    },
+    {
+     "id": "3913b08c-083a-4e03-b177-8cbd985e2b70",
+     "origin": "3913b08c-083a-4e03-b177-8cbd985e2b70",
+     "title": "unique-1549-9.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/3913B08C-083A-4E03-B177-8CBD985E2B70",
+     "bytes": 883685
+    },
+    {
+     "id": "f991ba5b-c587-4388-a38c-3b94689846cc",
+     "origin": "f991ba5b-c587-4388-a38c-3b94689846cc",
+     "title": "unique-1549-10.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/F991BA5B-C587-4388-A38C-3B94689846CC",
+     "bytes": 729337
+    },
+    {
+     "id": "6a2e2843-d701-4253-93da-fe05438607e6",
+     "origin": "6a2e2843-d701-4253-93da-fe05438607e6",
+     "title": "unique-1549-5.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/6A2E2843-D701-4253-93DA-FE05438607E6",
+     "bytes": 5189384
+    },
+    {
+     "id": "2821386c-b1fc-409d-ae19-d058e6434cce",
+     "origin": "2821386c-b1fc-409d-ae19-d058e6434cce",
+     "title": "unique-1549-8.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/2821386C-B1FC-409D-AE19-D058E6434CCE",
+     "bytes": 772619
+    },
+    {
+     "id": "c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "origin": "c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "title": "unique-1549-3.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/C985FA55-18BD-497F-90C3-17B72C6F7B60",
+     "bytes": 5390129
+    },
+    {
+     "id": "aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "origin": "aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "title": "unique-1549-2.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/AAC77DC9-02CA-4835-B857-6659E6D3A65B",
+     "bytes": 5348336
+    },
+    {
+     "id": "d5207961-8ddf-431c-9159-e94262122d4b",
+     "origin": "d5207961-8ddf-431c-9159-e94262122d4b",
+     "title": "unique-1549-7.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/Projects/D5207961-8DDF-431C-9159-E94262122D4B",
+     "bytes": 727654
+    }
+   ],
+   "new_sim_projects": [],
+   "edited": [
+    "b07d0dee-22cb-4705-b9fc-25d1cedb643b",
+    "f991ba5b-c587-4388-a38c-3b94689846cc",
+    "f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9"
+   ],
+   "sim_targets": [
+    "aac77dc9-02ca-4835-b857-6659e6d3a65b",
+    "c985fa55-18bd-497f-90c3-17b72c6f7b60",
+    "2921be8a-4bc2-4d8e-ab87-78eca66e31d6"
+   ]
+  },
+  {
+   "name": "mac-edit-photos",
+   "device": "Mac",
+   "description": "preset on 3 of the new photos",
+   "started": "2026-10-01T15:53:01",
+   "ended": "2026-10-01T15:54:22",
+   "seconds": 80.2,
+   "hooks": {
+    "LL_TAB": "projects",
+    "LL_APPLY_PRESET": "b07d0dee-22cb-4705-b9fc-25d1cedb643b:Cinema@2;f991ba5b-c587-4388-a38c-3b94689846cc:Matte@4;f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9:Vivid@6"
+   },
+   "log": "raw/03-mac-edit-photos.log",
+   "api": [
+    {
+     "t": "15:53:02.983",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 71,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:53:03.143",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 29,
+     "up": 198,
+     "down": 445
+    },
+    {
+     "t": "15:53:03.243",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 66,
+     "up": 0,
+     "down": 148337
+    },
+    {
+     "t": "15:53:03.277",
+     "method": "GET",
+     "path": "nearby/key",
+     "pattern": "GET nearby/key",
+     "status": 200,
+     "ms": 47,
+     "up": 0,
+     "down": 135
+    },
+    {
+     "t": "15:53:03.523",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 50,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:53:03.597",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 63,
+     "up": 0,
+     "down": 150429
+    },
+    {
+     "t": "15:53:25.485",
+     "method": "POST",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 54,
+     "up": 20,
+     "down": 231
+    },
+    {
+     "t": "15:53:25.544",
+     "method": "PUT",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 50,
+     "up": 1414,
+     "down": 1034
+    },
+    {
+     "t": "15:53:25.606",
+     "method": "POST",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 60,
+     "up": 343,
+     "down": 1149
+    },
+    {
+     "t": "15:53:25.649",
+     "method": "POST",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 37,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:53:25.678",
+     "method": "DELETE",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 28,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:53:27.074",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 37,
+     "up": 20,
+     "down": 231
+    },
+    {
+     "t": "15:53:27.131",
+     "method": "PUT",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 47,
+     "up": 1414,
+     "down": 1034
+    },
+    {
+     "t": "15:53:27.164",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 32,
+     "up": 342,
+     "down": 1976
+    },
+    {
+     "t": "15:53:27.222",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 43,
+     "up": 134,
+     "down": 537
+    },
+    {
+     "t": "15:53:27.255",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 28,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:53:27.291",
+     "method": "DELETE",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 35,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:53:29.211",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 43,
+     "up": 20,
+     "down": 231
+    },
+    {
+     "t": "15:53:29.258",
+     "method": "PUT",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 37,
+     "up": 1414,
+     "down": 1035
+    },
+    {
+     "t": "15:53:29.288",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 29,
+     "up": 342,
+     "down": 1973
+    },
+    {
+     "t": "15:53:29.343",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 39,
+     "up": 134,
+     "down": 537
+    },
+    {
+     "t": "15:53:29.372",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 28,
+     "up": 44,
+     "down": 214
+    },
+    {
+     "t": "15:53:29.400",
+     "method": "DELETE",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 26,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:53:32.772",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 68,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:53:32.850",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 74,
+     "up": 0,
+     "down": 148340
+    }
+   ],
+   "storage": [
+    {
+     "t": "15:53:27.177",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 11,
+     "bytes": 257696
+    },
+    {
+     "t": "15:53:29.303",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 12,
+     "bytes": 472012
+    }
+   ],
+   "highlights": [
+    "15:53:03.231 picplace: pacing requests under 300/min (255/min for sync work)",
+    "15:53:03.651 picplace: check (launch) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "15:53:04.754 LL_APPLY_PRESET applied Cinema to B07D0DEE",
+    "15:53:06.853 LL_APPLY_PRESET applied Matte to F991BA5B",
+    "15:53:08.954 LL_APPLY_PRESET applied Vivid to F7AF9AD0",
+    "15:53:25.683 picplace: push queue \u2014 1 sent, 0 failed",
+    "15:53:27.166 picplace: unique-1549-10 \u2014 uploading 1 of 2 file(s), 258 KB; 1 already on PicPlace",
+    "15:53:27.296 picplace: push queue \u2014 1 sent, 0 failed",
+    "15:53:29.290 picplace: unique-1549-11 \u2014 uploading 1 of 2 file(s), 472 KB; 1 already on PicPlace",
+    "15:53:29.406 picplace: push queue \u2014 1 sent, 0 failed"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20781,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 11,
+      "bytes_in": 5141,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 6,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 27,
+      "bytes_in": 31537710,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 84854
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44148520
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635180
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 151,
+     "preview": 133
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20790,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 14,
+      "bytes_in": 9039,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 7,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 29,
+      "bytes_in": 32267418,
+      "bytes_out": 0
+     },
+     "asset_replaced": {
+      "n": 3,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 87347
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44097090
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635180
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 151,
+     "preview": 133
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 140,
+   "mac_projects_after": 140,
+   "sim_projects_before": 128,
+   "sim_projects_after": 128,
+   "mac_sync_state_bytes": 89356,
+   "sim_sync_state_bytes": 71850,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "sim-pull",
+   "device": "Simulator",
+   "description": "launch, pull every new project's preview",
+   "started": "2026-10-01T15:54:25",
+   "ended": "2026-10-01T15:55:36",
+   "seconds": 70.6,
+   "hooks": {
+    "LL_TAB": "gallery"
+   },
+   "log": "raw/04-sim-pull.log",
+   "api": [
+    {
+     "t": "15:54:28.797",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 61,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "15:54:28.817",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 82,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "15:54:28.838",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 37,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "15:54:28.870",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 14,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "15:54:28.896",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 47,
+     "up": 0,
+     "down": 150432
+    },
+    {
+     "t": "15:54:28.938",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 58,
+     "up": 0,
+     "down": 148340
+    },
+    {
+     "t": "15:54:29.004",
+     "method": "GET",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 28,
+     "up": 0,
+     "down": 3585
+    },
+    {
+     "t": "15:54:29.031",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 22,
+     "up": 90,
+     "down": 2389
+    },
+    {
+     "t": "15:54:29.097",
+     "method": "POST",
+     "path": "projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 23,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.137",
+     "method": "GET",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 34,
+     "up": 0,
+     "down": 3584
+    },
+    {
+     "t": "15:54:29.166",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 28,
+     "up": 90,
+     "down": 2389
+    },
+    {
+     "t": "15:54:29.225",
+     "method": "POST",
+     "path": "projects/f991ba5b-c587-4388-a38c-3b94689846cc/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 32,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.250",
+     "method": "GET",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 24,
+     "up": 0,
+     "down": 3586
+    },
+    {
+     "t": "15:54:29.271",
+     "method": "POST",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 20,
+     "up": 90,
+     "down": 2390
+    },
+    {
+     "t": "15:54:29.303",
+     "method": "POST",
+     "path": "projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 18,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.327",
+     "method": "GET",
+     "path": "projects/3913b08c-083a-4e03-b177-8cbd985e2b70",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 23,
+     "up": 0,
+     "down": 2749
+    },
+    {
+     "t": "15:54:29.350",
+     "method": "POST",
+     "path": "projects/3913b08c-083a-4e03-b177-8cbd985e2b70/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 22,
+     "up": 90,
+     "down": 2389
+    },
+    {
+     "t": "15:54:29.384",
+     "method": "POST",
+     "path": "projects/3913b08c-083a-4e03-b177-8cbd985e2b70/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 19,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.408",
+     "method": "GET",
+     "path": "projects/d5207961-8ddf-431c-9159-e94262122d4b",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 24,
+     "up": 0,
+     "down": 2749
+    },
+    {
+     "t": "15:54:29.430",
+     "method": "POST",
+     "path": "projects/d5207961-8ddf-431c-9159-e94262122d4b/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 21,
+     "up": 90,
+     "down": 2389
+    },
+    {
+     "t": "15:54:29.492",
+     "method": "POST",
+     "path": "projects/d5207961-8ddf-431c-9159-e94262122d4b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 22,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.514",
+     "method": "GET",
+     "path": "projects/2821386c-b1fc-409d-ae19-d058e6434cce",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 21,
+     "up": 0,
+     "down": 2749
+    },
+    {
+     "t": "15:54:29.536",
+     "method": "POST",
+     "path": "projects/2821386c-b1fc-409d-ae19-d058e6434cce/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 21,
+     "up": 90,
+     "down": 2389
+    },
+    {
+     "t": "15:54:29.567",
+     "method": "POST",
+     "path": "projects/2821386c-b1fc-409d-ae19-d058e6434cce/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 17,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.594",
+     "method": "GET",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 26,
+     "up": 0,
+     "down": 2752
+    },
+    {
+     "t": "15:54:29.616",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 21,
+     "up": 90,
+     "down": 2390
+    },
+    {
+     "t": "15:54:29.654",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 19,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.676",
+     "method": "GET",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 22,
+     "up": 0,
+     "down": 2752
+    },
+    {
+     "t": "15:54:29.701",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 24,
+     "up": 90,
+     "down": 2390
+    },
+    {
+     "t": "15:54:29.739",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 22,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.768",
+     "method": "GET",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 25,
+     "up": 0,
+     "down": 2752
+    },
+    {
+     "t": "15:54:29.790",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 21,
+     "up": 90,
+     "down": 2390
+    },
+    {
+     "t": "15:54:29.821",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 17,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.845",
+     "method": "GET",
+     "path": "projects/6a2e2843-d701-4253-93da-fe05438607e6",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 21,
+     "up": 0,
+     "down": 2752
+    },
+    {
+     "t": "15:54:29.869",
+     "method": "POST",
+     "path": "projects/6a2e2843-d701-4253-93da-fe05438607e6/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 23,
+     "up": 90,
+     "down": 2390
+    },
+    {
+     "t": "15:54:29.899",
+     "method": "POST",
+     "path": "projects/6a2e2843-d701-4253-93da-fe05438607e6/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 17,
+     "up": 43,
+     "down": 416
+    },
+    {
+     "t": "15:54:29.924",
+     "method": "GET",
+     "path": "projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 24,
+     "up": 0,
+     "down": 2752
+    },
+    {
+     "t": "15:54:29.949",
+     "method": "POST",
+     "path": "projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 24,
+     "up": 90,
+     "down": 2390
+    },
+    {
+     "t": "15:54:29.990",
+     "method": "POST",
+     "path": "projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 20,
+     "up": 43,
+     "down": 416
+    }
+   ],
+   "storage": [
+    {
+     "t": "15:54:29.039",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 5,
+     "bytes": 748
+    },
+    {
+     "t": "15:54:29.064",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 11,
+     "bytes": 472012
+    },
+    {
+     "t": "15:54:29.168",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 2,
+     "bytes": 747
+    },
+    {
+     "t": "15:54:29.190",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 20,
+     "bytes": 257696
+    },
+    {
+     "t": "15:54:29.273",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 2,
+     "bytes": 1262
+    },
+    {
+     "t": "15:54:29.282",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 8,
+     "bytes": 383050
+    },
+    {
+     "t": "15:54:29.353",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 3,
+     "bytes": 745
+    },
+    {
+     "t": "15:54:29.363",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 8,
+     "bytes": 347324
+    },
+    {
+     "t": "15:54:29.460",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 2,
+     "bytes": 744
+    },
+    {
+     "t": "15:54:29.468",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 6,
+     "bytes": 291527
+    },
+    {
+     "t": "15:54:29.539",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 3,
+     "bytes": 748
+    },
+    {
+     "t": "15:54:29.547",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 7,
+     "bytes": 300277
+    },
+    {
+     "t": "15:54:29.619",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 3,
+     "bytes": 1268
+    },
+    {
+     "t": "15:54:29.631",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 11,
+     "bytes": 272430
+    },
+    {
+     "t": "15:54:29.706",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 4,
+     "bytes": 1228
+    },
+    {
+     "t": "15:54:29.715",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 7,
+     "bytes": 379137
+    },
+    {
+     "t": "15:54:29.794",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 3,
+     "bytes": 1248
+    },
+    {
+     "t": "15:54:29.801",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 5,
+     "bytes": 368159
+    },
+    {
+     "t": "15:54:29.872",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 3,
+     "bytes": 1250
+    },
+    {
+     "t": "15:54:29.880",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 6,
+     "bytes": 370287
+    },
+    {
+     "t": "15:54:29.951",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 2,
+     "bytes": 1250
+    },
+    {
+     "t": "15:54:29.966",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 12,
+     "bytes": 326277
+    }
+   ],
+   "highlights": [
+    "15:54:28.855 picplace: pacing requests under 300/min (255/min for sync work)",
+    "15:54:29.102 picplace: pulled unique-1549-11 (f7af9ad0) \u2014 2 object(s), 472760 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.225 picplace: pulled unique-1549-10 (f991ba5b) \u2014 2 object(s), 258443 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.304 picplace: pulled unique-1549-1 (b07d0dee) \u2014 2 object(s), 384312 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.384 picplace: pulled unique-1549-9 (3913b08c) \u2014 2 object(s), 348069 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.493 picplace: pulled unique-1549-7 (d5207961) \u2014 2 object(s), 292271 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.568 picplace: pulled unique-1549-8 (2821386c) \u2014 2 object(s), 301025 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.654 picplace: pulled unique-1549-4 (2921be8a) \u2014 2 object(s), 273698 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.743 picplace: pulled unique-1549-3 (c985fa55) \u2014 2 object(s), 380365 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.824 picplace: pulled unique-1549-2 (aac77dc9) \u2014 2 object(s), 369407 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.900 picplace: pulled unique-1549-5 (6a2e2843) \u2014 2 object(s), 371537 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.990 picplace: pulled unique-1549-6 (c5eafef5) \u2014 2 object(s), 327527 bytes; 1 heavy file(s) stay on PicPlace",
+    "15:54:29.992 picplace: check (foreground) \u2014 11 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20790,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 14,
+      "bytes_in": 9039,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 7,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 29,
+      "bytes_in": 32267418,
+      "bytes_out": 0
+     },
+     "asset_replaced": {
+      "n": 3,
+      "bytes_in": 0,
+      "bytes_out": 0
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 87347
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44097090
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635180
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 151,
+     "preview": 133
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20812,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 14,
+      "bytes_in": 9039,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 7,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 29,
+      "bytes_in": 32267418,
+      "bytes_out": 0
+     },
+     "asset_replaced": {
+      "n": 3,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 22,
+      "bytes_in": 0,
+      "bytes_out": 3779414
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 87347
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44097090
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635180
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 151,
+     "preview": 144
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 140,
+   "mac_projects_after": 140,
+   "sim_projects_before": 128,
+   "sim_projects_after": 139,
+   "mac_sync_state_bytes": 89356,
+   "sim_sync_state_bytes": 77923,
+   "new_mac_projects": [],
+   "new_sim_projects": [
+    {
+     "id": "b07d0dee-22cb-4705-b9fc-25d1cedb643b",
+     "origin": "b07d0dee-22cb-4705-b9fc-25d1cedb643b",
+     "title": "unique-1549-1.jpg",
+     "preset": "Cinema",
+     "modifiedAt": "2026-10-01T13:53:04.752Z",
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/B07D0DEE-22CB-4705-B9FC-25D1CEDB643B",
+     "bytes": 387382
+    },
+    {
+     "id": "c5eafef5-ab98-4fb1-9284-3c48350bc7be",
+     "origin": "c5eafef5-ab98-4fb1-9284-3c48350bc7be",
+     "title": "unique-1549-6.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/C5EAFEF5-AB98-4FB1-9284-3C48350BC7BE",
+     "bytes": 329139
+    },
+    {
+     "id": "2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "origin": "2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "title": "unique-1549-4.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/2921BE8A-4BC2-4D8E-AB87-78ECA66E31D6",
+     "bytes": 275356
+    },
+    {
+     "id": "f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9",
+     "origin": "f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9",
+     "title": "unique-1549-11.jpg",
+     "preset": "Vivid",
+     "modifiedAt": "2026-10-01T13:53:08.952Z",
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/F7AF9AD0-A0D2-4CC7-B6C8-D7FA668EA6F9",
+     "bytes": 475021
+    },
+    {
+     "id": "3913b08c-083a-4e03-b177-8cbd985e2b70",
+     "origin": "3913b08c-083a-4e03-b177-8cbd985e2b70",
+     "title": "unique-1549-9.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/3913B08C-083A-4E03-B177-8CBD985E2B70",
+     "bytes": 348949
+    },
+    {
+     "id": "f991ba5b-c587-4388-a38c-3b94689846cc",
+     "origin": "f991ba5b-c587-4388-a38c-3b94689846cc",
+     "title": "unique-1549-10.jpg",
+     "preset": "Matte",
+     "modifiedAt": "2026-10-01T13:53:06.852Z",
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/F991BA5B-C587-4388-A38C-3B94689846CC",
+     "bytes": 260705
+    },
+    {
+     "id": "6a2e2843-d701-4253-93da-fe05438607e6",
+     "origin": "6a2e2843-d701-4253-93da-fe05438607e6",
+     "title": "unique-1549-5.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/6A2E2843-D701-4253-93DA-FE05438607E6",
+     "bytes": 373151
+    },
+    {
+     "id": "2821386c-b1fc-409d-ae19-d058e6434cce",
+     "origin": "2821386c-b1fc-409d-ae19-d058e6434cce",
+     "title": "unique-1549-8.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/2821386C-B1FC-409D-AE19-D058E6434CCE",
+     "bytes": 301902
+    },
+    {
+     "id": "c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "origin": "c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "title": "unique-1549-3.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/C985FA55-18BD-497F-90C3-17B72C6F7B60",
+     "bytes": 381979
+    },
+    {
+     "id": "aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "origin": "aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "title": "unique-1549-2.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/AAC77DC9-02CA-4835-B857-6659E6D3A65B",
+     "bytes": 371039
+    },
+    {
+     "id": "d5207961-8ddf-431c-9159-e94262122d4b",
+     "origin": "d5207961-8ddf-431c-9159-e94262122d4b",
+     "title": "unique-1549-7.jpg",
+     "preset": "original",
+     "modifiedAt": null,
+     "mode": "Photo \u00b7 Imported",
+     "kind": "photos",
+     "folder": "/Users/stevenwright/Library/Developer/CoreSimulator/Devices/C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996/data/Containers/Data/Application/D5DCBFC7-07BE-497A-80A2-7A9C1AC7DCFE/Library/Application Support/LetsLapse/Libraries/457D3FBD-E366-4669-BB5B-81419A24B657/Projects/D5207961-8DDF-431C-9159-E94262122D4B",
+     "bytes": 293152
+    }
+   ]
+  },
+  {
+   "name": "sim-download",
+   "device": "Simulator",
+   "description": "download the originals of 3 photos not edited on the Mac (the just-in-time prompt's answer)",
+   "started": "2026-10-01T15:55:39",
+   "ended": "2026-10-01T15:56:47",
+   "seconds": 68.5,
+   "hooks": {
+    "LL_TAB": "gallery",
+    "LL_PICPLACE_DOWNLOAD": "aac77dc9-02ca-4835-b857-6659e6d3a65b,c985fa55-18bd-497f-90c3-17b72c6f7b60,2921be8a-4bc2-4d8e-ab87-78eca66e31d6"
+   },
+   "log": "raw/05-sim-download.log",
+   "api": [
+    {
+     "t": "15:55:41.467",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 73,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "15:55:41.482",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 170,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "15:55:41.533",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 21,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "15:55:41.563",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 72,
+     "up": 0,
+     "down": 152654
+    },
+    {
+     "t": "15:55:41.610",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 72,
+     "up": 0,
+     "down": 150562
+    },
+    {
+     "t": "15:55:41.721",
+     "method": "GET",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 53,
+     "up": 0,
+     "down": 2954
+    },
+    {
+     "t": "15:55:41.725",
+     "method": "GET",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 57,
+     "up": 0,
+     "down": 2954
+    },
+    {
+     "t": "15:55:41.725",
+     "method": "GET",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 58,
+     "up": 0,
+     "down": 2954
+    },
+    {
+     "t": "15:55:41.755",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 28,
+     "up": 51,
+     "down": 1208
+    },
+    {
+     "t": "15:55:41.758",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 31,
+     "up": 51,
+     "down": 1208
+    },
+    {
+     "t": "15:55:41.758",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 32,
+     "up": 51,
+     "down": 1208
+    },
+    {
+     "t": "15:55:41.869",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 40,
+     "up": 44,
+     "down": 417
+    },
+    {
+     "t": "15:55:41.881",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 32,
+     "up": 44,
+     "down": 417
+    },
+    {
+     "t": "15:55:41.881",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 32,
+     "up": 44,
+     "down": 417
+    }
+   ],
+   "storage": [
+    {
+     "t": "15:55:41.810",
+     "verb": "GET",
+     "name": "source/unique-1549-4.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 52,
+     "bytes": 2738735
+    },
+    {
+     "t": "15:55:41.824",
+     "verb": "GET",
+     "name": "source/unique-1549-2.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 66,
+     "bytes": 4977297
+    },
+    {
+     "t": "15:55:41.824",
+     "verb": "GET",
+     "name": "source/unique-1549-3.jpg",
+     "group": "source/*",
+     "status": 200,
+     "ms": 66,
+     "bytes": 5008150
+    }
+   ],
+   "highlights": [
+    "15:55:41.493 picplace: pacing requests under 300/min (255/min for sync work)",
+    "15:55:41.643 picplace: check (foreground) \u2014 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "15:55:41.669 picplace: check (launch) \u2014 a check finished 0 s ago; not repeated",
+    "15:55:41.832 assets: 2921BE8A recorded 0 of 0 pending (1 assets)",
+    "15:55:41.850 assets: C985FA55 recorded 0 of 0 pending (1 assets)",
+    "15:55:41.852 assets: AAC77DC9 recorded 0 of 0 pending (1 assets)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20812,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 14,
+      "bytes_in": 9039,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 7,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 29,
+      "bytes_in": 32267418,
+      "bytes_out": 0
+     },
+     "asset_replaced": {
+      "n": 3,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 22,
+      "bytes_in": 0,
+      "bytes_out": 3779414
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 87347
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44097090
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635180
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 151,
+     "preview": 144
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20815,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 14,
+      "bytes_in": 9039,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 7,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 29,
+      "bytes_in": 32267418,
+      "bytes_out": 0
+     },
+     "asset_replaced": {
+      "n": 3,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 25,
+      "bytes_in": 0,
+      "bytes_out": 16503596
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 87347
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44097090
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635180
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 154,
+     "preview": 141
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 140,
+   "mac_projects_after": 140,
+   "sim_projects_before": 139,
+   "sim_projects_after": 139,
+   "mac_sync_state_bytes": 89356,
+   "sim_sync_state_bytes": 78088,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "sim-edit",
+   "device": "Simulator",
+   "description": "preset on those 3 photos",
+   "started": "2026-10-01T15:56:50",
+   "ended": "2026-10-01T15:58:11",
+   "seconds": 80.5,
+   "hooks": {
+    "LL_TAB": "gallery",
+    "LL_APPLY_PRESET": "aac77dc9-02ca-4835-b857-6659e6d3a65b:Cinema@2;c985fa55-18bd-497f-90c3-17b72c6f7b60:Matte@4;2921be8a-4bc2-4d8e-ab87-78eca66e31d6:Vivid@6"
+   },
+   "log": "raw/06-sim-edit.log",
+   "api": [
+    {
+     "t": "15:56:53.089",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 174,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "15:56:53.178",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 71,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "15:56:53.203",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 41,
+     "up": 201,
+     "down": 448
+    },
+    {
+     "t": "15:56:53.242",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 48,
+     "up": 0,
+     "down": 152657
+    },
+    {
+     "t": "15:56:53.285",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 70,
+     "up": 0,
+     "down": 150565
+    },
+    {
+     "t": "15:56:53.340",
+     "method": "POST",
+     "path": "projects/assets",
+     "pattern": "POST projects/assets",
+     "status": 200,
+     "ms": 16,
+     "up": 148,
+     "down": 1940
+    },
+    {
+     "t": "15:56:53.386",
+     "method": "GET",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 31,
+     "up": 0,
+     "down": 2955
+    },
+    {
+     "t": "15:56:53.421",
+     "method": "GET",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 24,
+     "up": 0,
+     "down": 2955
+    },
+    {
+     "t": "15:56:53.447",
+     "method": "GET",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 21,
+     "up": 0,
+     "down": 2955
+    },
+    {
+     "t": "15:57:16.455",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 43,
+     "up": 20,
+     "down": 234
+    },
+    {
+     "t": "15:57:16.528",
+     "method": "PUT",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 53,
+     "up": 1414,
+     "down": 1243
+    },
+    {
+     "t": "15:57:16.571",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 41,
+     "up": 343,
+     "down": 2930
+    },
+    {
+     "t": "15:57:16.657",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 58,
+     "up": 256,
+     "down": 1075
+    },
+    {
+     "t": "15:57:16.697",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 33,
+     "up": 44,
+     "down": 417
+    },
+    {
+     "t": "15:57:16.728",
+     "method": "DELETE",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 28,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:57:17.438",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 40,
+     "up": 20,
+     "down": 234
+    },
+    {
+     "t": "15:57:17.494",
+     "method": "PUT",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 48,
+     "up": 1411,
+     "down": 1243
+    },
+    {
+     "t": "15:57:17.529",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 34,
+     "up": 343,
+     "down": 2936
+    },
+    {
+     "t": "15:57:17.600",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 53,
+     "up": 256,
+     "down": 1075
+    },
+    {
+     "t": "15:57:17.630",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 29,
+     "up": 44,
+     "down": 417
+    },
+    {
+     "t": "15:57:17.658",
+     "method": "DELETE",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 26,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:57:19.421",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/claim",
+     "pattern": "POST projects/{u}/claim",
+     "status": 200,
+     "ms": 66,
+     "up": 20,
+     "down": 234
+    },
+    {
+     "t": "15:57:19.472",
+     "method": "PUT",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "pattern": "PUT projects/{u}",
+     "status": 200,
+     "ms": 41,
+     "up": 1411,
+     "down": 1243
+    },
+    {
+     "t": "15:57:19.506",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/assets",
+     "pattern": "POST projects/{u}/assets",
+     "status": 200,
+     "ms": 33,
+     "up": 343,
+     "down": 2931
+    },
+    {
+     "t": "15:57:19.574",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/assets/confirm",
+     "pattern": "POST projects/{u}/assets/confirm",
+     "status": 200,
+     "ms": 51,
+     "up": 256,
+     "down": 1075
+    },
+    {
+     "t": "15:57:19.595",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 20,
+     "up": 44,
+     "down": 417
+    },
+    {
+     "t": "15:57:19.611",
+     "method": "DELETE",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/claim",
+     "pattern": "DELETE projects/{u}/claim",
+     "status": 200,
+     "ms": 16,
+     "up": 0,
+     "down": 14
+    },
+    {
+     "t": "15:57:22.978",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 66,
+     "up": 0,
+     "down": 3260
+    },
+    {
+     "t": "15:57:23.038",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 51,
+     "up": 0,
+     "down": 150577
+    }
+   ],
+   "storage": [
+    {
+     "t": "15:57:16.590",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 9,
+     "bytes": 1258
+    },
+    {
+     "t": "15:57:16.597",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 15,
+     "bytes": 386792
+    },
+    {
+     "t": "15:57:17.536",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 6,
+     "bytes": 1238
+    },
+    {
+     "t": "15:57:17.545",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 15,
+     "bytes": 387314
+    },
+    {
+     "t": "15:57:19.515",
+     "verb": "PUT",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 8,
+     "bytes": 1278
+    },
+    {
+     "t": "15:57:19.522",
+     "verb": "PUT",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 15,
+     "bytes": 301395
+    }
+   ],
+   "highlights": [
+    "15:56:53.195 picplace: pacing requests under 300/min (255/min for sync work)",
+    "15:56:53.345 picplace: check (foreground) \u2014 0 pulled, 0 updated, 0 queued to send, 3 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)",
+    "15:56:53.392 picplace: unique-1549-4 \u2014 all 1 heavy file(s) here verified on PicPlace: backed up",
+    "15:56:53.424 picplace: unique-1549-2 \u2014 all 1 heavy file(s) here verified on PicPlace: backed up",
+    "15:56:53.449 picplace: unique-1549-3 \u2014 all 1 heavy file(s) here verified on PicPlace: backed up",
+    "15:56:54.811 LL_APPLY_PRESET applied Cinema to AAC77DC9",
+    "15:56:56.898 LL_APPLY_PRESET applied Matte to C985FA55",
+    "15:56:58.997 LL_APPLY_PRESET applied Vivid to 2921BE8A",
+    "15:57:16.581 picplace: unique-1549-2 \u2014 uploading 2 of 2 file(s), 388 KB",
+    "15:57:16.733 picplace: push queue \u2014 1 sent, 0 failed",
+    "15:57:17.530 picplace: unique-1549-3 \u2014 uploading 2 of 2 file(s), 389 KB",
+    "15:57:17.665 picplace: push queue \u2014 1 sent, 0 failed",
+    "15:57:19.507 picplace: unique-1549-4 \u2014 uploading 2 of 2 file(s), 303 KB",
+    "15:57:19.613 picplace: push queue \u2014 1 sent, 0 failed"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20815,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 14,
+      "bytes_in": 9039,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 7,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 29,
+      "bytes_in": 32267418,
+      "bytes_out": 0
+     },
+     "asset_replaced": {
+      "n": 3,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 25,
+      "bytes_in": 0,
+      "bytes_out": 16503596
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 87347
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44097090
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635180
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 154,
+     "preview": 141
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20830,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 17,
+      "bytes_in": 12933,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 7,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 35,
+      "bytes_in": 33346693,
+      "bytes_out": 0
+     },
+     "asset_replaced": {
+      "n": 9,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 25,
+      "bytes_in": 0,
+      "bytes_out": 16503596
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 89840
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44152865
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635210
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 154,
+     "preview": 141
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 140,
+   "mac_projects_after": 140,
+   "sim_projects_before": 139,
+   "sim_projects_after": 139,
+   "mac_sync_state_bytes": 89356,
+   "sim_sync_state_bytes": 78476,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  },
+  {
+   "name": "mac-after",
+   "device": "Mac",
+   "description": "launch, one check: what the Simulator's edits cost the Mac",
+   "started": "2026-10-01T15:58:14",
+   "ended": "2026-10-01T15:59:22",
+   "seconds": 68.2,
+   "hooks": {
+    "LL_TAB": "projects"
+   },
+   "log": "raw/07-mac-after.log",
+   "api": [
+    {
+     "t": "15:58:15.514",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 68,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:58:15.723",
+     "method": "POST",
+     "path": "device",
+     "pattern": "POST device",
+     "status": 200,
+     "ms": 27,
+     "up": 198,
+     "down": 445
+    },
+    {
+     "t": "15:58:15.761",
+     "method": "GET",
+     "path": "nearby/key",
+     "pattern": "GET nearby/key",
+     "status": 200,
+     "ms": 13,
+     "up": 0,
+     "down": 135
+    },
+    {
+     "t": "15:58:15.783",
+     "method": "GET",
+     "path": "projects",
+     "pattern": "GET projects",
+     "status": 200,
+     "ms": 58,
+     "up": 0,
+     "down": 150577
+    },
+    {
+     "t": "15:58:15.861",
+     "method": "GET",
+     "path": "status",
+     "pattern": "GET status",
+     "status": 200,
+     "ms": 42,
+     "up": 0,
+     "down": 3257
+    },
+    {
+     "t": "15:58:15.917",
+     "method": "GET",
+     "path": "projects?include_deleted=1",
+     "pattern": "GET projects?include_deleted=1",
+     "status": 200,
+     "ms": 55,
+     "up": 0,
+     "down": 152669
+    },
+    {
+     "t": "15:58:15.983",
+     "method": "GET",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 29,
+     "up": 0,
+     "down": 3789
+    },
+    {
+     "t": "15:58:16.010",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 27,
+     "up": 90,
+     "down": 2390
+    },
+    {
+     "t": "15:58:16.054",
+     "method": "POST",
+     "path": "projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 22,
+     "up": 26,
+     "down": 417
+    },
+    {
+     "t": "15:58:16.118",
+     "method": "GET",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 32,
+     "up": 0,
+     "down": 3789
+    },
+    {
+     "t": "15:58:16.165",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 26,
+     "up": 90,
+     "down": 2390
+    },
+    {
+     "t": "15:58:16.198",
+     "method": "POST",
+     "path": "projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 21,
+     "up": 26,
+     "down": 417
+    },
+    {
+     "t": "15:58:16.265",
+     "method": "GET",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b",
+     "pattern": "GET projects/{u}",
+     "status": 200,
+     "ms": 34,
+     "up": 0,
+     "down": 3792
+    },
+    {
+     "t": "15:58:16.315",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/assets/urls",
+     "pattern": "POST projects/{u}/assets/urls",
+     "status": 200,
+     "ms": 27,
+     "up": 90,
+     "down": 2390
+    },
+    {
+     "t": "15:58:16.350",
+     "method": "POST",
+     "path": "projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/presence",
+     "pattern": "POST projects/{u}/presence",
+     "status": 200,
+     "ms": 23,
+     "up": 26,
+     "down": 417
+    }
+   ],
+   "storage": [
+    {
+     "t": "15:58:16.014",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 3,
+     "bytes": 1278
+    },
+    {
+     "t": "15:58:16.030",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 13,
+     "bytes": 301395
+    },
+    {
+     "t": "15:58:16.167",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 2,
+     "bytes": 1238
+    },
+    {
+     "t": "15:58:16.174",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 6,
+     "bytes": 387314
+    },
+    {
+     "t": "15:58:16.317",
+     "verb": "GET",
+     "name": "records.aar",
+     "group": "records.aar",
+     "status": 200,
+     "ms": 2,
+     "bytes": 1258
+    },
+    {
+     "t": "15:58:16.325",
+     "verb": "GET",
+     "name": "poster.jpg",
+     "group": "poster.jpg",
+     "status": 200,
+     "ms": 7,
+     "bytes": 386792
+    }
+   ],
+   "highlights": [
+    "15:58:15.748 picplace: pacing requests under 300/min (255/min for sync work)",
+    "15:58:16.382 picplace: check (launch) \u2014 0 pulled, 3 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)"
+   ],
+   "ledger_before": {
+    "user": "synth",
+    "ledger_max_id": 20830,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 17,
+      "bytes_in": 12933,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 7,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 35,
+      "bytes_in": 33346693,
+      "bytes_out": 0
+     },
+     "asset_replaced": {
+      "n": 9,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 25,
+      "bytes_in": 0,
+      "bytes_out": 16503596
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 89840
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44152865
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635210
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 154,
+     "preview": 141
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "ledger_after": {
+    "user": "synth",
+    "ledger_max_id": 20836,
+    "since": 20737,
+    "events": {
+     "manifest_written": {
+      "n": 17,
+      "bytes_in": 12933,
+      "bytes_out": 0
+     },
+     "copy_confirmed": {
+      "n": 7,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "upload_confirmed": {
+      "n": 35,
+      "bytes_in": 33346693,
+      "bytes_out": 0
+     },
+     "asset_replaced": {
+      "n": 9,
+      "bytes_in": 0,
+      "bytes_out": 0
+     },
+     "download_url_issued": {
+      "n": 31,
+      "bytes_in": 0,
+      "bytes_out": 17582871
+     }
+    },
+    "projects": {
+     "live": 151,
+     "trashed": 2,
+     "by_type": {
+      "interval": 1,
+      "photo": 152
+     },
+     "manifest_bytes": 89840
+    },
+    "assets": [
+     {
+      "kind": "preview",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 44152865
+     },
+     {
+      "kind": "records",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 635210
+     },
+     {
+      "kind": "source",
+      "status": "confirmed",
+      "n": 153,
+      "bytes": 262541995
+     }
+    ],
+    "presences": {
+     "original": 154,
+     "preview": 141
+    },
+    "index": {
+     "rows": 153,
+     "name_null": 152,
+     "records_indexed": 0
+    },
+    "uploads_pending": 0
+   },
+   "mac_projects_before": 140,
+   "mac_projects_after": 140,
+   "sim_projects_before": 139,
+   "sim_projects_after": 139,
+   "mac_sync_state_bytes": 89581,
+   "sim_sync_state_bytes": 78476,
+   "new_mac_projects": [],
+   "new_sim_projects": []
+  }
+ ],
+ "started": "2026-10-01T15:49:38",
+ "args": {
+  "cmd": "run",
+  "photos": "['/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos']",
+  "lapse": "None",
+  "mac_root": "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b",
+  "sim": "C8F8FCC2-5DBC-4B87-B7FE-06D1085C7996",
+  "server": "https://picplace.test",
+  "storage": "http://127.0.0.1:3900",
+  "picplace": "/Users/stevenwright/Sites/picplace",
+  "user": "synth",
+  "token": "None",
+  "out": "LetsLapse/docs/fieldtests/2026-10-01-single-cycle-bench",
+  "edits": "3",
+  "presets": "None",
+  "sim_edit": "download",
+  "steps": "None",
+  "quiet": "45",
+  "step_timeout": "1800",
+  "install_sim": "True",
+  "force": "True",
+  "sim_library": "457D3FBD-E366-4669-BB5B-81419A24B657",
+  "device_id": "7B7B7B7B-0000-4000-8000-0000000000BE"
+ },
+ "photos": [
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-1.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-10.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-11.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-2.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-3.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-4.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-5.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-6.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-7.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-8.jpg",
+  "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/unique-photos/unique-1549-9.jpg"
+ ],
+ "lapses": [],
+ "out": "LetsLapse/docs/fieldtests/2026-10-01-single-cycle-bench",
+ "ledger_start": {
+  "user": "synth",
+  "ledger_max_id": 20737,
+  "since": 0,
+  "events": {
+   "asset_replaced": {
+    "n": 25,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "copy_confirmed": {
+    "n": 39,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "download_url_issued": {
+    "n": 991,
+    "bytes_in": 0,
+    "bytes_out": 178239459
+   },
+   "manifest_deleted": {
+    "n": 3,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "manifest_written": {
+    "n": 300,
+    "bytes_in": 154879,
+    "bytes_out": 0
+   },
+   "project_deleted": {
+    "n": 3,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "project_restored": {
+    "n": 1,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "upload_confirmed": {
+    "n": 412,
+    "bytes_in": 171475205,
+    "bytes_out": 0
+   }
+  },
+  "projects": {
+   "live": 140,
+   "trashed": 2,
+   "by_type": {
+    "interval": 1,
+    "photo": 141
+   },
+   "manifest_bytes": 79713
+  },
+  "assets": [
+   {
+    "kind": "preview",
+    "status": "confirmed",
+    "n": 142,
+    "bytes": 40328914
+   },
+   {
+    "kind": "records",
+    "status": "confirmed",
+    "n": 142,
+    "bytes": 623942
+   },
+   {
+    "kind": "source",
+    "status": "confirmed",
+    "n": 142,
+    "bytes": 232816116
+   }
+  ],
+  "presences": {
+   "original": 140,
+   "preview": 133
+  },
+  "index": {
+   "rows": 142,
+   "name_null": 141,
+   "records_indexed": 0
+  },
+  "uploads_pending": 0
+ },
+ "ledger_end": {
+  "user": "synth",
+  "ledger_max_id": 20836,
+  "since": 0,
+  "events": {
+   "asset_replaced": {
+    "n": 34,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "copy_confirmed": {
+    "n": 46,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "download_url_issued": {
+    "n": 1022,
+    "bytes_in": 0,
+    "bytes_out": 195822330
+   },
+   "manifest_deleted": {
+    "n": 3,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "manifest_written": {
+    "n": 317,
+    "bytes_in": 167812,
+    "bytes_out": 0
+   },
+   "project_deleted": {
+    "n": 3,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "project_restored": {
+    "n": 1,
+    "bytes_in": 0,
+    "bytes_out": 0
+   },
+   "upload_confirmed": {
+    "n": 447,
+    "bytes_in": 204821898,
+    "bytes_out": 0
+   }
+  },
+  "projects": {
+   "live": 151,
+   "trashed": 2,
+   "by_type": {
+    "interval": 1,
+    "photo": 152
+   },
+   "manifest_bytes": 89840
+  },
+  "assets": [
+   {
+    "kind": "preview",
+    "status": "confirmed",
+    "n": 153,
+    "bytes": 44152865
+   },
+   {
+    "kind": "records",
+    "status": "confirmed",
+    "n": 153,
+    "bytes": 635210
+   },
+   {
+    "kind": "source",
+    "status": "confirmed",
+    "n": 153,
+    "bytes": 262541995
+   }
+  ],
+  "presences": {
+   "original": 154,
+   "preview": 141
+  },
+  "index": {
+   "rows": 153,
+   "name_null": 152,
+   "records_indexed": 0
+  },
+  "uploads_pending": 0
+ },
+ "finished": "2026-10-01T15:59:25"
+}

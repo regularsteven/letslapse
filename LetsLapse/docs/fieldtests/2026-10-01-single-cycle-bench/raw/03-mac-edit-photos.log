@@ -1,0 +1,81 @@
+15:53:02.033 🎥LL 268.333 device id 7B7B7B7B-0000-4000-8000-0000000000BE
+15:53:02.034 🎥LL 268.334 thermal: nominal at launch
+15:53:02.107 🎥LL 268.407 library lock: taken (pid 16357)
+15:53:02.109 🎥LL 268.409 storage: root came from the launch arguments — the libraries list is kept for this run only
+15:53:02.527 🎥LL 268.827 library: walked 145 documents in 0.019 s — 145 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 0 asset files and 0 shape registers re-indexed
+15:53:02.527 🎥LL 268.827 library: library.json lists 134 captures and 0 blends, the index 145 and 0 — the documents will be checked against the index and the export regenerated
+15:53:02.535 🎥LL 268.835 library: the documents and the index agree on every blend (checked in 0.01 s) — the export's counts were stale
+15:53:02.548 🎥LL 268.848 picplace: injected tokens — the stored session is not read
+15:53:02.548 🎥LL 268.848 picplace: session none — no tokens, library bound to @synth on picplace.test
+15:53:02.549 🎥LL 268.849 picplace: auto-sync switches for this device and library — changes on, originals ON, Wi-Fi only on
+15:53:02.569 🎥LL 268.869 library export: regenerated from the documents in 0.03 s (114273 bytes)
+15:53:02.720 🎥LL 269.020 project sizes: measuring 11
+15:53:02.983 🎥LL 269.283 picplace trace: GET status → 200 71 ms up=0 down=3257
+15:53:03.143 🎥LL 269.443 picplace trace: POST device → 200 29 ms up=198 down=445
+15:53:03.231 🎥LL 269.531 picplace: pacing requests under 300/min (255/min for sync work)
+15:53:03.243 🎥LL 269.543 picplace trace: GET projects → 200 66 ms up=0 down=148337
+15:53:03.277 🎥LL 269.577 picplace trace: GET nearby/key → 200 47 ms up=0 down=135
+15:53:03.287 🎥LL 269.587 nearby: key nk_4aa08c046242f739 held for picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae
+15:53:03.348 🎥LL 269.648 nearby: on — key nk_4aa08c046242f739, serving and browsing
+15:53:03.411 🎥LL 269.710 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+15:53:03.411 🎥LL 269.711 nearby: listening as “LetsLapse F6E14E45”
+15:53:03.411 🎥LL 269.711 nearby: listener failed — -65555: NoAuth
+15:53:03.523 🎥LL 269.823 picplace trace: GET status → 200 50 ms up=0 down=3257
+15:53:03.597 🎥LL 269.897 picplace trace: GET projects?include_deleted=1 → 200 63 ms up=0 down=150429
+15:53:03.650 🎥LL 269.950 picplace check pass: 140 of 140 project(s) read in 0.00 s off main
+15:53:03.651 🎥LL 269.951 picplace: check (launch) — 0 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 1 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+15:53:04.753 🎥LL 271.052 project B07D0DEE edited: adjustments, modifiedAt, modifiedBy, presetState, selectedPreset
+15:53:04.754 🎥LL 271.054 LL_APPLY_PRESET applied Cinema to B07D0DEE
+15:53:06.853 🎥LL 273.152 project F991BA5B edited: adjustments, modifiedAt, modifiedBy, presetState, selectedPreset
+15:53:06.853 🎥LL 273.153 LL_APPLY_PRESET applied Matte to F991BA5B
+15:53:08.548 🎥LL 274.848 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+15:53:08.548 🎥LL 274.848 nearby: listening as “LetsLapse F6E14E45”
+15:53:08.550 🎥LL 274.850 nearby: listener failed — -65555: NoAuth
+15:53:08.954 🎥LL 275.252 project F7AF9AD0 edited: adjustments, modifiedAt, modifiedBy, presetState, selectedPreset
+15:53:08.954 🎥LL 275.254 LL_APPLY_PRESET applied Vivid to F7AF9AD0
+15:53:18.566 🎥LL 284.866 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+15:53:18.569 🎥LL 284.869 nearby: listening as “LetsLapse F6E14E45”
+15:53:18.569 🎥LL 284.869 nearby: listener failed — -65555: NoAuth
+15:53:23.313 🎥LL 289.613 assets: backfill scan — 0 of 140 project(s) need work, 0.07 s off main
+15:53:25.431 🎥LL 291.730 picplace: poster for B07D0DEE-22CB-4705-B9FC-25D1CEDB643B: 383050 bytes
+15:53:25.485 🎥LL 291.785 picplace trace: POST projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/claim → 200 54 ms up=20 down=231
+15:53:25.492 🎥LL 291.792 picplace: records bundle for B07D0DEE-22CB-4705-B9FC-25D1CEDB643B: 5 members → 1262 bytes
+15:53:25.544 🎥LL 291.844 picplace trace: PUT projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b → 200 50 ms up=1414 down=1034
+15:53:25.606 🎥LL 291.906 picplace trace: POST projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/assets → 200 60 ms up=343 down=1149
+15:53:25.649 🎥LL 291.949 picplace trace: POST projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/presence → 200 37 ms up=44 down=214
+15:53:25.678 🎥LL 291.978 picplace trace: DELETE projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/claim → 200 28 ms up=0 down=14
+15:53:25.683 🎥LL 291.983 picplace: push queue — 1 sent, 0 failed
+15:53:25.683 🎥LL 291.983 picplace: sending done — 1 of 1 sent
+15:53:27.037 🎥LL 293.337 picplace: poster for F991BA5B-C587-4388-A38C-3B94689846CC: 257696 bytes
+15:53:27.074 🎥LL 293.374 picplace trace: POST projects/f991ba5b-c587-4388-a38c-3b94689846cc/claim → 200 37 ms up=20 down=231
+15:53:27.082 🎥LL 293.382 picplace: records bundle for F991BA5B-C587-4388-A38C-3B94689846CC: 5 members → 747 bytes
+15:53:27.131 🎥LL 293.431 picplace trace: PUT projects/f991ba5b-c587-4388-a38c-3b94689846cc → 200 47 ms up=1414 down=1034
+15:53:27.164 🎥LL 293.463 picplace trace: POST projects/f991ba5b-c587-4388-a38c-3b94689846cc/assets → 200 32 ms up=342 down=1976
+15:53:27.166 🎥LL 293.466 picplace: unique-1549-10 — uploading 1 of 2 file(s), 258 KB; 1 already on PicPlace
+15:53:27.177 🎥LL 293.477 picplace trace: STORAGE PUT poster.jpg → 200 11 ms bytes=257696
+15:53:27.222 🎥LL 293.522 picplace trace: POST projects/f991ba5b-c587-4388-a38c-3b94689846cc/assets/confirm → 200 43 ms up=134 down=537
+15:53:27.255 🎥LL 293.555 picplace trace: POST projects/f991ba5b-c587-4388-a38c-3b94689846cc/presence → 200 28 ms up=44 down=214
+15:53:27.291 🎥LL 293.591 picplace trace: DELETE projects/f991ba5b-c587-4388-a38c-3b94689846cc/claim → 200 35 ms up=0 down=14
+15:53:27.296 🎥LL 293.596 picplace: push queue — 1 sent, 0 failed
+15:53:27.296 🎥LL 293.596 picplace: sending done — 1 of 1 sent
+15:53:29.167 🎥LL 295.467 picplace: poster for F7AF9AD0-A0D2-4CC7-B6C8-D7FA668EA6F9: 472012 bytes
+15:53:29.211 🎥LL 295.510 picplace trace: POST projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/claim → 200 43 ms up=20 down=231
+15:53:29.219 🎥LL 295.519 picplace: records bundle for F7AF9AD0-A0D2-4CC7-B6C8-D7FA668EA6F9: 5 members → 748 bytes
+15:53:29.258 🎥LL 295.558 picplace trace: PUT projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9 → 200 37 ms up=1414 down=1035
+15:53:29.288 🎥LL 295.588 picplace trace: POST projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/assets → 200 29 ms up=342 down=1973
+15:53:29.290 🎥LL 295.590 picplace: unique-1549-11 — uploading 1 of 2 file(s), 472 KB; 1 already on PicPlace
+15:53:29.303 🎥LL 295.603 picplace trace: STORAGE PUT poster.jpg → 200 12 ms bytes=472012
+15:53:29.343 🎥LL 295.643 picplace trace: POST projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/assets/confirm → 200 39 ms up=134 down=537
+15:53:29.372 🎥LL 295.672 picplace trace: POST projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/presence → 200 28 ms up=44 down=214
+15:53:29.400 🎥LL 295.699 picplace trace: DELETE projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/claim → 200 26 ms up=0 down=14
+15:53:29.406 🎥LL 295.706 picplace: push queue — 1 sent, 0 failed
+15:53:29.406 🎥LL 295.706 picplace: sending done — 1 of 1 sent
+15:53:32.772 🎥LL 299.072 picplace trace: GET status → 200 68 ms up=0 down=3257
+15:53:32.850 🎥LL 299.150 picplace trace: GET projects → 200 74 ms up=0 down=148340
+15:53:34.000 🎥LL 300.300 picplace tally: 140 of 140 project(s) read in 0.01 s off main
+15:53:39.006 🎥LL 305.306 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+15:53:39.007 🎥LL 305.307 nearby: listening as “LetsLapse F6E14E45”
+15:53:39.011 🎥LL 305.311 nearby: listener failed — -65555: NoAuth
+15:54:19.351 🎥LL 345.650 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+15:54:19.351 🎥LL 345.650 nearby: listening as “LetsLapse F6E14E45”
+15:54:19.353 🎥LL 345.653 nearby: listener failed — -65555: NoAuth

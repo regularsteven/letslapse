@@ -45,7 +45,8 @@ launch:
   check on a real iPhone with two libraries, and Steven's production library —
   its repeated `unrelated` conflicts should stop if this was their cause.
 
-Also seen, to decide: **a tombstone and a re-import.** `buildings.01.lapse`
+Also seen, and since decided (a deliberate import wins — see the sync-cost
+entry): **a tombstone and a re-import.** `buildings.01.lapse`
 carries the origin of a project deleted that morning. On the Mac the check
 ran first and moved the fresh import to the trash ("was deleted on PicPlace");
 on the Simulator the push ran first and resurrected the tombstone. Same
@@ -95,6 +96,29 @@ report `docs/fieldtests/2026-10-01-sync-cost-bench-after-jobs/`):
   flushed on resign-active, background, quit and a library switch.
 - *An iOS launch runs one check, not two*: the launch check is not repeated
   when a check completed within the last minute. A Simulator launch 12 → 6.
+- *One push cycle for a small new project* (later the same day): a project
+  PicPlace has never had from this device, with at most 4 heavy files and
+  100 MB of them, goes up whole (`wholePushPolicy`, `.everything`) when
+  originals may go at all; anything larger keeps the records push and the
+  pausable originals queue. Importing 11 photos: 77 requests, 6 per project
+  (claim, PUT, negotiate, confirm, presence, release) where it was 14
+  (`docs/fieldtests/2026-10-01-single-cycle-bench/`). The heavy figures on the
+  record are the heavy files' alone, and the free-up gate was exercised on
+  such a project: originals removed after its own fresh read, then downloaded
+  back (`raw/` of that folder).
+- *The "is it on PicPlace?" reads in batches*: the look after an upload is
+  one sweep for every project waiting (`sweepVerifications`), and the
+  originals and blends queues read ahead a hundred projects per request
+  (`heavyListReadAhead`, `POST /projects/assets`). 139 projects with their
+  verified marker cleared: 3 requests, where it was 139. What it saves on
+  Hetzner, where uploads wait to be read back, is not measurable on Garage.
+- *A deliberate import wins over a deletion* (Steven's decision): the check no
+  longer trashes a copy that joined the library after the project was deleted
+  on PicPlace; it pushes it, which restores it there. Tested: export, delete,
+  re-import with sync held, then a check ("the import wins; restoring it
+  there"). **Owed with the server:** `resurrect: true` on that push once
+  PicPlace answers `409 project_deleted` to any other
+  (`docs/picplace-sync-cost-server-asks.md`, the developer's reply).
 Byte counts of that run are not comparable with the first: the same photos
 were already on the account, so originals and identical posters became
 server-side copies.

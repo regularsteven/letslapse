@@ -1,0 +1,29 @@
+16:03:51.392 🎥LL 917.690 device id 7B7B7B7B-0000-4000-8000-0000000000BE
+16:03:51.393 🎥LL 917.691 thermal: nominal at launch
+16:03:51.489 🎥LL 917.787 library lock: taken (pid 19403)
+16:03:51.490 🎥LL 917.788 storage: root came from the launch arguments — the libraries list is kept for this run only
+16:03:51.688 🎥LL 917.986 library: walked 145 documents in 0.019 s — 145 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 0 asset files and 0 shape registers re-indexed
+16:03:51.707 🎥LL 918.005 picplace: injected tokens — the stored session is not read
+16:03:51.707 🎥LL 918.005 picplace: session none — no tokens, library bound to @synth on picplace.test
+16:03:51.708 🎥LL 918.006 picplace: auto-sync switches for this device and library — changes on, originals ON, Wi-Fi only on
+16:03:52.092 🎥LL 918.390 picplace trace: GET status → 200 69 ms up=0 down=3257
+16:03:52.130 🎥LL 918.428 assets: CF552A5E recorded 0 of 0 pending (1 assets)
+16:03:52.223 🎥LL 918.521 presets: 0 custom preset(s) at /private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/0a9dabed-ddef-4abd-96c5-8b0e8ea1f097/scratchpad/synth-device-b/custom_presets.json
+16:03:52.388 🎥LL 918.686 picplace trace: POST device → 200 28 ms up=198 down=445
+16:03:52.489 🎥LL 918.787 picplace: pacing requests under 300/min (255/min for sync work)
+16:03:52.509 🎥LL 918.807 picplace trace: GET nearby/key → 200 19 ms up=0 down=135
+16:03:52.509 🎥LL 918.807 nearby: key nk_4aa08c046242f739 held for picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae
+16:03:52.510 🎥LL 918.808 nearby: on — key nk_4aa08c046242f739, serving and browsing
+16:03:52.515 🎥LL 918.813 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+16:03:52.515 🎥LL 918.813 nearby: listening as “LetsLapse FDFA382E”
+16:03:52.517 🎥LL 918.815 nearby: listener failed — -65555: NoAuth
+16:03:52.518 🎥LL 918.816 picplace trace: GET projects → 200 66 ms up=0 down=149570
+16:03:52.553 🎥LL 918.851 picplace: check (launch) held — waiting for Wi-Fi
+16:03:53.588 🎥LL 919.885 picplace tally: 140 of 140 project(s) read in 0.00 s off main
+16:03:57.789 🎥LL 924.087 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+16:03:57.789 🎥LL 924.087 nearby: listening as “LetsLapse FDFA382E”
+16:03:57.793 🎥LL 924.091 nearby: listener failed — -65555: NoAuth
+16:04:08.257 🎥LL 934.555 nearby: browser failed — -65555: NoAuth; rebuilding it, less often each time (up to a minute)
+16:04:08.257 🎥LL 934.555 nearby: listening as “LetsLapse FDFA382E”
+16:04:08.262 🎥LL 934.560 nearby: listener failed — -65555: NoAuth
+16:04:12.969 🎥LL 939.267 assets: backfill scan — 0 of 140 project(s) need work, 0.04 s off main

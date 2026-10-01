@@ -1,0 +1,89 @@
+15:54:27.370 🎥LL 353.669 watch-link activated state=2 reachable=false error=none
+15:54:27.566 🎥LL 353.866 device id D71224C0-F8C5-4705-984D-042382F5D823
+15:54:27.567 🎥LL 353.866 thermal: nominal at launch
+15:54:27.992 🎥LL 354.291 picplace: session picplace.test|a65072a3-ffc2-4b22-bf7e-a50ab20c19ae — tokens found, library bound to @synth on picplace.test
+15:54:27.997 🎥LL 354.297 picplace: auto-sync switches for this device and library — changes on, originals off, Wi-Fi only on
+15:54:28.013 🎥LL 354.313 watch-link appActive=true
+15:54:28.385 🎥LL 354.684 library: walked 129 documents in 0.037 s — 129 current · 0 read and indexed · 0 rewritten by a rule · 0 rows dropped · 0 asset files and 0 shape registers re-indexed
+15:54:28.387 🎥LL 354.687 nearby: on — key nk_4aa08c046242f739, serving and browsing
+15:54:28.500 🎥LL 354.800 nearby: listening as “LetsLapse 99765454”
+15:54:28.598 🎥LL 354.898 status: swept 128 project(s) in 0.16 s — 0 walked, 128 unchanged
+15:54:28.797 🎥LL 355.096 picplace trace: POST device → 200 61 ms up=201 down=448
+15:54:28.800 🎥LL 355.100 picplace: told PicPlace this device runs 0.1.0 (1) 2026-10-01 13:49 UTC
+15:54:28.817 🎥LL 355.117 picplace trace: GET status → 200 82 ms up=0 down=3260
+15:54:28.838 🎥LL 355.137 picplace trace: GET status → 200 37 ms up=0 down=3260
+15:54:28.855 🎥LL 355.155 picplace: pacing requests under 300/min (255/min for sync work)
+15:54:28.870 🎥LL 355.170 picplace trace: POST device → 200 14 ms up=201 down=448
+15:54:28.896 🎥LL 355.196 picplace trace: GET projects?include_deleted=1 → 200 47 ms up=0 down=150432
+15:54:28.938 🎥LL 355.237 picplace trace: GET projects → 200 58 ms up=0 down=148340
+15:54:28.966 🎥LL 355.266 picplace check pass: 128 of 128 project(s) read in 0.03 s off main
+15:54:28.976 🎥LL 355.276 picplace: 11 of the library's 139 project(s) on PicPlace are not here: unique-1549-11 (f7af9ad0, photo); unique-1549-10 (f991ba5b, photo); unique-1549-1 (b07d0dee, photo); unique-1549-9 (3913b08c, photo); unique-1549-7 (d5207961, photo); unique-1549-8 (2821386c, photo); unique-1549-4 (2921be8a, photo); unique-1549-3 (c985fa55, photo); unique-1549-2 (aac77dc9, photo); unique-1549-5 (6a2e2843, photo); unique-1549-6 (c5eafef5, photo)
+15:54:29.004 🎥LL 355.304 picplace trace: GET projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9 → 200 28 ms up=0 down=3585
+15:54:29.031 🎥LL 355.330 picplace trace: POST projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/assets/urls → 200 22 ms up=90 down=2389
+15:54:29.039 🎥LL 355.339 picplace trace: STORAGE GET records.aar → 200 5 ms bytes=748
+15:54:29.064 🎥LL 355.364 picplace trace: STORAGE GET poster.jpg → 200 11 ms bytes=472012
+15:54:29.097 🎥LL 355.397 picplace trace: POST projects/f7af9ad0-a0d2-4cc7-b6c8-d7fa668ea6f9/presence → 200 23 ms up=43 down=416
+15:54:29.102 🎥LL 355.402 picplace: pulled unique-1549-11 (f7af9ad0) — 2 object(s), 472760 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.137 🎥LL 355.436 picplace trace: GET projects/f991ba5b-c587-4388-a38c-3b94689846cc → 200 34 ms up=0 down=3584
+15:54:29.166 🎥LL 355.465 picplace trace: POST projects/f991ba5b-c587-4388-a38c-3b94689846cc/assets/urls → 200 28 ms up=90 down=2389
+15:54:29.168 🎥LL 355.468 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=747
+15:54:29.190 🎥LL 355.490 picplace trace: STORAGE GET poster.jpg → 200 20 ms bytes=257696
+15:54:29.225 🎥LL 355.525 picplace trace: POST projects/f991ba5b-c587-4388-a38c-3b94689846cc/presence → 200 32 ms up=43 down=416
+15:54:29.225 🎥LL 355.525 picplace: pulled unique-1549-10 (f991ba5b) — 2 object(s), 258443 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.250 🎥LL 355.550 picplace trace: GET projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b → 200 24 ms up=0 down=3586
+15:54:29.271 🎥LL 355.571 picplace trace: POST projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/assets/urls → 200 20 ms up=90 down=2390
+15:54:29.273 🎥LL 355.573 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=1262
+15:54:29.282 🎥LL 355.582 picplace trace: STORAGE GET poster.jpg → 200 8 ms bytes=383050
+15:54:29.303 🎥LL 355.603 picplace trace: POST projects/b07d0dee-22cb-4705-b9fc-25d1cedb643b/presence → 200 18 ms up=43 down=416
+15:54:29.304 🎥LL 355.604 picplace: pulled unique-1549-1 (b07d0dee) — 2 object(s), 384312 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.327 🎥LL 355.627 picplace trace: GET projects/3913b08c-083a-4e03-b177-8cbd985e2b70 → 200 23 ms up=0 down=2749
+15:54:29.350 🎥LL 355.650 picplace trace: POST projects/3913b08c-083a-4e03-b177-8cbd985e2b70/assets/urls → 200 22 ms up=90 down=2389
+15:54:29.353 🎥LL 355.653 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=745
+15:54:29.363 🎥LL 355.662 picplace trace: STORAGE GET poster.jpg → 200 8 ms bytes=347324
+15:54:29.384 🎥LL 355.684 picplace trace: POST projects/3913b08c-083a-4e03-b177-8cbd985e2b70/presence → 200 19 ms up=43 down=416
+15:54:29.384 🎥LL 355.684 picplace: pulled unique-1549-9 (3913b08c) — 2 object(s), 348069 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.408 🎥LL 355.708 picplace trace: GET projects/d5207961-8ddf-431c-9159-e94262122d4b → 200 24 ms up=0 down=2749
+15:54:29.430 🎥LL 355.730 picplace trace: POST projects/d5207961-8ddf-431c-9159-e94262122d4b/assets/urls → 200 21 ms up=90 down=2389
+15:54:29.460 🎥LL 355.760 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=744
+15:54:29.468 🎥LL 355.768 picplace trace: STORAGE GET poster.jpg → 200 6 ms bytes=291527
+15:54:29.492 🎥LL 355.792 picplace trace: POST projects/d5207961-8ddf-431c-9159-e94262122d4b/presence → 200 22 ms up=43 down=416
+15:54:29.493 🎥LL 355.793 picplace: pulled unique-1549-7 (d5207961) — 2 object(s), 292271 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.514 🎥LL 355.814 picplace trace: GET projects/2821386c-b1fc-409d-ae19-d058e6434cce → 200 21 ms up=0 down=2749
+15:54:29.536 🎥LL 355.836 picplace trace: POST projects/2821386c-b1fc-409d-ae19-d058e6434cce/assets/urls → 200 21 ms up=90 down=2389
+15:54:29.539 🎥LL 355.839 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=748
+15:54:29.547 🎥LL 355.847 picplace trace: STORAGE GET poster.jpg → 200 7 ms bytes=300277
+15:54:29.567 🎥LL 355.867 picplace trace: POST projects/2821386c-b1fc-409d-ae19-d058e6434cce/presence → 200 17 ms up=43 down=416
+15:54:29.568 🎥LL 355.868 picplace: pulled unique-1549-8 (2821386c) — 2 object(s), 301025 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.594 🎥LL 355.894 picplace trace: GET projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6 → 200 26 ms up=0 down=2752
+15:54:29.616 🎥LL 355.915 picplace trace: POST projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/assets/urls → 200 21 ms up=90 down=2390
+15:54:29.619 🎥LL 355.918 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=1268
+15:54:29.631 🎥LL 355.931 picplace trace: STORAGE GET poster.jpg → 200 11 ms bytes=272430
+15:54:29.654 🎥LL 355.953 picplace trace: POST projects/2921be8a-4bc2-4d8e-ab87-78eca66e31d6/presence → 200 19 ms up=43 down=416
+15:54:29.654 🎥LL 355.954 picplace: pulled unique-1549-4 (2921be8a) — 2 object(s), 273698 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.676 🎥LL 355.976 picplace trace: GET projects/c985fa55-18bd-497f-90c3-17b72c6f7b60 → 200 22 ms up=0 down=2752
+15:54:29.701 🎥LL 356.001 picplace trace: POST projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/assets/urls → 200 24 ms up=90 down=2390
+15:54:29.706 🎥LL 356.006 picplace trace: STORAGE GET records.aar → 200 4 ms bytes=1228
+15:54:29.715 🎥LL 356.014 picplace trace: STORAGE GET poster.jpg → 200 7 ms bytes=379137
+15:54:29.739 🎥LL 356.039 picplace trace: POST projects/c985fa55-18bd-497f-90c3-17b72c6f7b60/presence → 200 22 ms up=43 down=416
+15:54:29.743 🎥LL 356.042 picplace: pulled unique-1549-3 (c985fa55) — 2 object(s), 380365 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.768 🎥LL 356.068 picplace trace: GET projects/aac77dc9-02ca-4835-b857-6659e6d3a65b → 200 25 ms up=0 down=2752
+15:54:29.790 🎥LL 356.090 picplace trace: POST projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/assets/urls → 200 21 ms up=90 down=2390
+15:54:29.794 🎥LL 356.093 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=1248
+15:54:29.801 🎥LL 356.101 picplace trace: STORAGE GET poster.jpg → 200 5 ms bytes=368159
+15:54:29.821 🎥LL 356.121 picplace trace: POST projects/aac77dc9-02ca-4835-b857-6659e6d3a65b/presence → 200 17 ms up=43 down=416
+15:54:29.824 🎥LL 356.123 picplace: pulled unique-1549-2 (aac77dc9) — 2 object(s), 369407 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.845 🎥LL 356.144 picplace trace: GET projects/6a2e2843-d701-4253-93da-fe05438607e6 → 200 21 ms up=0 down=2752
+15:54:29.869 🎥LL 356.169 picplace trace: POST projects/6a2e2843-d701-4253-93da-fe05438607e6/assets/urls → 200 23 ms up=90 down=2390
+15:54:29.872 🎥LL 356.172 picplace trace: STORAGE GET records.aar → 200 3 ms bytes=1250
+15:54:29.880 🎥LL 356.180 picplace trace: STORAGE GET poster.jpg → 200 6 ms bytes=370287
+15:54:29.899 🎥LL 356.199 picplace trace: POST projects/6a2e2843-d701-4253-93da-fe05438607e6/presence → 200 17 ms up=43 down=416
+15:54:29.900 🎥LL 356.200 picplace: pulled unique-1549-5 (6a2e2843) — 2 object(s), 371537 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.924 🎥LL 356.223 picplace trace: GET projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be → 200 24 ms up=0 down=2752
+15:54:29.949 🎥LL 356.248 picplace trace: POST projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be/assets/urls → 200 24 ms up=90 down=2390
+15:54:29.951 🎥LL 356.251 picplace trace: STORAGE GET records.aar → 200 2 ms bytes=1250
+15:54:29.966 🎥LL 356.266 picplace trace: STORAGE GET poster.jpg → 200 12 ms bytes=326277
+15:54:29.990 🎥LL 356.290 picplace trace: POST projects/c5eafef5-ab98-4fb1-9284-3c48350bc7be/presence → 200 20 ms up=43 down=416
+15:54:29.990 🎥LL 356.290 picplace: pulled unique-1549-6 (c5eafef5) — 2 object(s), 327527 bytes; 1 heavy file(s) stay on PicPlace
+15:54:29.992 🎥LL 356.292 picplace: check (foreground) — 11 pulled, 0 updated, 0 queued to send, 0 poster(s) already on PicPlace noted, 0 retried, 0 waiting to retry, 0 deleted there, 0 removed here, 0 filed elsewhere, 0 other libraries' previews removed, 0 conflict(s)
+15:54:30.021 🎥LL 356.321 picplace tally: 139 of 139 project(s) read in 0.03 s off main
+15:54:48.856 🎥LL 375.156 assets: backfill scan — 0 of 139 project(s) need work, 0.09 s off main

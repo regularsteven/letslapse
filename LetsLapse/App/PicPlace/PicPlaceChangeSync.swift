@@ -295,6 +295,21 @@ extension PicPlaceController {
                 let base = records[origin]?.revision
                 if row.isTombstone {
                     guard let localID = localByOrigin[origin], let project = local[localID] else { continue }
+                    // A deliberate import always wins (Steven, 2026-10-01): a
+                    // copy that joined this library AFTER the project was
+                    // deleted on PicPlace — a `.lapse` opened again, a
+                    // transfer from another device — is a person bringing it
+                    // back, not a copy the deletion has yet to reach. It is
+                    // pushed, which restores it there. Until then the outcome
+                    // went by timing: a check that ran first moved the fresh
+                    // import to the trash, a push that ran first restored it.
+                    if let deleted = row.deletedAt, let added = model.capture(id: localID)?.addedAt, added > deleted {
+                        LLog("picplace: \(project.displayTitle) was deleted on PicPlace\(row.deletedBy.map { " from \($0.name)" } ?? "") and imported here since — the import wins; restoring it there")
+                        records[origin] = nil
+                        enqueuePush(localID, reason: .new, manual: manual)
+                        outcome.queued += 1
+                        continue
+                    }
                     // Deleted there, still here. A copy that never moved past
                     // the server's last revision loses nothing by going — to
                     // the trash, reversible — so it goes; a copy edited since

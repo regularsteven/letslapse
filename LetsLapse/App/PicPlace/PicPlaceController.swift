@@ -355,9 +355,15 @@ final class PicPlaceController: ObservableObject {
     /// Heavy sets (by digest) the blends queue found incomplete for want of
     /// something it does not send — not read again until the set moves.
     var heavySetMissing: [UUID: String] = [:]
-    /// The looks right after an upload PicPlace was still reading back,
-    /// by capture id (`verifyAfterUpload`).
-    var verifyTasks: [UUID: Task<Void, Never>] = [:]
+    /// The projects whose upload PicPlace was still reading back, by
+    /// capture id, with when each began to wait, and the one sweep that
+    /// looks at all of them (`verifyAfterUpload`).
+    var verifyPending: [UUID: Date] = [:]
+    var verifySweep: Task<Void, Never>?
+    /// Heavy lists the queues read ahead of the row they were on
+    /// (`heavyListReadAhead`), by origin, and when the oldest was read.
+    var heavyAhead: [UUID: [PPAsset]] = [:]
+    var heavyAheadReadAt = Date.distantPast
     var pathMonitorBox: AnyObject?
     /// One usage refresh for a whole run of syncs, not two requests per project.
     var usageRefreshTask: Task<Void, Never>?
@@ -1694,8 +1700,8 @@ final class PicPlaceController: ObservableObject {
         blendsQueueTask?.cancel(); blendsQueueTask = nil
         heavyRecheckTask?.cancel(); heavyRecheckTask = nil
         reachabilityProbe?.cancel(); reachabilityProbe = nil
-        for task in verifyTasks.values { task.cancel() }
-        verifyTasks = [:]
+        verifySweep?.cancel(); verifySweep = nil
+        verifyPending = [:]
         usageRefreshTask?.cancel(); usageRefreshTask = nil
         tallyTask?.cancel(); tallyTask = nil
         tallyRequested = false
@@ -1986,8 +1992,18 @@ final class PicPlaceController: ObservableObject {
                     refreshHeavyListing(for: capture)
                 } else if policy.sendsHeavy {
                     record.originalsMovedAt = Date()
-                    record.serverHeavyFiles = record.files
-                    record.serverHeavyBytes = record.bytes
+                    if policy == .everything {
+                        // The run counted the records and the poster too: the
+                        // heavy figures are the heavy files' alone — they feed
+                        // the card, the tally and the blends queue's "sent
+                        // from another device" test.
+                        let listing = await Task.detached(priority: .utility) { Self.heavyFiles(in: folder) }.value
+                        record.serverHeavyFiles = listing.count
+                        record.serverHeavyBytes = listing.reduce(Int64(0)) { $0 + $1.bytes }
+                    } else {
+                        record.serverHeavyFiles = record.files
+                        record.serverHeavyBytes = record.bytes
+                    }
                     // Every source went; the count is PicPlace's to say at
                     // the next read (the marker answers meanwhile).
                     record.serverSourceFiles = nil
