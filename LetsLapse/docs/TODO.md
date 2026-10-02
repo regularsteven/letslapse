@@ -327,41 +327,52 @@ the outage waited, the look after the backoff found PicPlace and released it;
   rewrites all of `sync-state.json` after every pulled project (2.1 GB
   written in one first connection).
 
-### Holy Grail highlight guard — built 2026-09-28, device check owed
+### Holy Grail highlight guard — a runaway net since 2026-10-02, device check owed
 
-The fix for the 18 Pro telephoto runaway (report:
-`docs/fieldtests/2026-09-28-18pro-holy-grail-runaway.md`): every Dynamic and
-Ladder run now caps its light at what the frames' own highlights allow
-(`HolyGrailRampEngine.highlightCeilingGain`, `HighlightTally`,
-`LiveBlendRawController.sensorHighlights(from:)`, the video tap's
-`sampleLinearLight`). Kit-tested and simulated; **never run on a phone.** Owed:
+Built 2026-09-28 for the 18 Pro telephoto runaway
+(`docs/fieldtests/2026-09-28-18pro-holy-grail-runaway.md`); its first dusk
+(2026-10-02, `docs/fieldtests/2026-10-02-18pro-dusk-guard-freeze.md`) came out
+~3.8 stops dark: a freeze bug, a drift paused all night, and an absolute 10 %
+threshold that fired on the camera's own dusk rendering. Rebuilt the same day,
+by Steven's decision, as **a runaway safety net only**: the ramp may not put
+clearly more of the frame at white than the shoot opened with (+10 points
+holds, +20 steps down ⅓ stop a window, within +5 the limit sits at least ⅙
+stop above the frames that showed room); the drift pauses only while the
+frames show that excess or the net is holding. `HolyGrailRampEngine`
+(`highlightOpening`, `highlightExcess`, `highlightCeilingGain`), pixel side
+unchanged (`HighlightTally`, `LiveBlendRawController.sensorHighlights(from:)`,
+the video tap's `sampleLinearLight`). Kit-tested — the freeze, the drift, a
+17 %-at-white opening left alone, the 2026-09-28 dusk, a sunrise both ways.
+Owed:
 
-- **A dusk Dynamic DNG run on the 18 Pro telephoto** (the night's framing if
-  possible). Pass: no window with ≥ 10 % of the frame at white for more than
-  a couple of windows; the guard's `holding` lines in the console; ISO rising
-  only as the light falls. Read it with `tools/ramp_audit.py` (guard columns).
-- **The white assumption, on a blown frame:** the DNG reading takes 1.0 of a
-  baseline-exposure-0 decode as the sensor's white. Confirmed linear on a real
-  telephoto DNG and clipping exactly at 1.0 on Apple's linear DNGs, but never
-  seen on a clipped Bayer frame. A deliberately over-exposed window should log
-  `peak` ≈ 1.0 (`highlightPeak` per window). If Core Image's white balance
-  pushes a channel past 1.0 before the raw clips, the guard is merely early.
-- **Cost:** the second look is ~25 ms on the M4 Max for 48 MP; check the
-  phone's `processingMillis` against a pre-guard run. BLEND 1 pass-through
-  pays a whole decode at most every 4 s — watch the 12 Pro at short intervals.
-- **The 16 Pro, same night-type shoot on the default:** its frames should
-  never trip the guard (no `highlights` issues) unless a large area really is
-  at white.
-- **JPEG/HEIC:** a bright-sky Dynamic run — the guard should only hold for
-  output codes ≥ 250 over ≥ 10 % of the frame.
-- Watch for a slow ⅙-stop sawtooth when the ceiling lifts (flicker report).
+- **A sunrise Dynamic DNG run on the 18 Pro** (Steven: 2026-10-03, 06:00–08:00,
+  every 3 s — the logic in reverse). Pass: the shoot follows the light up;
+  `highlights` issues only if the frames really put ≥ 10 points more at white
+  than the pre-dawn opening; no freeze (`tools/ramp_audit.py`, guard columns
+  and the opening line). The net does NOT guard the dark direction — a meter
+  fooled into reading a brightening scene as brighter than it is would
+  under-expose; watch for it.
+- **The 16 Pro beside it on the same build**, same view if possible — the
+  comparison 2026-10-02 lacked. It should never log a `highlights` issue.
+- **Cost:** the DNG reading's second look (~25 ms on the M4 Max for 48 MP);
+  BLEND 1 pass-through pays a whole decode at most every 4 s — watch the
+  12 Pro at short intervals.
+- **JPEG/HEIC:** a Dynamic run — the net judges output codes ≥ 254 against the
+  same opening rule.
+- A simulator/replay harness for the ramp (Steven, 2026-10-02): replay a
+  recorded shoot's `capture_log.json` through the real engine, with its stored
+  frames re-exposed in the decoder for the highlight readings — the method
+  that reproduced 2026-10-02's live readings within a point.
 
-Left as they were, by decision (the guard makes them harmless; each wants its
+Left as they were, by decision (the net makes them harmless; each wants its
 own fix): the anchor drift still trusts the AE's opinion and still moves a
 stop a minute at 3 s; APEX brightness still compresses past correct exposure;
 the delivered shutter still comes from EXIF `ExposureTime`, which rounds long
 exposures to 1/n (0.73 s → "1 s") — `ShutterSpeedValue`, or the bracket's own
-commanded value, is exact.
+commanded value, is exact; clipped pixels read 1.05–1.21 on the "sensor
+scale", not 1.0 (the net compares a reading with the opening, so it cancels).
+Protecting a bright sky below the camera's own exposure is the "Sky first"
+job below.
 
 ### Sky first — a second, switchable metering method beside today's (2026-09-28)
 
