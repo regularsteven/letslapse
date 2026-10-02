@@ -195,6 +195,10 @@ public struct CaptureExposureLog {
         public var highlightHot: Double?
         public var highlightWindow: Int?
         public var highlightCeilingEV: Double?
+        /// The share of the frame at white the shoot opened with — what the
+        /// guard measures every reading against (2026-10-02: a runaway net,
+        /// relative to the operator's own framing).
+        public var highlightOpening: Double?
         /// The reading's brightest sample on its own scale (1.0 = the
         /// sensor's white on the DNG path) — the device check that white
         /// sits where the guard assumes.
@@ -222,6 +226,7 @@ public struct CaptureExposureLog {
             highlightHot: Double? = nil,
             highlightWindow: Int? = nil,
             highlightCeilingEV: Double? = nil,
+            highlightOpening: Double? = nil,
             highlightPeak: Double? = nil,
             deviceExposureMode: String? = nil
         ) {
@@ -241,6 +246,7 @@ public struct CaptureExposureLog {
             self.highlightHot = highlightHot
             self.highlightWindow = highlightWindow
             self.highlightCeilingEV = highlightCeilingEV
+            self.highlightOpening = highlightOpening
             self.highlightPeak = highlightPeak
             self.deviceExposureMode = deviceExposureMode
         }

@@ -7762,10 +7762,12 @@ final class CameraController: NSObject, ObservableObject {
         engine.deadbandStops = 0.12
         engine.dwellSteps = 3
         engine.reversalRefractorySteps = 10
-        // The 2026-09-28 fix, on for every Dynamic and Ladder run: the frames'
-        // own highlights cap the light, whatever the two meters believe. On
-        // the 18 Pro telephoto both read the ramp's own ISO as a darkening
-        // scene and the shoot ran from ISO 19 to 7,680 in 2.6 minutes.
+        // The runaway net, on for every Dynamic and Ladder run: the ramp may
+        // not put clearly more of the frame at white than the shoot opened
+        // with, whatever the two meters believe. On 2026-09-28 the 18 Pro
+        // telephoto's meters read the ramp's own ISO as a darkening scene and
+        // the shoot ran from ISO 19 to 7,680 in 2.6 minutes. Relative to the
+        // opening since 2026-10-02 — see `HolyGrailRampEngine.highlightHoldExcess`.
         engine.highlightGuardEnabled = true
         holyGrailEngine = engine
         holyGrailGainByWindow = [:]
@@ -7951,8 +7953,9 @@ final class CameraController: NSObject, ObservableObject {
         if previous == .off, state == .clear { return }
         let reading = engine.lastHighlightReading
         let readingText = reading.map {
-            String(format: "%.0f%% of the frame at white, %.0f%% within ⅓ stop (window %d, peak %.3f)",
-                   $0.clippedFraction * 100, $0.hotFraction * 100, $0.window, $0.peak ?? .nan)
+            String(format: "%.0f%% of the frame at white (opened at %.0f%%), %.0f%% within ⅓ stop (window %d, peak %.3f)",
+                   $0.clippedFraction * 100, (engine.highlightOpening ?? $0.clippedFraction) * 100,
+                   $0.hotFraction * 100, $0.window, $0.peak ?? .nan)
         } ?? "no reading"
         let ceilingText = engine.highlightCeilingGain.map {
             String(format: "ceiling EV %.1f",
@@ -8492,6 +8495,7 @@ final class CameraController: NSObject, ObservableObject {
             highlightCeilingEV: engine.highlightCeilingGain.map {
                 HolyGrailRampEngine.sceneEV100(forGain: $0, aperture: aperture)
             },
+            highlightOpening: engine.highlightOpening,
             highlightPeak: reading?.peak,
             deviceExposureMode: videoDevice.map { Self.exposureModeName($0.exposureMode) }))
     }

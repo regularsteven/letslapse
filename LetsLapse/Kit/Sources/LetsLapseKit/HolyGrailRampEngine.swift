@@ -218,8 +218,9 @@ public struct HolyGrailRampEngine: Equatable {
     /// opinion describes the scene: on 2026-09-28 (iPhone 18 Pro telephoto,
     /// ISO carrying the ramp) it moved stop for stop with the ramp's own
     /// ISO, the gap never closed, and the drift added five stops in a
-    /// hundred windows. The highlight guard is what bounds it now: near the
-    /// highlights' ceiling the drift may not add light.
+    /// hundred windows. The highlight guard is what bounds it now: while the
+    /// frames show more at white than the shoot opened with, or the guard is
+    /// holding the ramp back, the drift may not add light.
     public var anchorDriftPerStep: Double = 0
     /// Disagreements smaller than this never move the anchor — AE breathing
     /// and metering noise stay out of the exposure record.
@@ -254,7 +255,8 @@ public struct HolyGrailRampEngine: Equatable {
         /// its luma still reads well short of white.
         public var clippedFraction: Double
         /// Share within `marginStops` of white (`hotLevel`) — what one more
-        /// full step would clip.
+        /// full step would clip. Logged, not acted on: the camera's own
+        /// exposure leaves 12–19 % of a dusk frame here (2026-10-02).
         public var hotFraction: Double
         /// The window the frames were shot in.
         public var window: Int
@@ -266,8 +268,12 @@ public struct HolyGrailRampEngine: Equatable {
         /// described the frames being shot now.
         public var gain: Double?
         /// The brightest sample, on the reading's own scale — logged, so a
-        /// device run can confirm where white really sits (1.0 on the
-        /// sensor scale).
+        /// device run can confirm where white really sits. On the 18 Pro's
+        /// baseline-free DNG decode clipped pixels read 1.05–1.21, not 1.0
+        /// (white balance lifts a clipped channel; 2026-09-28/10-02), so
+        /// `clippedLevel` counts a little early — which is one more reason
+        /// the guard compares a reading with the shoot's own opening rather
+        /// than with an absolute share.
         public var peak: Double?
 
         public init(
@@ -304,31 +310,66 @@ public struct HolyGrailRampEngine: Equatable {
     /// Off by default so the pure policy tests stay what they were; the
     /// camera layer switches it on for every ramped run (Dynamic and Ladder).
     public var highlightGuardEnabled = false
-    /// More than this share of the frame at white — or within a step of it —
-    /// is a large bright area going, not a lamp or the sun: the sun's disc
-    /// is ~0.1 % of a 4× telephoto frame, a sky is tens of percent. Steven's
-    /// number (2026-09-28): a sky that is under 10 % of the shot must not run
-    /// the shoot.
-    public static let highlightTripFraction = 0.10
-    /// A ceiling is only lifted when a reading taken AT it shows less than
-    /// this share hot — room the light has made by falling away.
-    public static let highlightRoomFraction = 0.05
-    /// How far one lift raises the ceiling: half the hot margin, so a lift
-    /// can never carry a patch from "not hot" straight to "at white" — and
-    /// no less, because the shipping gate's 0.12-stop deadband would never
-    /// step into a smaller one.
+
+    /// **A runaway net, not a metering policy (Steven, 2026-10-02).** The
+    /// guard judges the frames against the shoot's OPENING — the share of the
+    /// frame at white when it began, which is the clipping the operator
+    /// framed and accepted — and only acts when the ramp has put clearly
+    /// more of the frame at white than that.
+    ///
+    /// Why relative: the camera's own exposure leaves a lot of a dusk frame
+    /// at white. Measured on the 18 Pro: 17 % at the 2026-10-02 opening
+    /// (a sunset sky), 8 % at white and 15 % within ⅓ stop of it at the
+    /// restart 19 minutes later (city lights, a glowing horizon), 9.4 % at
+    /// the 2026-09-28 opening. The first guard held at an absolute 10 %
+    /// within ⅓ stop of white, so it fought that normal rendering from the
+    /// second window of a healthy shoot — and, with the freeze described at
+    /// `foldHighlights`, ended that dusk ~3.8 stops under the camera's own
+    /// exposure. Protecting a bright sky below what the camera would choose
+    /// is a rendering choice; it belongs to the "Sky first" option
+    /// (docs/TODO.md), not to the default.
+    ///
+    /// More at white than the opening by this share of the frame: no more
+    /// light. On the 2026-09-28 runaway (opening 9.4 %) that is ~19 % —
+    /// long before its final frames' 59 %.
+    public static let highlightHoldExcess = 0.10
+    /// …by this much: step back down, a third of a stop a window.
+    public static let highlightDarkenExcess = 0.20
+    /// …within this much: room — the limit sits at least a lift above the
+    /// exposure those frames were shot at.
+    public static let highlightRoomExcess = 0.05
+    /// How far one lift raises the ceiling over the exposure that showed
+    /// room: half a ramp step, and never less than the shipping gate's
+    /// 0.12-stop deadband, which would not step into a smaller one.
     public static let highlightLiftStops = 1.0 / 6.0
+    /// The opening is the least of this many readings, so one passing
+    /// headlight cannot raise it.
+    public static let highlightOpeningReadings = 3
 
     /// The most light the frames may be given, from what their highlights
-    /// have shown — seconds at ISO 100, like `lightGain`. Nil = no limit
-    /// seen yet. Set one step under an exposure that clipped, at an
-    /// exposure that ran hot, and lifted a sixth of a stop at a time as the
-    /// light falls away from it. It only ever limits brightening and forces
-    /// darkening; everything else the ramp does is untouched.
+    /// have shown — seconds at ISO 100, like `lightGain`. Nil = no limit:
+    /// on a shoot whose frames never put more at white than they opened
+    /// with, there never is one. Set at an exposure that went past the
+    /// hold excess, one step under one that went past the darken excess,
+    /// and raised to at least a lift above any exposure that showed room.
+    /// It only ever limits brightening and forces darkening; everything
+    /// else the ramp does is untouched.
     public private(set) var highlightCeilingGain: Double?
     public private(set) var highlightState: HighlightGuardState = .off
     /// The newest reading the guard has seen.
     public private(set) var lastHighlightReading: HighlightReading?
+    /// The share of the frame at white the shoot opened with (the least of
+    /// its first `highlightOpeningReadings` readings). Nil before the first.
+    public private(set) var highlightOpening: Double?
+    private var openingReadingsTaken = 0
+    private var lastOpeningWindow: Int?
+
+    /// How much more of the frame the newest reading has at white than the
+    /// shoot opened with. Zero before any reading.
+    public var highlightExcess: Double {
+        guard let reading = lastHighlightReading else { return 0 }
+        return reading.clippedFraction - (highlightOpening ?? reading.clippedFraction)
+    }
 
     /// Seeds the ramp from an exposure the camera is already delivering —
     /// in practice the live AE values read off the device the instant before
@@ -409,14 +450,16 @@ public struct HolyGrailRampEngine: Equatable {
         smoothedEV = smoothed
         let currentGain = max(currentTarget.lightGain, 1e-9)
         foldHighlights(highlights, currentGain: currentGain)
-        // Within a step of the highlights' ceiling the anchor may not drift
-        // toward more light. That drift is what walked the 2026-09-28 shoot
-        // five stops over — a twentieth of a stop every window for a hundred
-        // windows — and behind a ceiling it would only wind up.
-        let nearCeiling = highlightCeilingGain.map {
-            currentGain >= $0 * exp2(-HighlightReading.marginStops)
-        } ?? false
-        driftAnchor(toward: aeSceneEV, smoothed: smoothed, mayBrighten: !nearCeiling)
+        // While the frames show more at white than the shoot opened with, or
+        // the guard held the ramp back last step, the anchor may not drift
+        // toward more light: that drift is what walked the 2026-09-28 shoot
+        // five stops over, and behind a held ceiling it would only wind up.
+        // Only then — paused whenever a ceiling merely existed, it held the
+        // 2026-10-02 dusk 0.6–1 stop under the camera's own exposure all night.
+        let holdingHighlights = highlightGuardEnabled
+            && (highlightExcess >= Self.highlightHoldExcess
+                || highlightState == .holding || highlightState == .darkening)
+        driftAnchor(toward: aeSceneEV, smoothed: smoothed, mayBrighten: !holdingHighlights)
 
         let wantedGain = Self.requiredGain(
             sceneEV100: aimEV(from: smoothed) - bias, aperture: limits.aperture)
@@ -450,27 +493,40 @@ public struct HolyGrailRampEngine: Equatable {
         return currentTarget
     }
 
-    /// Folds one highlight reading into the ceiling (`highlightCeilingGain`).
+    /// Folds one highlight reading into the opening and the ceiling
+    /// (`highlightOpening`, `highlightCeilingGain`).
     private mutating func foldHighlights(_ reading: HighlightReading?, currentGain: Double) {
         guard highlightGuardEnabled, let reading,
               reading.clippedFraction.isFinite, reading.hotFraction.isFinite else { return }
         lastHighlightReading = reading
+        // The opening: the least of the first few distinct readings.
+        if openingReadingsTaken < Self.highlightOpeningReadings, reading.window != lastOpeningWindow {
+            highlightOpening = min(highlightOpening ?? reading.clippedFraction, reading.clippedFraction)
+            openingReadingsTaken += 1
+            lastOpeningWindow = reading.window
+        }
+        let excess = highlightExcess
         // The light the frames were shot at. Unknown is read as now: a
         // ceiling set from the current gain can only hold or lower the
         // exposure, never raise it.
         let shotAt = max(reading.gain ?? currentGain, 1e-12)
-        if reading.clippedFraction >= Self.highlightTripFraction {
-            // Detail is going: that exposure is off limits, and so is the
-            // step under it until a reading taken there says otherwise.
+        if excess >= Self.highlightDarkenExcess {
+            // Far more at white than the shoot opened with: that exposure is
+            // off limits, and so is the step under it until a reading taken
+            // there says otherwise.
             lowerHighlightCeiling(to: shotAt * exp2(-HighlightReading.marginStops))
-        } else if reading.hotFraction >= Self.highlightTripFraction {
-            // One more step would clip it: no more light than this.
+        } else if excess >= Self.highlightHoldExcess {
+            // Clearly more at white than the opening: no more light than this.
             lowerHighlightCeiling(to: shotAt)
-        } else if let ceiling = highlightCeilingGain,
-                  shotAt >= ceiling * exp2(-0.05),
-                  reading.hotFraction < Self.highlightRoomFraction {
-            // Shot at the ceiling, with room: the light has fallen away.
-            highlightCeilingGain = ceiling * exp2(Self.highlightLiftStops)
+        } else if excess <= Self.highlightRoomExcess, let ceiling = highlightCeilingGain {
+            // Room at the exposure THESE frames were shot at, so the limit
+            // sits at least a lift above it — wherever the ramp has settled
+            // under the limit. It used to rise only from a reading shot within
+            // 0.05 stop of the limit; on 2026-10-02 the gate's 0.12-stop
+            // deadband parked the ramp 0.07 stop under it, neither could
+            // move, and a dusk froze at 1/49 s for twelve minutes while the
+            // light fell three stops.
+            highlightCeilingGain = max(ceiling, shotAt * exp2(Self.highlightLiftStops))
         }
     }
 
@@ -614,7 +670,8 @@ public struct HolyGrailRampEngine: Equatable {
             sceneEV100: aimEV(from: smoothedEV) - bias, aperture: limits.aperture)
         let ceiling = Self.lightGain(shutterSeconds: limits.maxShutter.seconds, iso: limits.maxISO)
         let floor = Self.lightGain(shutterSeconds: limits.minShutter.seconds, iso: limits.minISO)
-        let heldUnderHardware = highlightCeilingGain.map { $0 < ceiling * 0.99 } ?? false
+        let holding = highlightState == .holding || highlightState == .darkening
+        let heldUnderHardware = holding && (highlightCeilingGain.map { $0 < ceiling * 0.99 } ?? false)
         return (wanted > ceiling * 1.01 && !heldUnderHardware) || wanted < floor * 0.99
     }
 

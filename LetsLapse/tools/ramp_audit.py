@@ -126,6 +126,11 @@ def main() -> int:
     # The highlight guard (2026-09-28): what it did, and the reading it had
     # — share of the frame at white / within ⅓ stop, the window measured.
     has_guard = any((f.get("ramp") or {}).get("highlightGuard") for f in frames)
+    opening = next(((f.get("ramp") or {}).get("highlightOpening") for f in frames
+                    if (f.get("ramp") or {}).get("highlightOpening") is not None), None)
+    if opening is not None:
+        print(f"highlight guard: the shoot opened with {opening * 100:.1f}% of the frame at white"
+              " — it acts only on clearly more than that")
     print(" window  time          commanded        delivered         Δstops  engineEV  sceneEV  meas   applied"
           + ("  guard      clip%  hot%  (w)" if has_guard else ""))
     prev_smoothed = None
