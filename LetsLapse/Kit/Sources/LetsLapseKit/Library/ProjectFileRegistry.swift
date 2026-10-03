@@ -108,6 +108,51 @@ public enum ProjectFileRegistry {
     /// `poster.jpg` — the project's graded poster frame (v2 plan §3.5).
     public static let posterName = "poster.jpg"
 
+    /// Picture tiers (docs/picture-tiers-plan.md §3.1). The grid tile the
+    /// server cuts from the poster — `tile.webp` today; the extension is the
+    /// server's choice, so the pattern takes any — and the full-size graded
+    /// working copy a device holding the originals renders, named by the
+    /// token of the grade it was rendered from (`PhotoGrade.proxyToken`).
+    /// Both derived and neither travels: a `.lapse` carries the originals
+    /// and the poster, from which either is made again. A sync classifies
+    /// them by name (`PicPlaceSyncInventory.role`): the tile is pulled, never
+    /// pushed; the proxy goes up under kind `proxy`.
+    public static let tilePattern = "tile.*"
+    public static let proxyPicturePattern = "picture-*.heic"
+
+    public static func isTile(fileName: String) -> Bool {
+        ProjectFile(tilePattern, at: .root, class: .derived, travels: false).matches(fileName: fileName)
+    }
+
+    public static func isProxyPicture(fileName: String) -> Bool {
+        ProjectFile(proxyPicturePattern, at: .root, class: .derived, travels: false).matches(fileName: fileName)
+    }
+
+    /// `picture-<token>.heic` for the twelve-character name token.
+    public static func proxyPictureName(token: String) -> String { "picture-\(token).heic" }
+
+    /// The names the server's tile can arrive under, in the order looked
+    /// for: WebP is the contract today; the others if the server's choice
+    /// moves (the app reads the content type, never assumes).
+    public static let tileCandidates = ["tile.webp", "tile.jpg", "tile.avif"]
+
+    /// A finished, already-graded picture standing in for media that is not
+    /// on this device — the poster, or the server's tile (stage 3's lazy
+    /// posters): decoded as the image it is, never graded a second time,
+    /// and never the source a poster or a working copy is rendered from.
+    public static func isFinishedPicture(fileName: String) -> Bool {
+        fileName == posterName || isTile(fileName: fileName)
+    }
+
+    /// The tile in a project folder, if one is there.
+    public static func tileURL(in folder: URL) -> URL? {
+        for name in tileCandidates {
+            let url = folder.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: url.path) { return url }
+        }
+        return nil
+    }
+
     /// `scene-analysis.json` — what the on-device vision pass said about the
     /// project's thumbnail frame (`SceneAnalysisRecord`): Auto rename & tag's
     /// cached Stage A, keyed by the frame it looked at, so the second run —
@@ -152,6 +197,10 @@ public enum ProjectFileRegistry {
         // tile a fresh device shows before the sources are on it. Derived:
         // any device holding the sources can render it again.
         ProjectFile(posterName, at: .root, class: .derived, travels: true),
+        // Picture tiers: the server's tile and a device's working copy
+        // (see `tilePattern`). Derived; neither travels.
+        ProjectFile(tilePattern, at: .root, class: .derived, travels: false),
+        ProjectFile(proxyPicturePattern, at: .root, class: .derived, travels: false),
         // The vision pass's record. Derived — any device holding the frame
         // can run the model again — but it is the expensive kind of derived,
         // so it travels: a shoot analysed once is analysed for every copy.

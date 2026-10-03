@@ -11,6 +11,59 @@ live inline.
 
 ## Open
 
+### Picture tiers — tile · poster · proxy (2026-10-03: contract written, picplace `c43f970`, pushes 1 and 2 live on picplace.co; stages 0–3 BUILT, uncommitted — stage 0 is the build the production tile backfill waits for)
+
+Steven's brief (2026-10-03): a full-size graded **working copy** per project on
+PicPlace — the `proxy` kind the server already defines — so text, masks,
+shapes, crop, collection stills and Shape-mation need no originals; a ~400 px
+**tile** tier the server cuts from the poster so a 100,000-project gallery is
+pulled in batches, not one poster per project; the poster unchanged. Rules: the proxy stops before crop
+and overlays (records applied on display); none is made for an unedited
+JPEG/HEIC (the original is the working copy); freshness rides as a token in
+its name; the device holding the originals renders the proxy and the poster
+in one pass, the server makes the tile (Steven's call, 2026-10-03, after a
+first draft had the client make it), and the server never regrades;
+renditions live in object storage as project assets. Two documents: `docs/picplace-picture-tiers-server-asks.md` (for the
+PicPlace developer, first — server-made tiles from the poster, cross-project
+rendition batches without the claim, rendition pointers on the index row,
+formats, the `proxy` presence tier, a `/status` split, the bucket key) and
+`docs/picture-tiers-plan.md` (six stages; **stage 0 landed 2026-10-03, plan §9**:
+the count fix, the row and flag shapes, the names, the proxy token and D6
+rule; **stage 1 landed the same day, plan §10**: `PicPlaceProxy` renders the
+working copy beside the poster inside the records push, the sweep
+(`runProxyQueue`) catches up old projects, `LL_RENDITIONS=render|sweep` —
+bench-verified against picplace.test; **stage 2 landed the same night, plan
+§11**: the server's tile fetched beside the poster on every pull, caught up
+by the check (`settleTiles`, 100 per check until stage 3's batches), the
+grid drawn from it through `ProjectThumbnailCache.tileSubstitute`, never
+written to the disk tier, `LL_TILES_LOG=1` — bench-verified A → server job →
+B; **stage 3 landed the same night, plan §12**: `PicPlaceRenditionBatch`
+(negotiate/PUT/confirm and URL mints across projects), the sweep a hundred
+copies per request with `replaces`, tiles a hundred per mint, the first
+connection in pages of a hundred with one mint, lazy posters (fetched on
+open), `bucket` on every PUT, `LL_RENDITIONS_SALT` — bench: 10 copies in 1
+or 3 requests, 10 previews in 10 + 1 + 20, 10 tiles in 1 mint; Mac +
+Mac + Simulator builds clean; **stage 4 landed late the same night, plan §13**:
+`EditorAsset.workingCopy`, `ProjectCapability.overlayEdit`, the real editor on
+`picture-<token>.heic` with the grade groups locked and only the crop
+writable, Sky/Land and Find shapes off the copy, the preview page's
+*Download Working Copy* button and `fetchWorkingCopy`, `LL_WC_PROBE=1`,
+`LL_PREVIEW_PROMPT=:working` — Steven's issues 2 and 5 (Masks and Text on
+previews) land here; bench-verified locally and A → PicPlace → B; **the
+proxy-count fix the same night, plan §14**: a working copy no longer moves
+the count a pull accounts for, and a held poster is kept by hash — the
+first production night's re-fetch storm (the Mac 600×, old builds 887
+posters); not yet on a device; 5 status and space next). Supersedes connected-asset-states plan D2. Steven's issues 2 and 5
+of 2026-10-03 (Masks and Text on a preview) land on the proxy in stage 4, not
+on the poster. · large · seams: the editor's write paths that assume a source
+(plan T6) — the working-copy mode guards `persist()` (crop only), the white
+migration, as-shot reads and the Lightroom sidecar; `PicPlaceSyncPolicy`
+skips non-travelling files, so the proxy is classified by name
+(`picture-<token>.heic` at the project root, as the server names it); the
+sweep pushes a proxy only at the server's revision (the race rule, round 2);
+the asset-count check must ignore server-made assets BEFORE the tile backfill
+runs on picplace.co (round 2, 2026-10-03).
+
 ### PicPlace libraries leaked into each other at an iOS launch (found and fixed 2026-10-01, uncommitted)
 
 The two-library bench (`docs/fieldtests/2026-10-01-two-library-bench/`, Mac on

@@ -190,7 +190,7 @@ extension PicPlaceController {
                     if localRevision == row.revision {
                         // In step. Make sure the base is recorded.
                         if records[origin] == nil {
-                            records[origin] = PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: row.assets.confirmed, bytes: row.assets.bytes,
+                            records[origin] = PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: row.accountedConfirmed, bytes: row.assets.bytes,
                                                                  uploaded: 0, alsoOn: [], server: profile?.server ?? serverString, lastError: nil, policy: "in-step")
                         }
                         progress.inStep += 1
@@ -239,16 +239,27 @@ extension PicPlaceController {
 
             progress.phase = .pulling
             initialSyncProgress = progress
-            for row in toPull {
-                do {
-                    try await pull(row)
-                    progress.pulled += 1
-                } catch {
-                    LLog("picplace: pull of \(row.name) (\(row.uuid.prefix(8))) failed: \(error)")
-                    progress.failures.append("\(row.name): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+            if serverHasRenditionBatches {
+                // Stage 3: a hundred projects' downloads minted in one request.
+                for page in toPull.chunked(100) {
+                    let (pulled, failures) = await pullPage(page) { initialSyncProgress = progress }
+                    progress.pulled += pulled
+                    progress.failures.append(contentsOf: failures)
+                    initialSyncProgress = progress
+                    if Task.isCancelled { return }
                 }
-                initialSyncProgress = progress
-                if Task.isCancelled { return }
+            } else {
+                for row in toPull {
+                    do {
+                        try await pull(row)
+                        progress.pulled += 1
+                    } catch {
+                        LLog("picplace: pull of \(row.name) (\(row.uuid.prefix(8))) failed: \(error)")
+                        progress.failures.append("\(row.name): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+                    }
+                    initialSyncProgress = progress
+                    if Task.isCancelled { return }
+                }
             }
 
             progress.phase = .pushing
@@ -337,7 +348,7 @@ extension PicPlaceController {
     /// with `id == originID`, the sync record's base set to the server's
     /// revision, presence posted at tier `preview`. No `source/` media: the
     /// project is preview-only by rule (§3.6). A failure leaves no folder.
-    func pull(_ row: PPProject) async throws {
+    func planPull(_ row: PPProject) async throws -> PullPlan {
         let uuid = row.uuid.lowercased()
         guard let originID = UUID(uuidString: uuid) else { throw PicPlaceSyncRun.Failed(caption: "PicPlace named a project without a valid id.") }
         let folder = model.projectFolderURL(for: originID)
@@ -352,7 +363,11 @@ extension PicPlaceController {
               var manifest = object["manifest"] as? [String: Any] else {
             throw PicPlaceSyncRun.Failed(caption: "PicPlace sent no manifest for \(row.name).")
         }
-        let assets = (detail.assets ?? []).filter { $0.status == "confirmed" }
+        // What devices pushed: the server's own tile (picture tiers) is not
+        // among the objects this device accounts for — it is fetched beside
+        // the poster from `confirmedAll` when it is cut from that poster.
+        let confirmedAll = (detail.assets ?? []).filter { $0.status == "confirmed" }
+        let assets = confirmedAll.accounted
         // The overflow shape: the manifest is an asset the stub points at.
         if let manifestAssetID = manifest["manifest_asset"] as? String {
             let data = try await download(assetID: manifestAssetID, projectUUID: uuid, name: "manifest.json")
@@ -368,14 +383,87 @@ extension PicPlaceController {
         }
 
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let bundleAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName })
+        let posterAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName })
+        let tileAsset = Self.freshTile(in: confirmedAll, poster: posterAsset)
+        let looseAssets = bundleAsset == nil ? assets.filter { PicPlaceSyncInventory.role(for: $0.name) == .bundle } : []
+        // Stage 3, lazy posters: with a tile to draw the grid from, the poster
+        // waits for the day the project is opened (`fetchPosterOnOpen`).
+        let wantsPoster = !(serverHasTiles && tileAsset != nil)
+        return PullPlan(row: row, uuid: uuid, originID: originID, folder: folder, document: document, assets: assets,
+                        bundleAsset: bundleAsset, posterAsset: wantsPoster ? posterAsset : nil, tileAsset: tileAsset,
+                        looseAssets: looseAssets)
+    }
+
+    /// The half of a pull that reads PicPlace: the row's detail and manifest,
+    /// the document decoded, and which assets to fetch — so a page of pulls
+    /// can mint every URL in one request before any bytes move (stage 3).
+    struct PullPlan {
+        var row: PPProject
+        var uuid: String
+        var originID: UUID
+        var folder: URL
+        var document: ProjectDocument
+        var assets: [PPAsset]
+        var bundleAsset: PPAsset?
+        var posterAsset: PPAsset?
+        var tileAsset: PPAsset?
+        var looseAssets: [PPAsset]
+
+        var assetIDs: [String] {
+            [bundleAsset?.id, posterAsset?.id, tileAsset?.id].compactMap { $0 } + looseAssets.map(\.id)
+        }
+    }
+
+    /// A new project on the server, pulled whole: plan, one mint, the bytes.
+    func pull(_ row: PPProject) async throws {
+        let plan = try await planPull(row)
+        let minted = await mintDownloads(plan.assetIDs, projectUUID: plan.uuid)
+        try await completePull(plan, minted: minted)
+    }
+
+    /// Up to a hundred new projects: every plan first (one `GET
+    /// projects/{uuid}` each, unavoidable — the manifest lives there), then
+    /// ONE `POST assets/urls` for all their downloads, then the bytes. The
+    /// per-project mint is what a 100,000-library's first pull could not
+    /// afford. `tick` is called after each project for the progress line.
+    func pullPage(_ rows: [PPProject], tick: () -> Void = {}) async -> (pulled: Int, failures: [String]) {
+        var plans: [PullPlan] = []
+        var failures: [String] = []
+        for row in rows {
+            do { plans.append(try await planPull(row)) }
+            catch {
+                LLog("picplace: pull of \(row.name) (\(row.uuid.prefix(8))) failed: \(error)")
+                failures.append("\(row.name): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+            }
+            if Task.isCancelled { return (0, failures) }
+        }
+        let minted = await mintRenditionURLs(plans.flatMap(\.assetIDs))
+        var pulled = 0
+        for plan in plans {
+            do {
+                try await completePull(plan, minted: minted)
+                pulled += 1
+            } catch {
+                LLog("picplace: pull of \(plan.row.name) (\(plan.uuid.prefix(8))) failed: \(error)")
+                failures.append("\(plan.row.name): \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+            }
+            tick()
+            if Task.isCancelled { break }
+        }
+        return (pulled, failures)
+    }
+
+    /// The half of a pull that writes: the bundle (or the loose records),
+    /// the poster when the plan wants it, the tile, the registration and
+    /// the record.
+    func completePull(_ plan: PullPlan, minted: [String: PPDownloadURL]) async throws {
+        let row = plan.row, uuid = plan.uuid, originID = plan.originID, folder = plan.folder, document = plan.document
+        let assets = plan.assets, bundleAsset = plan.bundleAsset, posterAsset = plan.posterAsset
+        let tileAsset = plan.tileAsset, looseAssets = plan.looseAssets
         do {
             var files = 0
             var bytes: Int64 = 0
-            let bundleAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName })
-            let posterAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName })
-            let looseAssets = bundleAsset == nil ? assets.filter { PicPlaceSyncInventory.role(for: $0.name) == .bundle } : []
-            // Every URL this pull needs, in one request.
-            let minted = await mintDownloads(([bundleAsset?.id, posterAsset?.id].compactMap { $0 }) + looseAssets.map(\.id), projectUUID: uuid)
             if let bundle = bundleAsset {
                 let data = try await download(assetID: bundle.id, projectUUID: uuid, name: "records.aar", minted: minted)
                 let tmp = folder.appendingPathComponent("tmp", isDirectory: true)
@@ -404,6 +492,12 @@ extension PicPlaceController {
                 try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
                 files += 1; bytes += Int64(data.count)
             }
+            // The server's tile beside the poster (stage 2) — the grid's picture
+            // here; not one of the objects this device accounts for.
+            if let tile = tileAsset {
+                let data = try await download(assetID: tile.id, projectUUID: uuid, name: tile.name, minted: minted)
+                try Self.writeTile(data, name: tile.name, in: folder)
+            }
             let capture = try model.registerPulledProject(capture: document.capture, blends: document.blends, originID: originID)
             let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
             records[originID] = PicPlaceSyncRecord(
@@ -415,12 +509,43 @@ extension PicPlaceController {
                 serverHeavyFiles: heavy.count, serverHeavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) },
                 serverConfirmedSeen: assets.count)
             records[originID]?.serverSourceFiles = heavy.filter { PicPlaceSyncInventory.heavyKind($0.name) == .source }.count
+            records[originID]?.tileSHA256 = tileAsset?.sha256
+            records[originID]?.posterSHA256 = posterAsset?.sha256
             saveSyncState()
             let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": row.revision, "tier": "preview"])
             LLog("picplace: pulled \(capture.displayTitle) (\(uuid.prefix(8))) — \(files) object(s), \(bytes) bytes; \(heavy.count) heavy file(s) stay on PicPlace")
         } catch {
             try? FileManager.default.removeItem(at: folder)
             throw error
+        }
+    }
+
+    /// The server's tile for `poster` among `assets`, when it was cut from
+    /// that very poster (the contract's freshness rule: the tile's
+    /// `derived_from_sha256` equals the poster's `sha256`). nil for a tile
+    /// cut from an earlier poster — the grid then cuts from the poster until
+    /// the server's job catches up — and from a server before tiles.
+    static func freshTile(in assets: [PPAsset], poster: PPAsset?) -> PPAsset? {
+        guard let posterSHA = poster?.sha256 else { return nil }
+        return assets.first {
+            $0.status == "confirmed" && $0.isServerMade && ProjectFileRegistry.isTile(fileName: $0.name)
+                && $0.derivedFromSha256 == posterSHA
+        }
+    }
+
+    /// Writes the tile under the server's name and removes any other tile
+    /// in the folder (a format the server moved away from).
+    static func writeTile(_ data: Data, name: String, in folder: URL) throws {
+        for other in ProjectFileRegistry.tileCandidates where other != name {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(other))
+        }
+        try data.write(to: folder.appendingPathComponent(name), options: .atomic)
+    }
+
+    /// Every tile in the folder — for a poster the server has no fresh tile of.
+    static func removeTiles(in folder: URL) {
+        for name in ProjectFileRegistry.tileCandidates {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
         }
     }
 

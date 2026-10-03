@@ -29,6 +29,10 @@ struct EditorGroupBar: View {
     /// the host's, which asks whether to fetch them. The dots still say
     /// which groups hold an edit.
     var locked = false
+    /// The groups drawn greyed on a working copy (stage 4): every grade
+    /// group but the crop. A tap still lands on the host, which asks for
+    /// the originals.
+    var lockedGroups: Set<EditorGroup> = []
 
     enum Style {
         /// 2a: six 58 pt cells spread across a black bar.
@@ -98,6 +102,7 @@ struct EditorGroupBar: View {
 
     private func cell(_ group: EditorGroup) -> some View {
         let selected = selection == group
+        let locked = locked || lockedGroups.contains(group)
         return Button {
             // No toggle-off: the open panel's ✓/✕ own closing.
             selection = group

@@ -444,7 +444,7 @@ extension PicPlaceController {
         heavyListings[id] = remaining
         summaries[id] = nil
         if var record = records[key] {
-            let confirmed = (detail.assets ?? []).filter { $0.status == "confirmed" }
+            let confirmed = (detail.assets ?? []).filter { $0.status == "confirmed" }.accounted
             let heavy = confirmed.filter { PicPlaceSyncInventory.isHeavy($0.name) }
             record.serverHeavyFiles = heavy.count
             record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }

@@ -21,11 +21,20 @@ enum EditorAsset: Equatable {
     /// The project's `poster.jpg` when it has one, else its folder — the
     /// page finds its own picture; this is its identity.
     case preview(URL)
+    /// The project's full-size working copy (`picture-<token>.heic`,
+    /// picture tiers stage 4) on a device without its originals: the real
+    /// editor mounts on it with the grade groups locked.
+    case workingCopy(URL)
 
     var url: URL {
         switch self {
-        case .still(let url), .movie(let url), .preview(let url): return url
+        case .still(let url), .movie(let url), .preview(let url), .workingCopy(let url): return url
         }
+    }
+
+    var isWorkingCopy: Bool {
+        if case .workingCopy = self { return true }
+        return false
     }
 
     var isMovie: Bool {
@@ -226,6 +235,12 @@ extension AppModel {
     func stageEditor(for capture: CaptureProject, page: RailTab = .editor, group: EditorGroup? = nil,
                      allowsPreview: Bool = false) -> EditorOpenRequest? {
         guard let asset = editorAsset(for: capture) else {
+            // A working copy here opens the real editor on it (stage 4):
+            // the overlay pages work, the grade groups ask for the originals.
+            if let copy = workingCopyAsset(for: capture) {
+                requestedEditorPage = EditorPageRequest(captureID: capture.id, page: page, group: group)
+                return EditorOpenRequest(captureID: capture.id, title: capture.displayTitle, asset: copy)
+            }
             guard allowsPreview else { return nil }
             // The preview page lives on the Editor page: the others need
             // the originals and are drawn greyed.
@@ -252,7 +267,7 @@ private struct EditorCover: ViewModifier {
         content.fullScreenCover(item: $request) { request in
             Group {
                 switch request.asset {
-                case .still(let url):
+                case .still(let url), .workingCopy(let url):
                     PhotoViewerView(captureID: request.captureID, url: url)
                 case .movie(let url):
                     VideoEditorView(captureID: request.captureID, url: url)
@@ -279,7 +294,7 @@ extension EditorOpenRequest {
     /// alongside is what moves an already-open window to its page.
     func open(with openWindow: OpenWindowAction) {
         switch asset {
-        case .still(let url):
+        case .still(let url), .workingCopy(let url):
             openWindow(value: PhotoEditorWindowRequest(captureID: captureID, url: url, title: title))
         case .movie(let url):
             openWindow(value: VideoEditorWindowRequest(captureID: captureID, url: url, title: title))

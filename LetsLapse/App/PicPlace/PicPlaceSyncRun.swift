@@ -54,6 +54,20 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     /// The grade token `poster.jpg` was rendered at; a different token means
     /// the poster is stale and is rendered again before the next push.
     var posterToken: String?
+    /// Picture tiers (docs/picture-tiers-plan.md §3.4): the proxy token the
+    /// full-size working copy on PicPlace was rendered at (`PhotoGrade.proxyToken`,
+    /// the crop left out), and when this device last opened the editor on a
+    /// working copy it holds — the free-up rule's clock. nil until stage 1.
+    var proxyToken: String?
+    var workingCopyUsedAt: Date?
+    /// The SHA-256 of the server's tile this device last wrote beside the
+    /// poster (stage 2); the check fetches the row's tile when it differs.
+    var tileSHA256: String?
+    /// The SHA-256 of the poster this device last took from PicPlace: a
+    /// confirmed-count move whose row names the same poster costs no poster
+    /// fetch and, from the listing, no hashing (the developer's ask,
+    /// 2026-10-03).
+    var posterSHA256: String?
     /// Stage 5: the originals — source media and blends — this device last
     /// knew to be on the server (from the project detail), and when this
     /// device last uploaded or downloaded them.
@@ -191,6 +205,9 @@ struct PicPlaceSyncRun {
         /// an ordinary update, which would move a project back after another
         /// device moved it (agreed with the server, asks §6 Q2).
         var library: UUID?
+        /// The capture month in the person's calendar (`YYYY-MM`), sent on
+        /// every PUT from push 2 (picture tiers §A); nil before it.
+        var bucket: String? = nil
     }
 
     struct Failed: LocalizedError {
@@ -349,6 +366,7 @@ struct PicPlaceSyncRun {
                 "revision": project.revision,
                 "captured_at": ISO8601DateFormatter().string(from: project.capturedAt),
             ]
+            if let bucket = project.bucket { body["bucket"] = bucket }
             if let origin = project.originUUID { body["origin_uuid"] = origin.uuidString.lowercased() }
             if mayCreate, let library = project.library { body["library"] = library.uuidString.lowercased() }
             let compactBytes = Int64((try? JSONSerialization.data(withJSONObject: manifest, options: [.withoutEscapingSlashes]).count) ?? manifestData.count)
@@ -833,9 +851,21 @@ struct PicPlaceSyncRun {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
+    /// The twelve hex characters that name a working copy on PicPlace —
+    /// SHA-256 of `PhotoGrade.proxyToken` (docs/picture-tiers-plan.md §3.2),
+    /// so a device computes the expected name from the records it holds and
+    /// compares it with the row's `renditions.proxy.name`: equal is fresh.
+    static func proxyNameToken(for proxyToken: String) -> String {
+        let digest = SHA256.hash(data: Data(proxyToken.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined().prefix(12).description
+    }
+
     private static func contentType(for url: URL) -> String? {
         switch url.pathExtension.lowercased() {
         case "jpg", "jpeg": return "image/jpeg"
+        case "heic", "heif": return "image/heic"
+        case "webp": return "image/webp"
+        case "avif": return "image/avif"
         case "png": return "image/png"
         case "dng": return "image/x-adobe-dng"
         case "arw": return "image/x-sony-arw"

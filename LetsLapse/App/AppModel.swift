@@ -1611,10 +1611,12 @@ final class AppModel: ObservableObject {
     /// `mediaURL` still gates the answer, so a project with a missing source
     /// file goes on rendering as the placeholder instead of a broken image.
     func thumbnailURL(for capture: CaptureProject) -> URL? {
-        if capture.isPhotoCapture { return heroImageURL(for: capture) ?? posterURL(for: capture) }
+        if capture.isPhotoCapture { return heroImageURL(for: capture) ?? posterURL(for: capture) ?? tileURL(for: capture) }
         // No media on this device: the poster stands in (a preview-only
-        // project). `ProjectThumbnailView` shows it as the plain image it is.
-        guard let media = mediaURL(for: capture) else { return posterURL(for: capture) }
+        // project), or the server's tile when the poster waits for the day
+        // the project is opened (picture tiers, stage 3's lazy posters).
+        // `ProjectThumbnailView` shows either as the plain image it is.
+        guard let media = mediaURL(for: capture) else { return posterURL(for: capture) ?? tileURL(for: capture) }
         guard capture.kind == .photos else { return media }
         return thumbnailFrameURL(for: capture) ?? media
     }

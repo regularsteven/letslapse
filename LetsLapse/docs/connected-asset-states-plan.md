@@ -350,7 +350,7 @@ yet* with OK. Never a dead end, never a silent refusal.
   with the originals. Each blend uploads as it is rendered (with a still),
   under the same Wi-Fi rule as records. Cost: the library's 147 blends are
   13.4 GB, ~90 MB each. Built in stage 3.
-- **D2 Preview size — DEFERRED (Steven, 2026-09-25).** `poster.jpg` is
+- **D2 Preview size — DEFERRED (Steven, 2026-09-25); superseded 2026-10-03 by [picture-tiers-plan.md](picture-tiers-plan.md)** (the master is the `proxy` kind, tiles join, the poster stays). `poster.jpg` is
   1280 px: sharp on a phone, soft full screen on a 13″ iPad or the Mac.
   Steven plans a server-side pipeline instead of a bigger poster: PicPlace
   keeps one high-quality, high-resolution master (an HQ JPEG or similar) and

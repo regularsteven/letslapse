@@ -111,6 +111,14 @@ final class ProjectThumbnailCache: ObservableObject {
     /// decode failed, so callers must not treat nil as "show the placeholder"
     /// if they already have an image on screen.
     func thumbnail(for url: URL, kind: AppModel.MediaKind) async -> Image? {
+        // Picture tiers, stage 2: a project with no picture here is drawn
+        // from the server's tile beside its poster when one is there — a
+        // 400 px WebP in place of a 1280 px JPEG to cut down — keyed by the
+        // tile's own path and date, and never written to the disk tier (it
+        // is that tier). Without a tile the poster is cut, as before.
+        let tile = Self.tileSubstitute(for: url)
+            ?? (ProjectFileRegistry.isTile(fileName: url.lastPathComponent) ? url : nil)
+        let url = tile ?? url
         if let cached = cache.object(forKey: Self.memoryKey(url)) {
             return Image(decorative: cached, scale: 1)
         }
@@ -123,16 +131,16 @@ final class ProjectThumbnailCache: ObservableObject {
             if poisoned.contains(diskKey) {
                 return Load(key: diskKey, image: nil, skipped: true)
             }
-            if let stored = DiskThumbnailStore.read(diskKey) {
+            if tile == nil, let stored = DiskThumbnailStore.read(diskKey) {
                 return Load(key: diskKey, image: stored)
             }
-            guard let generated = ProjectThumbnailGenerator.thumbnail(for: url, kind: kind) else {
+            guard let generated = ProjectThumbnailGenerator.thumbnail(for: url, kind: tile == nil ? kind : .image) else {
                 // Whether the file is even there separates "deleted behind our
                 // back" from "ImageIO gave up on it" in the log.
                 return Load(key: diskKey, image: nil,
                             sourceExists: FileManager.default.fileExists(atPath: url.path))
             }
-            DiskThumbnailStore.write(generated, forKey: diskKey)
+            if tile == nil { DiskThumbnailStore.write(generated, forKey: diskKey) }
             return Load(key: diskKey, image: generated)
         }
         // Cancelled — the caller scrolled away. Nothing to report and nothing
@@ -148,7 +156,19 @@ final class ProjectThumbnailCache: ObservableObject {
             return nil
         }
         remember(image, forKey: Self.memoryKey(url))
+        #if DEBUG
+        if let tile, ProcessInfo.processInfo.environment["LL_TILES_LOG"] != nil {
+            LLog("thumbnail: \(tile.deletingLastPathComponent().lastPathComponent) drawn from \(tile.lastPathComponent) (\(image.width)×\(image.height))")
+        }
+        #endif
         return Image(decorative: image, scale: 1)
+    }
+
+    /// The server's tile beside a poster, for a request that names the
+    /// poster — nil for anything else, and for a poster with no tile yet.
+    nonisolated static func tileSubstitute(for url: URL) -> URL? {
+        guard url.lastPathComponent == ProjectFileRegistry.posterName else { return nil }
+        return ProjectFileRegistry.tileURL(in: url.deletingLastPathComponent())
     }
 
     /// Rotate 90° is a record now (2026-09-24): the file does not change, so

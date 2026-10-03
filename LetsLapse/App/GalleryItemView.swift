@@ -35,7 +35,7 @@ struct GalleryItemEditor: View {
     var body: some View {
         Group {
             switch focus.request.asset {
-            case .still(let url):
+            case .still(let url), .workingCopy(let url):
                 PhotoViewerView(
                     captureID: focus.captureID, url: url,
                     exitRequest: exitRequest, onExit: onExit, paging: paging)

@@ -4,7 +4,12 @@ import Foundation
 
 struct PPStatus: Decodable {
     struct User: Decodable { var uuid: String; var username: String?; var name: String? }
-    struct Storage: Decodable { var quotaBytes: Int64?; var usedBytes: Int64; var downloadUrlTtlSeconds: Int; var uploadUrlTtlSeconds: Int }
+    struct Storage: Decodable {
+        var quotaBytes: Int64?; var usedBytes: Int64; var downloadUrlTtlSeconds: Int; var uploadUrlTtlSeconds: Int
+        /// The renditions' share of `usedBytes` — kinds `preview` and
+        /// `proxy`, confirmed, live projects (picture tiers, push 2).
+        var renditions: PPRenditionsFigure?
+    }
     /// The instance block the v2 asks request (server-asks §1): absent until
     /// the server ships it, then the authoritative half of a library binding.
     struct Server: Decodable { var id: String; var environment: String?; var url: String? }
@@ -18,6 +23,9 @@ struct PPStatus: Decodable {
         struct RequestsPerMinute: Decodable { var device: Int?; var account: Int? }
         var manifestMaxBytes: Int64?; var objectMaxBytes: Int64?; var assetBatch: Int?; var tombstoneDays: Int?
         var requestsPerMinute: RequestsPerMinute?
+        /// The kinds the unclaimed rendition batches take (picture tiers,
+        /// push 2: `preview`, `proxy`). Absent before them.
+        var renditionKinds: [String]?
     }
     var apiVersion: Int
     var serverTime: Date
@@ -61,6 +69,8 @@ struct PPLibrary: Decodable, Equatable, Identifiable {
     var name: String?
     var projects: PPStatus.Projects?
     var usedBytes: Int64?
+    /// The library's renditions inside its `usedBytes` (push 2).
+    var renditions: PPRenditionsFigure?
     var createdBy: PPDeviceSummary?
     var updatedBy: PPDeviceSummary?
     var deletedBy: PPDeviceSummary?
@@ -142,7 +152,17 @@ extension Array where Element == PPPresence {
 }
 
 struct PPProject: Decodable {
-    struct Assets: Decodable { var confirmed: Int; var pending: Int; var bytes: Int64 }
+    struct Assets: Decodable {
+        var confirmed: Int; var pending: Int; var bytes: Int64
+        /// Of `confirmed`, the assets the server made itself — the grid
+        /// tile it cuts from the poster (picture tiers, push 1). Absent
+        /// before them.
+        var server: Int?
+        /// What a device pushed: the count this device compares with what
+        /// it last saw, so a tile the server cut never reads as "something
+        /// to fetch" (`settleAssetCountMoves`).
+        var clientConfirmed: Int { max(0, confirmed - (server ?? 0)) }
+    }
     var uuid: String
     var name: String
     var type: String
@@ -163,6 +183,13 @@ struct PPProject: Decodable {
     /// moved between libraries — never a create.
     var library: String?
     var libraryChangedAt: Date?
+    /// The project's renditions on PicPlace — tile, poster, proxy — as the
+    /// index row carries them (picture tiers, push 1, `features.renditions`).
+    /// nil from a server before them.
+    var renditions: PPRenditions?
+    /// The capture month, `YYYY-MM` (push 2): what the app sent, or the UTC
+    /// month the server derived for a row that never said.
+    var bucket: String?
 
     var isTombstone: Bool { deletedAt != nil }
     var libraryUUID: UUID? { library.flatMap(UUID.init(uuidString:)) }
@@ -194,6 +221,71 @@ struct PPAsset: Decodable {
     /// is not read: nothing here needs when, and a date that failed to parse
     /// would fail the whole list.)
     var verified: Bool?
+    var contentType: String?
+    /// `device` for everything a client uploaded, `server` for what the
+    /// server made (the tile). nil from a server before picture tiers:
+    /// every asset there is a device's.
+    var origin: String?
+    /// For a server-made asset, the SHA-256 of the object it was cut from —
+    /// the poster's, on a tile. The tile's freshness rule on both sides.
+    var derivedFromSha256: String?
+
+    var isServerMade: Bool { origin == "server" }
+    /// A working copy (`picture-<token>.heic`, kind `proxy`): a rendition a
+    /// device sends and a pull never takes.
+    var isWorkingCopy: Bool { kind == PicPlaceSyncInventory.proxyKind }
+}
+
+extension Array where Element == PPAsset {
+    /// The assets a device pushed — every count the app compares with what
+    /// it last saw, and every "what is on PicPlace" it reads, leaves the
+    /// server's own out (docs/picture-tiers-plan.md stage 0).
+    var clientMade: [PPAsset] { filter { !$0.isServerMade } }
+    /// What a pull accounts for — the records, the poster, the heavy set:
+    /// client-made and not a working copy. A proxy another device sent
+    /// moved the confirmed count by one and every other device fetched the
+    /// records and the poster again for it (the Mac, 600 projects on
+    /// 2026-10-03 evening); it is a rendition, not news.
+    var accounted: [PPAsset] { filter { !$0.isServerMade && !$0.isWorkingCopy } }
+}
+
+extension PPProject {
+    /// The confirmed assets a pull accounts for, from the row alone: the
+    /// devices' assets less the working copy the pointers name (one per
+    /// project by design).
+    var accountedConfirmed: Int { max(0, assets.clientConfirmed - (renditions?.proxy != nil ? 1 : 0)) }
+}
+
+/// One rendition pointer on an index row (picture tiers, push 1): the
+/// confirmed asset's id, name and hash, so a tiles pass needs no listing
+/// and a proxy's freshness is read off its name's token.
+struct PPRendition: Decodable {
+    var id: String
+    var name: String
+    var bytes: Int64?
+    var sha256: String?
+    var contentType: String?
+    var origin: String?
+    var derivedFromSha256: String?
+}
+
+/// `storage.renditions` and `libraries[].renditions` in `/status`.
+struct PPRenditionsFigure: Decodable, Equatable {
+    var objects: Int
+    var bytes: Int64
+}
+
+struct PPRenditions: Decodable {
+    var tile: PPRendition?
+    var poster: PPRendition?
+    var proxy: PPRendition?
+
+    /// A tile cut from the poster the row describes now — else it is a
+    /// stale one, and the grid cuts from the poster until the job catches up.
+    var tileIsFresh: Bool {
+        guard let tile, let from = tile.derivedFromSha256, let poster = poster?.sha256 else { return false }
+        return from == poster
+    }
 }
 
 /// `POST /projects/assets` — many projects' asset lists in one read (the
@@ -222,6 +314,12 @@ struct PPNegotiation: Decodable {
     /// nil on a refused item (then `error` says why).
     var asset: PPAsset?
     var upload: PPUpload?
+    /// On the batch path (`POST assets`, push 2): the item's project and
+    /// name, on errors as well as successes, and the project's current
+    /// revision beside `stale_revision`.
+    var project: String?
+    var name: String?
+    var currentRevision: Int?
     /// A per-item refusal. `asset_immutable`: PicPlace holds a confirmed
     /// original at this path with other bytes and keeps its own (the
     /// free-up server asks, round 2 Q2) — `asset` is that copy when sent.
@@ -266,6 +364,15 @@ struct PPConfirmResult: Decodable {
     var asset: PPAsset?
     var error: String?
     var message: String?
+    /// The batch path (push 2): the item's project, and the asset this
+    /// confirm retired (`replaces`), when it did.
+    var project: String?
+    var replaced: PPReplaced?
+}
+
+struct PPReplaced: Decodable {
+    var id: String
+    var name: String?
 }
 
 /// What the server says when it refuses: `{error, message, claim?}` for the

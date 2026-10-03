@@ -198,6 +198,7 @@ extension PicPlaceController {
         let manual = reason == "manual"
         var posterCandidates: [(origin: UUID, id: UUID)] = []
         var countMoves: [(row: PPProject, localID: UUID)] = []
+        var tileCandidates: [(row: PPProject, localID: UUID)] = []
         // A person's press retries every failed push now; the automatic
         // checks wait for each one's backoff.
         let now = Date()
@@ -291,6 +292,9 @@ extension PicPlaceController {
             var seen = Set<UUID>()
             for row in scoped {
                 guard let origin = UUID(uuidString: row.uuid) else { continue }
+                // The row's renditions (picture tiers, push 1): what the
+                // working-copy sweep and the grid read without a listing.
+                serverRenditions[origin] = row.renditions
                 seen.insert(origin)
                 clearElsewhere(origin)
                 let base = records[origin]?.revision
@@ -405,18 +409,43 @@ extension PicPlaceController {
                     // did (a push that finished after the pull, a poster
                     // that arrived), else asks for a poster it lacks once
                     // per change there.
+                    // Picture tiers, stage 2: a preview whose row points at a
+                    // tile cut from its current poster, which this device has
+                    // not fetched (or fetched from an earlier poster), takes
+                    // it after the pass — one mint and one GET each, up to a
+                    // hundred per check until push 2's batches (stage 3).
+                    if project.sourcesMissing, let renditions = row.renditions, renditions.tileIsFresh,
+                       let tile = renditions.tile, record?.tileSHA256 != tile.sha256,
+                       tileCandidates.count < (serverHasRenditionBatches ? 1_000 : 100) {
+                        tileCandidates.append((row, localID))
+                    }
                     if !project.sourcesMissing, record?.posterToken == nil, syncTasks[localID] == nil {
-                        // Asked of PicPlace in one batch after the pass:
-                        // most already have their poster there.
-                        posterCandidates.append((origin, localID))
+                        if serverHasRenditions, let renditions = row.renditions {
+                            // The row says whether PicPlace holds the poster
+                            // (push 1): no listing pass (`settlePosters`).
+                            if renditions.poster != nil, let capture = model.capture(id: localID) {
+                                records[origin]?.posterToken = currentPosterToken(for: capture)
+                                outcome.postersKnown += 1
+                            } else {
+                                enqueuePush(localID, reason: .poster, manual: manual)
+                                outcome.queued += 1
+                            }
+                        } else {
+                            // Asked of PicPlace in one batch after the pass:
+                            // most already have their poster there.
+                            posterCandidates.append((origin, localID))
+                        }
                     } else if project.sourcesMissing, record?.policy == "pull" || record?.serverConfirmedSeen != nil,
-                              record?.serverConfirmedSeen != row.assets.confirmed {
+                              record?.serverConfirmedSeen != row.accountedConfirmed {
                         // Settled after the pass, a hundred projects per
                         // request (`settleAssetCountMoves`): most often the
                         // count moved because another device uploaded the
                         // ORIGINALS, and nothing this device holds changed.
                         countMoves.append((row, localID))
                     } else if project.sourcesMissing, !project.hasPoster,
+                              // Stage 3: a preview with a tile keeps its poster
+                              // for the day it is opened (lazy posters).
+                              !(serverHasTiles && model.capture(id: localID).map { model.tileURL(for: $0) != nil } == true),
                               (record?.posterCheckedAt).map({ ($0 < (row.updatedAt ?? .distantFuture)) }) ?? true {
                         guard let capture = model.capture(id: localID) else { continue }
                         do {
@@ -446,9 +475,25 @@ extension PicPlaceController {
                                               serverDevice: row.updatedBy?.name, serverRevision: row.revision, localRevision: localRevision))
                 }
             }
+            // What PicPlace holds of the renditions, for the log, once per
+            // change (picture tiers, push 1): the production check's probe.
+            if serverHasRenditions {
+                let inScope = scoped.compactMap { row -> PPRenditions? in
+                    guard let origin = UUID(uuidString: row.uuid) else { return nil }
+                    return serverRenditions[origin]
+                }
+                let tally = (posters: inScope.filter { $0.poster != nil }.count,
+                             tiles: inScope.filter { $0.tile != nil }.count,
+                             proxies: inScope.filter { $0.proxy != nil }.count)
+                if renditionsTallyLogged.map({ $0 != tally }) ?? true {
+                    renditionsTallyLogged = tally
+                    LLog("picplace: renditions on PicPlace for \(scoped.count) row(s) — posters \(tally.posters) · tiles \(tally.tiles) · working copies \(tally.proxies)")
+                }
+            }
 
             await settlePosters(posterCandidates, manual: manual, outcome: &outcome)
             await settleAssetCountMoves(countMoves, outcome: &outcome)
+            await settleTiles(tileCandidates)
 
             // New here since the last check: up they go (records and a poster).
             // A record whose every push failed is not a push: the project
@@ -489,6 +534,7 @@ extension PicPlaceController {
             }
             scheduleOriginalsQueue()
             scheduleBlendsQueue()
+            scheduleProxyQueue()
             // A look after an upload the app was closed in the middle of.
             resumePendingVerifications()
             // The library's collections travel too, where PicPlace keeps them.
@@ -635,6 +681,124 @@ extension PicPlaceController {
         }
     }
 
+    /// The server's tiles for previews whose rows point at one this device
+    /// lacks (stage 2): one mint and one GET per tile, the file written
+    /// beside the poster, the grid's cut of the poster dropped so the next
+    /// draw takes the tile. Quiet on a failure: the next check asks again.
+    func settleTiles(_ candidates: [(row: PPProject, localID: UUID)]) async {
+        guard !candidates.isEmpty else { return }
+        var fetched = 0
+        var bytes = 0
+        // Push 2: the URLs of a hundred tiles in one request (stage 3); before
+        // it, one mint per tile.
+        let minted = serverHasRenditionBatches
+            ? await mintRenditionURLs(candidates.compactMap { $0.row.renditions?.tile?.id })
+            : [:]
+        for candidate in candidates {
+            guard let capture = model.capture(id: candidate.localID), let tile = candidate.row.renditions?.tile,
+                  let origin = UUID(uuidString: candidate.row.uuid) else { continue }
+            let uuid = candidate.row.uuid.lowercased()
+            do {
+                let data = try await download(assetID: tile.id, projectUUID: uuid, name: tile.name, minted: minted)
+                let folder = model.projectFolderURL(for: capture)
+                try Self.writeTile(data, name: tile.name, in: folder)
+                records[origin]?.tileSHA256 = tile.sha256
+                ProjectThumbnailCache.shared.invalidate(urls: [folder.appendingPathComponent(ProjectFileRegistry.posterName)])
+                model.noteFilesChanged(for: capture.id)
+                fetched += 1
+                bytes += data.count
+            } catch {
+                LLog("picplace: tile of \(candidate.row.name) — \(Self.describe(error))")
+            }
+        }
+        if fetched > 0 {
+            saveSyncState()
+            model.noteIndexChanged()
+            LLog("picplace: \(fetched) tile(s) fetched, \(bytes) bytes\(serverHasRenditionBatches ? " (\(max(1, (candidates.count + 99) / 100)) mint(s))" : "")\(candidates.count >= (serverHasRenditionBatches ? 1_000 : 100) ? " — more at the next check" : "")")
+        }
+    }
+
+    /// The working copy PicPlace holds for this project when the row names
+    /// the one the records expect — what the preview page offers beside the
+    /// originals for text, masks, shapes and the crop (stage 4).
+    func workingCopyOffer(for capture: AppModel.CaptureProject) -> PPRendition? {
+        guard let pointer = serverRenditions[model.originID(of: capture)]?.proxy,
+              pointer.name == model.expectedProxyName(for: capture) else { return nil }
+        return pointer
+    }
+
+    /// The project's working copy from PicPlace (stage 4): the row's proxy
+    /// pointer, read again when the one in hand does not name the copy the
+    /// records expect, minted, written beside the poster, every other copy
+    /// removed. Shown as a download on the project meanwhile. True when it
+    /// is here.
+    func fetchWorkingCopy(_ capture: AppModel.CaptureProject) async -> Bool {
+        guard binding != nil, canSync, progress[capture.id] == nil else { return false }
+        let origin = model.originID(of: capture)
+        let uuid = origin.uuidString.lowercased()
+        let expected = model.expectedProxyName(for: capture)
+        var pointer = serverRenditions[origin]?.proxy
+        if pointer?.name != expected {
+            guard let detail: PPProjectDetail = try? await client.get("projects/\(uuid)") else { return false }
+            serverRenditions[origin] = detail.project.renditions
+            pointer = detail.project.renditions?.proxy
+        }
+        guard let pointer, pointer.name == expected else {
+            LLog("picplace: no working copy of \(capture.displayTitle) on PicPlace yet (\(expected))")
+            return false
+        }
+        progress[capture.id] = PicPlaceSyncProgress(phase: .downloading, filesTotal: 1, bytesTotal: pointer.bytes ?? 0)
+        defer { progress[capture.id] = nil }
+        do {
+            let data = try await download(assetID: pointer.id, projectUUID: uuid, name: pointer.name)
+            let folder = model.projectFolderURL(for: capture)
+            try data.write(to: folder.appendingPathComponent(pointer.name), options: .atomic)
+            PicPlaceProxy.removeAll(in: folder, except: pointer.name)
+            records[origin]?.workingCopyUsedAt = Date()
+            saveSyncState()
+            model.noteFilesChanged(for: capture.id)
+            LLog("picplace: working copy of \(capture.displayTitle) fetched (\(data.count) bytes)")
+            return true
+        } catch {
+            LLog("picplace: working copy of \(capture.displayTitle) — \(Self.describe(error))")
+            return false
+        }
+    }
+
+    /// A preview's poster on the day it is opened (stage 3's lazy posters: a
+    /// pull takes the tile and leaves the poster when the server has one).
+    /// True when a poster was written. Once per project at a time; nothing
+    /// for a project that has its poster, its picture, or no library.
+    @discardableResult
+    func fetchPosterOnOpen(_ capture: AppModel.CaptureProject) async -> Bool {
+        guard model.sourcesMissing(capture), model.posterURL(for: capture) == nil,
+              !posterFetches.contains(capture.id) else { return false }
+        posterFetches.insert(capture.id)
+        // A page opened at launch is ahead of the handshake: give the
+        // session a few seconds before deciding there is none.
+        var waited = 0
+        while !(binding != nil && canSync), waited < 5 {
+            try? await Task.sleep(for: .seconds(2))
+            waited += 1
+        }
+        guard binding != nil, canSync else {
+            posterFetches.remove(capture.id)
+            LLog("picplace: poster of \(capture.displayTitle) on open — no session to fetch it with")
+            return false
+        }
+        defer { posterFetches.remove(capture.id) }
+        let origin = model.originID(of: capture)
+        do {
+            let detail: PPProjectDetail = try await client.get("projects/\(origin.uuidString.lowercased())")
+            let fetched = try await fetchPoster(detail.project, into: capture)
+            if fetched { LLog("picplace: poster of \(capture.displayTitle) fetched on open") }
+            return fetched
+        } catch {
+            LLog("picplace: poster of \(capture.displayTitle) on open — \(Self.describe(error))")
+            return false
+        }
+    }
+
     /// Preview-only projects, in step by revision, whose confirmed-asset
     /// count on PicPlace moved since this device last took their records.
     /// Until 2026-10-01 each took its records again — the project, two URLs,
@@ -667,15 +831,25 @@ extension PicPlaceController {
         for move in moves {
             guard let capture = model.capture(id: move.localID), let origin = UUID(uuidString: move.row.uuid) else { continue }
             let row = move.row
-            if let assets = lists[origin]?.filter({ $0.status == "confirmed" }), var record = records[origin],
-               let seen = record.serverConfirmedSeen, assets.count == row.assets.confirmed {
+            // The server's own tile is not news (picture tiers, stage 0):
+            // every count here is of what devices pushed.
+            if let assets = lists[origin]?.filter({ $0.status == "confirmed" }).accounted, var record = records[origin],
+               let seen = record.serverConfirmedSeen, assets.count == row.accountedConfirmed {
                 let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
                 let lightBefore = seen - (record.serverHeavyFiles ?? 0)
                 let serverPoster = assets.first { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName }?.sha256
                 let posterURL = model.projectFolderURL(for: capture).appendingPathComponent(ProjectFileRegistry.posterName)
-                let localPoster = await Task.detached(priority: .utility) { try? PicPlaceSyncRun.sha256(of: posterURL) }.value
+                // The hash the device recorded when it took the poster, else
+                // the file's — once.
+                let localPoster: String?
+                if let known = record.posterSHA256 {
+                    localPoster = known
+                } else {
+                    localPoster = await Task.detached(priority: .utility) { try? PicPlaceSyncRun.sha256(of: posterURL) }.value
+                }
                 if assets.count - heavy.count == lightBefore, serverPoster == localPoster {
                     record.serverConfirmedSeen = assets.count
+                    record.posterSHA256 = serverPoster
                     record.notePresence(row.presence, excluding: profile?.deviceID)
                     record.serverHeavyFiles = heavy.count
                     record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }
@@ -693,7 +867,7 @@ extension PicPlaceController {
             do {
                 try await pullUpdate(row, into: capture)
                 outcome.updated += 1
-                LLog("picplace: \(capture.displayTitle) — records fetched again (the server holds \(row.assets.confirmed) confirmed asset(s), this device had seen \(records[origin]?.serverConfirmedSeen.map(String.init) ?? "none"))")
+                LLog("picplace: \(capture.displayTitle) — records fetched again (the server holds \(row.accountedConfirmed) accounted asset(s), this device had seen \(records[origin]?.serverConfirmedSeen.map(String.init) ?? "none"))")
             } catch {
                 outcome.failures.append("\(row.name): \(Self.describe(error))")
             }
@@ -719,7 +893,8 @@ extension PicPlaceController {
               var manifest = object["manifest"] as? [String: Any] else {
             throw PicPlaceSyncRun.Failed(caption: "PicPlace sent no manifest for \(row.name).")
         }
-        let assets = (detail.assets ?? []).filter { $0.status == "confirmed" }
+        let confirmedAll = (detail.assets ?? []).filter { $0.status == "confirmed" }
+        let assets = confirmedAll.accounted
         if let manifestAssetID = manifest["manifest_asset"] as? String {
             let data = try await download(assetID: manifestAssetID, projectUUID: uuid, name: "manifest.json")
             guard let real = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -732,8 +907,14 @@ extension PicPlaceController {
 
         let bundleAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.bundleKind && $0.name == PicPlaceSyncInventory.bundleName })
         let posterAsset = assets.first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName })
-        // Both URLs in one request (`mintDownloads`).
-        let minted = await mintDownloads([bundleAsset?.id, posterAsset?.id].compactMap { $0 }, projectUUID: uuid)
+        let tileAsset = Self.freshTile(in: confirmedAll, poster: posterAsset)
+        // The poster this device holds already, by the hash it recorded:
+        // the records come again, the poster does not.
+        let posterPath = folder.appendingPathComponent(ProjectFileRegistry.posterName).path
+        let posterKept = posterAsset?.sha256 != nil && posterAsset?.sha256 == records[originID]?.posterSHA256
+            && FileManager.default.fileExists(atPath: posterPath)
+        // Every URL in one request (`mintDownloads`).
+        let minted = await mintDownloads([bundleAsset?.id, posterKept ? nil : posterAsset?.id, tileAsset?.id].compactMap { $0 }, projectUUID: uuid)
         if let bundle = bundleAsset {
             let data = try await download(assetID: bundle.id, projectUUID: uuid, name: "records.aar", minted: minted)
             let tmp = folder.appendingPathComponent("tmp", isDirectory: true)
@@ -743,9 +924,17 @@ extension PicPlaceController {
             try DirectoryArchive.extract(archive, to: folder)
             try? FileManager.default.removeItem(at: tmp)
         }
-        if let poster = posterAsset {
+        if let poster = posterAsset, !posterKept {
             let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg", minted: minted)
             try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
+        }
+        // The server's tile for this poster (stage 2), or none until its job
+        // has cut one for the new poster.
+        if let tile = tileAsset {
+            let data = try await download(assetID: tile.id, projectUUID: uuid, name: tile.name, minted: minted)
+            try Self.writeTile(data, name: tile.name, in: folder)
+        } else {
+            Self.removeTiles(in: folder)
         }
         try model.applyPulledUpdate(projectID: capture.id, originID: originID, capture: document.capture, blends: document.blends)
         model.noteFilesChanged(for: capture.id)
@@ -755,6 +944,8 @@ extension PicPlaceController {
         record.clearFailure()
         record.notePresence(row.presence, excluding: profile?.deviceID)
         record.posterToken = nil
+        record.tileSHA256 = tileAsset?.sha256
+        record.posterSHA256 = posterAsset?.sha256
         record.serverConfirmedSeen = assets.count
         let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
         record.serverHeavyFiles = heavy.count
@@ -778,11 +969,22 @@ extension PicPlaceController {
         let detail: PPProjectDetail = try await client.get("projects/\(uuid)")
         var record = records[originID] ?? PicPlaceSyncRecord(syncedAt: Date(), revision: row.revision, files: 0, bytes: 0, uploaded: 0, alsoOn: [], server: profile?.server ?? serverString, lastError: nil, policy: "pull")
         record.posterCheckedAt = Date()
-        record.serverConfirmedSeen = (detail.assets ?? []).filter { $0.status == "confirmed" }.count
+        record.serverConfirmedSeen = (detail.assets ?? []).filter { $0.status == "confirmed" }.accounted.count
         records[originID] = record
         guard let poster = (detail.assets ?? []).first(where: { $0.kind == PicPlaceSyncInventory.posterKind && $0.name == ProjectFileRegistry.posterName && $0.status == "confirmed" }) else { return false }
-        let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg")
-        try data.write(to: model.projectFolderURL(for: capture).appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
+        let tile = Self.freshTile(in: detail.assets ?? [], poster: poster)
+        let folder = model.projectFolderURL(for: capture)
+        let minted = await mintDownloads([poster.id, tile?.id].compactMap { $0 }, projectUUID: uuid)
+        let data = try await download(assetID: poster.id, projectUUID: uuid, name: "poster.jpg", minted: minted)
+        try data.write(to: folder.appendingPathComponent(ProjectFileRegistry.posterName), options: .atomic)
+        if let tile {
+            let tileData = try await download(assetID: tile.id, projectUUID: uuid, name: tile.name, minted: minted)
+            try Self.writeTile(tileData, name: tile.name, in: folder)
+        } else {
+            Self.removeTiles(in: folder)
+        }
+        records[originID]?.tileSHA256 = tile?.sha256
+        records[originID]?.posterSHA256 = poster.sha256
         model.noteFilesChanged(for: capture.id)
         model.noteIndexChanged()
         LLog("picplace: poster of \(row.name) (\(uuid.prefix(8))) fetched")

@@ -128,8 +128,14 @@ extension AppModel {
     func editorLookAheadJob(for capture: CaptureProject) -> EditorLookAheadJob? {
         switch editorAsset(for: capture) {
         case .still: return editorOpeningRender(for: capture).map(EditorLookAheadJob.still)
-        case .movie: return nil
-        case .preview, nil: return previewPictureURL(for: capture).map(EditorLookAheadJob.preview)
+        case .movie, .workingCopy: return nil
+        case .preview, nil:
+            // Stage 3's lazy posters: a neighbour without its poster asks for
+            // it while it is a swipe away, so the page opens on the poster.
+            if previewPictureURL(for: capture) == nil, case .preview = editorAsset(for: capture) {
+                Task { @MainActor in await picplace.fetchPosterOnOpen(capture) }
+            }
+            return previewPictureURL(for: capture).map(EditorLookAheadJob.preview)
         }
     }
 }

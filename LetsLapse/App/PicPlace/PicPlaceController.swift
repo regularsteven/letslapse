@@ -140,6 +140,11 @@ final class PicPlaceController: ObservableObject {
     /// The server's heavy assets per project from the last fresh read this
     /// session, keyed by origin id — the card's per-file truth.
     @Published internal(set) var serverHeavy: [UUID: [PicPlaceOriginalsCheck.RemoteAsset]] = [:]
+    /// The renditions PicPlace holds per project, read off the index rows
+    /// at every check (picture tiers, push 1; nil from a server before them):
+    /// the working-copy sweep's "another device already sent it", and the
+    /// grid's tile pointer.
+    @Published internal(set) var serverRenditions: [UUID: PPRenditions] = [:]
     /// When a view last asked for a project's list (`askForListing`), by
     /// origin id — a screen of rows asks once.
     var listingAskedAt: [UUID: Date] = [:]
@@ -220,6 +225,22 @@ final class PicPlaceController: ObservableObject {
     /// PicPlace keeps each library's collections (`features["collections"]`,
     /// docs/picplace-collections-ask.md) — the collections sync's switch.
     private(set) var serverSyncsCollections = false
+    /// Picture tiers (docs/picture-tiers-plan.md; the server's contract is
+    /// picplace `docs/letslapse-picture-tiers.md`): the index row carries
+    /// rendition pointers (`features.renditions`, push 1); the server cuts a
+    /// tile from every poster (`features.tiles`, the switch Steven turns on
+    /// at picplace.co once this build is on the devices); the unclaimed
+    /// batch endpoints exist (`features.rendition_batches`, push 2). Every
+    /// path keeps today's behaviour while its flag is false.
+    private(set) var serverHasRenditions = false
+    private(set) var serverHasTiles = false
+    private(set) var serverHasRenditionBatches = false
+    private(set) var serverRenditionKinds: [String] = []
+    /// The renditions' share of the account's storage (`storage.renditions`,
+    /// push 2) — the Settings card's "working copies on PicPlace · N GB".
+    @Published private(set) var serverRenditionsFigure: PPRenditionsFigure?
+    /// Posters being fetched on open (stage 3's lazy posters), by project.
+    var posterFetches: Set<UUID> = []
     /// The push a few seconds after a collection changes here.
     var collectionsPushTask: Task<Void, Never>?
     /// The first connection's progress while it runs (§4.1 step 4).
@@ -346,6 +367,14 @@ final class PicPlaceController: ObservableObject {
     var originalsQueueTask: Task<Void, Never>?
     /// The walk that sends blends on their own (D1, `runBlendsQueue`).
     var blendsQueueTask: Task<Void, Never>?
+    /// The working-copy sweep (picture tiers, stage 1).
+    var proxyQueueTask: Task<Void, Never>?
+    /// DEBUG, `LL_RENDITIONS=sweep`: the Simulator reports no battery, so a
+    /// bench sweep there ignores the charger rule.
+    var proxySweepIgnoresCharger = false
+    /// The last renditions tally the check logged, so the line appears when
+    /// the pointers move and not at every check.
+    var renditionsTallyLogged: (posters: Int, tiles: Int, proxies: Int)?
     /// A running transfer's background activity, by project — its progress
     /// goes to the Lock Screen when a continued task holds the app.
     var transferActivities: [UUID: PicPlaceBackgroundActivity] = [:]
@@ -389,6 +418,7 @@ final class PicPlaceController: ObservableObject {
     /// (2026-09-29): after a check that changed nothing, a walk reads every
     /// project to the same end — every three minutes, all night.
     var blendsWalkSeen: (key: WalkKey, at: Date)?
+    var proxyWalkSeen: (key: WalkKey, at: Date)?
     var originalsWalkSeen: (key: WalkKey, at: Date)?
     /// The first two are legacy install-wide keys: read once into the
     /// library's `settings.json` (then removed), and still honoured from
@@ -911,6 +941,18 @@ final class PicPlaceController: ObservableObject {
         // filing (or a pull) left posters unnoted (`settlePosters`).
         serverListsAssetsInBatches = status.features["asset_lists_batch"] == true
         serverSyncsCollections = status.features["collections"] == true
+        let tiersBefore = (serverHasRenditions, serverHasTiles, serverHasRenditionBatches)
+        serverHasRenditions = status.features["renditions"] == true
+        serverHasTiles = status.features["tiles"] == true
+        serverHasRenditionBatches = status.features["rendition_batches"] == true
+        serverRenditionKinds = status.limits?.renditionKinds ?? []
+        serverRenditionsFigure = status.storage.renditions
+        if tiersBefore != (serverHasRenditions, serverHasTiles, serverHasRenditionBatches) {
+            // Once per change, so a production check shows what the server
+            // says (picture tiers: push 1 = pointers, the tile switch; push 2
+            // = the batch endpoints).
+            LLog("picplace: picture tiers on \(sessionHost) — rendition pointers \(serverHasRenditions ? "on" : "off"), tiles \(serverHasTiles ? "on" : "off"), rendition batches \(serverHasRenditionBatches ? "on" : "off")\(serverRenditionKinds.isEmpty ? "" : " (\(serverRenditionKinds.joined(separator: ", ")))")")
+        }
         noteNearbyKey(status)
         #if DEBUG
         // `LL_PICPLACE_NO_BATCH=1`: behave as a server without the batched
@@ -1698,6 +1740,7 @@ final class PicPlaceController: ObservableObject {
         pushQueueTask?.cancel(); pushQueueTask = nil
         originalsQueueTask?.cancel(); originalsQueueTask = nil
         blendsQueueTask?.cancel(); blendsQueueTask = nil
+        proxyQueueTask?.cancel(); proxyQueueTask = nil
         heavyRecheckTask?.cancel(); heavyRecheckTask = nil
         reachabilityProbe?.cancel(); reachabilityProbe = nil
         verifySweep?.cancel(); verifySweep = nil
@@ -1897,7 +1940,8 @@ final class PicPlaceController: ObservableObject {
             originUUID: capture.derivedFromOriginID,
             manifestMaxBytes: manifestMaxBytes,
             tier: tier,
-            library: serverHasLibraries ? scope : nil)
+            library: serverHasLibraries ? scope : nil,
+            bucket: serverHasRenditionBatches ? Self.bucket(for: capture.createdAt) : nil)
         // Every originals run can be stopped between files (2026-09-24): a
         // job's Pause, Pause for all sending, the Wi-Fi rule, iOS about to
         // suspend the app. What finished is confirmed first.
@@ -1918,6 +1962,12 @@ final class PicPlaceController: ObservableObject {
         let posterToken = currentPosterToken(for: capture)
         let posterKind = model.mediaKind(for: capture)
         let lastPosterToken = records[key]?.posterToken
+        // The working copy (picture tiers, stage 1): rendered beside the
+        // poster when the project needs one and the one on disk is not this
+        // recipe's — the walk then finds it as a `proxy` object; an exempt
+        // project's stale copy is removed so nothing of it goes up. nil =
+        // the project is its own working copy (D6).
+        let proxyToken = currentProxyToken(for: capture)
         syncTasks[capture.id] = Task {
             // A job a person just started — Upload, Resume, Use mobile data —
             // asks iOS to hold the app while it runs. Everything else keeps
@@ -1945,9 +1995,15 @@ final class PicPlaceController: ObservableObject {
             do {
                 // A preview-only project's "source" IS its poster: nothing to
                 // render, the file it has is the one that goes.
-                if policy.sendsRecords, let posterSource, posterSource.lastPathComponent != ProjectFileRegistry.posterName {
+                if policy.sendsRecords, let posterSource, !ProjectFileRegistry.isFinishedPicture(fileName: posterSource.lastPathComponent) {
                     _ = await PicPlacePoster.ensure(sourceURL: posterSource, kind: posterKind, grade: grade, token: posterToken,
                                                     lastToken: lastPosterToken, in: folder)
+                    if let proxyToken {
+                        _ = await PicPlaceProxy.ensure(sourceURL: posterSource, grade: grade,
+                                                       nameToken: PicPlaceSyncRun.proxyNameToken(for: proxyToken), in: folder)
+                    } else {
+                        PicPlaceProxy.removeAll(in: folder)
+                    }
                 }
                 // Each blend here gets its still (`posters/<id>.jpg`, in the
                 // records bundle) before the records go, so a device that
@@ -1963,6 +2019,7 @@ final class PicPlaceController: ObservableObject {
                 let divergent = record.divergentFiles
                 let changed = record.changedFiles
                 record.posterToken = posterToken
+                record.proxyToken = proxyToken
                 let previousRecord = records[key]
                 if let previous = previousRecord {
                     // A push of one policy keeps what the other recorded.
@@ -1976,7 +2033,7 @@ final class PicPlaceController: ObservableObject {
                     record.divergentFiles = previous.divergentFiles
                     record.changedFiles = previous.changedFiles
                     record.blendsDigest = previous.blendsDigest
-                    if policy == .minimal { record.posterToken = posterToken }
+                    if policy == .minimal { record.posterToken = posterToken; record.proxyToken = proxyToken }
                 }
                 record.clearFailure()
                 if policy == .blends {
@@ -1988,6 +2045,7 @@ final class PicPlaceController: ObservableObject {
                     record.heavyFiles = previousRecord?.heavyFiles
                     record.heavyBytes = previousRecord?.heavyBytes
                     record.posterToken = previousRecord?.posterToken ?? record.posterToken
+                    record.proxyToken = previousRecord?.proxyToken ?? record.proxyToken
                     serverHeavy[key] = nil
                     refreshHeavyListing(for: capture)
                 } else if policy.sendsHeavy {
@@ -2220,6 +2278,17 @@ final class PicPlaceController: ObservableObject {
         let source = model.thumbnailURL(for: capture)
         return model.photoGrade(for: capture).cacheToken
             + (source.map { ProjectOrientation.shared.keySuffix(for: $0) } ?? "")
+    }
+
+    /// The working copy's token (docs/picture-tiers-plan.md §3.2): the
+    /// grade's `proxyToken` — the cache token with the crop left out — plus
+    /// the project's quarter turns, as the poster's carries them: the render
+    /// applies the turns, so a Rotate 90° re-renders the copy. nil when the
+    /// project is its own working copy (D6) or has no picture here.
+    func currentProxyToken(for capture: AppModel.CaptureProject) -> String? {
+        guard model.needsProxy(for: capture), let source = model.thumbnailURL(for: capture),
+              !ProjectFileRegistry.isFinishedPicture(fileName: source.lastPathComponent) else { return nil }
+        return model.proxyRecipeToken(for: capture)
     }
 
     func syncAndWait(_ capture: AppModel.CaptureProject, policy: PicPlaceSyncPolicy? = nil) async {

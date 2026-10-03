@@ -212,3 +212,19 @@ public struct ProjectHoldings: Equatable, Sendable {
             bytesAreComplete: complete)
     }
 }
+
+/// Whether a project needs a full-size working copy (a *proxy*) on PicPlace,
+/// or is its own (docs/picture-tiers-plan.md §3.3; Steven's D6, 2026-10-03).
+/// A raw source always does: the engine's neutral is its hidden base look,
+/// not a no-op. A display-referred source — JPEG, HEIC, PNG, a stack blend —
+/// does only when the proxy's recipe would move a pixel: a preset or slider,
+/// an owned or declared white, a keyframe (all inside `colourIdentity`), a
+/// level, or a render variant other than the baseline. The crop is NOT in the
+/// recipe: it is a record applied on display. A flat JPEG carries its profile
+/// in the file, so an unedited one is its own working copy too.
+public enum ProxyRule {
+    public static func needsProxy(sourceIsRaw: Bool, colourIdentity: Bool, hasLevel: Bool, baselineVariant: Bool) -> Bool {
+        if sourceIsRaw { return true }
+        return !colourIdentity || hasLevel || !baselineVariant
+    }
+}

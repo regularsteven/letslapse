@@ -91,7 +91,7 @@ private struct EditorPreviewPageContent: View {
     var body: some View {
         if let arrived {
             switch arrived {
-            case .still(let url):
+            case .still(let url), .workingCopy(let url):
                 PhotoViewerView(captureID: captureID, url: url, exitRequest: exitRequest, onExit: onExit, paging: paging)
             case .movie(let url):
                 VideoEditorView(captureID: captureID, url: url, exitRequest: exitRequest, onExit: onExit, paging: paging)
@@ -144,7 +144,7 @@ private struct EditorPreviewPageContent: View {
             get: { prompt != nil }, set: { if !$0 { prompt = nil } }), presenting: prompt) { prompt in
             promptActions(prompt)
         } message: { prompt in
-            Text(prompt.content.message)
+            Text(promptMessage(prompt))
         }
     }
 
@@ -433,6 +433,11 @@ private struct EditorPreviewPageContent: View {
                size.height > 0 {
                 pictureAspect = size.width / size.height
             }
+            // Stage 3's lazy posters: the tile is on screen; the poster comes
+            // now that the page is open, and the page draws it when it lands.
+            Task { @MainActor in
+                if await model.picplace.fetchPosterOnOpen(capture) { await loadPicture() }
+            }
         }
         pictureSettled = true
         if let paging { paging.onPicture(captureID) } else { PageTurnTrace.finish("picture") }
@@ -519,21 +524,51 @@ private struct EditorPreviewPageContent: View {
             case .line: return EditorPageRequest(captureID: id, page: .editor)
             }
         }
+
+        /// Text, Masks and the crop compose on a full-size picture — the
+        /// working copy is enough (stage 4); everything else is a pixel edit.
+        var capability: ProjectCapability {
+            switch self {
+            case .tab(.text), .tab(.masks), .group(.crop): return .overlayEdit
+            default: return .pixelEdit
+            }
+        }
     }
 
     private func ask(_ tapped: Tapped) {
         guard let capture else { return }
-        guard let shortfall = model.availability(of: .pixelEdit, for: capture).shortfall else {
+        guard let shortfall = model.availability(of: tapped.capability, for: capture).shortfall else {
             // Here after all (a download landed between frames).
             checkArrival()
             return
         }
         prompt = PagePrompt(tapped: tapped, content: FetchPromptContent(
             subject: tapped.subject, shortfall: shortfall, noun: noun(for: shortfall),
-            offer: picplace.fetchOffer(for: capture, shortfall: shortfall)))
+            offer: picplace.fetchOffer(for: capture, shortfall: shortfall)),
+            workingCopy: tapped.capability == .overlayEdit ? picplace.workingCopyOffer(for: capture) : nil)
+    }
+
+    /// The prompt's words, with the working copy's line when one is on offer.
+    private func promptMessage(_ prompt: PagePrompt) -> String {
+        guard let copy = prompt.workingCopy else { return prompt.content.message }
+        return prompt.content.message + " A working copy (\(LLFormat.bytes(copy.bytes ?? 0))) is on PicPlace — enough for text, masks, shapes and the crop."
+    }
+
+    /// The working copy from PicPlace, then the page that was asked for.
+    private func downloadWorkingCopy(landing: EditorPageRequest) {
+        guard let capture else { return }
+        resume = landing
+        Task { @MainActor in
+            if await picplace.fetchWorkingCopy(capture) { checkArrival() } else { resume = nil }
+        }
     }
 
     @ViewBuilder private func promptActions(_ prompt: PagePrompt) -> some View {
+        if let copy = prompt.workingCopy {
+            Button("Download Working Copy (\(LLFormat.bytes(copy.bytes ?? 0)))") {
+                downloadWorkingCopy(landing: prompt.tapped.landing(captureID))
+            }
+        }
         switch prompt.content.offer {
         case .download:
             Button("Download and Continue") { download(prompt.content.shortfall, landing: prompt.tapped.landing(captureID)) }
@@ -760,7 +795,8 @@ private struct EditorPreviewPageContent: View {
     /// panel that was asked for. Whoever brought the files — the prompt, the
     /// line, the project card — the page becomes what it stood in for.
     private func checkArrival() {
-        guard arrived == nil, !isDownloading, let capture, let asset = model.editorAsset(for: capture) else { return }
+        guard arrived == nil, !isDownloading, let capture,
+              let asset = model.editorAsset(for: capture) ?? model.workingCopyAsset(for: capture) else { return }
         model.requestedEditorPage = resume ?? EditorPageRequest(captureID: captureID, page: .editor)
         withAnimation(.easeInOut(duration: 0.2)) { arrived = asset }
     }
@@ -770,7 +806,7 @@ private struct EditorPreviewPageContent: View {
     }
 
     #if DEBUG
-    /// `LL_PREVIEW_PROMPT=<group>|text|frames|masks|line[:download]` —
+    /// `LL_PREVIEW_PROMPT=<group>|text|frames|masks|line[:download|:working]` —
     /// raises the just-in-time prompt on the first preview page, for
     /// screenshots; `:download` then presses *Download and Continue* two
     /// seconds later, as a finger would (the bench, on a Simulator no
@@ -792,6 +828,13 @@ private struct EditorPreviewPageContent: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             ask(tapped)
+            if parts.dropFirst().contains("working") {
+                guard let asked = prompt else { LLog("LL_PREVIEW_PROMPT: no prompt to press"); return }
+                prompt = nil
+                downloadWorkingCopy(landing: asked.tapped.landing(captureID))
+                LLog("LL_PREVIEW_PROMPT: pressed Download Working Copy for \(asked.tapped.subject)")
+                return
+            }
             guard presses else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 guard let asked = prompt, asked.content.offer == .download else {
@@ -815,6 +858,9 @@ private struct PagePrompt: Identifiable {
     let id = UUID()
     var tapped: EditorPreviewPageContent.Tapped
     var content: FetchPromptContent
+        /// The working copy PicPlace holds for this project, when the
+        /// page asked for compose on (stage 4) — a third button.
+        var workingCopy: PPRendition? = nil
 }
 
 private struct PreviewFootHeightKey: PreferenceKey {

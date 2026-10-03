@@ -103,7 +103,7 @@ struct ProjectThumbnailView: View {
     /// device (v2 plan §3.5) is a finished, already-graded picture — decoded
     /// as the image it is whatever the project's kind, and never graded a
     /// second time.
-    private var isPoster: Bool { url?.lastPathComponent == ProjectFileRegistry.posterName }
+    private var isPoster: Bool { url.map { ProjectFileRegistry.isFinishedPicture(fileName: $0.lastPathComponent) } ?? false }
     private var effectiveKind: AppModel.MediaKind { isPoster ? .image : kind }
     private var effectiveGrade: PhotoGrade? { isPoster ? nil : grade }
 }

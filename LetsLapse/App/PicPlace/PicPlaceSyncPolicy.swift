@@ -59,6 +59,9 @@ enum PicPlaceSyncInventory {
     static let bundleKind = "records"
     static let bundleContentType = "application/octet-stream"
     static let posterKind = "preview"
+    /// The full-size working copy's kind (picture tiers; the server's
+    /// contract names it `picture-<token>.heic` under `proxy`).
+    static let proxyKind = "proxy"
 
     /// Classifies the folder's regular files. Everything under `tmp/` and
     /// the dot files were already left out by the listing.
@@ -85,6 +88,13 @@ enum PicPlaceSyncInventory {
 
     static func role(for relativePath: String) -> PicPlaceSyncItem.Role {
         if relativePath == ProjectFileRegistry.projectDocumentName { return .manifest }
+        // Picture tiers (docs/picture-tiers-plan.md §3.1), decided before
+        // the travels guard since neither travels in a `.lapse`: the tile is
+        // the server's own, cut from the poster — pulled, never pushed; the
+        // proxy is a device's full-size working copy under kind `proxy` (a
+        // pulled one re-negotiates as unchanged: one item, no transfer).
+        if ProjectFileRegistry.isTile(fileName: relativePath) { return .skipped("server-made") }
+        if ProjectFileRegistry.isProxyPicture(fileName: relativePath) { return .object(kind: proxyKind) }
         guard let entry = ProjectFileRegistry.entry(forRelativePath: relativePath) else {
             return .skipped("not a registered project file")
         }

@@ -216,6 +216,7 @@ struct GalleryView: View {
             .armsProjectSharing(model.transferServer, isEnabled: sharingEnabled)
             .onAppear   { consumeSelectHook() }
             .onAppear   { consumeItemHook() }
+            .onChange(of: sortedIDs.count) { _, _ in consumeItemHook() }
             #if DEBUG
             .onAppear {
                 if let hooked = ListDebugHooks.filter { filter = hooked }
@@ -1093,6 +1094,10 @@ struct GalleryView: View {
         // Once: on iOS a cover's dismissal re-appears the grid, and the
         // hook would open the pager again after every Back.
         guard !itemHookConsumed, let raw = ProcessInfo.processInfo.environment["LL_ITEM"] else { return }
+        // The grid's rows arrive a beat after the tab (the library walk):
+        // a hook that fired on the empty grid was spent without opening
+        // anything (2026-10-03). Wait for the rows.
+        guard !sortedIDs.isEmpty else { return }
         itemHookConsumed = true
         #if os(macOS)
         guard focus == nil else { return }
@@ -1107,9 +1112,10 @@ struct GalleryView: View {
         } else {
             capture = UUID(uuidString: parts[0]).flatMap { id in sortedIDs.contains(id) ? model.capture(id: id) : nil }
         }
-        guard let capture else { return }
+        guard let capture else { LLog("LL_ITEM: \(parts[0]) is not in the grid (\(sortedIDs.count) rows)"); return }
+        LLog("LL_ITEM: opening \(capture.displayTitle) on \(page.rawValue)")
         #if os(macOS)
-        enterItem(capture, page: page)
+        if !enterItem(capture, page: page) { LLog("LL_ITEM: the editor could not be staged for \(capture.displayTitle)") }
         #else
         // A cover raised in the same pass as the tab's appearance is
         // dropped on iOS (see `LL_SYNC_PANEL`); give the screen the turn.

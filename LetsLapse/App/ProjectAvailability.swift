@@ -21,6 +21,11 @@ enum ProjectCapability: Hashable {
     /// The editor's groups and pages, presets from anywhere, Rotate 90°
     /// (rule 6): the originals — a Photo capture, its picture.
     case pixelEdit
+    /// Text, Masks, shapes and the crop (picture tiers, stage 4): a
+    /// full-size picture to compose on — the originals' picture, or the
+    /// project's working copy (`picture-<token>.heic`), which carries the
+    /// grade in its pixels and is enough for everything that is a record.
+    case overlayEdit
     /// A new blend of any kind (rule 1): every original.
     case newBlend
     /// The shoot's frames one by one — View all photos, Review, Stabilise,
@@ -125,7 +130,7 @@ extension AppModel {
         var holdings = ProjectHoldings(
             originals: inputs.originals, blends: inputs.blends, pictureBlendID: inputs.pictureBlendID,
             present: present, recordedBytes: recorded,
-            hasPreview: present[ProjectFileRegistry.posterName] != nil)
+            hasPreview: present[ProjectFileRegistry.posterName] != nil || ProjectFileRegistry.tileCandidates.contains { present[$0] != nil })
         // The heavy set here, fingerprinted as PicPlace's backed-up marker
         // is (`heavyDigest`) — what the holdings pill's green tick compares.
         let heavy = PicPlaceController.heavyFiles(entries)
@@ -137,6 +142,72 @@ extension AppModel {
 
     /// A Photo capture's picture when it is a stack (a JPEG burst): the
     /// newest image blend. What its editor, tile and hero stand for.
+    /// Whether this project's working copy must be rendered (docs/picture-tiers-plan.md
+    /// §3.3, Steven's D6): a raw source always, a display-referred one only
+    /// when the proxy's recipe would move a pixel; never a video, which has
+    /// no proxy yet. An unedited JPEG, HEIC or stack blend is its own
+    /// working copy, fetched through the originals path.
+    func needsProxy(for capture: CaptureProject) -> Bool {
+        guard capture.kind == .photos else { return false }
+        let picture = pictureBlend(for: capture)
+        let sourceIsRaw = picture == nil && (sourceFrameURLs(for: capture).first.map(ImportedStills.isRaw) ?? false)
+        let grade = photoGrade(for: capture)
+        return ProxyRule.needsProxy(
+            sourceIsRaw: sourceIsRaw, colourIdentity: grade.isColorIdentity, hasLevel: grade.hasRotation,
+            baselineVariant: RenderVariantRegistry.current.id == RenderVariantRegistry.baselineID)
+    }
+
+    /// The server's grid tile beside the project's poster, if one is here
+    /// (stage 2) — what a project with no picture on this device is drawn
+    /// from in grids and lists.
+    func tileURL(for capture: CaptureProject) -> URL? {
+        ProjectFileRegistry.tileURL(in: projectFolderURL(for: capture))
+    }
+
+    /// The recipe token a project's working copy is named by (docs/picture-tiers-plan.md
+    /// §3.2): the grade's proxy token — the cache token without the crop —
+    /// and the quarter turns the render applies, read off any frame of the
+    /// project (the turns are the project's). One place for the holder that
+    /// renders and the device that looks, so the two agree by construction.
+    func proxyRecipeToken(for capture: CaptureProject) -> String {
+        let folder = projectFolderURL(for: capture)
+        let frame = (capture.sourceFileNames.first { !$0.hasSuffix(".json") }).map { folder.appendingPathComponent($0) }
+        var token = photoGrade(for: capture).proxyToken + (frame.map { ProjectOrientation.shared.keySuffix(for: $0) } ?? "")
+        #if DEBUG
+        // `LL_RENDITIONS_SALT=<s>`: every working copy reads stale under a
+        // new name — the bench for a re-render and `replaces`.
+        if let salt = ProcessInfo.processInfo.environment["LL_RENDITIONS_SALT"], !salt.isEmpty { token += "|salt\(salt)" }
+        #endif
+        return token
+    }
+
+    /// `picture-<token>.heic` — the name the project's working copy has on
+    /// PicPlace and here, from the records alone.
+    func expectedProxyName(for capture: CaptureProject) -> String {
+        ProjectFileRegistry.proxyPictureName(token: PicPlaceSyncRun.proxyNameToken(for: proxyRecipeToken(for: capture)))
+    }
+
+    /// The project's working copy here, when it is the one the records
+    /// expect — a copy of an earlier grade is not it.
+    func workingCopyURL(for capture: CaptureProject) -> URL? {
+        let url = projectFolderURL(for: capture).appendingPathComponent(expectedProxyName(for: capture))
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// Full-size pixels a page may compose on: the originals' picture when
+    /// it is here, else a fresh working copy, else nothing (stage 4).
+    func workingPictureURL(for capture: CaptureProject) -> URL? {
+        if let asset = editorAsset(for: capture), case .still(let url) = asset { return url }
+        return workingCopyURL(for: capture)
+    }
+
+    /// The editor's asset for a project whose originals are not here but
+    /// whose working copy is.
+    func workingCopyAsset(for capture: CaptureProject) -> EditorAsset? {
+        guard capture.kind == .photos, editorAsset(for: capture) == nil else { return nil }
+        return workingCopyURL(for: capture).map(EditorAsset.workingCopy)
+    }
+
     func pictureBlend(for capture: CaptureProject) -> BlendProject? {
         guard capture.isPhotoCapture else { return nil }
         return blends(for: capture).first { $0.kind == .image }
@@ -231,7 +302,7 @@ extension AppModel {
     func need(for capability: ProjectCapability, in holdings: ProjectHoldings) -> ProjectHoldings.Need {
         switch capability {
         case .browse, .metadata: return .nothing
-        case .pixelEdit: return holdings.pictureNeed
+        case .pixelEdit, .overlayEdit: return holdings.pictureNeed
         case .newBlend, .frames: return .originals
         case .blend(let id): return .blends([id])
         case .exportProject: return ProjectHoldings.Need(originals: true, blendIDs: Set(holdings.blends.map(\.id)))
@@ -241,6 +312,10 @@ extension AppModel {
     /// The whole answer — what is missing and what it weighs. Walks the
     /// folder on a cache miss: for a tap, a prompt, a page.
     func availability(of capability: ProjectCapability, for capture: CaptureProject) -> CapabilityAvailability {
+        // A working copy answers the overlay pages before the holdings do:
+        // the shortfall it reports otherwise is the originals', which is
+        // what the prompt offers beside the copy.
+        if capability == .overlayEdit, workingPictureURL(for: capture) != nil { return .available }
         let holdings = holdings(for: capture)
         guard let shortfall = holdings.shortfall(for: need(for: capability, in: holdings)) else { return .available }
         return .needs(shortfall)
@@ -251,11 +326,12 @@ extension AppModel {
     /// (a stat per frame once per session for a complete shoot, one stat
     /// for a missing one).
     func isAvailable(_ capability: ProjectCapability, for capture: CaptureProject) -> Bool {
+        if capability == .overlayEdit { return workingPictureURL(for: capture) != nil }
         if let holdings = holdingsStore.cache[capture.id] {
             return holdings.shortfall(for: need(for: capability, in: holdings)) == nil
         }
         switch capability {
-        case .browse, .metadata:
+        case .browse, .metadata, .overlayEdit:
             return true
         case .pixelEdit:
             if let picture = pictureBlend(for: capture) { return !blendFileMissing(picture) }

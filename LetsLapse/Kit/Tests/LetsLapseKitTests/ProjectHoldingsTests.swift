@@ -148,4 +148,20 @@ final class ProjectHoldingsTests: XCTestCase {
     }
 
     private typealias Need = ProjectHoldings.Need
+
+    /// Steven's D6 table (docs/picture-tiers-plan.md §3.3): a raw source
+    /// always needs a working copy; a display-referred one only when the
+    /// proxy's recipe moves a pixel — and the crop is not in the recipe.
+    func testProxyRuleFollowsTheTable() {
+        // raw, whatever the grade
+        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: true, colourIdentity: true, hasLevel: false, baselineVariant: true))
+        // an unedited JPEG, HEIC, flat JPEG or stack blend is its own working copy
+        XCTAssertFalse(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: true, hasLevel: false, baselineVariant: true))
+        // a preset, a slider, a white, a keyframe
+        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: false, hasLevel: false, baselineVariant: true))
+        // a level
+        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: true, hasLevel: true, baselineVariant: true))
+        // a render variant other than the baseline
+        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: true, hasLevel: false, baselineVariant: false))
+    }
 }

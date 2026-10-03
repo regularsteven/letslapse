@@ -17,6 +17,29 @@ final class ProjectFileRegistryTests: XCTestCase {
         XCTAssertFalse(plain.matches(fileName: "capture_log.json.bak"))
     }
 
+    /// Picture tiers (docs/picture-tiers-plan.md §3.1): the server's tile,
+    /// whatever extension it chose, and a device's working copy are known
+    /// root files — derived, never travelling — and a stray near them is not.
+    func testPictureTiersAreRegisteredAndNeverTravel() {
+        for name in ["tile.webp", "tile.jpg", "tile.avif"] {
+            XCTAssertTrue(ProjectFileRegistry.isTile(fileName: name), name)
+            XCTAssertEqual(ProjectFileRegistry.entry(forRelativePath: name)?.class, .derived, name)
+            XCTAssertEqual(ProjectFileRegistry.entry(forRelativePath: name)?.travels, false, name)
+        }
+        XCTAssertFalse(ProjectFileRegistry.isTile(fileName: "tiles.webp"))
+        XCTAssertFalse(ProjectFileRegistry.isTile(fileName: "poster.jpg"))
+        let proxy = ProjectFileRegistry.proxyPictureName(token: "3f9a1c0b7e2d")
+        XCTAssertEqual(proxy, "picture-3f9a1c0b7e2d.heic")
+        XCTAssertTrue(ProjectFileRegistry.isProxyPicture(fileName: proxy))
+        XCTAssertEqual(ProjectFileRegistry.entry(forRelativePath: proxy)?.class, .derived)
+        XCTAssertEqual(ProjectFileRegistry.entry(forRelativePath: proxy)?.travels, false)
+        XCTAssertFalse(ProjectFileRegistry.isProxyPicture(fileName: "picture.heic"))
+        XCTAssertFalse(ProjectFileRegistry.isProxyPicture(fileName: "picture-3f9a.jpg"))
+        XCTAssertFalse(ProjectFileRegistry.travellingRootFiles.contains(ProjectFileRegistry.tilePattern))
+        XCTAssertFalse(ProjectFileRegistry.travellingRootFiles.contains(ProjectFileRegistry.proxyPicturePattern))
+        XCTAssertFalse(ProjectFileRegistry.auditedSidecars.contains { $0.isPattern })
+    }
+
     func testEntryForRelativePathClassifiesEveryShape() throws {
         XCTAssertEqual(ProjectFileRegistry.entry(forRelativePath: "assets.ndjson")?.class, .edit)
         XCTAssertEqual(ProjectFileRegistry.entry(forRelativePath: "poster.jpg")?.class, .derived)

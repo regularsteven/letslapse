@@ -506,6 +506,7 @@ struct EditorPager: View {
         let type = asset.url.pathExtension.uppercased()
         switch asset {
         case .preview: return "preview"
+        case .workingCopy: return "working copy \(type)"
         case .movie: return "video \(type)"
         case .still:
             if capture.isPhotoCapture { return "photo \(type)" }
@@ -521,7 +522,7 @@ struct EditorPager: View {
         // A preview's `poster.jpg` is a finished, already-graded picture —
         // the tile's rule (`ProjectThumbnailView.isPoster`): decoded as the
         // image it is and never graded a second time (it was, 2026-09-25).
-        let isPoster = url?.lastPathComponent == ProjectFileRegistry.posterName
+        let isPoster = url.map { ProjectFileRegistry.isFinishedPicture(fileName: $0.lastPathComponent) } ?? false
         let grade = isPoster ? nil : capture.map(model.photoGrade(for:))
         return Poster(
             id: id,

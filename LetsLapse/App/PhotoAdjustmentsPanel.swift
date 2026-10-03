@@ -128,6 +128,9 @@ struct PhotoAdjustmentsPanel: View {
     @Binding var adjustments: PhotoAdjustments
     var group: EditorGroup
     var layout: EditorPanelLayout
+    /// On a working copy (stage 4) the level is in the picture's pixels:
+    /// the crop group shows its chips and frame, not the Angle slider.
+    var hidesLevel = false
     /// `.dark` on the iOS editors, `.light` on the Mac — colours, knob sizes,
     /// chip look. The header's shape follows it too: the dark editors get
     /// the ✕ / ✓ circles, the Mac card gets Revert / Done.
@@ -1246,20 +1249,22 @@ struct PhotoAdjustmentsPanel: View {
         // in its stacked shape, so a text layer's Angle row and this one are
         // the same instrument. It writes through the same binding as every
         // colour, so the timeline keyframes and eases it exactly like them.
-        RotationSlider(
-            label: "Angle",
-            degrees: Binding(
-                get: { Double(adjustments.rotationDegrees) },
-                set: { adjustments.rotationDegrees = Float($0) }),
-            style: .stacked, accent: accent,
-            onEditing: { editing in onFieldEditing?(.rotation, editing) },
-            isKeyframed: keyframedFields.contains(.rotation),
-            onReset: onResetField.map { reset in { reset(.rotation) } })
-        Text("Levels the picture and crops in so no corner shows black. Baked into blended and guided clips; set it at more than one moment and it eases between them.")
-            .font(.system(size: 11))
-            .foregroundStyle(.tertiary)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        if !hidesLevel {
+            RotationSlider(
+                label: "Angle",
+                degrees: Binding(
+                    get: { Double(adjustments.rotationDegrees) },
+                    set: { adjustments.rotationDegrees = Float($0) }),
+                style: .stacked, accent: accent,
+                onEditing: { editing in onFieldEditing?(.rotation, editing) },
+                isKeyframed: keyframedFields.contains(.rotation),
+                onReset: onResetField.map { reset in { reset(.rotation) } })
+            Text("Levels the picture and crops in so no corner shows black. Baked into blended and guided clips; set it at more than one moment and it eases between them.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     /// Original · 1:1 · 4:5 · 16:9 · 9:16 · Custom, every chip the same width.

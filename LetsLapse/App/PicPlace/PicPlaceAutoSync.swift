@@ -1,6 +1,9 @@
 import Foundation
 import Network
 import LetsLapseKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Auto-sync (v2 plan §4.7): the Lightroom experience — an edit reaches
 /// PicPlace shortly after it settles, other devices' changes arrive on their
@@ -592,7 +595,7 @@ extension PicPlaceController {
             LLog("picplace: push queue — \(sent) sent, \(failed) failed\(pushQueue.isEmpty && heldPushes.isEmpty ? "" : ", \(pushQueue.count + heldPushes.count) held")\(sendsPaused ? " (paused)" : "")")
         }
         updateAutoError()
-        if sent > 0 { scheduleOriginalsQueue(); scheduleBlendsQueue() }
+        if sent > 0 { scheduleOriginalsQueue(); scheduleBlendsQueue(); scheduleProxyQueue() }
     }
 
     private enum PushOutcome { case sent, failed, nothing }
@@ -884,6 +887,138 @@ extension PicPlaceController {
             heavyRecheckTask = nil
             scheduleBlendsQueue(force: true)
         }
+    }
+
+    /// Whether a working copy may be rendered on its own right now (picture
+    /// tiers, stage 1): every rule an automatic send keeps, and on iOS the
+    /// charger — a full-size render per project is GPU time and heat, and
+    /// the sweep over an old library is hours of it. The Mac renders
+    /// whenever the rules hold.
+    var proxyRendersAllowed: Bool {
+        guard heavyChecksAllowed else { return false }
+        // A render per project back to back is heat; the sweep stands down
+        // at `serious` and carries on when the device has cooled (the walk
+        // resumes where the rules let it).
+        switch ProcessInfo.processInfo.thermalState {
+        case .serious, .critical: return false
+        default: break
+        }
+        #if os(iOS)
+        if proxySweepIgnoresCharger { return true }
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        switch UIDevice.current.batteryState {
+        case .charging, .full: return true
+        default: return false
+        }
+        #else
+        return true
+        #endif
+    }
+
+    /// The working-copy sweep (docs/picture-tiers-plan.md stage 1): every
+    /// project whose originals are here and whose working copy on PicPlace
+    /// is missing or stale gets one rendered and pushed — newest first, one
+    /// at a time, through the ordinary records push (the walk finds the new
+    /// file beside the poster), while the rules hold. Skipped, as the blends
+    /// walk is, when nothing moved since the last whole walk.
+    func scheduleProxyQueue(force: Bool = false) {
+        guard proxyRendersAllowed, proxyQueueTask == nil else { return }
+        if !force, walkIsFresh(proxyWalkSeen) { return }
+        let key = currentWalkKey
+        proxyQueueTask = Task { [weak self] in
+            guard let self else { return }
+            if await runProxyQueue() { proxyWalkSeen = (key, Date()) }
+            proxyQueueTask = nil
+        }
+    }
+
+    /// True when it walked every project — what `scheduleProxyQueue`
+    /// remembers the walk by. An exempt project (its own working copy, D6)
+    /// is passed over; a stale copy of one on PicPlace is stage 3's to
+    /// delete. A copy another device sent is read off the index row's
+    /// pointer (push 1) and noted without a render.
+    private func runProxyQueue() async -> Bool {
+        guard let libraryIndex = model.libraryIndex else { return false }
+        var query = LibraryIndex.ProjectQuery()
+        query.limit = 100_000
+        query.sort = .created
+        query.ascending = false
+        let rows = (try? libraryIndex.projects(query).rows) ?? []
+        let now = Date()
+        var visited = 0
+        var sent = 0
+        var walkedWhole = true
+        // Push 2's batch path: render, then a hundred copies per negotiate
+        // and confirm, no claim, under the race rule (stage 3). Before it,
+        // one ordinary records push per project.
+        let batched = serverHasRenditionBatches && serverRenditionKinds.contains(PicPlaceSyncInventory.proxyKind)
+        var batch: [(item: PicPlaceRenditionItem, origin: UUID, token: String, title: String)] = []
+        func flush() async {
+            guard !batch.isEmpty else { return }
+            // The files stay on disk whatever happens here: a batch not sent
+            // (the rules moved while rendering) is found by name next time.
+            guard heavyChecksAllowed else { batch.removeAll(); return }
+            autoStatus = "Sending \(batch.count) working cop\(batch.count == 1 ? "y" : "ies") to PicPlace"
+            let outcomes = await sendRenditions(batch.map(\.item))
+            var sentNow = 0
+            for entry in batch {
+                switch outcomes[entry.item.key] ?? .failed("no answer") {
+                case .held, .uploaded:
+                    records[entry.origin]?.proxyToken = entry.token
+                    sentNow += 1
+                case .staleRevision(let current):
+                    LLog("picplace: working copy of \(entry.title) — this device is behind PicPlace (revision \(current)); the next check pulls, then it is sent again")
+                case .failed(let why):
+                    LLog("picplace: working copy of \(entry.title) — \(why)")
+                }
+            }
+            if sentNow > 0 { saveSyncState() }
+            sent += sentNow
+            batch.removeAll()
+        }
+        for row in rows {
+            visited += 1
+            if visited % 32 == 0 { await Task.yield() }
+            guard proxyRendersAllowed, !Task.isCancelled else { walkedWhole = false; break }
+            guard let capture = model.capture(id: row.id), capture.kind == .photos, !model.sourcesMissing(capture) else { continue }
+            let origin = model.originID(of: capture)
+            guard let record = records[origin], record.recordsReachedServer, record.elsewhereLibrary == nil,
+                  record.revision == revision(of: capture) else { continue }
+            if let due = record.retryDueAt, due > now { continue }
+            guard syncTasks[capture.id] == nil, !removingProjects.contains(capture.id), uploadJobs[capture.id] == nil else { continue }
+            guard let token = currentProxyToken(for: capture) else { continue }
+            if record.proxyToken == token { continue }
+            let name = ProjectFileRegistry.proxyPictureName(token: PicPlaceSyncRun.proxyNameToken(for: token))
+            if serverHasRenditions, serverRenditions[origin]?.proxy?.name == name {
+                records[origin]?.proxyToken = token
+                saveSyncState()
+                continue
+            }
+            autoStatus = "Rendering working copy · \(capture.displayTitle)"
+            LLog("picplace: working-copy sweep — \(capture.displayTitle)")
+            if batched {
+                guard let source = model.thumbnailURL(for: capture) else { continue }
+                let folder = model.projectFolderURL(for: capture)
+                guard let url = await PicPlaceProxy.ensure(sourceURL: source, grade: model.photoGrade(for: capture),
+                                                           nameToken: PicPlaceSyncRun.proxyNameToken(for: token), in: folder) else { continue }
+                guard let sha = try? await Task.detached(priority: .utility, operation: { try PicPlaceSyncRun.sha256(of: url) }).value,
+                      let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil else { continue }
+                // The copy PicPlace holds now, retired when this one confirms.
+                let previous = serverRenditions[origin]?.proxy
+                batch.append((PicPlaceRenditionItem(
+                    origin: origin, kind: PicPlaceSyncInventory.proxyKind, name: url.lastPathComponent, url: url,
+                    bytes: bytes, sha256: sha, contentType: "image/heic",
+                    replaces: previous.flatMap { $0.name == url.lastPathComponent ? nil : $0.id }), origin, token, capture.displayTitle))
+                if batch.count >= 100 { await flush() }
+            } else {
+                await syncAndWait(capture, policy: .minimal)
+                sent += 1
+            }
+        }
+        await flush()
+        if autoStatus?.hasPrefix("Rendering working copy") == true || autoStatus?.hasPrefix("Sending ") == true { autoStatus = nil }
+        if sent > 0 { LLog("picplace: working-copy sweep — \(sent) project(s) sent\(walkedWhole ? "" : "; stopped before the end")") }
+        return walkedWhole
     }
 
     /// Every project holding a blend PicPlace lacks sends its blends —

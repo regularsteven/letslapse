@@ -171,6 +171,16 @@ struct PhotoAdjustments: Codable, Equatable {
     /// whole frame is the same picture, whatever aspect chip drew it.
     var hasCrop: Bool { crop.map { !$0.isFull } ?? false }
 
+    /// These values with the crop taken out — crop ONLY; the level stays.
+    /// The proxy's recipe (docs/picture-tiers-plan.md §3.2): the working
+    /// copy is the levelled, uncropped frame and the crop a record applied
+    /// on display, so a crop must never move its token.
+    var withoutCrop: PhotoAdjustments {
+        var copy = self
+        copy.crop = nil
+        return copy
+    }
+
     /// These values with the rotation taken out — rotation ONLY; the crop
     /// stays. For a path that levels frames itself and hands the rest on,
     /// which still has to know where the crop falls once it has levelled.
@@ -792,6 +802,19 @@ struct PhotoGrade: Equatable, Sendable {
         // to E must re-render, not hand back what A left in the cache.
         let variant = RenderVariantRegistry.current
         return "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.cacheToken)"
+            + (timeline.isEmpty ? "" : "|kf\(timeline.cacheToken)")
+            + whiteBalance.cacheToken
+            + (variant.id == RenderVariantRegistry.baselineID ? "" : "|v\(variant.id)")
+    }
+
+    /// `cacheToken` with the crop left out — the recipe of the full-size
+    /// working copy (docs/picture-tiers-plan.md §3.2): the proxy is the
+    /// levelled, uncropped frame, so a crop never re-renders it, while
+    /// everything else that moves a pixel does. Its name on PicPlace is
+    /// `picture-<proxyNameToken>.heic`.
+    var proxyToken: String {
+        let variant = RenderVariantRegistry.current
+        return "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.withoutCrop.cacheToken)"
             + (timeline.isEmpty ? "" : "|kf\(timeline.cacheToken)")
             + whiteBalance.cacheToken
             + (variant.id == RenderVariantRegistry.baselineID ? "" : "|v\(variant.id)")

@@ -38,6 +38,18 @@ struct PhotoViewerView: View {
 
     let captureID: UUID
     let url: URL
+    /// The editor on a working copy (docs/picture-tiers-plan.md §3.6): the
+    /// full-size, already-graded `picture-<token>.heic` of a project whose
+    /// originals are not here. The overlay pages work on it; the grade
+    /// groups are drawn locked and ask for the originals; the grade is
+    /// never written but for its crop, a record applied on display.
+    private var isWorkingCopy: Bool { ProjectFileRegistry.isProxyPicture(fileName: url.lastPathComponent) }
+    /// Every grade group but the crop, on a working copy.
+    private var lockedGroups: Set<EditorGroup> { isWorkingCopy ? Set(EditorGroup.allCases.filter { $0 != .crop }) : [] }
+    /// The originals asked for from a locked group, and the editor that
+    /// replaces this one when they land.
+    @State private var originalsRequest: FetchPromptRequest?
+    @State private var relaunchOn: URL?
     /// False when something else already owns the chrome — the fullscreen media
     /// sheet embeds this view as its photo page and draws its own close button,
     /// share and page counter above it.
@@ -1075,6 +1087,17 @@ struct PhotoViewerView: View {
     }
 
     var body: some View {
+        if let relaunchOn {
+            // The originals landed under a working copy: the editor on them,
+            // in place (stage 4).
+            PhotoViewerView(captureID: captureID, url: relaunchOn, showsBackButton: showsBackButton,
+                            exitRequest: exitRequest, onExit: onExit, paging: paging)
+        } else {
+            editorBody
+        }
+    }
+
+    private var editorBody: some View {
         GeometryReader { proxy in
             Group {
                 // The Editor page has the redesign's three layouts; the other
@@ -1140,7 +1163,7 @@ struct PhotoViewerView: View {
             // An interval shoot's frames — and, where the shoot wrote one, the
             // capture clock they sit on, which is what turns the strip's axis
             // from "frame 812" into "1:09:41 into the shoot".
-            if capture.kind == .photos, !capture.isPhotoCapture {
+            if capture.kind == .photos, !capture.isPhotoCapture, !isWorkingCopy {
                 let sources = model.sourceFrameURLs(for: capture)
                 allFrames = sources
                 // A sidecar that doesn't describe this shoot frame for frame is
@@ -1160,7 +1183,8 @@ struct PhotoViewerView: View {
                 }
             }
             refreshFrameWindow()
-            refreshLightroomSidecar()
+            if !isWorkingCopy { refreshLightroomSidecar() }
+            if isWorkingCopy { LLog("editor: working copy \(url.lastPathComponent) for \(capture.displayTitle) — grade groups locked, overlays live") }
             loaded = true
             PageTurnTrace.mark("seed")
             let viewedURL = url
@@ -1170,7 +1194,7 @@ struct PhotoViewerView: View {
             // after the other. A legacy relative white is the exception: it
             // is migrated first, or the first picture would be graded
             // against the reading it is about to replace.
-            if needsWhiteMigration {
+            if needsWhiteMigration, !isWorkingCopy {
                 await refreshAsShotAnchor(for: viewedURL)
                 await migrateRelativeWhiteIfNeeded()
                 PageTurnTrace.mark("white")
@@ -1186,7 +1210,7 @@ struct PhotoViewerView: View {
                 // what 1:1 and every detail patch are measured against.
                 sourcePixels = size
             }
-            await refreshAsShotAnchor(for: viewedURL)
+            if !isWorkingCopy { await refreshAsShotAnchor(for: viewedURL) }
             #if DEBUG
             if ProcessInfo.processInfo.environment["LL_VIEWER"] == "expanded" {
                 // The handle dragged all the way up — the state the "expanded"
@@ -1202,6 +1226,7 @@ struct PhotoViewerView: View {
             applyLightroomHook()
             applyMixerHook()
             applySectionsHook()
+            applyWorkingCopyProbe()
             #endif
             if let group = pendingPanel {
                 pendingPanel = nil
@@ -1297,6 +1322,14 @@ struct PhotoViewerView: View {
         // this window may already exist: reopening fronts it, and this is the
         // only way a fronted window learns which page it was opened for.
         .onReceive(model.$requestedEditorPage) { consumePageRequest($0) }
+        .fetchPrompt($originalsRequest)
+        .onReceive(model.holdingsStore.$revision) { _ in
+            // A working copy's editor steps aside for the originals (stage 4).
+            guard isWorkingCopy, relaunchOn == nil, let capture,
+                  let asset = model.editorAsset(for: capture), case .still(let still) = asset else { return }
+            persist(); persistOverlays()
+            relaunchOn = still
+        }
         .onChange(of: exitRequest) { _, request in
             guard let request else { return }
             if request.offersPresetSave { requestExit() } else { finishExit() }
@@ -1604,8 +1637,18 @@ struct PhotoViewerView: View {
         Binding(
             get: { openGroup },
             set: { group in
-                if let group { openPanel(for: group) }
+                guard let group else { return }
+                if lockedGroups.contains(group) { askOriginals(for: group) } else { openPanel(for: group) }
             })
+    }
+
+    /// A locked group on a working copy: the just-in-time question for the
+    /// originals; once they land the editor on them takes this page.
+    private func askOriginals(for group: EditorGroup) {
+        guard let capture else { return }
+        originalsRequest = model.request(.pixelEdit, for: capture, subject: group.title) {
+            model.requestedEditorPage = EditorPageRequest(captureID: captureID, page: .editor, group: group)
+        }
     }
 
     /// Which buttons carry the dot — the panel's own header rule, asked per
@@ -1715,7 +1758,7 @@ struct PhotoViewerView: View {
             } else {
                 EditorGroupBar(
                     selection: groupSelection, nonNeutral: nonNeutralGroups,
-                    style: .phone, accent: accentColor)
+                    style: .phone, accent: accentColor, lockedGroups: lockedGroups)
             }
         }
     }
@@ -1862,7 +1905,7 @@ struct PhotoViewerView: View {
             }
             EditorGroupBar(
                 selection: groupSelection, nonNeutral: nonNeutralGroups,
-                style: .padPill, accent: accentColor)
+                style: .padPill, accent: accentColor, lockedGroups: lockedGroups)
         }
         .padding(16)
     }
@@ -2005,7 +2048,7 @@ struct PhotoViewerView: View {
         railTabBar
         EditorGroupBar(
             selection: groupSelection, nonNeutral: nonNeutralGroups,
-            style: .macCard, accent: accentColor)
+            style: .macCard, accent: accentColor, lockedGroups: lockedGroups)
         if let group = openGroup {
             groupPanel(group, layout: .rail, style: railPanelStyle)
         }
@@ -2491,7 +2534,7 @@ struct PhotoViewerView: View {
         let media = model.mediaURL(for: capture)
         let relative: String = media.map { url in
             url.path.hasPrefix(folder.path) ? String(url.path.dropFirst(folder.path.count + 1)) : url.lastPathComponent
-        } ?? ""
+        } ?? (capture.sourceFileNames.first { !$0.hasSuffix(".json") } ?? "")
         let source: ShapeRegister.Representative.Source = capture.kind == .video ? .blendVideo : .sourceFrame
         let frame = registerFrame
         shapeRegister = ShapeRegister.manual(representative: .init(
@@ -3307,7 +3350,7 @@ struct PhotoViewerView: View {
     /// Pending candidates of the previous find are passed over first.
     private func findShapesOnce(_ mode: ShapeDetectionMode) async {
         settleFind()
-        guard let capture, let rep = ShapeFinder.representative(for: capture, in: model) else {
+        guard let capture, let rep = isWorkingCopy ? workingCopyRepresentative(capture) : ShapeFinder.representative(for: capture, in: model) else {
             lastFind = ShapeFinder.Pass(runID: UUID(), mode: mode, found: [], engines: [], milliseconds: 0,
                                         note: "The picture could not be read.", failed: true)
             return
@@ -3323,6 +3366,39 @@ struct PhotoViewerView: View {
         if let pass {
             ShapeDetectorFeedback.shared.recordPass(pass, project: capture.id, listed: registerHolds)
         }
+    }
+
+    #if DEBUG
+    /// `LL_WC_PROBE=1`: on a working copy, two of the writes a finger would
+    /// make, through their real paths — a radial mask (`overlays.json`) and
+    /// a square crop (the grade's one field a working copy may move) —
+    /// three seconds after the page is seeded. The bench reads the files.
+    private func applyWorkingCopyProbe() {
+        guard isWorkingCopy, ProcessInfo.processInfo.environment["LL_WC_PROBE"] != nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            overlayDocument.shapeMasks.append(ShapeMask(
+                name: "Probe",
+                shape: MaskShape(kind: .radial, center: CGPoint(x: 0.5, y: 0.45),
+                                 radiusX: 0.2, radiusY: 0.18, rotationDegrees: 0, feather: 0.5)))
+            overlayEdited(commit: true)
+            var values = adjustments
+            values.crop = FrameCrop.fitted(.square, frameAspect: aspect ?? 1)
+            adjustments = values
+            refreshState()
+            scheduleUpdate()
+            persist()
+            LLog("LL_WC_PROBE: a radial mask and a square crop written on the working copy of \(capture?.displayTitle ?? "?")")
+        }
+    }
+    #endif
+
+    /// The working copy as the picture Find shapes reads (stage 4): named
+    /// after the project's first frame so the register keeps a source
+    /// frame's identity, decoded from the copy.
+    private func workingCopyRepresentative(_ capture: AppModel.CaptureProject) -> ShapeRepresentative? {
+        guard isWorkingCopy else { return nil }
+        let relative = capture.sourceFileNames.first { !$0.hasSuffix(".json") } ?? url.lastPathComponent
+        return ShapeRepresentative(url: url, relativePath: relative, source: .sourceFrame, frameFraction: nil)
     }
 
     /// The register already holds this shape (same kind over the same
@@ -3878,6 +3954,7 @@ struct PhotoViewerView: View {
             adjustments: editedAdjustments,
             group: group,
             layout: layout,
+            hidesLevel: isWorkingCopy,
             style: style,
             toolSelection: $toolSelection,
             frameWhiteKelvin: frameWhite.kelvin,
@@ -4548,11 +4625,12 @@ struct PhotoViewerView: View {
         let sequenceMode = overlayDocument.maskSettings.maskMode == .sequence && hasTimeline
         let sequenceFrames = frames
         let frameURL = displayedURL
-        let preset = preset
+        // A working copy is graded already: the scene is read off it as it is.
+        let preset: PhotoPreset = isWorkingCopy ? .original : preset
         // The mask is fetched over the whole frame, as the composite applies
         // it: the crop is drawn over the picture here, never cut from it.
         let adjustments: PhotoAdjustments = {
-            var whole = self.adjustments
+            var whole = self.isWorkingCopy ? PhotoAdjustments.neutral : self.adjustments
             whole.crop = nil
             return whole
         }()
@@ -4601,6 +4679,18 @@ struct PhotoViewerView: View {
     private func persist() {
         // A staged screenshot (`LL_MIXER`) must never reach a real project.
         guard !persistSuppressedForStaging, let capture else { return }
+        if isWorkingCopy {
+            // The copy carries the grade in its pixels: only the crop — a
+            // record applied on display — may move here. Everything else
+            // is written back as the project holds it.
+            let stored = model.photoGrade(for: capture)
+            var safe = stored.adjustments
+            safe.crop = adjustments.crop
+            model.setPhotoGrade(
+                preset: stored.preset, adjustments: safe, state: model.presetState(for: capture),
+                timeline: stored.timeline, for: capture)
+            return
+        }
         model.setPhotoGrade(
             preset: preset, adjustments: adjustments, state: presetState,
             timeline: timeline, for: capture)
@@ -4699,20 +4789,24 @@ struct PhotoViewerView: View {
         let masks = previewMaskSet()
         let debugRegion = tintedRegion
         let rotation = Double(adjustments.rotationDegrees)
+        let workingCopy = isWorkingCopy
         let image = await MediaWorkQueue.grading.run { () -> CGImage? in
             // Levelled inside the grader (cached with the grade, at this
             // moment's angle); the compositor is told so its source-space
-            // masks turn to match.
-            guard let graded = PhotoGrader.render(
-                url: url, preset: preset, adjustments: adjustments,
-                whiteBalance: whiteBalance, maxDimension: longEdge, cropped: false)
-            else { return nil }
+            // masks turn to match. A working copy is already both: decoded
+            // as it is, and the compositor told the level is in it.
+            let base: CGImage? = workingCopy
+                ? ProjectThumbnailGenerator.imageThumbnail(for: url, maxPixelSize: Int(longEdge))
+                : PhotoGrader.render(
+                    url: url, preset: preset, adjustments: adjustments,
+                    whiteBalance: whiteBalance, maxDimension: longEdge, cropped: false)
+            guard let graded = base else { return nil }
             return SceneAwareCompositor.compositedPreview(
                 base: graded, overlays: overlays, maskGrades: maskGrades,
                 suppressing: suppressed,
                 position: compositePosition, masks: masks,
                 settings: maskSettings, debugRegion: debugRegion,
-                rotationDegrees: rotation)
+                rotationDegrees: workingCopy ? 0 : rotation)
         }
         isRendering = false
         // A nil render (cancelled, or a missing file) leaves whatever is on
@@ -4729,7 +4823,7 @@ struct PhotoViewerView: View {
             reconcileAspect(with: cgImage)
             // The readouts' anchor for this frame — after the picture, which
             // never needed it (the grader resolves the as-shot white itself).
-            await refreshAsShotAnchor(for: url)
+            if !isWorkingCopy { await refreshAsShotAnchor(for: url) }
             await locateDetail(in: cgImage, of: url)
         }
     }
@@ -4778,7 +4872,9 @@ struct PhotoViewerView: View {
     /// render is already showing as much as the screen can — which is every
     /// state but a real zoom-in.
     private var patchRequest: DetailPatchRequest? {
-        guard loaded, !isScrubbing, !isPlaying, !zoom.isFitted else { return nil }
+        // A working copy's preview is its pixels at 2000 px; a patch would be
+        // the copy graded a second time.
+        guard loaded, !isScrubbing, !isPlaying, !zoom.isFitted, !isWorkingCopy else { return nil }
         let geometry = zoomGeometry(in: paneSize)
         guard geometry.container.width > 0, geometry.container.height > 0 else { return nil }
         let source = sourcePixelSize

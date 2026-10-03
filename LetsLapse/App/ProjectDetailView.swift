@@ -1860,7 +1860,7 @@ private struct ProjectHeroPane: View {
             // what is about to be edited, so naming the noun only made the
             // three modes read as three different affordances.
             switch preview {
-            case .still(let url):
+            case .still(let url), .workingCopy(let url):
                 editPill { onOpenViewer(url) }
             case .movie(let url):
                 editPill { onEditVideo(url) }
@@ -1924,6 +1924,10 @@ private struct ProjectHeroPane: View {
                     systemImage: "arrow.up.left.and.arrow.down.right",
                     label: "View photo") { onOpenViewer(url) }
             }
+        case .workingCopy(let url):
+            heroCircle(
+                systemImage: "arrow.up.left.and.arrow.down.right",
+                label: "View photo") { onOpenViewer(url) }
         case .preview:
             EmptyView()
         }
@@ -1973,6 +1977,9 @@ private struct ProjectHeroPane: View {
                     whiteBalance: grade.whiteBalance, maxDimension: 1400)
             case .movie(let url):
                 return VideoGrader.gradedFrame(at: url, grade: grade, maxDimension: 1400)
+            case .workingCopy(let url):
+                // Already graded: decoded as it is.
+                return ProjectThumbnailGenerator.imageThumbnail(for: url, maxPixelSize: 1400)
             case .preview:
                 // A poster is already graded; the hero shows it as it is.
                 return nil

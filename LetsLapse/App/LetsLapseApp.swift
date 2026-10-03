@@ -833,7 +833,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE", "LL_PILL_SHEET", "LL_BLEND_RESUME", "LL_BLEND_CANT_RESUME"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE", "LL_PILL_SHEET", "LL_BLEND_RESUME", "LL_BLEND_CANT_RESUME", "LL_RENDITIONS"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -1225,6 +1225,49 @@ struct ContentView: View {
                 }
             }
         }
+        // LL_RENDITIONS=render:<latest|uuid> — render the working copy and
+        // the poster of that project into its folder, no server (picture
+        // tiers, stage 1): the D6 rule decides whether a copy is made, and
+        // the log line carries its size and time. LL_RENDITIONS=sweep — one
+        // working-copy sweep over the library (a bound library).
+        if let raw = environment["LL_RENDITIONS"], !raw.isEmpty {
+            let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                switch parts[0] {
+                case "render":
+                    let which = parts.count > 1 ? parts[1] : "latest"
+                    let capture = which == "latest"
+                        ? model.newestCapture()
+                        : UUID(uuidString: which).flatMap { id in model.capture(id: id) }
+                    guard let capture else { LLog("LL_RENDITIONS: no such project \(which)"); return }
+                    Task { @MainActor in
+                        let folder = model.projectFolderURL(for: capture)
+                        let grade = model.photoGrade(for: capture)
+                        guard let source = model.thumbnailURL(for: capture), !ProjectFileRegistry.isFinishedPicture(fileName: source.lastPathComponent) else {
+                            LLog("LL_RENDITIONS: \(capture.displayTitle) has no picture here"); return
+                        }
+                        let posterToken = model.picplace.currentPosterToken(for: capture)
+                        _ = await PicPlacePoster.ensure(sourceURL: source, kind: model.mediaKind(for: capture), grade: grade,
+                                                        token: posterToken, lastToken: nil, in: folder)
+                        if let token = model.picplace.currentProxyToken(for: capture) {
+                            let name = PicPlaceSyncRun.proxyNameToken(for: token)
+                            let url = await PicPlaceProxy.ensure(sourceURL: source, grade: grade, nameToken: name, in: folder)
+                            LLog("LL_RENDITIONS: \(capture.displayTitle) — working copy \(url?.lastPathComponent ?? "not written") (recipe \(token))")
+                        } else {
+                            PicPlaceProxy.removeAll(in: folder)
+                            LLog("LL_RENDITIONS: \(capture.displayTitle) is its own working copy (D6) — no proxy")
+                        }
+                    }
+                case "sweep":
+                    model.picplace.proxySweepIgnoresCharger = true
+                    model.picplace.scheduleProxyQueue(force: true)
+                    LLog("LL_RENDITIONS: working-copy sweep scheduled (the charger rule ignored for this run)")
+                default:
+                    LLog("LL_RENDITIONS: unknown form \(raw)")
+                }
+            }
+        }
+
         // LL_ROTATE=latest|<capture-uuid>[:<turns>] — Rotate 90° that many
         // times (default once) through `rotateProject`, two seconds after
         // launch. A turn is a record (2026-09-24): hash the project's files
