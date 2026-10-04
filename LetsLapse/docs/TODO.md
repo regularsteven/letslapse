@@ -162,7 +162,7 @@ here", no cost), and a twin by origin in another library being left unsynced.
 Steven: shapes are added fast, one by one, and a person may or may not have
 the proxy or the originals on the device — nor should they need them for a
 shape; finer work downloads the working copy. Plan in
-`docs/brief-after-picture-tiers-2026-10-04.md` §4: (1) the poster keeps the
+`docs/brief-after-picture-tiers-2026-10-04.md`, job 2: (1) the poster keeps the
 pixel work only (grade, masked grades, level, crop) and text and shape
 layers leave its render — every surface draws them live from the records
 (item view, pager, editor, export composite; tiles an open sub-decision);
