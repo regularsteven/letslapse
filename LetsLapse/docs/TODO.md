@@ -316,6 +316,15 @@ change made outside the API (a dropped asset row) moves no sequence, so the
 virtual index never sees it — pair it with `LL_PICPLACE_FEED=reset`; and the
 holder-side poster branch needs the originals here (`LL_PICPLACE_DOWNLOAD`
 restores a fixture's).
+And the reason the devices still read the whole index after the watermark
+fix: the controller's `loadIndexCache()` call sat inside the `#if DEBUG` block
+that holds the launch hooks, so no Release build ever read its cache — the
+Mac bench is a Debug build and never saw it. Moved out; the 16 Pro, 12 Pro and
+iPad M3 now launch on "the index cache read: 1812 row(s)" and "nothing
+changed … the index is not read" (no `GET /projects` at all), and a launch
+that finds no cache names the path and the folder's contents. Rule from it:
+anything production-bound added near the hook region of an `init` is checked
+in a Release build on a device, not on the Mac bench.
 
 **Agreed, not started — client (`App/PicPlace/`):**
 *(the first, fifth and sixth bullets below are the ones done above)*

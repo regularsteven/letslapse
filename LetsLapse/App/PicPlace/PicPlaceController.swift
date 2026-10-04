@@ -577,6 +577,12 @@ final class PicPlaceController: ObservableObject {
         LLog("picplace: session \(sessionKey ?? "none") — \(tokens == nil ? "no tokens" : "tokens found")\(binding == nil ? "" : ", library bound to @\(binding!.user.displayHandle) on \(binding!.server.host)")")
         var tokensKey = tokens == nil ? nil : sessionKey
         profile = sessionKey.flatMap { Self.loadProfile(for: $0) }
+        // The virtual index from the last run, once the profile that names
+        // this device is known (the change feed, 2026-10-04). Outside the
+        // DEBUG hooks below: until 2026-10-04 it sat inside them, so no
+        // Release build ever read its cache and every device launch read
+        // the whole index (3.6 MB) — the Mac bench, a Debug build, never saw it.
+        loadIndexCache()
         #if DEBUG
         // `LL_PICPLACE_TOKENS=<access>:<refresh>` signs the app in with tokens
         // obtained elsewhere (the picplace repo's curl walkthrough), so a
@@ -591,9 +597,6 @@ final class PicPlaceController: ObservableObject {
             }
         }
         stagedState = Self.stagedState(from: ProcessInfo.processInfo.environment["LL_PICPLACE"])
-        // The virtual index from the last run, once the profile that names
-        // this device is known (the change feed, 2026-10-04).
-        loadIndexCache()
         // `LL_PICPLACE_LIBRARIES=<n>` stages the connect sheet (stage C) with
         // n demo libraries and the unfiled entry, no server.
         if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_LIBRARIES"], let n = Int(raw) {

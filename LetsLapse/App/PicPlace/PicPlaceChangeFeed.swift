@@ -212,7 +212,9 @@ extension PicPlaceController {
         }
         let trusted = feedOn && syncMeta.changeSeq != nil && syncMeta.changeSeqScope == key && !feedRows.isEmpty
         guard trusted, let watermark = syncMeta.changeSeq else {
-            return try await readWholeIndex(status: status, reason: feedOn ? (syncMeta.changeSeq == nil ? "no watermark" : "watermark is another library's or the rows are gone") : "feed off")
+            return try await readWholeIndex(status: status, reason: feedOn
+                ? (syncMeta.changeSeq == nil ? "no watermark" : (feedRows.isEmpty ? "no cached rows for watermark \(syncMeta.changeSeq.map(String.init) ?? "none")" : "watermark is another library's"))
+                : "feed off")
         }
         let head = status?.changeSeq?.head(forLibrary: key) ?? Int.max
         if head <= watermark {
@@ -368,7 +370,16 @@ extension PicPlaceController {
     /// the sync state's own; otherwise the first check reads the whole index.
     func loadIndexCache() {
         let url = PicPlaceIndexCache.url(inRoot: root)
-        guard let data = try? Data(contentsOf: url) else { return }
+        let data: Data
+        do { data = try Data(contentsOf: url) }
+        catch {
+            // No cache is the first launch's normal; anything else is said.
+            // 2026-10-04: the 16 Pro found none at every launch although the
+            // folder held one — the folder's own listing is logged with it.
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path)) ?? []
+            LLog("picplace: feed — no index cache at \(url.path) (\((error as NSError).code)); the folder holds \(names.joined(separator: ", ")); the whole index is read")
+            return
+        }
         guard let cache = try? JSONDecoder().decode(PicPlaceIndexCache.self, from: data),
               cache.format == PicPlaceIndexCache.format else {
             LLog("picplace: feed — the index cache on disk could not be read (\(data.count) bytes); the whole index is read")
