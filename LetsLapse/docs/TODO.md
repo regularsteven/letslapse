@@ -157,6 +157,22 @@ libraries (5 originals became server-side copies, nothing re-uploaded), a
 move between libraries seen from the Mac ("is in synth two … left alone
 here", no cost), and a twin by origin in another library being left unsynced.
 
+### Editing a preview without the full working copy — decision owed (2026-10-04)
+
+Steven's question after the picture-tiers detour: masks, shapes and text on
+a preview are JSON edits over normalised coordinates and need no source
+pixels (plan §3), yet a preview asks for a 1–4 MB working copy before Masks
+or Text opens. The poster cannot be the canvas (it is the finished picture,
+overlays baked in). The brief `docs/brief-after-picture-tiers-2026-10-04.md`
+§4 lays out the options: **B** fetch the copy silently on Wi-Fi (one day,
+no new picture), **A** a small working copy (~2048 px, ~0.5 MB, the same
+recipe and token as the full one, a second rendition kind on PicPlace — the
+next tiers stage, two to three days plus the developer's part), C the
+poster (no). Recommended B now, A next. Decisions needed: a second rendition
+kind on the server, and the small copy as the default download on a preview
+with the full copy behind *Download full size*. Sky/Land needs no change —
+it already works from a 512 px render.
+
 ### PicPlace sync cost: the agreed client jobs from the one-photo trace (2026-09-30)
 
 One photo was traced end to end on the `synth` test library: Mac import and
