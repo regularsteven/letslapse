@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 60" width="302" height="60" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · PicPlace status · working-copy · narrow</title>
+  <desc>Mirrors PicPlaceStatusCard (App/PicPlace/PicPlaceViews.swift) in its .previewOnly state with the project's working copy here, on the Mac Gallery item inspector (picture tiers stage 5, 2026-10-04; docs/picture-tiers-plan.md §15 — the phone card is picplace-status.working-copy.phone.svg). The green photo.fill (#248A3D: here; StatusGlyph.Asset.workingCopy) in the glyph column, the title "Working copy here", the caption "The originals are on PicPlace · 1 file · 2,9 MB", the action "Download originals"; then the Working copy line as one row — "Working copy · Here · 1,3 MB · text, masks, shapes and crop work on it" (the detail wraps to the second line in the real pane; drawn as one here, trimmed) with Remove… trailing (HeavyLine.Action.removeWorkingCopy, no server check; after it the card is preview-only). Measured from the 2026-10-04 bench's window capture of the item view (M3-level).</desc>
+<!-- LetsLapse design component · PicPlace status · narrow = 302pt (the macOS Gallery item inspector; place at x=34 under a PICPLACE header the screen draws). Glyph 16pt at x 0, title 12pt semibold at x 24 on baseline 17, the action 11pt medium accent trailing at x 302, caption 11pt secondary on 32; the Working copy row: title 12pt semibold on 52 at 24, Remove… 11pt medium accent trailing on 52 — 60pt. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="picplace-status" data-state="working-copy" data-width="narrow">
+    <g transform="translate(-0.9,3.2) scale(0.74)" data-symbol="photo.fill">
+      <mask id="psn-knock-picture" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M4.6 16.6L9.2 11.4L12.4 14.8L15.2 12.2L19.4 16.6Z" fill="#000000"/><circle cx="16.3" cy="8.9" r="1.8" fill="#000000"/></mask>
+      <path d="M4.2 4.5H19.8A2.2 2.2 0 0 1 22 6.7V17.3A2.2 2.2 0 0 1 19.8 19.5H4.2A2.2 2.2 0 0 1 2 17.3V6.7A2.2 2.2 0 0 1 4.2 4.5Z" fill="#248A3D" mask="url(#psn-knock-picture)"/>
+    </g>
+    <text x="24" y="17" font-size="12" class="sb" fill="#000">Working copy here</text>
+    <text x="24" y="32" font-size="11" fill="#6D6D72">The originals are on PicPlace · 1 file · 2,9 MB</text>
+    <text x="302" y="17" font-size="11" class="m" fill="#C36A00" text-anchor="end">Download originals</text>
+    <g id="row-working-copy"><text x="24" y="52" font-size="12" class="sb" fill="#000">Working copy</text><text x="106" y="52" font-size="11" fill="#6D6D72">Here · 1,3 MB · text, masks, shapes and crop</text><text x="302" y="52" font-size="11" class="m" fill="#C36A00" text-anchor="end">Remove…</text></g>
+  </g>
+</svg>

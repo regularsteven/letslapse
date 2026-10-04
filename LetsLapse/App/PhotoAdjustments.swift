@@ -181,6 +181,16 @@ struct PhotoAdjustments: Codable, Equatable {
         return copy
     }
 
+    /// Only the geometry — the level and the crop — on neutral values: what
+    /// a working copy, which carries the colour in its pixels, is drawn
+    /// through (2026-10-04).
+    var geometryOnly: PhotoAdjustments {
+        var copy = PhotoAdjustments.neutral
+        copy.rotationDegrees = rotationDegrees
+        copy.crop = crop
+        return copy
+    }
+
     /// These values with the rotation taken out — rotation ONLY; the crop
     /// stays. For a path that levels frames itself and hands the rest on,
     /// which still has to know where the crop falls once it has levelled.
@@ -807,14 +817,16 @@ struct PhotoGrade: Equatable, Sendable {
             + (variant.id == RenderVariantRegistry.baselineID ? "" : "|v\(variant.id)")
     }
 
-    /// `cacheToken` with the crop left out — the recipe of the full-size
+    /// `cacheToken` with the geometry left out — the recipe of the full-size
     /// working copy (docs/picture-tiers-plan.md §3.2): the proxy is the
-    /// levelled, uncropped frame, so a crop never re-renders it, while
-    /// everything else that moves a pixel does. Its name on PicPlace is
-    /// `picture-<proxyNameToken>.heic`.
+    /// UNLEVELLED, uncropped frame (2026-10-04: the level joined the crop as
+    /// a record applied on display, so the Angle slider works on a copy),
+    /// so neither a crop nor a level re-renders it, while everything else
+    /// that moves a pixel does. A project with no level keeps the token it
+    /// had. Its name on PicPlace is `picture-<proxyNameToken>.heic`.
     var proxyToken: String {
         let variant = RenderVariantRegistry.current
-        return "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.withoutCrop.cacheToken)"
+        return "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.withoutGeometry.cacheToken)"
             + (timeline.isEmpty ? "" : "|kf\(timeline.cacheToken)")
             + whiteBalance.cacheToken
             + (variant.id == RenderVariantRegistry.baselineID ? "" : "|v\(variant.id)")

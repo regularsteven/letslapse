@@ -3958,7 +3958,6 @@ struct PhotoViewerView: View {
             adjustments: editedAdjustments,
             group: group,
             layout: layout,
-            hidesLevel: isWorkingCopy,
             style: style,
             toolSelection: $toolSelection,
             frameWhiteKelvin: frameWhite.kelvin,
@@ -4629,12 +4628,13 @@ struct PhotoViewerView: View {
         let sequenceMode = overlayDocument.maskSettings.maskMode == .sequence && hasTimeline
         let sequenceFrames = frames
         let frameURL = displayedURL
-        // A working copy is graded already: the scene is read off it as it is.
+        // A working copy is graded already: the scene is read off it as it
+        // is, through the level alone.
         let preset: PhotoPreset = isWorkingCopy ? .original : preset
         // The mask is fetched over the whole frame, as the composite applies
         // it: the crop is drawn over the picture here, never cut from it.
         let adjustments: PhotoAdjustments = {
-            var whole = self.isWorkingCopy ? PhotoAdjustments.neutral : self.adjustments
+            var whole = self.isWorkingCopy ? self.adjustments.geometryOnly : self.adjustments
             whole.crop = nil
             return whole
         }()
@@ -4684,12 +4684,13 @@ struct PhotoViewerView: View {
         // A staged screenshot (`LL_MIXER`) must never reach a real project.
         guard !persistSuppressedForStaging, let capture else { return }
         if isWorkingCopy {
-            // The copy carries the grade in its pixels: only the crop — a
-            // record applied on display — may move here. Everything else
-            // is written back as the project holds it.
+            // The copy carries the colour in its pixels: only the geometry —
+            // the crop and the level, records applied on display — may move
+            // here. Everything else is written back as the project holds it.
             let stored = model.photoGrade(for: capture)
             var safe = stored.adjustments
             safe.crop = adjustments.crop
+            safe.rotationDegrees = adjustments.rotationDegrees
             model.setPhotoGrade(
                 preset: stored.preset, adjustments: safe, state: model.presetState(for: capture),
                 timeline: stored.timeline, for: capture)
@@ -4797,20 +4798,21 @@ struct PhotoViewerView: View {
         let image = await MediaWorkQueue.grading.run { () -> CGImage? in
             // Levelled inside the grader (cached with the grade, at this
             // moment's angle); the compositor is told so its source-space
-            // masks turn to match. A working copy is already both: decoded
-            // as it is, and the compositor told the level is in it.
-            let base: CGImage? = workingCopy
-                ? ProjectThumbnailGenerator.imageThumbnail(for: url, maxPixelSize: Int(longEdge))
-                : PhotoGrader.render(
-                    url: url, preset: preset, adjustments: adjustments,
-                    whiteBalance: whiteBalance, maxDimension: longEdge, cropped: false)
+            // masks turn to match. A working copy carries the colour in its
+            // pixels and is drawn through the geometry alone (2026-10-04:
+            // the level is a record on display, so the Angle slider works
+            // on it).
+            let base: CGImage? = PhotoGrader.render(
+                url: url, preset: workingCopy ? .original : preset,
+                adjustments: workingCopy ? adjustments.geometryOnly : adjustments,
+                whiteBalance: workingCopy ? .asShot : whiteBalance, maxDimension: longEdge, cropped: false)
             guard let graded = base else { return nil }
             return SceneAwareCompositor.compositedPreview(
                 base: graded, overlays: overlays, maskGrades: maskGrades,
                 suppressing: suppressed,
                 position: compositePosition, masks: masks,
                 settings: maskSettings, debugRegion: debugRegion,
-                rotationDegrees: workingCopy ? 0 : rotation)
+                rotationDegrees: rotation)
         }
         isRendering = false
         // A nil render (cancelled, or a missing file) leaves whatever is on
@@ -5060,17 +5062,18 @@ struct PhotoViewerView: View {
     /// confirmation. Reveal timings and links are the mock's own, so the
     /// lanes drawn in `photo-viewer.text.svg` are measured from this.
     private func applyTextHook() {
-        guard let hook = ProcessInfo.processInfo.environment["LL_TEXT"], frames.count > 1 else { return }
+        guard let hook = ProcessInfo.processInfo.environment["LL_TEXT"] else { return }
         let parts = hook.split(separator: ",").map(String.init)
         // `crafted` stages what Add Crafted Text produces — the design's own
         // beach line, through the real splitter, layout and insert — so the
         // crafted result can be measured for its mirror without a model
-        // installed and without typing into the sheet.
+        // installed and without typing into the sheet. On a single photo
+        // too (2026-10-04): the finished-picture bench puts text on one.
         if parts.contains("crafted"), overlayDocument.overlays.isEmpty {
             stageCraftedText()
             return
         }
-        guard parts.contains("story"), overlayDocument.overlays.isEmpty else { return }
+        guard parts.contains("story"), frames.count > 1, overlayDocument.overlays.isEmpty else { return }
         func layer(
             _ runs: [TextRun], label: String = "", size: Double, x: Double, y: Double, bold: Bool,
             color: String = "#FFFFFF", reveal: OverlayReveal, exit: OverlayReveal?

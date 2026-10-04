@@ -190,14 +190,13 @@ final class ProjectHoldingsTests: XCTestCase {
 
     func testProxyRuleFollowsTheTable() {
         // raw, whatever the grade
-        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: true, colourIdentity: true, hasLevel: false, baselineVariant: true))
-        // an unedited JPEG, HEIC, flat JPEG or stack blend is its own working copy
-        XCTAssertFalse(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: true, hasLevel: false, baselineVariant: true))
+        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: true, colourIdentity: true, baselineVariant: true))
+        // an unedited JPEG, HEIC, flat JPEG or stack blend is its own working
+        // copy — a level or a crop alone changes nothing (records on display)
+        XCTAssertFalse(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: true, baselineVariant: true))
         // a preset, a slider, a white, a keyframe
-        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: false, hasLevel: false, baselineVariant: true))
-        // a level
-        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: true, hasLevel: true, baselineVariant: true))
+        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: false, baselineVariant: true))
         // a render variant other than the baseline
-        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: true, hasLevel: false, baselineVariant: false))
+        XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: false, colourIdentity: true, baselineVariant: false))
     }
 }

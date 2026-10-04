@@ -136,70 +136,82 @@
             <text x="375" y="453.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">287</text>
           </g>
 
+          <!-- Working copy here — .asset(.workingCopy, .here): the green picture (stage 5, 2026-10-04); the
+               originals are on PicPlace, their full-size graded copy is here -->
+          <g id="row-pp-working-copy">
+            <g transform="translate(18.04,471.57) scale(0.83)" data-symbol="photo.fill">
+              <mask id="ls-knock-picture" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M4.6 16.6L9.2 11.4L12.4 14.8L15.2 12.2L19.4 16.6Z" fill="#000000"/><circle cx="16.3" cy="8.9" r="1.8" fill="#000000"/></mask>
+              <path d="M4.2 4.5H19.8A2.2 2.2 0 0 1 22 6.7V17.3A2.2 2.2 0 0 1 19.8 19.5H4.2A2.2 2.2 0 0 1 2 17.3V6.7A2.2 2.2 0 0 1 4.2 4.5Z" fill="#248A3D" mask="url(#ls-knock-picture)"/>
+            </g>
+            <text x="48" y="486.5" font-size="14" fill="#000">Working copy here</text>
+            <text x="375" y="486.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">4</text>
+          </g>
+
           <!-- Download available — .asset(.originals, .there): grey camera.fill -->
           <g id="row-pp-download-available">
-            <g transform="translate(18.04,471.57) scale(0.83)" data-symbol="camera.fill">
+            <g transform="translate(18.04,504.57) scale(0.83)" data-symbol="camera.fill">
               <path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/>
             </g>
-            <text x="48" y="486.5" font-size="14" fill="#000">Download available</text>
-            <text x="375" y="486.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">11</text>
+            <text x="48" y="519.5" font-size="14" fill="#000">Download available</text>
+            <text x="375" y="519.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">11</text>
           </g>
 
           <!-- Not available to download — .asset(.originals, .nowhere): grey camera.fill with a
                slash knocked through (SF Symbols has no slashed camera; StatusGlyphView draws it).
                Wraps rather than truncating in a narrow sidebar; at this width (166 pt) it fits. -->
           <g id="row-pp-not-available">
-            <g transform="translate(18.04,504.57) scale(0.83)" data-symbol="camera.fill + a slash knocked through (no SF camera.slash)">
+            <g transform="translate(18.04,537.57) scale(0.83)" data-symbol="camera.fill + a slash knocked through (no SF camera.slash)">
               <path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/>
               <path d="M3 2.4L21 21.6" stroke="#F2F2F7" stroke-width="5" stroke-linecap="round"/>
               <path d="M3 2.4L21 21.6" stroke="#AEAEB2" stroke-width="2.3" stroke-linecap="round"/>
             </g>
-            <text x="48" y="519.5" font-size="14" fill="#000">Not available to download</text>
-            <text x="375" y="519.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">2</text>
+            <text x="48" y="552.5" font-size="14" fill="#000">Not available to download</text>
+            <text x="375" y="552.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">2</text>
           </g>
 
           <!-- Needs uploading — .cloud(.needsUploading): icloud.and.arrow.up.fill, neutral, the
                arrow knocked out -->
           <g id="row-pp-needs-uploading">
-            <g transform="translate(18.79,538.89) scale(0.777)" data-symbol="icloud.and.arrow.up.fill">
+            <g transform="translate(18.79,571.89) scale(0.777)" data-symbol="icloud.and.arrow.up.fill">
               <path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#48484A"/>
               <path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#F2F2F7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
             </g>
-            <text x="48" y="552.5" font-size="14" fill="#000">Needs uploading</text>
-            <text x="375" y="552.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">193</text>
+            <text x="48" y="585.5" font-size="14" fill="#000">Needs uploading</text>
+            <text x="375" y="585.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">193</text>
           </g>
 
           <!-- Has blends — .symbol(HoldingsPillBody.blendsGlyph): square.3.layers.3d OUTLINE,
                neutral (the pill's layers as a plain symbol, not a status; the row counts
                row.blendCount > 0, whatever the files' whereabouts) -->
           <g id="row-pp-has-blends">
-            <g transform="translate(18.4,571.62) scale(0.8)" fill="none" stroke="#48484A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-symbol="square.3.layers.3d">
+            <g transform="translate(18.4,604.62) scale(0.8)" fill="none" stroke="#48484A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" data-symbol="square.3.layers.3d">
               <path d="M12 3.2L20.8 8L12 12.8L3.2 8Z"/><path d="M3.2 11.6L12 16.4L20.8 11.6"/><path d="M3.2 15.2L12 20L20.8 15.2"/>
             </g>
-            <text x="48" y="585.5" font-size="14" fill="#000">Has blends</text>
-            <text x="375" y="585.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">42</text>
+            <text x="48" y="618.5" font-size="14" fill="#000">Has blends</text>
+            <text x="375" y="618.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">42</text>
           </g>
 
           <!-- Syncing / Needs attention — .cloud(.uploading): icloud.and.arrow.up.fill in amber
                (LL.accent on a light list). Keeps a transfer under way, a fresh upload PicPlace is
                still reading back (the grid's here.checking tile), a failure or a conflict. -->
           <g id="row-pp-attention">
-            <g transform="translate(18.79,604.89) scale(0.777)" data-symbol="icloud.and.arrow.up.fill">
+            <g transform="translate(18.79,637.89) scale(0.777)" data-symbol="icloud.and.arrow.up.fill">
               <path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#C36A00"/>
               <path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#F2F2F7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
             </g>
-            <text x="48" y="618.5" font-size="14" fill="#000">Syncing / Needs attention</text>
-            <text x="375" y="618.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">1</text>
+            <text x="48" y="651.5" font-size="14" fill="#000">Syncing / Needs attention</text>
+            <text x="375" y="651.5" font-size="12" class="sec" text-anchor="end" style="font-variant-numeric:tabular-nums">1</text>
           </g>
-          <!-- while the sweep runs: <text x="18" y="≈640" font-size="11" class="sec">Checking 120 of 300 projects…</text> (not drawn) -->
+          <!-- while the sweep runs: <text x="18" y="≈673" font-size="11" class="sec">Checking 120 of 300 projects…</text> (not drawn) -->
         </g>
 
-        <line x1="12" y1="649.5" x2="381" y2="649.5" stroke="#000" stroke-opacity="0.10"/>
+        <line x1="12" y1="682.5" x2="381" y2="682.5" stroke="#000" stroke-opacity="0.10"/>
 
-        <!-- TAGS, COLLECTIONS and SHAPES as before, 288 pt further down: the PICPLACE section
-             (header 394.5 → last row's foot 629) and its divider (+20.5) push TAGS' header from
-             394.5 to 682.5. The screen edge now catches the sheet at TAGS; the rest scrolls. -->
-        <g transform="translate(0,288)">
+        <!-- TAGS, COLLECTIONS and SHAPES as before, 321 pt further down (288 + 33 on 2026-10-04 for the
+             Working copy here row): the PICPLACE section (header 394.5 → last row's foot 662) and its
+             divider (+20.5) push TAGS' header from 394.5 to 715.5. The screen edge now catches the sheet
+             at TAGS; the rest scrolls. -->
+        <g transform="translate(0,321)">
         <!-- ===== TAGS — presentSceneTags, 7pt dot rows, cumulative ===== -->
         <g id="section-tags">
           <text x="18" y="394.5" font-size="13" class="sb sec" letter-spacing="0.5">TAGS</text>

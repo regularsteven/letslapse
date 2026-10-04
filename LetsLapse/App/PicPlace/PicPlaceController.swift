@@ -1985,6 +1985,23 @@ final class PicPlaceController: ObservableObject {
         // project's stale copy is removed so nothing of it goes up. nil =
         // the project is its own working copy (D6).
         let proxyToken = currentProxyToken(for: capture)
+        // The finished picture's inputs (2026-10-04): a photo's poster is the
+        // grade with the masked grades, the text and shapes, the level and
+        // the crop. From the originals' picture here; from the working copy
+        // — drawn through the geometry alone — on a device without them, so
+        // an overlay or crop edit made there reaches every Gallery and
+        // PicPlace's page.
+        var finished: FinishedPicture.Inputs?
+        var posterFromCopy: URL?
+        if policy.sendsRecords, capture.kind == .photos, posterKind != .video {
+            if let posterSource, !ProjectFileRegistry.isFinishedPicture(fileName: posterSource.lastPathComponent) {
+                finished = FinishedPicture.inputs(for: capture, source: posterSource, grade: grade, in: model)
+            } else if model.sourcesMissing(capture), let copy = model.workingCopyURL(for: capture) {
+                posterFromCopy = copy
+                finished = FinishedPicture.inputs(
+                    for: capture, source: copy, grade: PhotoGrade(preset: .original, adjustments: grade.adjustments.geometryOnly), in: model)
+            }
+        }
         syncTasks[capture.id] = Task {
             // A job a person just started — Upload, Resume, Use mobile data —
             // asks iOS to hold the app while it runs. Everything else keeps
@@ -2019,8 +2036,9 @@ final class PicPlaceController: ObservableObject {
                 // render, the file it has is the one that goes.
                 if policy.sendsRecords, let posterSource, !ProjectFileRegistry.isFinishedPicture(fileName: posterSource.lastPathComponent) {
                     let rendered = await PicPlacePoster.ensure(sourceURL: posterSource, kind: posterKind, grade: grade, token: posterToken,
-                                                               lastToken: lastPosterToken, in: folder)
+                                                               lastToken: lastPosterToken, in: folder, finished: finished)
                     posterRendered = rendered != nil
+                    if rendered != nil, lastPosterToken != posterToken { self.model.noteFilesChanged(for: capture.id) }
                     if rendered == nil { LLog("picplace: ALARM poster: could not render the poster of \(capture.displayTitle) (\(key.uuidString.prefix(8))) — the records go without it; the check asks again") }
                     if let proxyToken {
                         _ = await PicPlaceProxy.ensure(sourceURL: posterSource, grade: grade,
@@ -2031,6 +2049,14 @@ final class PicPlaceController: ObservableObject {
                         // leftover nobody fetches (stage 5).
                         await self.deleteServerWorkingCopy(origin: key, title: capture.displayTitle)
                     }
+                } else if policy.sendsRecords, let copy = posterFromCopy, let finished {
+                    // A device without the originals, holding the working
+                    // copy: the poster from the copy and the records (the
+                    // copy itself stays as it is — it is not re-rendered here).
+                    let rendered = await PicPlacePoster.ensure(sourceURL: copy, kind: posterKind, grade: grade, token: posterToken,
+                                                               lastToken: lastPosterToken, in: folder, finished: finished)
+                    posterRendered = rendered != nil
+                    if rendered != nil, lastPosterToken != posterToken { self.model.noteFilesChanged(for: capture.id) }
                 }
                 // Each blend here gets its still (`posters/<id>.jpg`, in the
                 // records bundle) before the records go, so a device that
@@ -2303,8 +2329,13 @@ final class PicPlaceController: ObservableObject {
     /// already holds the poster (`settlePosters`).
     func currentPosterToken(for capture: AppModel.CaptureProject) -> String {
         let source = model.thumbnailURL(for: capture)
+        // A photo's poster is the finished picture (2026-10-04): the overlay
+        // document's fingerprint is in the token, so text, masks and masked
+        // grades re-render it as a preset does.
+        let overlays = capture.kind == .photos ? model.overlaysSignature(for: capture).map { "|o\($0)" } ?? "" : ""
         return model.photoGrade(for: capture).cacheToken
             + (source.map { ProjectOrientation.shared.keySuffix(for: $0) } ?? "")
+            + overlays
     }
 
     /// The id of the working copy PicPlace's row names when it is not the

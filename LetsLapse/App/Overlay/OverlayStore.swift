@@ -1,4 +1,5 @@
 import CoreGraphics
+import CryptoKit
 import Foundation
 import ImageIO
 import LetsLapseKit
@@ -135,6 +136,16 @@ extension AppModel {
         overlayMasksFolderURL(for: capture).appendingPathComponent(mask.fileName)
     }
 
+    /// A short fingerprint of the project's overlay document as stored —
+    /// nil with no file (2026-10-04): the poster's token carries it, so a
+    /// text layer, a mask or a masked grade re-renders the poster the way
+    /// a preset does. The bytes, not the decoded document: cheap, and an
+    /// edit that changes nothing in the file changes nothing here.
+    func overlaysSignature(for capture: CaptureProject) -> String? {
+        guard let data = try? Data(contentsOf: overlaysURL(for: capture)), !data.isEmpty else { return nil }
+        return SHA256.hash(data: data).prefix(6).map { String(format: "%02x", $0) }.joined()
+    }
+
     /// The project's overlay document. Missing file = empty; a torn file
     /// reads as empty rather than crashing anything. Reads the spike's
     /// original bare-array format too, so early sidecars keep their text.
@@ -165,14 +176,20 @@ extension AppModel {
     /// text not yet written.
     func setOverlayDocument(_ document: OverlayDocument, for capture: CaptureProject) {
         let url = overlaysURL(for: capture)
-        guard !document.isEmpty else {
+        let before = try? Data(contentsOf: url)
+        if document.isEmpty {
             try? FileManager.default.removeItem(at: url)
-            return
+        } else {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            guard let data = try? encoder.encode(document) else { return }
+            try? data.write(to: url, options: .atomic)
         }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(document) else { return }
-        try? data.write(to: url, options: .atomic)
+        // An edit of the picture as much as a preset is (2026-10-04): the
+        // project is marked edited so the records push carries the overlays
+        // and the poster — the finished picture — is rendered again. Until
+        // now the file changed and nothing moved until some other edit.
+        if (try? Data(contentsOf: url)) != before { markEdited(capture.id) }
     }
 
     /// Copies a user-supplied black-and-white image into the project and

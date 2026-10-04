@@ -160,7 +160,7 @@ extension AppModel {
         let sourceIsRaw = picture == nil && (sourceFrameURLs(for: capture).first.map(ImportedStills.isRaw) ?? false)
         let grade = photoGrade(for: capture)
         return ProxyRule.needsProxy(
-            sourceIsRaw: sourceIsRaw, colourIdentity: grade.isColorIdentity, hasLevel: grade.hasRotation,
+            sourceIsRaw: sourceIsRaw, colourIdentity: grade.isColorIdentity,
             baselineVariant: RenderVariantRegistry.current.id == RenderVariantRegistry.baselineID)
     }
 

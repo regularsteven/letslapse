@@ -2,6 +2,19 @@
 
 Canvas: 760×680 pt default window (`LetsLapseApp.defaultSize`); capture presents as a ≥960×720 sheet. The guided builder's own files are drawn at **1000×700**, the window size its layout was signed off at — each one says what the 760×680 default does instead. Since the 2026-08-12 mac review, `LL.screenBackground` on macOS light mode is the token table's #F2F2F7 (was `underPageBackgroundColor`, a dark canvas grey) — that fix brightens EVERY mac screen, so all other mac drawings now match the app rather than being aspirational.
 
+✅ **2026-10-04, picture tiers stage 5 — the working copy's status (docs/picture-tiers-plan.md §15), code
+first (committed `3d0d976`), mirrors drawn the same morning:** the sidebar's PICPLACE section gains **Working copy
+here** between *On this device* and *Download available* (the green `photo.fill`; the rows below moved 33 pt) in
+[gallery.svg](gallery.svg); the holdings pill gains the green picture after the camera —
+`components/holdings-pill.there.copy.safe` · `.nowhere.copy` · `.there.copy.downloading` (`holdings-pill.make.py`);
+the item view's PICPLACE card in its working-copy state —
+[gallery.item.picplace.working-copy.svg](gallery.item.picplace.working-copy.svg) over
+`components/picplace-status.working-copy.narrow.svg` (title *Working copy here*, the Working copy line with
+Remove…, the note). Verified by window capture of the scratch-root instance (`LL_DETAIL`, `LL_SCROLL=picplace`,
+`LL_PICPLACE_FILTER=workingCopyHere`). Not drawn: a grid tile wearing the new pill (the fourteen tiles stand), the
+Settings card's *Remove working copies not opened in 30 days* row (the Mac's Settings card has no mirror of its
+free-up rows; the phone's does — `iOS/settings.picplace.signed-in.free-up.portrait.svg`).
+
 ⚠️ **2026-09-27, `GalleryPreviewPanel` reordered — code first, mirrors STALE until Steven signs off the layout:** one order for both dresses — thumbnail (pane) · title/date/size · **Open alone** (pane; Edit / Text / Shapes / New clip removed — Open already lands in the editor) · Auto rename & tag (now in the inspector too) · Tags · Presets (pane) · **PicPlace** (now in the pane too, once the library is bound; above the management rows in both) · In frame / Storage / Here / Field notes · Rename / Share / Finder / Delete · **then** Info + Metadata (moved down) · blended clips / OUTPUT. Stale: [gallery.svg](gallery.svg), [gallery.tags.svg](gallery.tags.svg), [gallery.presets.svg](gallery.presets.svg), [gallery.metadata.svg](gallery.metadata.svg), [gallery.item.svg](gallery.item.svg), [gallery.item.interval.svg](gallery.item.interval.svg), [gallery.item.video.svg](gallery.item.video.svg), [gallery.item.picplace.svg](gallery.item.picplace.svg), [gallery.item.preview.svg](gallery.item.preview.svg) and its [prompt](gallery.item.preview.prompt.svg) / [downloading](gallery.item.preview.downloading.svg); check [gallery.timeline.svg](gallery.timeline.svg) if it draws the pane. Verified by window capture of a scratch-root Debug instance (`LL_SELECT=latest`, `LL_ITEM=latest`).
 
 ✅ **2026-09-26, connected asset states + status glyphs — the owed mirrors DRAWN** (Steven: "do the mirrors"; plan

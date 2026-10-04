@@ -11651,6 +11651,26 @@ final class AppModel: ObservableObject {
         // promise about the bytes that leave the app, not a fact derived from
         // whatever numbers happen to be sitting on the project.
         let grade = photoGrade(for: capture)
+        let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
+        // The finished picture (2026-10-04): a photo with text, shapes or a
+        // masked grade leaves with them drawn, as the editor shows it — and
+        // a working copy (the picture of a project whose originals are not
+        // here) leaves through its geometry alone, since it carries the
+        // colour already. Until now an export carried the grade and the
+        // geometry and nothing drawn on them.
+        if isImage {
+            let isCopy = ProjectFileRegistry.isProxyPicture(fileName: url.lastPathComponent)
+            let document = overlayDocument(for: capture)
+            if isCopy || !document.overlays.isEmpty || document.maskGrades.contains(where: \.isActive) {
+                let exportGrade = isCopy ? PhotoGrade(preset: .original, adjustments: grade.adjustments.geometryOnly) : grade
+                let inputs = FinishedPicture.inputs(for: capture, source: url, grade: exportGrade, in: self)
+                guard let image = await FinishedPicture.render(inputs, maxDimension: nil) else {
+                    throw PhotoGrader.GradeError.renderFailed
+                }
+                let written = try PhotoGrader.writeJPEG(image, carryingMetadataFrom: url)
+                return (written, true)
+            }
+        }
         // A levelled or cropped project is rendered even when its look is
         // Original — the rotation and the crop are as much "how I'm looking
         // at it" as a preset is, and an export that handed over the source
@@ -11659,7 +11679,6 @@ final class AppModel: ObservableObject {
             return (url, false)
         }
         guard !grade.isIdentity else { return (url, false) }
-        let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
         let graded: URL
         if isImage {
             graded = try await Task.detached(priority: .userInitiated) {
@@ -11686,9 +11705,15 @@ final class AppModel: ObservableObject {
             }
         }
     }
-    /// Saves a photo capture to Photos with its selected grade baked in.
+    /// Saves a photo capture to Photos with its selected grade baked in — or,
+    /// with the originals on PicPlace and a working copy here, the finished
+    /// picture from the copy (2026-10-04).
     func saveGradedPhoto(for capture: CaptureProject) async throws {
-        guard let url = heroImageURL(for: capture) else {
+        var url = heroImageURL(for: capture)
+        if url.map({ !FileManager.default.fileExists(atPath: $0.path) }) ?? true {
+            url = workingCopyURL(for: capture)
+        }
+        guard let url else {
             throw SourceClipSaveError.saveFailed("the photo is missing")
         }
         try await saveGradedAsset(at: url, for: capture)

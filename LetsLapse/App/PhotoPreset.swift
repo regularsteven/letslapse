@@ -1006,6 +1006,15 @@ enum PhotoGrader {
             url: url, preset: preset, adjustments: adjustments, maxDimension: nil) else {
             throw GradeError.renderFailed
         }
+        return try writeJPEG(cgImage, carryingMetadataFrom: url, quality: quality)
+    }
+
+    /// Writes a rendered picture to a temporary JPEG for a Photos export,
+    /// carrying the source's EXIF, GPS fix and camera identity — the
+    /// writing half of `renderJPEG`, for a picture composed elsewhere (the
+    /// finished picture with its text and masks, 2026-10-04). The caller
+    /// owns the temp file.
+    static func writeJPEG(_ cgImage: CGImage, carryingMetadataFrom url: URL, quality: CGFloat = 0.95) throws -> URL {
         let destinationURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("graded-\(UUID().uuidString).jpg")
         guard let destination = CGImageDestinationCreateWithURL(

@@ -2,6 +2,23 @@
 
 Canvas 393×852 pt (iPhone 16/17 class). One file per screen per orientation; variants in the filename. Status: ✅ Synced · ⚠️ Stale · 🟡 Planned (not yet drawn).
 
+✅ **2026-10-04, picture tiers stage 5 — the working copy's status (docs/picture-tiers-plan.md §15), code
+first (committed `3d0d976`), mirrors drawn the same morning:** the Library sheet's PICPLACE section gains **Working
+copy here** between *On this device* and *Download available* (the green `photo.fill`; the rows below and the
+TAGS / COLLECTIONS / SHAPES sections moved 33 pt) in
+[gallery.library-sheet.portrait.svg](gallery.library-sheet.portrait.svg); the holdings pill gains the green
+picture after the camera (`components/holdings-pill.there.copy.safe` · `.nowhere.copy` ·
+`.there.copy.downloading`, from `holdings-pill.make.py`); the project's PICPLACE card in its working-copy state —
+[project-detail.photo.picplace.working-copy.portrait.svg](project-detail.photo.picplace.working-copy.portrait.svg)
+over `components/picplace-status.working-copy.phone.svg` (144 pt: title *Working copy here*, the Working copy
+line with Remove…, the note; the management card 68 pt lower); and Settings' PICPLACE card with the free-up rows
+— [settings.picplace.signed-in.free-up.portrait.svg](settings.picplace.signed-in.free-up.portrait.svg) over
+`components/picplace-account.signed-in.free-up.phone.svg` (1041.9 pt: *Remove originals already on PicPlace*,
+**Remove working copies not opened in 30 days**, and the On PicPlace row's "48,5 MB of working copies and tiles").
+Measured from the Mac's own card (the same SwiftUI) and the 2026-10-03 bench photographs; a phone capture is owed
+for the two new screens. The editor's crop panel on a working copy shows its Angle slider again since 2026-10-04
+(plan §17) — the standing `project-photo.viewer.crop` mirrors already draw it.
+
 ✅ **2026-09-28, nearby originals — drawn after Steven's sign-off** ("commit it, then do the mirrors"; code `cf702fe`,
 plan `docs/nearby-originals-plan.md` §7–§8): the preview page's offer —
 [project-photo.viewer.preview.nearby.portrait.svg](project-photo.viewer.preview.nearby.portrait.svg), the card growing by

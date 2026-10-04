@@ -16,24 +16,34 @@ enum PicPlacePoster {
 
     /// The poster's URL after making sure it is current for `token`. nil when
     /// the project has no frame to render (a video whose file is gone).
+    /// `finished` (2026-10-04): a photo's poster is the finished picture —
+    /// the grade, the masked grades, the text and shapes, the level and the
+    /// crop (`FinishedPicture`) — when the caller gathered its inputs; a
+    /// video's, and a photo's without them, the graded frame as before.
     static func ensure(sourceURL: URL, kind: AppModel.MediaKind, grade: PhotoGrade, token: String,
-                       lastToken: String?, in folder: URL) async -> URL? {
+                       lastToken: String?, in folder: URL, finished: FinishedPicture.Inputs? = nil) async -> URL? {
         let url = folder.appendingPathComponent(ProjectFileRegistry.posterName)
         if lastToken == token, FileManager.default.fileExists(atPath: url.path) { return url }
-        let rendered = await MediaWorkQueue.shared.run { () -> Data? in
-            let image: CGImage? = kind == .video
-                ? VideoGrader.gradedFrame(at: sourceURL, grade: grade, maxDimension: maxDimension)
-                : PhotoGrader.render(url: sourceURL, preset: grade.preset, adjustments: grade.adjustments,
-                                     rotationDegrees: grade.rotationDegrees, whiteBalance: grade.whiteBalance,
-                                     maxDimension: maxDimension)
-            guard let image else { return nil }
+        let image: CGImage?
+        if kind == .video {
+            image = await MediaWorkQueue.shared.run { VideoGrader.gradedFrame(at: sourceURL, grade: grade, maxDimension: maxDimension) } ?? nil
+        } else if let finished {
+            image = await FinishedPicture.render(finished, maxDimension: maxDimension)
+        } else {
+            image = await MediaWorkQueue.shared.run {
+                PhotoGrader.render(url: sourceURL, preset: grade.preset, adjustments: grade.adjustments,
+                                   rotationDegrees: grade.rotationDegrees, whiteBalance: grade.whiteBalance,
+                                   maxDimension: maxDimension)
+            } ?? nil
+        }
+        let rendered: Data? = image.flatMap { image in
             let data = NSMutableData()
             guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
             CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
             guard CGImageDestinationFinalize(destination) else { return nil }
             return data as Data
         }
-        guard let data = rendered ?? nil else {
+        guard let data = rendered else {
             LLog("picplace: no poster for \(folder.lastPathComponent) — \(sourceURL.lastPathComponent) did not render")
             return FileManager.default.fileExists(atPath: url.path) ? url : nil
         }
@@ -74,9 +84,12 @@ enum PicPlaceProxy {
         }
         let started = Date()
         let rendered = await MediaWorkQueue.shared.run { () -> (data: Data, width: Int, height: Int)? in
+            // Unlevelled and uncropped (2026-10-04): the level is a record
+            // applied on display, like the crop, so the Angle slider works
+            // on the copy without the originals.
             guard let image = PhotoGrader.render(
-                url: sourceURL, preset: grade.preset, adjustments: grade.adjustments.withoutCrop,
-                rotationDegrees: grade.rotationDegrees, whiteBalance: grade.whiteBalance,
+                url: sourceURL, preset: grade.preset, adjustments: grade.adjustments.withoutGeometry,
+                rotationDegrees: 0, whiteBalance: grade.whiteBalance,
                 maxDimension: nil, cropped: false) else { return nil }
             let data = NSMutableData()
             guard let destination = CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil) else { return nil }

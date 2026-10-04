@@ -920,3 +920,59 @@ one of them read *1 uploaded*, and the PicPlace web page had no picture.
 Device install owed: the 18 Pro holds the 21 originals; its first check on
 the new build should log *holds no poster … sending one again* 21 times,
 then the Mac's check fetches their tiles once the server cuts them.
+
+## 17. The level on display, and the finished picture (2026-10-04, morning)
+
+Steven's two observations on the 18 Pro after freeing a photo's originals
+(§16's night): the Angle slider had gone from the working copy, and an
+overlay edit synced as a record while every picture that stands for the
+project — the Gallery tile, the hero, PicPlace's page — went on showing the
+photo without it.
+
+- **The level is a record on display, like the crop.** D1 had the copy
+  levelled; now `PhotoGrade.proxyToken` leaves the geometry out
+  (`withoutGeometry`), `PicPlaceProxy.ensure` renders unlevelled, and
+  `ProxyRule.needsProxy` no longer counts a level. A project with no level
+  keeps the token it had, so nothing re-renders for the 1,362 copies on
+  PicPlace; a levelled project's holder renders a new copy and retires the
+  old. The editor draws a copy through `PhotoGrader.render` with
+  `geometryOnly` adjustments (Original colour, the level, no crop cut) and
+  hands the compositor the rotation as it does for originals; `persist()`
+  writes the level beside the crop; the hero draws the copy through the
+  level and the crop; `hidesLevel` is no longer set.
+- **The finished picture** (`App/Overlay/FinishedPicture.swift`): the
+  grade, the masked grades, the text and shape layers, the level, then the
+  crop — the editor's order, through `SceneAwareCompositor.bakeStill` —
+  from the originals' picture on a holder, or from the working copy through
+  the geometry alone. The sky mask is taken from the cache or computed when
+  a layer or a masked grade sits in the sky or the land and a segmenter is
+  installed; custom masks and shapes resolve as the editor's preview set
+  does. Three readers: the **poster** (`PicPlacePoster.ensure(finished:)`;
+  the push gathers the inputs on the main actor, and `currentPosterToken`
+  carries the overlay document's fingerprint, `overlaysSignature`, so an
+  overlay edit re-renders the poster as a preset does), the **poster from
+  the copy** (a device without the originals and with a working copy
+  renders the poster from it on its records push — so an overlay or crop
+  edit made there reaches every Gallery and PicPlace's page, which cuts the
+  tile from it), and **the export** (`gradedExportCopy` renders the
+  finished picture whenever the project draws anything or the source is a
+  working copy, written through `PhotoGrader.writeJPEG` with the source's
+  metadata; `saveGradedPhoto` falls back to the copy when the hero file is
+  not here). Until now the poster and the export carried the grade and the
+  geometry alone — on every device, not only the one without originals.
+- **An overlay edit is an edit.** `setOverlayDocument` wrote the file and
+  nothing else moved: a text layer or a mask reached PicPlace only with the
+  next unrelated push, and the poster never. It now marks the project
+  edited when the file's bytes changed (`markEdited`), so the records push
+  and the finished poster follow it as they follow a preset.
+- **Hooks.** `LL_TEXT=crafted` now stages its line on a single photo too.
+
+**The bench (picplace.test, 2026-10-04 07:49–07:55, the JPEG fixture).**
+Crafted text on the photo; the originals removed (presence `proxy`); a 3°
+level written on the records; the editor on the copy opened on its Crop
+group with the Angle slider back; the push rendered the poster FROM THE
+COPY with the text and the level (302 KB) and sent it with the records —
+the server's poster row renewed, the tile cut from it; a text edit alone
+then marked the project edited and pushed (the poster unchanged, since
+the overlay bytes were the same). Pictures: the scratchpad's M3-poster
+and M3-level captures of the night.

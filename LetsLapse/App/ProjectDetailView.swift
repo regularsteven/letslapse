@@ -1978,8 +1978,9 @@ private struct ProjectHeroPane: View {
             case .movie(let url):
                 return VideoGrader.gradedFrame(at: url, grade: grade, maxDimension: 1400)
             case .workingCopy(let url):
-                // Already graded: decoded as it is.
-                return ProjectThumbnailGenerator.imageThumbnail(for: url, maxPixelSize: 1400)
+                // Already graded: drawn through the level and the crop alone.
+                return PhotoGrader.render(
+                    url: url, preset: .original, adjustments: grade.adjustments.geometryOnly, maxDimension: 1400)
             case .preview:
                 // A poster is already graded; the hero shows it as it is.
                 return nil

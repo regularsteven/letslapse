@@ -61,10 +61,17 @@ that needs no server check, Settings' renditions figure and *Remove working
 copies not opened in 30 days*, presence tier `proxy`, and the exempt
 project's copy retired through the developer's `POST /assets/delete`
 (`0a33ec9`, `features.rendition_delete`) — bench-verified on picplace.test;
-**owed:** the SVG mirrors (plan §6), a device look at the pill sheet, and
-the app's sync-cost step-2 share now its flags are named (`md5_uploads`,
-`storage_unavailable`, `resurrect_required` — see "PicPlace sync cost"
-below)). Supersedes connected-asset-states plan D2. Steven's issues 2 and 5
+the step-2 client share landed 2026-10-04 (`81f32c5`), and the same
+morning **the level moved out of the working copy and the poster became
+the finished picture** (plan §17: `geometryOnly`, `FinishedPicture`, the
+poster from the copy on a device without originals, the export through the
+same renderer, an overlay edit marking the project edited) and **the
+mirrors were drawn** (both sidebars' *Working copy here* row, the pill's
+three copy states, the card's working-copy state on phone and Mac,
+Settings' free-up variant — the platform INDEX notes of 2026-10-04);
+**owed:** a phone capture of the two new iOS screens, Steven's look at the
+pill sheet on a device, and the change-feed client (step 3) once every
+device runs `81f32c5` or later). Supersedes connected-asset-states plan D2. Steven's issues 2 and 5
 of 2026-10-03 (Masks and Text on a preview) land on the proxy in stage 4, not
 on the poster. · large · seams: the editor's write paths that assume a source
 (plan T6) — the working-copy mode guards `persist()` (crop only), the white

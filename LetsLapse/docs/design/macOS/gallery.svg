@@ -114,7 +114,7 @@
            Row = 7 + 17 per line + 7, 2 apart, as the Library rows above. The filter starts on All, so both
            All rows are lit. The counts are this file's fourteen projects as their pills draw them (grid below,
            components/gallery-filmstrip.*): 11 here · 2 on PicPlace only · 1 nowhere · 5 not backed up (the
-           upload under way included) · 3 with blends · 1 moving. While the status sweep's first walk runs,
+           upload under way included) · 3 with blends · 1 moving · 1 with its working copy here (stage 5). While the status sweep's first walk runs,
            "Checking N of M projects…" (11 pt secondary, 18 in, 4 under the last row) follows — not drawn. -->
       <g id="picplace-filters">
       <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">PICPLACE</text>
@@ -126,37 +126,43 @@
       <g transform="translate(38.40,308.04) scale(0.8)" data-symbol="camera.fill"><path fill="#248A3D" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g>
       <text x="68" y="323" font-size="14" fill="#000">On this device</text>
       <text x="202" y="323" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">11</text>
-      <!-- Download available: row 336–384 -->
-      <g transform="translate(38.40,341.04) scale(0.8)" data-symbol="camera.fill"><path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g>
-      <text x="68" y="356" font-size="14" fill="#000">Download</text>
-      <text x="68" y="373" font-size="14" fill="#000">available</text>
-      <text x="202" y="356" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">2</text>
-      <!-- Not available to download: row 386–434 -->
-      <g transform="translate(38.40,391.04) scale(0.8)" data-symbol="camera.fill + a slash knocked through (no SF camera.slash)"><mask id="pp-knock-camera" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M3 2.4L21 21.6" stroke="#000000" stroke-width="5" stroke-linecap="round"/></mask><g mask="url(#pp-knock-camera)"><path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g><path d="M3 2.4L21 21.6" stroke="#AEAEB2" stroke-width="2.3" stroke-linecap="round"/></g>
-      <text x="68" y="406" font-size="14" fill="#000">Not available to</text>
-      <text x="68" y="423" font-size="14" fill="#000">download</text>
-      <text x="202" y="406" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
-      <!-- Needs uploading: row 436–484 -->
-      <g transform="translate(38.64,441.84) scale(0.79)" data-symbol="icloud.and.arrow.up.fill"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#48484A"/><path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
-      <text x="68" y="456" font-size="14" fill="#000">Needs</text>
-      <text x="68" y="473" font-size="14" fill="#000">uploading</text>
-      <text x="202" y="456" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">5</text>
-      <!-- Has blends: row 486–517 -->
-      <g transform="translate(38.88,492.18) scale(0.76)" data-symbol="square.3.layers.3d" fill="none" stroke="#48484A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.2L20.8 8L12 12.8L3.2 8Z"/><path d="M3.2 11.6L12 16.4L20.8 11.6"/><path d="M3.2 15.2L12 20L20.8 15.2"/></g>
-      <text x="68" y="506" font-size="14" fill="#000">Has blends</text>
-      <text x="202" y="506" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">3</text>
-      <!-- Syncing / Needs attention: row 519–567 -->
-      <g transform="translate(38.64,524.84) scale(0.79)" data-symbol="icloud.and.arrow.up.fill"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#C36A00"/><path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
-      <text x="68" y="539" font-size="14" fill="#000">Syncing / Needs</text>
-      <text x="68" y="556" font-size="14" fill="#000">attention</text>
-      <text x="202" y="539" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
+      <!-- Working copy here: row 336–367 (stage 5, 2026-10-04 — .asset(.workingCopy, .here): the green picture;
+           the originals are not here, their full-size graded copy is) -->
+      <g transform="translate(38.40,341.04) scale(0.8)" data-symbol="photo.fill"><mask id="pp-knock-picture" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M4.6 16.6L9.2 11.4L12.4 14.8L15.2 12.2L19.4 16.6Z" fill="#000000"/><circle cx="16.3" cy="8.9" r="1.8" fill="#000000"/></mask><path d="M4.2 4.5H19.8A2.2 2.2 0 0 1 22 6.7V17.3A2.2 2.2 0 0 1 19.8 19.5H4.2A2.2 2.2 0 0 1 2 17.3V6.7A2.2 2.2 0 0 1 4.2 4.5Z" fill="#248A3D" mask="url(#pp-knock-picture)"/></g>
+      <text x="68" y="356" font-size="14" fill="#000">Working copy here</text>
+      <text x="202" y="356" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
+      <!-- Download available: row 369–417 -->
+      <g transform="translate(38.40,374.04) scale(0.8)" data-symbol="camera.fill"><path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g>
+      <text x="68" y="389" font-size="14" fill="#000">Download</text>
+      <text x="68" y="406" font-size="14" fill="#000">available</text>
+      <text x="202" y="389" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">2</text>
+      <!-- Not available to download: row 419–467 -->
+      <g transform="translate(38.40,424.04) scale(0.8)" data-symbol="camera.fill + a slash knocked through (no SF camera.slash)"><mask id="pp-knock-camera" maskUnits="userSpaceOnUse" x="0" y="33" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M3 2.4L21 21.6" stroke="#000000" stroke-width="5" stroke-linecap="round"/></mask><g mask="url(#pp-knock-camera)"><path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g><path d="M3 2.4L21 21.6" stroke="#AEAEB2" stroke-width="2.3" stroke-linecap="round"/></g>
+      <text x="68" y="439" font-size="14" fill="#000">Not available to</text>
+      <text x="68" y="456" font-size="14" fill="#000">download</text>
+      <text x="202" y="439" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
+      <!-- Needs uploading: row 469–517 -->
+      <g transform="translate(38.64,474.84) scale(0.79)" data-symbol="icloud.and.arrow.up.fill"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#48484A"/><path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="68" y="489" font-size="14" fill="#000">Needs</text>
+      <text x="68" y="506" font-size="14" fill="#000">uploading</text>
+      <text x="202" y="489" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">5</text>
+      <!-- Has blends: row 519–550 -->
+      <g transform="translate(38.88,525.18) scale(0.76)" data-symbol="square.3.layers.3d" fill="none" stroke="#48484A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.2L20.8 8L12 12.8L3.2 8Z"/><path d="M3.2 11.6L12 16.4L20.8 11.6"/><path d="M3.2 15.2L12 20L20.8 15.2"/></g>
+      <text x="68" y="539" font-size="14" fill="#000">Has blends</text>
+      <text x="202" y="539" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">3</text>
+      <!-- Syncing / Needs attention: row 552–600 -->
+      <g transform="translate(38.64,557.84) scale(0.79)" data-symbol="icloud.and.arrow.up.fill"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#C36A00"/><path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="68" y="572" font-size="14" fill="#000">Syncing / Needs</text>
+      <text x="68" y="589" font-size="14" fill="#000">attention</text>
+      <text x="202" y="572" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
       </g>
 
-      <line x1="32" y1="587" x2="208" y2="587" stroke="#000" stroke-opacity="0.10"/>
+      <line x1="32" y1="620" x2="208" y2="620" stroke="#000" stroke-opacity="0.10"/>
 
-      <!-- TAGS, COLLECTIONS and SHAPES as before, 356 pt lower (2026-09-26): the PICPLACE section above them
-           ends at 567. COLLECTIONS and SHAPES now scroll under the window edge. -->
-      <g transform="translate(0,356)">
+      <!-- TAGS, COLLECTIONS and SHAPES as before, 389 pt lower (2026-09-26; +33 on 2026-10-04 for the
+           Working copy here row): the PICPLACE section above them ends at 600. COLLECTIONS and SHAPES now
+           scroll under the window edge. -->
+      <g transform="translate(0,389)">
       <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">TAGS</text>
 
       <circle cx="37.5" cy="288" r="3.5" fill="#000" fill-opacity="0.25"/>
