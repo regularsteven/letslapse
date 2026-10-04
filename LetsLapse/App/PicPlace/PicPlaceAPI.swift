@@ -23,6 +23,10 @@ struct PPStatus: Decodable {
         struct RequestsPerMinute: Decodable { var device: Int?; var account: Int? }
         var manifestMaxBytes: Int64?; var objectMaxBytes: Int64?; var assetBatch: Int?; var tombstoneDays: Int?
         var requestsPerMinute: RequestsPerMinute?
+        /// The inline records' cap as stored (§B, `features.records_inline`)
+        /// and the largest request this server takes (bulk PUT).
+        var recordsMaxBytes: Int64?
+        var requestMaxBytes: Int64?
         /// The kinds the unclaimed rendition batches take (picture tiers,
         /// push 2: `preview`, `proxy`). Absent before them.
         var renditionKinds: [String]?

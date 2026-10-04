@@ -246,6 +246,9 @@ final class PicPlaceController: ObservableObject {
     /// carries each library's head and `GET /changes` the rows since a
     /// watermark (`PicPlaceChangeFeed.swift`).
     private(set) var serverHasChangeFeed = false
+    /// `features.records_inline` (§B, 2026-10-04) and its cap.
+    private(set) var serverHasRecordsInline = false
+    private(set) var serverRecordsMaxBytes: Int64 = 8 * 1024 * 1024
     /// The virtual index: every row by uuid (lowercased) from the last full
     /// read, patched by the feed. Empty until a full read.
     var feedRows: [String: PPProject] = [:]
@@ -363,6 +366,15 @@ final class PicPlaceController: ObservableObject {
     /// `LL_PICPLACE_FREEUP=copies`: the stale working copies go once the
     /// estimate that finds them lands (stage 5).
     var removeStaleCopiesAfterEstimate = false
+    /// `LL_PICPLACE_RECORDS_CAP=<bytes>` (DEBUG): a low inline cap, so the
+    /// "the bundle carries them" path runs on a small project.
+    static var recordsCapHook: Int64? {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["LL_PICPLACE_RECORDS_CAP"].flatMap(Int64.init)
+        #else
+        return nil
+        #endif
+    }
     /// The originals queue's last run was stopped between files (Pause, the
     /// Wi-Fi rule, iOS suspending the app): the walk stops too, rather than
     /// start the next project into the same stop.
@@ -975,6 +987,8 @@ final class PicPlaceController: ObservableObject {
         serverHasRenditionDelete = status.features["rendition_delete"] == true
         serverHasMD5Uploads = status.features["md5_uploads"] == true
         serverHasChangeFeed = status.features["change_feed"] == true
+        serverHasRecordsInline = status.features["records_inline"] == true
+        if let cap = status.limits?.recordsMaxBytes { serverRecordsMaxBytes = cap }
         serverRenditionKinds = status.limits?.renditionKinds ?? []
         // The Settings card's row is the bound library's: its own figure
         // when `/status` lists it, else the account's (stage 5).
@@ -984,7 +998,7 @@ final class PicPlaceController: ObservableObject {
             // Once per change, so a production check shows what the server
             // says (picture tiers: push 1 = pointers, the tile switch; push 2
             // = the batch endpoints).
-            LLog("picplace: picture tiers on \(sessionHost) — rendition pointers \(serverHasRenditions ? "on" : "off"), tiles \(serverHasTiles ? "on" : "off"), rendition batches \(serverHasRenditionBatches ? "on" : "off"), rendition delete \(serverHasRenditionDelete ? "on" : "off"), md5 uploads \(serverHasMD5Uploads ? "on" : "off"), change feed \(serverHasChangeFeed ? "on" : "off")\(serverRenditionKinds.isEmpty ? "" : " (\(serverRenditionKinds.joined(separator: ", ")))")")
+            LLog("picplace: picture tiers on \(sessionHost) — rendition pointers \(serverHasRenditions ? "on" : "off"), tiles \(serverHasTiles ? "on" : "off"), rendition batches \(serverHasRenditionBatches ? "on" : "off"), rendition delete \(serverHasRenditionDelete ? "on" : "off"), md5 uploads \(serverHasMD5Uploads ? "on" : "off"), change feed \(serverHasChangeFeed ? "on" : "off"), records inline \(serverHasRecordsInline ? "on" : "off")\(serverRenditionKinds.isEmpty ? "" : " (\(serverRenditionKinds.joined(separator: ", ")))")")
         }
         noteNearbyKey(status)
         #if DEBUG
@@ -1983,7 +1997,9 @@ final class PicPlaceController: ObservableObject {
             library: serverHasLibraries ? scope : nil,
             bucket: serverHasRenditionBatches ? Self.bucket(for: capture.createdAt) : nil,
             replacesProxy: replacedProxyID(for: capture),
-            md5Uploads: serverHasMD5Uploads)
+            md5Uploads: serverHasMD5Uploads,
+            recordsInline: serverHasRecordsInline,
+            recordsMaxBytes: Self.recordsCapHook ?? serverRecordsMaxBytes)
         // Every originals run can be stopped between files (2026-09-24): a
         // job's Pause, Pause for all sending, the Wi-Fi rule, iOS about to
         // suspend the app. What finished is confirmed first.

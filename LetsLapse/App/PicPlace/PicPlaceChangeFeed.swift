@@ -45,8 +45,27 @@ struct PPFeedRow: Decodable {
             var revision: Int?
             var tier: String?
         }
+        /// Every device holding a copy, with its tier (the developer's
+        /// answer to the stand-up's 7th question, 2026-10-04) — absent on
+        /// a server before it, when `originals` is all the row says.
+        struct Holder: Decodable {
+            /// The server names the holder `device` (the bench read it on
+            /// 2026-10-04; the stand-up answer had said `id`) — both read.
+            var id: String
+            var revision: Int?
+            var tier: String?
+            private enum Key: String, CodingKey { case id, device, revision, tier }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: Key.self)
+                if let device = try c.decodeIfPresent(String.self, forKey: .device) { id = device }
+                else { id = try c.decode(String.self, forKey: .id) }
+                revision = try c.decodeIfPresent(Int.self, forKey: .revision)
+                tier = try c.decodeIfPresent(String.self, forKey: .tier)
+            }
+        }
         var mine: Mine?
         var originals: [String]
+        var devices: [Holder]?
     }
     var uuid: String
     var changeSeq: Int
@@ -71,7 +90,7 @@ struct PPFeedRow: Decodable {
 
     /// Every device id the row names — what the name table must know.
     var deviceIDs: [String] {
-        var ids = presence.originals
+        var ids = presence.originals + (presence.devices?.map(\.id) ?? [])
         if let device = claim?.device { ids.append(device) }
         if let updatedBy { ids.append(updatedBy) }
         if let deletedBy { ids.append(deletedBy) }
@@ -82,6 +101,12 @@ struct PPFeedRow: Decodable {
 /// `GET /devices`.
 struct PPDeviceList: Decodable {
     var devices: [PPDeviceSummary]
+}
+
+/// `GET /projects?shape=feed`: the index in the feed's slim rows.
+struct PPFeedIndex: Decodable {
+    var projects: [PPFeedRow]
+    var serverTime: Date?
 }
 
 /// The virtual index on disk — `PicPlace/index-cache.json` beside the sync
@@ -125,9 +150,16 @@ extension PPProject {
         func summary(_ id: String) -> PPDeviceSummary {
             names[id] ?? PPDeviceSummary(id: id, name: "another device", platform: nil, revokedAt: nil)
         }
-        var presence: [PPPresence] = row.presence.originals
-            .filter { $0 != thisDevice?.id }
-            .map { PPPresence(device: summary($0), revision: nil, tier: "original", confirmedAt: nil) }
+        var presence: [PPPresence]
+        if let holders = row.presence.devices {
+            // Every holder, as the index row listed them.
+            presence = holders.filter { $0.id != thisDevice?.id }
+                .map { PPPresence(device: summary($0.id), revision: $0.revision, tier: $0.tier, confirmedAt: nil) }
+        } else {
+            presence = row.presence.originals
+                .filter { $0 != thisDevice?.id }
+                .map { PPPresence(device: summary($0), revision: nil, tier: "original", confirmedAt: nil) }
+        }
         if let mine = row.presence.mine, let thisDevice {
             presence.append(PPPresence(device: thisDevice, revision: mine.revision, tier: mine.tier, confirmedAt: nil))
         }
@@ -203,27 +235,59 @@ extension PicPlaceController {
     /// change between the two reads is in the index AND comes again from
     /// the feed, which is harmless.
     private func readWholeIndex(status: PPStatus?, reason: String) async throws -> PPProjectIndex {
-        // The body itself, so every row is kept as sent for the cache.
-        let data = try await client.getData("projects", query: ["include_deleted": "1"])
-        let index = try PicPlaceClient.decoder.decode(PPProjectIndex.self, from: data)
+        // The body itself, so every row is kept as sent for the cache. The
+        // feed's slim shape when the server offers it (`?shape=feed`, the
+        // stand-up's 9th answer, 2026-10-04 — a third of the bytes, device
+        // names from one `GET /devices`); the full shape from one that
+        // ignores the parameter.
+        var data = try await client.getData("projects", query: ["include_deleted": "1", "shape": "feed"])
+        let index: PPProjectIndex
+        var shape = "index"
+        var slim: PPFeedIndex?
+        do { slim = try PicPlaceClient.decoder.decode(PPFeedIndex.self, from: data) }
+        catch {
+            // Not the slim shape the app models. A server that ignored the
+            // parameter answered in the full shape, which decodes below; one
+            // that answered in a slim shape the app cannot read is asked
+            // again for the full shape — one more request, never a failed
+            // check (the 2026-10-04 bench: holders came as `device`, the
+            // app read `id`, and the check failed outright).
+            if (try? PicPlaceClient.decoder.decode(PPProjectIndex.self, from: data)) == nil {
+                LLog("picplace: feed — the index's feed shape could not be read (\(error)); the full shape is read instead")
+                data = try await client.getData("projects", query: ["include_deleted": "1"])
+            }
+        }
+        if let slim {
+            shape = "feed"
+            let unknown = Set(slim.projects.flatMap(\.deviceIDs)).filter { deviceNames[$0] == nil }
+            if !unknown.isEmpty, let list: PPDeviceList = try? await client.get("devices") {
+                for device in list.devices { deviceNames[device.id] = device }
+            }
+            let me = profile.map { PPDeviceSummary(id: $0.deviceID, name: $0.deviceName, platform: nil, revokedAt: nil) }
+            let now = Date()
+            index = PPProjectIndex(projects: slim.projects.map { PPProject(feed: $0, names: deviceNames, thisDevice: me, now: now) },
+                                   serverTime: slim.serverTime)
+        } else {
+            index = try PicPlaceClient.decoder.decode(PPProjectIndex.self, from: data)
+        }
         feedRows.removeAll(keepingCapacity: true)
         feedRaw.removeAll(keepingCapacity: true)
         for row in index.projects {
             feedRows[row.uuid.lowercased()] = row
-            noteDeviceNames(in: row)
+            if shape == "index" { noteDeviceNames(in: row) }
         }
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let rows = object["projects"] as? [[String: Any]] {
             for row in rows {
                 guard let uuid = (row["uuid"] as? String)?.lowercased(),
                       let json = try? JSONSerialization.data(withJSONObject: row) else { continue }
-                feedRaw[uuid] = PicPlaceIndexCache.Row(shape: "index", json: json)
+                feedRaw[uuid] = PicPlaceIndexCache.Row(shape: shape, json: json)
             }
         }
         if serverHasChangeFeed, let seq = status?.changeSeq?.account {
             syncMeta.changeSeq = seq
             syncMeta.changeSeqScope = feedScopeKey
-            LLog("picplace: feed — the whole index read (\(reason)); \(index.projects.count) row(s), watermark \(seq)")
+            LLog("picplace: feed — the whole index read (\(reason), \(shape) shape, \(data.count) bytes); \(index.projects.count) row(s), watermark \(seq)")
             saveIndexCache()
         } else {
             syncMeta.changeSeq = nil

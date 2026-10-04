@@ -270,6 +270,31 @@ with that one row. On Steven's Mac this replaces a 250 KB index read per
 check. Owed: a watch on production — the first full read per device after
 the install, then `picplace: feed —` lines only.
 
+**Done 2026-10-04 — §B's client, the records inline on the PUT** (the
+developer's `records_inline`, live on picplace.co with `limits.records_max_bytes`
+8 MB): a records push whose `/status` says `records_inline` carries
+`records: { metadata: <metadata.json as an object>, assets: [ <one object per
+assets.ndjson line> ] }` in the PUT body, verbatim from disk
+(`PicPlaceSyncRun.inlineRecords`), so the server holds the two documents as
+rows the moment the manifest lands and needs no bundle read to index them;
+`records: null` goes only when both files are absent; records over the cap
+are left to the bundle ("records of N bytes over the cap; the bundle carries
+them"); a `413 records_too_large` sends the same PUT once more without them.
+The bundle is unchanged, and the pull still reads it. Beside it the whole
+index is now read in the feed's slim shape (`GET /projects?shape=feed`,
+~1.4 KB a row → ~0.9 KB on the bench; the device names from one
+`GET /devices`), and feed rows name every holder (`presence.devices`,
+the server's key is `device`), so *Also on* no longer shrinks for a row
+learned through the feed; a slim shape the app cannot read falls back to one
+full-shape request, never a failed check. Bench on picplace.test (R1–R3):
+"records inline: 1 asset record(s), 1249 bytes", PUT up 2.8 KB, the server's
+`GET /projects/{uuid}` returning the metadata keys and the asset record; a
+100-byte cap (`LL_PICPLACE_RECORDS_CAP`) leaves them to the bundle; the full
+index in the feed shape 238 KB for 170 rows, decoded, watermark seeded.
+Owed: the pull reading `records` from the row instead of the bundle (step 5's
+second half, when the server offers it), and bulk PUT (step 6) for the
+migration paths.
+
 **Agreed, not started — client (`App/PicPlace/`):**
 *(the first, fifth and sixth bullets below are the ones done above)*
 - **One `/status` per check.** `repairBindingLibraryIfMissing` re-reads it

@@ -264,3 +264,105 @@ becomes a backstop. Untested; it may not hold.
 3. Section A: token and buckets, or the change feed — and the shape, so the
    app's side can be written against it.
 4. Sections B and C: whether you want to take them up, and in what order.
+
+## Stand-up, 2026-10-04 10:20 — the lay of the land before §B's client
+
+**LetsLapse, committed on `ios-app` today (newest first):** `48b9a83` the
+change-feed client (step 3): a virtual index — the whole index once, cached
+on disk as sent, patched from `GET /changes?since_seq&library&limit=500`,
+nothing read when `/status`'s library head is at the watermark, `410` →
+full read; `ad9c884` + `90f86d8` the Mac's Projects list (document cache
+4,096, paced size writes, card facts memoised, index moves coalesced);
+`b87f015` the level as a record on display, the finished picture (grade +
+masked grades + text + shapes + level + crop) as the poster and the export,
+rendered from the working copy on a device without originals, the stage 5
+mirrors; `81f32c5` step 2's client (md5 at negotiate, 503 hold, resurrect)
+and answers read past unmodelled top-level scalars; `3d0d976` picture-tiers
+stage 5 and the poster re-send for holders whose row lacks one.
+
+**Where it runs:** all five devices and the Mac are on `48b9a83`. Seen on
+picplace.co: 19 posters re-sent by the 18 Pro and 16 Pro (posters 1,754 →
+1,773, tiles following), every device's first feed check reading the index
+once (1,812 rows, watermark 1983) and the next checks taking a page of two
+rows or nothing; 0 decode failures since `81f32c5`; the Mac idle at 0.1 %.
+
+**The server as LetsLapse understands it (picplace.co):** push 1 + 2, tiles
+on and backfilled, `rendition_delete`, step 2 (`md5_uploads`,
+`storage_unavailable`, `noop_put`, `resurrect_required` off), `replaces` on
+the claimed negotiate (item 7), step 3 (`change_feed`, `change_seq`
+everywhere), step 4 (`/status` cached on the sequence), step 5's first half
+(manifests in the database), §B built (`records_inline`, deploying on
+Steven's word: "Deploy now, then start step 6"), step 6 built locally at
+`3105460` (`bulk_put`, every kind on the batch endpoints).
+
+**§B's client, as LetsLapse will build it:** on every records push whose
+`/status` says `records_inline`, the PUT body carries `records: { metadata:
+<metadata.json as an object>, assets: [ <one object per assets.ndjson line> ] }`
+verbatim from disk, hashes with their `sha256:` prefix, skipped when the
+encoded records exceed `limits.records_max_bytes`; a `413
+records_too_large` answer retries the same PUT once without `records`;
+`records: null` goes when `metadata.json` and `assets.ndjson` are both
+absent (never otherwise); the pull keeps reading `records.aar`, and
+`GET /projects/{uuid}`'s `records` is ignored for now. The bundle is
+unchanged.
+
+**Questions for the PicPlace developer** (answers wanted before the client
+goes to production):
+1. Is `records_inline` live on picplace.co now, and does `/status` carry
+   `limits.records_max_bytes`? If the deploy is still pending, say when.
+2. A `413 records_too_large` refuses the whole PUT — the manifest is not
+   written either — so the client retries without `records`. Correct?
+3. `records: null` clears both documents at once; is there a per-document
+   clear (`records: {"metadata": null}`), or must a device send the other
+   one whole beside it?
+4. Does a records change alone (same manifest) move the project's
+   `change_seq`? The doc says it saves the row and re-indexes; LetsLapse
+   assumes yes, so other devices' feeds learn of it.
+5. The fold-in takes `name`/title from where when both the manifest's
+   `name` and `records.metadata`'s edited title exist? LetsLapse treats the
+   manifest's `name` as the display name and metadata's title as IPTC.
+6. The feed: a library-scoped head is "the highest sequence among its rows
+   or of any library move on the account". LetsLapse reads that as: a
+   project leaving this library moves this library's head, so an idle check
+   cannot miss a departure. Confirm.
+7. Feed rows list only the devices holding the originals; the index rows
+   listed every presence. *Also on* now shrinks for rows learned through
+   the feed. Could the feed row carry every presence device id (with its
+   tier), so the two paths agree? Small for you, visible to Steven.
+8. Step 6: when `bulk_put` deploys, LetsLapse will use it for the migration
+   path (first connection, imports of many projects). Anything the client
+   should send differently from the single PUT besides the `uuid` in each
+   document — and does `records` ride inside each document the same way?
+9. The index cache LetsLapse keeps is 6.5 MB for 1,812 rows as the index
+   sends them (presence with device summaries is the bulk). No ask — but if
+   `GET /projects` gained the feed row's slim shape behind a parameter, the
+   cache would be a third of that. Worth it only if cheap.
+
+**What the developer may want from LetsLapse:** every device now sends
+`resurrect: true` on a resurrection push (so the refusal can go on when you
+like); the devices' first feed reads are done, so expect `/changes` and
+`/status` and almost no `GET /projects` from them from here; nothing in
+the app depends on `updated_since`.
+
+**The developer's nine answers (2026-10-04 10:30), the contract the §B
+client is built on:** (1) `records_inline` and `limits.records_max_bytes`
+(8 MB) are live on picplace.co. (2) `413 records_too_large` refuses the
+whole PUT before anything is written — retry without `records`. (3) No
+per-document clear: a sent `records` replaces the pair whole; clear one by
+sending the other whole beside a `null`; an omitted `assets` inside a sent
+`records` stores an empty list — LetsLapse always sends both keys, and
+`records: null` only when both files are gone. (4) A records-only change
+moves `change_seq` and re-indexes without a manifest write. (5) The
+manifest's capture `name` feeds the index's `name`; the metadata title
+feeds `title`. (6) A departure moves the head of the library it left (the
+head counts any move on the account; a move between two other libraries
+costs one empty check). (7) Built: feed rows carry `presence.devices`,
+every holder by id with revision and tier, beside `mine` and `originals`.
+(8) Bulk PUT differs from the single PUT only by the `uuid` per document;
+`records`, `library`, `bucket`, `resurrect` ride inside each; each is
+answered with its own `status` in order, in its own transaction; a created
+document grants its claim to the sender; keep the body under
+`limits.request_max_bytes`. (9) Built: `GET /projects?shape=feed` streams
+the feed's slim row. Steps 6 and the two asks are three local commits
+(`3105460`, `e9750c2` …) deploying on Steven's word; the `resurrect`
+refusal switches on when he says — every device sends it now.

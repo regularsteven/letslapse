@@ -230,6 +230,12 @@ struct PicPlaceSyncRun {
         /// sends declares its MD5 at negotiate, so the PUT carries
         /// `Content-MD5` and confirm verifies it without a read-back.
         var md5Uploads: Bool = false
+        /// `features.records_inline` (§B, 2026-10-04): the PUT carries
+        /// `metadata.json` and `assets.ndjson` as JSON beside the manifest,
+        /// under `recordsMaxBytes` as stored — the server folds them into
+        /// its index at once. The bundle still carries them.
+        var recordsInline: Bool = false
+        var recordsMaxBytes: Int64 = 8 * 1024 * 1024
     }
 
     struct Failed: LocalizedError {
@@ -409,16 +415,35 @@ struct PicPlaceSyncRun {
             if resurrects { body["resurrect"] = true }
             if let origin = project.originUUID { body["origin_uuid"] = origin.uuidString.lowercased() }
             if mayCreate, let library = project.library { body["library"] = library.uuidString.lowercased() }
+            // The records inline (§B): both documents as JSON, verbatim from
+            // disk, when the server takes them and they fit its cap; `null`
+            // when neither file exists. A `413 records_too_large` — the whole
+            // PUT refused, nothing written — goes again without them, and
+            // the bundle carries them as it always has.
+            if project.recordsInline, let records = Self.inlineRecords(in: project.folder, cap: project.recordsMaxBytes) {
+                body["records"] = records.value
+                if records.bytes > 0 { LLog("picplace: \(project.name) — records inline: \(records.assets) asset record(s), \(records.bytes) bytes") }
+            }
+            func putProject(_ body: [String: Any]) async throws {
+                do {
+                    let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
+                } catch let error as PicPlaceAPIError where error.status == 413 && error.code == "records_too_large" && body["records"] != nil {
+                    LLog("picplace: \(project.name) — PicPlace refused the inline records as too large; sent again without them (the bundle carries them)")
+                    var slim = body
+                    slim["records"] = nil
+                    let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: slim)
+                }
+            }
             let compactBytes = Int64((try? JSONSerialization.data(withJSONObject: manifest, options: [.withoutEscapingSlashes]).count) ?? manifestData.count)
             if compactBytes <= project.manifestMaxBytes {
                 body["manifest"] = manifest
-                let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
+                try await putProject(body)
             } else {
                 // A first PUT (a stub) creates the project and grants the
                 // claim the upload needs; the second carries the asset's id.
                 LLog("picplace: manifest of \(uuid) is \(compactBytes) bytes, over the \(project.manifestMaxBytes)-byte cap — sending it as an asset")
                 body["manifest"] = ["manifest_asset": NSNull()]
-                let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
+                try await putProject(body)
                 try FileManager.default.createDirectory(at: manifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try manifestData.write(to: manifestURL, options: .atomic)
                 let manifestHashes = try Self.hashes(of: manifestURL)
@@ -821,6 +846,37 @@ struct PicPlaceSyncRun {
     }
 
     // MARK: The folder
+
+    /// `metadata.json` as an object and `assets.ndjson` as a list, one
+    /// object per line, for the PUT's `records` (§B) — `NSNull` when
+    /// neither file exists; nil when the pair, encoded, is over `cap`
+    /// (the bundle carries them then) or a file does not parse.
+    static func inlineRecords(in folder: URL, cap: Int64) -> (value: Any, assets: Int, bytes: Int)? {
+        let metadataURL = folder.appendingPathComponent(ProjectFileRegistry.projectMetadataName)
+        let assetsURL = folder.appendingPathComponent(ProjectFileRegistry.assetRecordsName)
+        let metadataData = try? Data(contentsOf: metadataURL)
+        let assetsData = try? Data(contentsOf: assetsURL)
+        if metadataData == nil && assetsData == nil { return (NSNull(), 0, 0) }
+        var metadata: Any = NSNull()
+        if let metadataData {
+            guard let object = try? JSONSerialization.jsonObject(with: metadataData) as? [String: Any] else { return nil }
+            metadata = object
+        }
+        var assets: [Any] = []
+        if let assetsData {
+            for line in assetsData.split(separator: UInt8(ascii: "\n")) where !line.isEmpty {
+                guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else { return nil }
+                assets.append(object)
+            }
+        }
+        let records: [String: Any] = ["metadata": metadata, "assets": assets]
+        guard let encoded = try? JSONSerialization.data(withJSONObject: records) else { return nil }
+        guard Int64(encoded.count) <= cap else {
+            LLog("picplace: \(folder.lastPathComponent) — records of \(encoded.count) bytes over the \(cap)-byte inline cap; the bundle carries them")
+            return nil
+        }
+        return (records, assets.count, encoded.count)
+    }
 
     static func negotiateFields(_ item: FileItem) -> [String: Any] {
         let fields: [String: Any?] = ["kind": item.kind, "name": item.name, "bytes": item.bytes, "sha256": item.sha256,
