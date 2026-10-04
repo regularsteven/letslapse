@@ -435,7 +435,8 @@ extension PicPlaceController {
                         records[origin]?.posterResentAt = Date()
                         LLog("picplace: PicPlace holds no poster of \(project.displayTitle) (\(origin.uuidString.prefix(8))) — sending one again")
                     }
-                    if !project.sourcesMissing, records[origin]?.posterToken == nil, syncTasks[localID] == nil {
+                    if !project.sourcesMissing, records[origin]?.posterToken == nil, syncTasks[localID] == nil,
+                       records[origin]?.posterFailedRecently != true {
                         if serverHasRenditions, let renditions = row.renditions {
                             // The row says whether PicPlace holds the poster
                             // (push 1): no listing pass (`settlePosters`).

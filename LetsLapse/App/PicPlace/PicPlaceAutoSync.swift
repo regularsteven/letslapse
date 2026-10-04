@@ -627,7 +627,7 @@ extension PicPlaceController {
         case .retry:
             guard moved || record?.lastError != nil else { return .nothing }
         case .poster:
-            guard moved || (record?.posterToken == nil && !model.sourcesMissing(capture)) else { return .nothing }
+            guard moved || (record?.posterToken == nil && !model.sourcesMissing(capture) && record?.posterFailedRecently != true) else { return .nothing }
         }
         if var run = sendRun { run.current = capture.displayTitle; run.started = true; sendRun = run }
         let run = sendRun

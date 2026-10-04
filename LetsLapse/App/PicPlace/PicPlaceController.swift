@@ -2080,7 +2080,7 @@ final class PicPlaceController: ObservableObject {
                                                                lastToken: lastPosterToken, in: folder, finished: finished)
                     posterRendered = rendered != nil
                     if rendered != nil, lastPosterToken != posterToken { self.model.noteFilesChanged(for: capture.id) }
-                    if rendered == nil { LLog("picplace: ALARM poster: could not render the poster of \(capture.displayTitle) (\(key.uuidString.prefix(8))) — the records go without it; the check asks again") }
+                    if rendered == nil { LLog("picplace: ALARM poster: could not render the poster of \(capture.displayTitle) (\(key.uuidString.prefix(8))) — the records go without it; the check asks again in \(Int(PicPlaceSyncRecord.posterResendInterval / 3600)) h") }
                     if let proxyToken {
                         _ = await PicPlaceProxy.ensure(sourceURL: posterSource, grade: grade,
                                                        nameToken: PicPlaceSyncRun.proxyNameToken(for: proxyToken), in: folder)
@@ -2115,6 +2115,11 @@ final class PicPlaceController: ObservableObject {
                 record.posterToken = posterRendered == false ? nil : posterToken
                 record.proxyToken = proxyToken
                 let previousRecord = records[key]
+                // The check's stamps live on the record the push replaces
+                // (2026-10-04: a new record each push forgot them, so the
+                // 6-hour gate on a poster re-send never held).
+                record.posterResentAt = previousRecord?.posterResentAt
+                record.posterFailedAt = posterRendered == false ? Date() : (posterRendered == true ? nil : previousRecord?.posterFailedAt)
                 if let previous = previousRecord {
                     // A push of one policy keeps what the other recorded.
                     record.serverHeavyFiles = previous.serverHeavyFiles
@@ -2127,7 +2132,9 @@ final class PicPlaceController: ObservableObject {
                     record.divergentFiles = previous.divergentFiles
                     record.changedFiles = previous.changedFiles
                     record.blendsDigest = previous.blendsDigest
-                    if policy == .minimal { record.posterToken = posterToken; record.proxyToken = proxyToken }
+                    // A render that failed is not said to have gone (the
+                    // 2026-10-04 loop: this line said it had).
+                    if policy == .minimal { record.posterToken = posterRendered == false ? nil : posterToken; record.proxyToken = proxyToken }
                 }
                 record.clearFailure()
                 if policy == .blends {

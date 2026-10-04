@@ -300,6 +300,22 @@ cache ran ahead of the saved state and every launch after a feed page read
 the whole index again (3.6 MB on the 16 Pro and 12 Pro). The watermark now
 asks for the write wherever it moves, a cache at or past the state's watermark
 is read and the state adopts it, and a cache left unused says why in the log.
+The same logs showed the iPad M3 re-pushing two DNG projects whose poster it
+cannot render ("frame-00003.dng did not render") on every 3-minute check as
+poster catch-ups — each PUT and bundle moving the sequence for every device:
+the records-policy branch recorded the poster as sent although the render
+failed, and the 6-hour re-send stamp lived on the record the push replaced.
+Fixed: a failed render is never recorded as sent, the stamps survive the
+push, the record remembers the failure (`posterFailedAt`) and the check and
+the queue leave the poster alone for `posterResendInterval`; an edit's push
+renders anyway and clears it. Bench D0 + L1–L3 on picplace.test with
+`LL_POSTER_FAULT=1` (DEBUG: every poster render fails): one push, then
+"0 queued" on every check and after a relaunch; the stamp aged by 7 h → one
+push with the poster, stamp cleared. Trap for the bench: a server-side
+change made outside the API (a dropped asset row) moves no sequence, so the
+virtual index never sees it — pair it with `LL_PICPLACE_FEED=reset`; and the
+holder-side poster branch needs the originals here (`LL_PICPLACE_DOWNLOAD`
+restores a fixture's).
 
 **Agreed, not started — client (`App/PicPlace/`):**
 *(the first, fifth and sixth bullets below are the ones done above)*

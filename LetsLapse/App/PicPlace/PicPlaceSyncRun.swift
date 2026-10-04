@@ -99,6 +99,17 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     /// (2026-10-03): once per `posterResendInterval` per project.
     var posterResentAt: Date?
     static let posterResendInterval: TimeInterval = 6 * 3600
+    /// When a push last failed to render the poster here (2026-10-04: two
+    /// DNG projects the iPad could not decode were queued as poster
+    /// catch-ups on every 3-minute check, each PUT moving the sequence for
+    /// every device) — the check asks again after `posterResendInterval`,
+    /// and an edit's push, which renders anyway, clears it.
+    var posterFailedAt: Date?
+    /// A render failed here recently: the check does not queue a poster for
+    /// it until the interval has passed.
+    var posterFailedRecently: Bool {
+        posterFailedAt.map { Date().timeIntervalSince($0) < Self.posterResendInterval } ?? false
+    }
     /// The failure behind `lastError`: when, how many times in a row, and
     /// which policy was being sent. The check retries a failed push once
     /// `failedAt` plus the backoff for `failures` has passed; a person's

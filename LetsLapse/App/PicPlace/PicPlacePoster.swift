@@ -22,6 +22,11 @@ enum PicPlacePoster {
     /// video's, and a photo's without them, the graded frame as before.
     static func ensure(sourceURL: URL, kind: AppModel.MediaKind, grade: PhotoGrade, token: String,
                        lastToken: String?, in folder: URL, finished: FinishedPicture.Inputs? = nil) async -> URL? {
+#if DEBUG
+        // `LL_POSTER_FAULT=1`: every render fails — the bench for a poster
+        // the device cannot make (2026-10-04).
+        if ProcessInfo.processInfo.environment["LL_POSTER_FAULT"] == "1" { return nil }
+#endif
         let url = folder.appendingPathComponent(ProjectFileRegistry.posterName)
         if lastToken == token, FileManager.default.fileExists(atPath: url.path) { return url }
         let image: CGImage?
