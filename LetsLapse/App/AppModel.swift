@@ -1432,7 +1432,9 @@ final class AppModel: ObservableObject {
             self?.errorMessage = error.localizedDescription
         }
         persister.onManifestWritten = { [weak self] date in self?.noteManifestWritten(at: date) }
-        persister.onIndexChanged = { [weak self] in Task { @MainActor in self?.noteIndexChanged() } }
+        // Writes come in bursts (a size job, a pull-update pass): one
+        // redraw per burst, not one per write (2026-10-04).
+        persister.onIndexChanged = { [weak self] in Task { @MainActor in self?.noteIndexChangedSoon() } }
         // An edit that reached the disk is auto-sync's cue (v2 plan §4.7) —
         // once the library is loaded; the launch walk's own rewrites are not edits.
         persister.onProjectWritten = { [weak self] id in
@@ -4762,6 +4764,16 @@ final class AppModel: ObservableObject {
     /// back as tickets (`noteSourceFramesValidated`), and one of the keys
     /// the free-up estimate is remembered under.
     private(set) var filesRevision = 0
+    /// Index moves from the persister, coalesced (`noteIndexChangedSoon`).
+    var indexChangeFlush: Task<Void, Never>?
+    /// What a list card derives from a project's record and files — its
+    /// tile's URL and its frame count — remembered per project, keyed on
+    /// the record's edit time and the library's files revision, so a redraw
+    /// costs a dictionary read rather than thousands of URL constructions
+    /// (2026-10-04: a 4,000-frame shoot built its frame list twice per card
+    /// body, and with the Size sort writing 757 measurements the Mac's main
+    /// thread sat at 68 % in `ProjectCard.body`).
+    private var cardFacts: [UUID: (key: String, thumbnail: URL?, frames: Int)] = [:]
 
     /// The tickets as they stand, for a pass off the main actor
     /// (`LibraryPass`): a project in the set has had every listed frame
@@ -9660,7 +9672,26 @@ final class AppModel: ObservableObject {
         projectStorageBytes.removeValue(forKey: captureID)
         validatedSourceFrames.remove(captureID)
         filesRevision &+= 1
+        cardFacts[captureID] = nil
         dropHoldings(for: captureID)
+    }
+
+    // MARK: - List card facts
+
+    /// The tile a list card shows for `capture` — `thumbnailURL(for:)`,
+    /// remembered (see `cardFacts`).
+    func cardThumbnailURL(for capture: CaptureProject) -> URL? { cardFacts(for: capture).thumbnail }
+
+    /// The frames a list card counts for `capture` — `effectiveFrameCount`,
+    /// remembered.
+    func cardFrameCount(for capture: CaptureProject) -> Int { cardFacts(for: capture).frames }
+
+    private func cardFacts(for capture: CaptureProject) -> (key: String, thumbnail: URL?, frames: Int) {
+        let key = "\(filesRevision)|\(lastEdited(capture).timeIntervalSince1970)|\(capture.sourceFileNames.count)|\(capture.nominatedBadFrameNames?.count ?? 0)|\(capture.hideBadFrames ?? true)"
+        if let known = cardFacts[capture.id], known.key == key { return known }
+        let made = (key: key, thumbnail: thumbnailURL(for: capture), frames: effectiveFrameCount(for: capture))
+        cardFacts[capture.id] = made
+        return made
     }
 
     private var applicationSupportURL: URL {

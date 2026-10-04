@@ -222,4 +222,18 @@ extension AppModel {
         indexRevision &+= 1
         listCache.removeAll()
     }
+
+    /// `noteIndexChanged` once a burst of writes has settled — 120 ms after
+    /// the first (2026-10-04: 757 size measurements each redrew the Projects
+    /// list on the Mac; a registration shows a tenth of a second later,
+    /// which nothing waits on).
+    func noteIndexChangedSoon() {
+        guard indexChangeFlush == nil else { return }
+        indexChangeFlush = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard let self else { return }
+            self.indexChangeFlush = nil
+            self.noteIndexChanged()
+        }
+    }
 }

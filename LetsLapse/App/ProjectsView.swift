@@ -751,7 +751,7 @@ private struct ProjectCard: View {
     /// source media — an interval shoot skipping any opening frames the user
     /// nominated as bad.
     private var thumbnailURL: URL? {
-        model.thumbnailURL(for: capture)
+        model.cardThumbnailURL(for: capture)
     }
 
     /// "4 source clips · 2 bursts at 120 fps": the clip count is knowable
@@ -772,7 +772,7 @@ private struct ProjectCard: View {
             // What the shoot has left to show, not what is on disk — a project
             // hiding two bad frames badges 248, and the viewer it opens has
             // exactly 248 places to stand.
-            return "\(model.effectiveFrameCount(for: capture)) photos"
+            return "\(model.cardFrameCount(for: capture)) photos"
         }
         if let duration = capture.sourceDurationSeconds {
             return DurationFormatter.recordingTime(from: duration)
