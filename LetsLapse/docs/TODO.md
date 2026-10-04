@@ -11,7 +11,7 @@ live inline.
 
 ## Open
 
-### Picture tiers — tile · poster · proxy (2026-10-03: contract written, picplace `c43f970`, pushes 1 and 2 live on picplace.co; stages 0–3 BUILT, uncommitted — stage 0 is the build the production tile backfill waits for)
+### Picture tiers — tile · poster · proxy (2026-10-03: contract written, picplace `c43f970`, pushes 1 and 2 live on picplace.co, tiles on and backfilled; stages 0–4 COMMITTED `e50aefc` and on every device; stage 5 BUILT the same night, uncommitted)
 
 Steven's brief (2026-10-03): a full-size graded **working copy** per project on
 PicPlace — the `proxy` kind the server already defines — so text, masks,
@@ -53,7 +53,18 @@ previews) land here; bench-verified locally and A → PicPlace → B; **the
 proxy-count fix the same night, plan §14**: a working copy no longer moves
 the count a pull accounts for, and a held poster is kept by hash — the
 first production night's re-fetch storm (the Mac 600×, old builds 887
-posters); not yet on a device; 5 status and space next). Supersedes connected-asset-states plan D2. Steven's issues 2 and 5
+posters); on every device since `e50aefc`; **stage 5 landed the same night,
+plan §15**: `ProjectHoldings.hasWorkingCopy` + `presenceTier`, the pill's
+green `photo.fill` beside a grey camera (*Working copy here*), the Gallery
+filter, the card's *Working copy here* title and its line with a Remove
+that needs no server check, Settings' renditions figure and *Remove working
+copies not opened in 30 days*, presence tier `proxy`, and the exempt
+project's copy retired through the developer's `POST /assets/delete`
+(`0a33ec9`, `features.rendition_delete`) — bench-verified on picplace.test;
+**owed:** the SVG mirrors (plan §6), a device look at the pill sheet, and
+the app's sync-cost step-2 share now its flags are named (`md5_uploads`,
+`storage_unavailable`, `resurrect_required` — see "PicPlace sync cost"
+below)). Supersedes connected-asset-states plan D2. Steven's issues 2 and 5
 of 2026-10-03 (Masks and Text on a preview) land on the proxy in stage 4, not
 on the poster. · large · seams: the editor's write paths that assume a source
 (plan T6) — the working-copy mode guards `persist()` (crop only), the white
@@ -63,6 +74,37 @@ skips non-travelling files, so the proxy is classified by name
 sweep pushes a proxy only at the server's revision (the race rule, round 2);
 the asset-count check must ignore server-made assets BEFORE the tile backfill
 runs on picplace.co (round 2, 2026-10-03).
+
+### PicPlace: 21 blank previews on the Mac, a 20-minute launch check, three projects re-fetched every check (found 2026-10-03 night, fixed in code, device check owed)
+
+Steven's Mac drew 21 preview-only projects (shot on the 18 Pro 27–30.9)
+with no picture: PicPlace holds their records alone — the phone's card
+says *1 uploaded*, the web page has no picture — so there is no poster and
+no tile to cut, and since stage 3 a pull takes the tile only. Nothing in
+the app re-sent a poster once the record said the push was done. Fixes:
+(1) the check clears the poster note of a project this device holds whole
+when the row's `renditions.poster` is null and queues a poster push, once
+per 6 h per project (`posterResentAt`); (2) a push whose poster render
+fails no longer stamps `posterToken` (an `ALARM poster:` line instead), so
+the next check asks again; (3) the Mac's launch check "968 updated" over 20
+minutes was a one-time migration — records written by the pre-count-fix
+build counted working copies, the new accounting did not; (4) three
+projects re-fetched on every check: a re-grade through the records push
+left the old working copy on the server (no `replaces` on the per-project
+negotiate), the row subtracts one copy by its pointer while a listing
+leaves every copy out, so the counts never agreed — the push now names the
+old copy as `replaces` (`PicPlaceSyncRun.Project.replacesProxy`, a plain
+retry on `replaces_not_found`) — which the server's per-project negotiate
+turned out to DROP (asks doc, ask 7), so after the confirms the run reads
+the project's detail and retires every other confirmed working copy with
+`DELETE /assets/{id}` under its claim — and the move test compares the row
+with its own last count (`serverRowAccounted`), never with the listing's.
+Owed: a
+build on the 18 Pro (the holder of the 21), then watch its check log for
+*holds no poster … sending one again* ×21 and the Mac's for their tiles;
+ask the developer whether the 30.9 pushes ever negotiated a poster (a lost
+PUT) or not (a render that failed on the phone), and whether the server
+should retire a superseded proxy on its own when a pointer moves.
 
 ### PicPlace libraries leaked into each other at an iOS launch (found and fixed 2026-10-01, uncommitted)
 
@@ -975,6 +1017,15 @@ tokens, remove them on teardown.
 ### Copy pass — where a file is when it is not on this device (Steven, later)
 
 **Raised:** 2026-09-26 · **Size:** small (words), device names medium
+
+- **"Remove originals already on PicPlace" reads as a deletion on PicPlace**
+  (Steven, 2026-10-03, about to free his 18 Pro): the Settings row and the
+  card's Remove only ever delete *this device's* copies, after the hash
+  check that PicPlace holds each file — nothing on PicPlace is touched.
+  Reword to say where the files leave from, e.g. *Remove from this device
+  the originals that are on PicPlace* / *Free up space — originals already
+  on PicPlace*; the card's confirm already says "from this device" in its
+  title, the row does not.
 
 Steven is not a fan of *"Only on iPhone so far"*: most people have one iPhone, and
 iPhones have names — *Steve 16 Pro*, *Steve 18 Pro*. The words now in place are

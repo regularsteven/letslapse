@@ -585,3 +585,43 @@ originals arriving costs one listing per hundred projects and no poster.
 Tiles stay held until every device has the build; "flip tiles" then.
 Sync-cost step 2 (`md5` at negotiate, the no-op PUT) is welcome right after
 the flip.
+
+**2026-10-03, night — the developer shipped both asks before the app
+needed them** (local checkout, not yet on picplace.co): `POST /assets/delete`
+(`0a33ec9`, `features.rendition_delete`) takes up to `max_batch` rendition
+ids of any projects — `{"assets":[{"id":…}]}` — with no claim, under the
+push's revision rule (`stale_revision` + `current_revision` per row when
+this device's presence is behind the project; `claim_required` for any
+other kind), and answers `{"assets":[{id, project, name, deleted: true}]}`;
+the object goes before the row, so a storage failure leaves the asset.
+Sync-cost step 2 (`7316b0b`): `features.md5_uploads` (an `md5` at
+negotiate signs `Content-MD5` into the PUT and confirm verifies on the
+ETag, no read-back), `storage_unavailable` (`503` with `Retry-After`
+instead of a missing-manifest outage), `noop_put` and
+`resurrect_required` (off by default). **The app's side, stage 5:** the
+push retires an exempt project's leftover working copy through
+`assets/delete` when the flag is on (`deleteServerWorkingCopy`), and logs
+`stale_revision` for the next push after a pull. The `md5` at negotiate,
+the `503` hold and `resurrect` are the app's step-2 jobs, owed after
+stage 5 (`docs/TODO.md`, "PicPlace sync cost").
+
+**Ask 7 (2026-10-03, late night) — `replaces` on the per-project
+negotiate.** `POST /projects/{uuid}/assets` accepts `replaces` on an item
+but drops it: `store` calls `negotiateOne($project, $device, $item)` without
+the fourth argument (lines 97 and 103 of `AssetController`), so only the
+batch path (`negotiateRendition`) retires the superseded copy. A re-grade
+through the records push — which carries the new working copy beside the
+records and poster — therefore left two copies per project (probed
+2026-10-03 23:40 on picplace.test: a negotiate with `replaces` answered
+without `replaced` and both copies stayed). Please pass `replaces` through
+on the per-project path with the same validation (`replaces_not_found`)
+and the same `replaced` in the confirm's answer. Until then the app retires
+the old copy itself with `DELETE /assets/{id}` under the claim it holds,
+right after the confirms — so nothing waits on this, but the push costs
+one request more per re-grade. **Ask 8 — the ledger of 21 projects.** The
+projects Steven's 18 Pro pushed 27–30.9 (e.g. `f6e582d2-7bac-4073-a27e-596ab1c3acc2`,
+`baef1f19-24fe-4d7d-9de9-877e92c6dd1b`, `fb2e6876-ce0e-4088-ad1c-057cf9cab0d4`)
+hold `records.aar` alone on picplace.co: did their first push negotiate a
+`poster.jpg` that was never confirmed (a lost PUT, reaped), or no poster
+at all? The app now re-sends a poster whenever a holder's row lacks one,
+so this is for the record, not a blocker.

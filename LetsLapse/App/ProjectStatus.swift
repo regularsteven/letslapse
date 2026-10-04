@@ -25,8 +25,11 @@ struct ProjectLocalStatus: Codable, Equatable, Sendable {
     /// The heavy set here, fingerprinted as PicPlace's backed-up marker is.
     var heavyDigest: String
     var heavyFiles: Int
-    /// The document's and the heavy folders' modification dates — a project
-    /// whose signature moved is walked again.
+    /// A full-size working copy is here (stage 5, picture tiers) — the
+    /// filter *Working copy here*, with the originals not.
+    var hasWorkingCopy: Bool
+    /// The document's, the heavy folders' and the folder's own modification
+    /// dates — a project whose signature moved is walked again.
     var signature: String
 
     init(_ holdings: ProjectHoldings, signature: String) {
@@ -34,12 +37,15 @@ struct ProjectLocalStatus: Codable, Equatable, Sendable {
         blendsHere = holdings.otherBlendsHere
         heavyDigest = holdings.localHeavyDigest ?? PicPlaceOriginalsCheck.digest([])
         heavyFiles = holdings.localHeavyFiles
+        hasWorkingCopy = holdings.hasWorkingCopy
         self.signature = signature
     }
 
-    /// The folder's signature: `project.json`, `source/` and `blends/`'s
-    /// modification dates. Adding or removing a frame or a blend moves the
-    /// folder's date; a record change moves the document's.
+    /// The folder's signature: `project.json`, `source/`, `blends/` and the
+    /// folder's own modification dates. Adding or removing a frame or a
+    /// blend moves its folder's date; a record change moves the document's;
+    /// a working copy, a poster or a tile arriving or leaving moves the
+    /// folder's own (stage 5).
     nonisolated static func signature(folder: URL) -> String {
         func stamp(_ url: URL) -> String {
             let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
@@ -49,6 +55,7 @@ struct ProjectLocalStatus: Codable, Equatable, Sendable {
             stamp(ProjectDocumentFormat.url(inProjectFolder: folder)),
             stamp(folder.appendingPathComponent("source", isDirectory: true)),
             stamp(folder.appendingPathComponent("blends", isDirectory: true)),
+            stamp(folder),
         ].joined(separator: "|")
     }
 }
@@ -58,6 +65,8 @@ struct ProjectLocalStatus: Codable, Equatable, Sendable {
 enum PicPlaceFilter: String, CaseIterable, Identifiable, Sendable {
     case all
     case onDevice
+    /// The originals are not here, a working copy is (stage 5).
+    case workingCopyHere
     case downloadAvailable
     case notAvailable
     case needsUploading
@@ -70,6 +79,7 @@ enum PicPlaceFilter: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .all: return "All"
         case .onDevice: return "On this device"
+        case .workingCopyHere: return "Working copy here"
         case .downloadAvailable: return "Download available"
         case .notAvailable: return "Not available to download"
         case .needsUploading: return "Needs uploading"
@@ -84,6 +94,7 @@ enum PicPlaceFilter: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .all: return .symbol("square.grid.2x2")
         case .onDevice: return .asset(.originals, .here)
+        case .workingCopyHere: return .asset(.workingCopy, .here)
         case .downloadAvailable: return .asset(.originals, .there)
         case .notAvailable: return .asset(.originals, .nowhere)
         case .needsUploading: return .cloud(.needsUploading)
@@ -125,6 +136,8 @@ enum PicPlaceFilter: String, CaseIterable, Identifiable, Sendable {
 /// it — nil pieces where nothing is known yet.
 struct ProjectPicPlaceStatus: Equatable {
     var originalsHere: Bool
+    /// A working copy is here (stage 5) — meaningful with `originalsHere` false.
+    var hasWorkingCopy: Bool = false
     var backedUp: Bool
     var originalsOnPicPlace: Bool
     var onPicPlace: Bool
@@ -162,6 +175,7 @@ extension AppModel {
         }
         return ProjectPicPlaceStatus(
             originalsHere: local.originalsHere,
+            hasWorkingCopy: local.hasWorkingCopy,
             backedUp: backedUp,
             originalsOnPicPlace: onPicPlace && originalsOnPicPlace(origin: origin, record: record),
             onPicPlace: onPicPlace,
@@ -198,6 +212,7 @@ extension AppModel {
         switch filter {
         case .all, .hasBlends: return true
         case .onDevice: return status.originalsHere
+        case .workingCopyHere: return !status.originalsHere && status.hasWorkingCopy
         case .downloadAvailable: return !status.originalsHere && status.originalsOnPicPlace
         case .notAvailable: return !status.originalsHere && !status.originalsOnPicPlace
         case .needsUploading: return status.originalsHere && !status.backedUp && !status.verifying
@@ -340,7 +355,9 @@ extension AppModel {
     // MARK: Remembered between launches
 
     private struct LocalStatusFile: Codable {
-        var version = 1
+        /// 2 since stage 5 (`hasWorkingCopy`, the folder's own stamp in the
+        /// signature): a version-1 file is walked afresh, once.
+        var version = 2
         var entries: [UUID: ProjectLocalStatus]
     }
 
@@ -348,7 +365,7 @@ extension AppModel {
         guard !statusStore.loadedFromDisk else { return }
         statusStore.loadedFromDisk = true
         guard let data = try? Data(contentsOf: localStatusURL),
-              let file = try? JSONDecoder().decode(LocalStatusFile.self, from: data), file.version == 1
+              let file = try? JSONDecoder().decode(LocalStatusFile.self, from: data), file.version == 2
         else { return }
         // Nothing here is trusted until the sweep has checked its signature;
         // it only spares the walk of a project that did not move.

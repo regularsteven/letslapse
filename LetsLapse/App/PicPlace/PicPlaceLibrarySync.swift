@@ -508,6 +508,7 @@ extension PicPlaceController {
                 heavyFiles: heavy.count, heavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) },
                 serverHeavyFiles: heavy.count, serverHeavyBytes: heavy.reduce(0) { $0 + ($1.bytes ?? 0) },
                 serverConfirmedSeen: assets.count)
+            records[originID]?.serverRowAccounted = row.accountedConfirmed
             records[originID]?.serverSourceFiles = heavy.filter { PicPlaceSyncInventory.heavyKind($0.name) == .source }.count
             records[originID]?.tileSHA256 = tileAsset?.sha256
             records[originID]?.posterSHA256 = posterAsset?.sha256

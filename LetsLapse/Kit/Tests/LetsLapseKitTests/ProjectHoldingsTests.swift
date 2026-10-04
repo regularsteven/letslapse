@@ -152,6 +152,42 @@ final class ProjectHoldingsTests: XCTestCase {
     /// Steven's D6 table (docs/picture-tiers-plan.md §3.3): a raw source
     /// always needs a working copy; a display-referred one only when the
     /// proxy's recipe moves a pixel — and the crop is not in the recipe.
+    /// Stage 5 (picture tiers): a working copy here stands in for the
+    /// originals — by the name the records expect when the caller knows it,
+    /// else any `picture-*.heic` (the status sweep); never when the
+    /// originals themselves are here.
+    func testAWorkingCopyHereStandsInForTheOriginals() {
+        let copy = "picture-abc123def456.heic"
+        var present: [String: Int64] = [copy: 6_000_000]
+        let expected = ProjectHoldings(
+            originals: frames(1), blends: [], pictureBlendID: nil,
+            present: present, recordedBytes: recorded(["source/frame-1.dng"], bytes: 20), hasPreview: true,
+            workingCopyName: copy)
+        XCTAssertTrue(expected.hasWorkingCopy)
+        XCTAssertEqual(expected.workingCopyBytes, 6_000_000)
+        XCTAssertEqual(expected.tier, .preview, "a working copy is not the originals")
+        XCTAssertEqual(expected.presenceTier, "proxy")
+
+        let stale = ProjectHoldings(
+            originals: frames(1), blends: [], pictureBlendID: nil,
+            present: present, recordedBytes: [:], hasPreview: true,
+            workingCopyName: "picture-000000000000.heic")
+        XCTAssertFalse(stale.hasWorkingCopy, "a copy of another recipe is not the working copy")
+        XCTAssertEqual(stale.presenceTier, "preview")
+
+        let unnamed = ProjectHoldings(
+            originals: frames(1), blends: [], pictureBlendID: nil,
+            present: present, recordedBytes: [:], hasPreview: true)
+        XCTAssertTrue(unnamed.hasWorkingCopy, "with no expected name, any working copy counts")
+
+        present["source/frame-1.dng"] = 20
+        let holder = ProjectHoldings(
+            originals: frames(1), blends: [], pictureBlendID: nil,
+            present: present, recordedBytes: [:], hasPreview: true, workingCopyName: copy)
+        XCTAssertTrue(holder.hasWorkingCopy)
+        XCTAssertEqual(holder.presenceTier, "original", "the originals outrank the copy")
+    }
+
     func testProxyRuleFollowsTheTable() {
         // raw, whatever the grade
         XCTAssertTrue(ProxyRule.needsProxy(sourceIsRaw: true, colourIdentity: true, hasLevel: false, baselineVariant: true))

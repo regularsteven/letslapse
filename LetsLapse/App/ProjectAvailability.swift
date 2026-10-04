@@ -90,10 +90,16 @@ extension AppModel {
         var originals: [(name: String, files: [String])]
         var blends: [(id: UUID, fileName: String)]
         var pictureBlendID: UUID?
+        /// The working copy the records expect (stage 5) — known on the
+        /// main actor, where the grade and the turns are; nil in the status
+        /// sweep, where any copy in the folder counts.
+        var workingCopyName: String?
     }
 
     func holdingsInputs(for capture: CaptureProject) -> HoldingsInputs {
-        Self.holdingsInputs(capture: capture, blends: blends(for: capture), folder: projectFolderURL(for: capture))
+        var inputs = Self.holdingsInputs(capture: capture, blends: blends(for: capture), folder: projectFolderURL(for: capture))
+        if capture.kind == .photos { inputs.workingCopyName = expectedProxyName(for: capture) }
+        return inputs
     }
 
     /// The same from a document read anywhere — the status sweep's, off the
@@ -130,7 +136,8 @@ extension AppModel {
         var holdings = ProjectHoldings(
             originals: inputs.originals, blends: inputs.blends, pictureBlendID: inputs.pictureBlendID,
             present: present, recordedBytes: recorded,
-            hasPreview: present[ProjectFileRegistry.posterName] != nil || ProjectFileRegistry.tileCandidates.contains { present[$0] != nil })
+            hasPreview: present[ProjectFileRegistry.posterName] != nil || ProjectFileRegistry.tileCandidates.contains { present[$0] != nil },
+            workingCopyName: inputs.workingCopyName)
         // The heavy set here, fingerprinted as PicPlace's backed-up marker
         // is (`heavyDigest`) — what the holdings pill's green tick compares.
         let heavy = PicPlaceController.heavyFiles(entries)
@@ -192,6 +199,15 @@ extension AppModel {
     func workingCopyURL(for capture: CaptureProject) -> URL? {
         let url = projectFolderURL(for: capture).appendingPathComponent(expectedProxyName(for: capture))
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// What this device tells PicPlace it holds of the project (the presence
+    /// record other devices' lines read): `original` when the picture is
+    /// here, `proxy` when a fresh working copy stands in for it, else
+    /// `preview` (docs/picture-tiers-plan.md §3.7, D5).
+    func presenceTier(for capture: CaptureProject) -> String {
+        if !sourcesMissing(capture) { return "original" }
+        return workingCopyURL(for: capture) != nil ? "proxy" : "preview"
     }
 
     /// Full-size pixels a page may compose on: the originals' picture when

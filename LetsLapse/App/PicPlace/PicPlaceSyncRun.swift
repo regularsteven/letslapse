@@ -87,6 +87,18 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     /// bundle and poster of a push that completed after the pull, or the
     /// originals — and the check fetches the records again.
     var serverConfirmedSeen: Int?
+    /// The index row's own accounted count (`PPProject.accountedConfirmed`)
+    /// when this device last took or settled the records (2026-10-03): the
+    /// move test compares the row with THIS, never with the listing's count
+    /// — the row subtracts one working copy by its pointer while a listing
+    /// leaves every copy out, so a project with two copies on PicPlace read
+    /// as moved on every check and fetched its records each time (the Mac,
+    /// three projects a check).
+    var serverRowAccounted: Int?
+    /// When the check last re-sent a poster PicPlace's row said it lacked
+    /// (2026-10-03): once per `posterResendInterval` per project.
+    var posterResentAt: Date?
+    static let posterResendInterval: TimeInterval = 6 * 3600
     /// The failure behind `lastError`: when, how many times in a row, and
     /// which policy was being sent. The check retries a failed push once
     /// `failedAt` plus the backoff for `failures` has passed; a person's
@@ -208,6 +220,12 @@ struct PicPlaceSyncRun {
         /// The capture month in the person's calendar (`YYYY-MM`), sent on
         /// every PUT from push 2 (picture tiers §A); nil before it.
         var bucket: String? = nil
+        /// The id of the working copy PicPlace holds under another name —
+        /// a re-grade's old copy — named as `replaces` on the new copy's
+        /// negotiate so it is retired when the new one confirms (2026-10-03:
+        /// without it every re-grade left one more copy on the server, and
+        /// every other device's count read as moved on each check).
+        var replacesProxy: String? = nil
     }
 
     struct Failed: LocalizedError {
@@ -233,6 +251,9 @@ struct PicPlaceSyncRun {
         /// Hashed afresh and found different from what `assets.ndjson`
         /// recorded: the file changed since it was recorded.
         var changedSinceRecorded = false
+        /// A confirmed asset of the same project and kind this one retires
+        /// when it confirms (`replaces`, push 2) — a re-grade's old copy.
+        var replaces: String?
 
         /// The item as a heavy file (a source frame or a blend), else nil —
         /// the heavy kinds are the check's own (`source`, `blend`).
@@ -335,7 +356,10 @@ struct PicPlaceSyncRun {
             // 2. What the policy sends, with hashes (assets.ndjson first,
             // computed otherwise); the records bundle is built here.
             await report { $0.phase = .preparing }
-            let inventory = try await Self.inventory(of: project.folder, policy: project.policy)
+            var inventory = try await Self.inventory(of: project.folder, policy: project.policy)
+            if let old = project.replacesProxy, let index = inventory.files.firstIndex(where: { $0.kind == PicPlaceSyncInventory.proxyKind }) {
+                inventory.files[index].replaces = old
+            }
             bundleURL = inventory.bundleURL
             var files = inventory.files
             try Task.checkCancellation()
@@ -408,13 +432,30 @@ struct PicPlaceSyncRun {
             // Heavy files whose PicPlace copy has not been read back yet
             // (`verified`): the set's marker waits for them.
             var unverifiedHeavy = Set<String>()
+            // Old copies this run names as `replaces` (a re-grade's working
+            // copy), by the new asset's id — retired by hand after the
+            // confirms when PicPlace did not say it retired them (2026-10-03:
+            // the per-project negotiate does not pass `replaces` on, only
+            // the batch one does; the claim this run holds lets it DELETE).
+            var toRetire: [String: String] = [:]
+            var retireNames: [String: String] = [:]
             for batch in files.chunked(Self.batchSize) {
                 try Task.checkCancellation()
                 lastClaim = try await reclaimIfStale(lastClaim)
                 let request: [String: Any] = ["assets": batch.map(Self.negotiateFields)]
                 let response: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: request)
                 let results = response["assets"] ?? []
-                for (item, result) in zip(batch, results) {
+                for (item, var result) in zip(batch, results) {
+                    if result.error == "replaces_not_found", item.replaces != nil {
+                        // The old working copy this one was to retire is
+                        // already gone (another device's sweep, a stale
+                        // pointer): the item goes again on its own.
+                        var plain = item
+                        plain.replaces = nil
+                        let again: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: ["assets": [Self.negotiateFields(plain)]])
+                        guard let retried = again["assets"]?.first else { throw Failed(caption: "PicPlace did not negotiate \(item.name).") }
+                        result = retried
+                    }
                     if let error = result.error {
                         if PPNegotiation.isImmutableRefusal(error), item.heavyFile != nil {
                             divergent.append(item.name)
@@ -424,6 +465,10 @@ struct PicPlaceSyncRun {
                         throw Failed(caption: "\(item.name): \(result.message ?? error)")
                     }
                     guard let asset = result.asset else { throw Failed(caption: "PicPlace did not negotiate \(item.name).") }
+                    if let old = item.replaces, old != asset.id {
+                        toRetire[asset.id] = old
+                        retireNames[old] = item.name
+                    }
                     if let upload = result.upload {
                         pending.append(PendingUpload(item: item, assetID: asset.id, upload: upload))
                     } else {
@@ -465,6 +510,7 @@ struct PicPlaceSyncRun {
                         chunk.filter { heavyNames.contains($0.name) }.map { ($0.assetID, $0.name) },
                         uniquingKeysWith: { first, _ in first })
                     for result in response["assets"] ?? [] {
+                        if result.didReplace { toRetire[result.id] = nil }
                         if let error = result.error {
                             failures.append(result.message ?? error)
                         } else if let name = heavyByAssetID[result.id], result.asset?.verified != true {
@@ -567,6 +613,26 @@ struct PicPlaceSyncRun {
             try await confirmFinished()
             if !failures.isEmpty {
                 throw Failed(caption: failures.count == 1 ? failures[0] : "\(failures.count) files could not be confirmed")
+            }
+            // The old copies PicPlace did not retire for us, under the claim:
+            // the one named as `replaces`, and — since a re-grade before this
+            // build left one behind each time — every other confirmed copy
+            // the project lists, by one read of its detail.
+            if let sent = files.first(where: { $0.kind == PicPlaceSyncInventory.proxyKind }) {
+                var old = Set(toRetire.values)
+                if let detail: PPProjectDetail = try? await client.get("projects/\(uuid)") {
+                    for asset in detail.assets ?? [] where asset.isWorkingCopy && asset.status == "confirmed" && asset.name != sent.name {
+                        old.insert(asset.id)
+                    }
+                }
+                for id in old {
+                    do {
+                        let reply: PPDeleted = try await client.delete("assets/\(id)")
+                        LLog("picplace: \(project.name) — retired a previous working copy on PicPlace (\(id.prefix(8)))\(reply.deleted == true ? "" : " — PicPlace did not say deleted")")
+                    } catch {
+                        LLog("picplace: \(project.name) — could not retire the previous working copy \(id.prefix(8)) (\(retireNames[id] ?? sent.name) replaces it): \(error.localizedDescription)")
+                    }
+                }
             }
 
             // 7. Presence, then let go of the claim.
@@ -712,7 +778,8 @@ struct PicPlaceSyncRun {
     static func negotiateFields(_ item: FileItem) -> [String: Any] {
         let fields: [String: Any?] = ["kind": item.kind, "name": item.name, "bytes": item.bytes, "sha256": item.sha256,
                                       "content_type": item.name == PicPlaceSyncInventory.bundleName
-                                          ? PicPlaceSyncInventory.bundleContentType : contentType(for: item.url)]
+                                          ? PicPlaceSyncInventory.bundleContentType : contentType(for: item.url),
+                                      "replaces": item.replaces]
         return fields.compactMapValues { $0 }
     }
 

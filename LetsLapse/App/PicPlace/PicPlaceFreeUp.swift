@@ -45,10 +45,33 @@ extension PicPlaceController {
     enum RemovalScope: String, Equatable {
         case originals
         case blends
+        /// The full-size working copy (stage 5, picture tiers): removed with
+        /// no server check — PicPlace holds it, and the next open for text,
+        /// masks, shapes or crop fetches it again.
+        case workingCopy
 
-        var kind: PicPlaceOriginalsCheck.Kind { self == .originals ? .source : .blend }
-        var noun: String { self == .originals ? "originals" : "blends" }
+        /// The heavy kind the scope removes — nil for the working copy,
+        /// which is not heavy and has its own door (`removeWorkingCopy`).
+        var kind: PicPlaceOriginalsCheck.Kind? {
+            switch self {
+            case .originals: return .source
+            case .blends: return .blend
+            case .workingCopy: return nil
+            }
+        }
+
+        var noun: String {
+            switch self {
+            case .originals: return "originals"
+            case .blends: return "blends"
+            case .workingCopy: return "working copy"
+            }
+        }
     }
+
+    /// How long a working copy may sit unopened before Settings offers to
+    /// remove it (docs/picture-tiers-plan.md §3.7).
+    static let workingCopyIdleDays = 30
 
     /// The card's two rows — Originals and Blends: what is here, what of it
     /// PicPlace lacks, and what only PicPlace has.
@@ -136,6 +159,12 @@ extension PicPlaceController {
             /// Projects not on PicPlace yet that already have an upload job
             /// (Project Syncing shows them); left out of `notUpProjects`.
             var queuedProjects = 0
+            /// Working copies here with the originals not, unopened for
+            /// `workingCopyIdleDays` (stage 5) — what *Remove working copies*
+            /// removes, and their size.
+            var staleCopies = 0
+            var staleCopyBytes: Int64 = 0
+            var staleCopyIDs: [UUID] = []
             var measuredAt = Date()
         }
 
@@ -144,9 +173,12 @@ extension PicPlaceController {
             var total = 0
             var freedBytes: Int64 = 0
             var current: String?
+            /// What the run removes — the originals, or the working copies.
+            var scope: RemovalScope = .originals
         }
 
         struct Result: Equatable {
+            var scope: RemovalScope = .originals
             var projects = 0
             var freedBytes: Int64 = 0
             /// Projects that kept their originals, and the first reasons.
@@ -312,8 +344,70 @@ extension PicPlaceController {
             if model.posterURL(for: capture) == nil { return "This project has no preview yet — sync it once, then remove the originals" }
         case .blends:
             if capture.isPhotoCapture { return "A photo's blend is the photo itself — it stays" }
+        case .workingCopy:
+            break
         }
         return nil
+    }
+
+    /// Removes the project's working copies — every `picture-*.heic` in its
+    /// folder — with no server check: PicPlace holds the copy, and the next
+    /// open for text, masks, shapes or crop fetches it again (stage 5). A
+    /// project whose originals are here keeps its copy: that is the
+    /// holder's own render, which the sweep would only make again.
+    func removeWorkingCopy(_ capture: AppModel.CaptureProject) async -> RemovalOutcome {
+        let id = capture.id
+        if let busy = projectInUse(capture) { return RemovalOutcome(refusal: busy) }
+        guard model.sourcesMissing(capture) else { return RemovalOutcome(refusal: "The originals are on \(Self.deviceWord) — the working copy stays with them") }
+        let folder = model.projectFolderURL(for: capture)
+        let copies = Self.workingCopies(in: folder)
+        guard !copies.isEmpty else { return RemovalOutcome(refusal: "No working copy on \(Self.deviceWord) to remove") }
+        removingProjects.insert(id)
+        progress[id] = PicPlaceSyncProgress(phase: .removing, filesDone: 0, filesTotal: copies.count, bytesDone: 0,
+                                            bytesTotal: copies.reduce(0) { $0 + $1.bytes })
+        defer {
+            removingProjects.remove(id)
+            progress[id] = nil
+        }
+        var outcome = RemovalOutcome()
+        for copy in copies {
+            do {
+                try FileManager.default.removeItem(at: folder.appendingPathComponent(copy.name))
+                outcome.removedFiles += 1
+                outcome.removedBytes += copy.bytes
+            } catch {
+                outcome.stopped = "\(copy.name) would not go (\(error.localizedDescription))"
+                break
+            }
+        }
+        model.noteFilesChanged(for: id)
+        if outcome.didRemove, let record = records[model.originID(of: capture)] {
+            // Back to the preview tier on PicPlace's presence record.
+            let uuid = model.originID(of: capture).uuidString.lowercased()
+            let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": record.revision, "tier": model.presenceTier(for: capture)])
+        }
+        LLog("picplace: free up — removed \(outcome.removedFiles) working cop\(outcome.removedFiles == 1 ? "y" : "ies"), \(outcome.removedBytes) bytes, of \(capture.displayTitle)\(outcome.stopped.map { "; stopped: \($0)" } ?? "")")
+        return outcome
+    }
+
+    /// The working copies in a project folder, by name and size — any
+    /// thread.
+    nonisolated static func workingCopies(in folder: URL) -> [(name: String, bytes: Int64)] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return names.filter { ProjectFileRegistry.isProxyPicture(fileName: $0) }.sorted().map { name in
+            let size = (try? folder.appendingPathComponent(name).resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            return (name, Int64(size))
+        }
+    }
+
+    /// The editor mounted on the project's working copy: the free-up rule's
+    /// clock starts again. Written at most once an hour per project.
+    func noteWorkingCopyUsed(_ capture: AppModel.CaptureProject) {
+        let key = model.originID(of: capture)
+        guard let record = records[key] else { return }
+        if let last = record.workingCopyUsedAt, Date().timeIntervalSince(last) < 3600 { return }
+        records[key]?.workingCopyUsedAt = Date()
+        saveSyncState()
     }
 
     /// Whether something on this device is using the project's files.
@@ -327,12 +421,13 @@ extension PicPlaceController {
     /// The check, then the removal — the core every door shares. On the
     /// main actor; the hashing and the deleting run off it.
     func performRemoval(_ capture: AppModel.CaptureProject, scope: RemovalScope) async -> RemovalOutcome {
+        // The working copy has no server check and no claim (stage 5).
+        guard let kind = scope.kind else { return await removeWorkingCopy(capture) }
         if let blocker = removalBlocker(for: capture, scope: scope) { return RemovalOutcome(refusal: blocker) }
         let id = capture.id
         let key = model.originID(of: capture)
         let uuid = key.uuidString.lowercased()
         let folder = model.projectFolderURL(for: capture)
-        let kind = scope.kind
         removingProjects.insert(id)
         progress[id] = PicPlaceSyncProgress(phase: .verifying)
         defer {
@@ -455,12 +550,18 @@ extension PicPlaceController {
             let covered = PicPlaceOriginalsCheck.notCovered(remaining, by: remote, verifiedOnly: true).isEmpty
             record.heavyDigest = covered ? PicPlaceOriginalsCheck.digest(remaining) : nil
             if outcome.didRemove { record.removedAt = Date() }
+            // A working copy left behind the originals: the free-up rule's
+            // clock starts now, not at a fetch that never happened (stage 5).
+            if outcome.didRemove, scope == .originals, record.workingCopyUsedAt == nil, model.workingCopyURL(for: capture) != nil {
+                record.workingCopyUsedAt = Date()
+            }
             records[key] = record
             saveSyncState()
         }
         if outcome.didRemove, model.sourcesMissing(capture) {
+            // `proxy` when a working copy stays behind the removed originals.
             let revision = records[key]?.revision ?? revision(of: capture)
-            let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": revision, "tier": "preview"])
+            let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": revision, "tier": model.presenceTier(for: capture)])
         }
         LLog("picplace: free up — removed \(outcome.removedFiles) \(scope.noun) file(s), \(outcome.removedBytes) bytes, of \(capture.displayTitle) (\(uuid.prefix(8)))\(outcome.stopped.map { "; stopped: \($0)" } ?? "")\(keptForCollections > 0 ? "; \(keptForCollections) kept for collections" : "")")
         return outcome
@@ -568,6 +669,14 @@ extension PicPlaceController {
             let listings = await Task.detached(priority: .utility) { () -> [(UUID, [PicPlaceOriginalsCheck.LocalFile])] in
                 candidates.map { ($0.id, Self.heavyFiles(in: $0.folder)) }
             }.value
+            // The working copies here (stage 5): a folder's `picture-*.heic`,
+            // by size — judged against the record's last-opened date.
+            let copies = await Task.detached(priority: .utility) { () -> [(UUID, Int64)] in
+                candidates.compactMap { candidate in
+                    let found = Self.workingCopies(in: candidate.folder)
+                    return found.isEmpty ? nil : (candidate.id, found.reduce(0) { $0 + $1.bytes })
+                }
+            }.value
             LLPerf.end("free-up listings", listingsSignpost)
             let listingsSeconds = Date().timeIntervalSince(listingsStarted)
             let judgeStarted = Date()
@@ -575,7 +684,7 @@ extension PicPlaceController {
             let origins = Dictionary(candidates.map { ($0.id, $0.origin) }, uniquingKeysWith: { first, _ in first })
             let knowledge = FreeUpKnowledge(records: self.records, serverHeavy: self.serverHeavy, queued: Set(self.uploadJobs.keys))
             let estimate = await Task.detached(priority: .utility) {
-                Self.judgeFreeUp(listings, origins: origins, knowledge: knowledge)
+                Self.judgeFreeUp(listings, copies: copies, origins: origins, knowledge: knowledge)
             }.value
             LLPerf.end("free-up judge", judgeSignpost)
             // One write, not one per project: every write publishes.
@@ -591,6 +700,10 @@ extension PicPlaceController {
                 self.queueUploadsAfterEstimate = false
                 self.queueRemainingOriginalsUploads()
             }
+            if self.removeStaleCopiesAfterEstimate {
+                self.removeStaleCopiesAfterEstimate = false
+                self.removeStaleWorkingCopies()
+            }
         }
     }
 
@@ -603,10 +716,23 @@ extension PicPlaceController {
         var queued: Set<UUID>
     }
 
-    /// The estimate from the listings — any thread.
-    nonisolated static func judgeFreeUp(_ listings: [(UUID, [PicPlaceOriginalsCheck.LocalFile])], origins: [UUID: UUID],
-                                        knowledge: FreeUpKnowledge) -> FreeUpState.Estimate {
+    /// The estimate from the listings — any thread. `copies` are the
+    /// working copies here by project and size (stage 5): one is stale when
+    /// the originals are not here and the record says it was not opened in
+    /// `workingCopyIdleDays` — or never, which a copy fetched to look at
+    /// always notes.
+    nonisolated static func judgeFreeUp(_ listings: [(UUID, [PicPlaceOriginalsCheck.LocalFile])], copies: [(UUID, Int64)] = [],
+                                        origins: [UUID: UUID], knowledge: FreeUpKnowledge, now: Date = Date()) -> FreeUpState.Estimate {
         var estimate = FreeUpState.Estimate()
+        let sourcesHere = Set(listings.filter { $0.1.contains { $0.kind == .source } }.map(\.0))
+        for (id, bytes) in copies {
+            guard !sourcesHere.contains(id), let origin = origins[id] else { continue }
+            let used = knowledge.records[origin]?.workingCopyUsedAt ?? .distantPast
+            guard now.timeIntervalSince(used) > Double(workingCopyIdleDays) * 86_400 else { continue }
+            estimate.staleCopies += 1
+            estimate.staleCopyBytes += bytes
+            estimate.staleCopyIDs.append(id)
+        }
         for (id, listing) in listings {
             let source = listing.filter { $0.kind == .source }
             guard !source.isEmpty, let origin = origins[id] else { continue }
@@ -697,6 +823,47 @@ extension PicPlaceController {
 
     func stopFreeUp() {
         freeUpTask?.cancel()
+    }
+
+    /// Settings' *Remove working copies not opened in 30 days* (stage 5):
+    /// the estimate's stale copies, removed one project at a time with no
+    /// server check — each comes down again when its project is opened to
+    /// edit text, masks, shapes or crop.
+    func removeStaleWorkingCopies() {
+        guard freeUpTask == nil, removalTasks.isEmpty, let estimate = freeUp.estimate, !estimate.staleCopyIDs.isEmpty else { return }
+        let ids = estimate.staleCopyIDs
+        freeUp.result = nil
+        freeUp.run = FreeUpState.Run(done: 0, total: ids.count, scope: .workingCopy)
+        LLog("picplace: free up — removing the working copies of \(ids.count) project(s) not opened in \(Self.workingCopyIdleDays) days")
+        freeUpTask = Task { [weak self] in
+            guard let self else { return }
+            let activity = PicPlaceBackgroundActivity("PicPlace — removing working copies")
+            defer { activity.end() }
+            var result = FreeUpState.Result(scope: .workingCopy)
+            for id in ids {
+                if Task.isCancelled { result.stopped = "Stopped"; break }
+                guard let capture = self.model.capture(id: id) else { self.freeUp.run?.done += 1; continue }
+                self.freeUp.run?.current = capture.displayTitle
+                let outcome = await self.removeWorkingCopy(capture)
+                self.freeUp.run?.done += 1
+                if outcome.didRemove {
+                    result.projects += 1
+                    result.freedBytes += outcome.removedBytes
+                    self.freeUp.run?.freedBytes = result.freedBytes
+                }
+                if let refusal = outcome.refusal {
+                    result.kept += 1
+                    if result.reasons.count < 3 { result.reasons.append("\(capture.displayTitle): \(refusal)") }
+                }
+                if let stopped = outcome.stopped { result.stopped = stopped; break }
+            }
+            result.finishedAt = Date()
+            LLog("picplace: free up — working copies of \(result.projects) project(s), \(result.freedBytes) bytes freed; \(result.kept) kept\(result.stopped.map { "; stopped: \($0)" } ?? "")")
+            self.freeUp.run = nil
+            self.freeUp.result = result
+            self.freeUpTask = nil
+            self.refreshFreeUpEstimate(force: true)
+        }
     }
 
     /// *Queue upload for N projects* beside the estimate (2026-09-27): an

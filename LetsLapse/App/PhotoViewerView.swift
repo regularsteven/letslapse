@@ -1184,7 +1184,11 @@ struct PhotoViewerView: View {
             }
             refreshFrameWindow()
             if !isWorkingCopy { refreshLightroomSidecar() }
-            if isWorkingCopy { LLog("editor: working copy \(url.lastPathComponent) for \(capture.displayTitle) — grade groups locked, overlays live") }
+            if isWorkingCopy {
+                LLog("editor: working copy \(url.lastPathComponent) for \(capture.displayTitle) — grade groups locked, overlays live")
+                // The free-up rule's clock (stage 5): a copy opened keeps.
+                model.picplace.noteWorkingCopyUsed(capture)
+            }
             loaded = true
             PageTurnTrace.mark("seed")
             let viewedURL = url

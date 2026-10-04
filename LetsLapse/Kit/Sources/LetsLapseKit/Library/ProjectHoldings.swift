@@ -94,6 +94,13 @@ public struct ProjectHoldings: Equatable, Sendable {
     public var pictureBlendID: UUID?
     /// `poster.jpg` is here.
     public var hasPreview: Bool
+    /// The project's full-size working copy (`picture-<token>.heic`, docs/picture-tiers-plan.md
+    /// §3.7) is here — the one the records expect when the caller named it,
+    /// else any. What text, masks, shapes and crop can work on without the
+    /// originals.
+    public var hasWorkingCopy = false
+    /// What that copy weighs here, when it is here.
+    public var workingCopyBytes: Int64?
     /// The fingerprint of the heavy files on this device — every source
     /// file and blend, by path and size — the way PicPlace's backed-up
     /// marker is (`PicPlaceOriginalsCheck.digest`; the digest of nothing
@@ -124,12 +131,17 @@ public struct ProjectHoldings: Equatable, Sendable {
     ///   - present: the folder's files, project-relative path → bytes.
     ///   - recordedBytes: `assets.ndjson`'s sizes by name.
     ///   - hasPreview: `poster.jpg` is here.
+    ///   - workingCopyName: the working copy the records expect
+    ///     (`picture-<token>.heic`); nil when the caller cannot work it out
+    ///     (the status sweep, which reads the document alone), when any
+    ///     working copy in the folder counts — a device keeps one at most.
     public init(originals: [(name: String, files: [String])],
                 blends: [(id: UUID, fileName: String)],
                 pictureBlendID: UUID?,
                 present: [String: Int64],
                 recordedBytes: [String: Int64],
-                hasPreview: Bool) {
+                hasPreview: Bool,
+                workingCopyName: String? = nil) {
         self.originals = originals.map { original in
             let files = original.files.isEmpty ? [original.name] : original.files
             let isHere = files.contains { present[$0] != nil }
@@ -153,6 +165,20 @@ public struct ProjectHoldings: Equatable, Sendable {
         }
         self.pictureBlendID = pictureBlendID
         self.hasPreview = hasPreview
+        if let workingCopyName {
+            workingCopyBytes = present[workingCopyName]
+        } else {
+            workingCopyBytes = present.first { ProjectFileRegistry.isProxyPicture(fileName: $0.key) }?.value
+        }
+        hasWorkingCopy = workingCopyBytes != nil
+    }
+
+    /// Where this device stands for PicPlace's presence record: `original`
+    /// when the picture is here, `proxy` when a working copy stands in for
+    /// it, else `preview`.
+    public var presenceTier: String {
+        if tier == .originals { return "original" }
+        return hasWorkingCopy ? "proxy" : "preview"
     }
 
     // MARK: - Reading

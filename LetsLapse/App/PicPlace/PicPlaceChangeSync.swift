@@ -419,7 +419,21 @@ extension PicPlaceController {
                        tileCandidates.count < (serverHasRenditionBatches ? 1_000 : 100) {
                         tileCandidates.append((row, localID))
                     }
-                    if !project.sourcesMissing, record?.posterToken == nil, syncTasks[localID] == nil {
+                    // A poster PicPlace's row says it lacks, from a device that
+                    // holds the originals (2026-10-03: 21 of Steven's projects
+                    // pushed 27–30.9 went up as records alone and nothing ever
+                    // sent the poster — every other device drew them blank).
+                    // The note is cleared so the branch below sends one; once
+                    // per `posterResendInterval` per project, in case the
+                    // server never records it.
+                    if !project.sourcesMissing, syncTasks[localID] == nil, serverHasRenditions,
+                       let renditions = row.renditions, renditions.poster == nil, records[origin]?.posterToken != nil,
+                       (records[origin]?.posterResentAt).map({ Date().timeIntervalSince($0) > PicPlaceSyncRecord.posterResendInterval }) ?? true {
+                        records[origin]?.posterToken = nil
+                        records[origin]?.posterResentAt = Date()
+                        LLog("picplace: PicPlace holds no poster of \(project.displayTitle) (\(origin.uuidString.prefix(8))) — sending one again")
+                    }
+                    if !project.sourcesMissing, records[origin]?.posterToken == nil, syncTasks[localID] == nil {
                         if serverHasRenditions, let renditions = row.renditions {
                             // The row says whether PicPlace holds the poster
                             // (push 1): no listing pass (`settlePosters`).
@@ -436,7 +450,7 @@ extension PicPlaceController {
                             posterCandidates.append((origin, localID))
                         }
                     } else if project.sourcesMissing, record?.policy == "pull" || record?.serverConfirmedSeen != nil,
-                              record?.serverConfirmedSeen != row.accountedConfirmed {
+                              (record?.serverRowAccounted ?? record?.serverConfirmedSeen) != row.accountedConfirmed {
                         // Settled after the pass, a hundred projects per
                         // request (`settleAssetCountMoves`): most often the
                         // count moved because another device uploaded the
@@ -553,17 +567,23 @@ extension PicPlaceController {
             // `LL_PICPLACE_UPLOAD` presses Upload at launch instead
             // (`runUploadHookOnce`): a person's Upload does not wait for a
             // check, which mobile data holds.
-            // Free up space, once per process: `LL_PICPLACE_REMOVE=<uuid>[:originals|blends]`
+            // Free up space, once per process: `LL_PICPLACE_REMOVE=<uuid>[:originals|blends|workingcopy]`
             // presses the card's Remove (after its confirm) on that project;
             // `LL_PICPLACE_FREEUP=1` presses Settings' Remove originals already
-            // on PicPlace; `LL_PICPLACE_UPLOAD_ALL=1` its Upload beside it.
+            // on PicPlace (`=copies` its Remove working copies not opened in
+            // 30 days, stage 5); `LL_PICPLACE_UPLOAD_ALL=1` its Upload beside it.
             if !Self.freeUpHooksRan {
                 Self.freeUpHooksRan = true
                 let environment = ProcessInfo.processInfo.environment
                 if let raw = environment["LL_PICPLACE_REMOVE"] {
                     let parts = raw.split(separator: ":").map(String.init)
                     if let id = UUID(uuidString: parts[0]), let capture = model.capture(id: id) {
-                        let scope: RemovalScope = parts.count > 1 && parts[1] == "blends" ? .blends : .originals
+                        let scope: RemovalScope
+                        switch parts.count > 1 ? parts[1] : "originals" {
+                        case "blends": scope = .blends
+                        case "workingcopy", "renditions": scope = .workingCopy
+                        default: scope = .originals
+                        }
                         LLog("picplace hook: remove the \(scope.noun) of \(capture.displayTitle)")
                         removeFromDevice(capture, scope: scope)
                     } else {
@@ -581,9 +601,15 @@ extension PicPlaceController {
                     LLog("picplace hook: upload the originals not on PicPlace yet")
                     queueRemainingOriginalsUploads()
                 }
-                if environment["LL_PICPLACE_FREEUP"] != nil {
-                    LLog("picplace hook: remove originals already on PicPlace")
-                    freeUpSpace()
+                if let raw = environment["LL_PICPLACE_FREEUP"] {
+                    if raw == "copies" {
+                        LLog("picplace hook: remove working copies not opened in \(Self.workingCopyIdleDays) days")
+                        removeStaleCopiesAfterEstimate = true
+                        refreshFreeUpEstimate(force: true)
+                    } else {
+                        LLog("picplace hook: remove originals already on PicPlace")
+                        freeUpSpace()
+                    }
                 }
             }
             // `LL_PICPLACE_REVIEW=1` opens the conflicts sheet after the check.
@@ -758,6 +784,9 @@ extension PicPlaceController {
             saveSyncState()
             model.noteFilesChanged(for: capture.id)
             LLog("picplace: working copy of \(capture.displayTitle) fetched (\(data.count) bytes)")
+            // This device now holds the project at the `proxy` tier (D5).
+            let revision = records[origin]?.revision ?? revision(of: capture)
+            let _: [String: [PPPresence]]? = try? await client.post("projects/\(uuid)/presence", json: ["revision": revision, "tier": "proxy"])
             return true
         } catch {
             LLog("picplace: working copy of \(capture.displayTitle) — \(Self.describe(error))")
@@ -849,6 +878,7 @@ extension PicPlaceController {
                 }
                 if assets.count - heavy.count == lightBefore, serverPoster == localPoster {
                     record.serverConfirmedSeen = assets.count
+                    record.serverRowAccounted = row.accountedConfirmed
                     record.posterSHA256 = serverPoster
                     record.notePresence(row.presence, excluding: profile?.deviceID)
                     record.serverHeavyFiles = heavy.count
@@ -947,6 +977,7 @@ extension PicPlaceController {
         record.tileSHA256 = tileAsset?.sha256
         record.posterSHA256 = posterAsset?.sha256
         record.serverConfirmedSeen = assets.count
+        record.serverRowAccounted = row.accountedConfirmed
         let heavy = assets.filter { PicPlaceSyncInventory.isHeavy($0.name) }
         record.serverHeavyFiles = heavy.count
         record.serverHeavyBytes = heavy.reduce(0) { $0 + ($1.bytes ?? 0) }

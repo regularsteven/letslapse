@@ -179,7 +179,7 @@ extension PicPlaceController {
                 // PicPlace's presence says what this device holds now — the
                 // record other devices' "only on …" lines read.
                 if let record = records[key] {
-                    let tier = model.sourcesMissing(capture) ? "preview" : "original"
+                    let tier = model.presenceTier(for: capture)
                     let _: [String: [PPPresence]]? = try? await client.post("projects/\(key.uuidString.lowercased())/presence",
                                                                              json: ["revision": record.revision, "tier": tier])
                 }

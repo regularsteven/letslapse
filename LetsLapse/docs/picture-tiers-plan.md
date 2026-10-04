@@ -391,12 +391,12 @@ copy, draws a mask and a text box → the Mac pulls the records and exports →
 the text box's corner lands on the same normalised point in both (a pixel
 check from `LL_DUMP_ORDER`'s sibling, `LL_DUMP_OVERLAYS=1`).
 
-### Stage 5 — status and space (medium; stages 1–2)
+### Stage 5 — status and space (medium; stages 1–2) — BUILT 2026-10-03, see §15
 
 `hasWorkingCopy`, the `proxy` presence tier, the pill state, the filter, the
-card line, free-up-space's `.renditions` scope with the 30-day rule,
-`/status`'s `assets.renditions` on the Settings card. *Done when*
-`LL_PILL_SHEET=1` draws the new state and `LL_PICPLACE_REMOVE=<uuid>:renditions`
+card line, free-up-space's `.workingCopy` scope with the 30-day rule,
+`/status`'s renditions figure on the Settings card. *Done when*
+`LL_PILL_SHEET=1` draws the new state and `LL_PICPLACE_REMOVE=<uuid>:workingcopy`
 removes a proxy and the card falls back to *Preview only* with the download
 offer.
 
@@ -410,7 +410,9 @@ code exists); reading tile bundles per bucket if the server builds them
 
 New: `LL_RENDITIONS=render:<latest|uuid>|sweep`, `LL_DROP_SOURCES=…:keep-proxy`,
 `LL_PREVIEW_PROMPT=<page>:working`, `LL_DUMP_OVERLAYS=1`,
-`LL_PICPLACE_REMOVE=<uuid>:renditions`. Existing that carry the work:
+`LL_PICPLACE_REMOVE=<uuid>:workingcopy` (`renditions` still answers),
+`LL_PICPLACE_FREEUP=copies`, `LL_PICPLACE_FILTER=workingCopyHere` (stage 5).
+Existing that carry the work:
 `LL_PICPLACE_TRACE=1` (request counts), `LL_PICPLACE_DRYRUN` (lists the
 renditions it would send), `LL_PILL_SHEET=1`, `LL_PICPLACE_FILTER`,
 `LL_DUMP_PILLS=1`. Benches: `tools/sync-cost-bench/` gains a tiles-pass count
@@ -789,3 +791,132 @@ project read, a mint, the records and ~300 KB of poster; at the 18 Pro's
 ~1,700 projects that is about half a gigabyte per device, on Hetzner
 egress. The fix is in the tree, Mac and Simulator builds clean; it reaches
 the Mac with Steven's next Xcode run and the 18 Pro with the next install.
+
+## 15. Stage 5 — what landed (2026-10-03, night, uncommitted)
+
+Status and space, on the Mac build and the Simulator build; bench-verified
+on picplace.test against a throwaway JPEG project in the `tiers-scratch`
+root (library *tiers-s5* on the synth account).
+
+- **Holdings.** `ProjectHoldings.hasWorkingCopy` and `workingCopyBytes`
+  (Kit): the copy the records expect when the caller names it
+  (`HoldingsInputs.workingCopyName`, the main actor's `expectedProxyName`),
+  else any `picture-*.heic` in the folder — the status sweep's rule, which
+  reads the document alone and cannot run the grade off the main actor (the
+  white-balance track and custom presets are main-actor state). A device
+  keeps one copy at most, so the two agree except in the moment after a
+  remote re-grade. `presenceTier` on the holdings and `presenceTier(for:)`
+  on the model: `original` · `proxy` · `preview` (D5); every presence post
+  (push, download, removal, pull) reads it, and `fetchWorkingCopy` posts
+  `proxy` after a fetch.
+- **The pill.** `StatusGlyph.Asset.workingCopy` draws `photo.fill`, green
+  when here, after the originals' camera and before the blends' layers;
+  `HoldingsPillState.workingCopy`, set when the originals are not here and a
+  copy is. VoiceOver: *Working copy here*. `LL_PILL_SHEET=1` draws three
+  new rows — *Working copy here* (grey camera, green picture, tick cloud),
+  *originals gone* (slashed camera, green picture), *downloading*. Steven to
+  overrule the glyph on the sheet (§7.1).
+- **The filter.** `PicPlaceFilter.workingCopyHere` after *On this device*;
+  `ProjectLocalStatus.hasWorkingCopy` in the sweep's summary, whose
+  signature now stamps the folder's own date too (a copy, poster or tile
+  arriving moves it); the remembered file is version 2, so a version-1 file
+  is walked afresh once. `LL_PICPLACE_FILTER=workingCopyHere` kept the
+  project; `onDevice` left it out.
+- **The card.** A preview-only project with a copy titles *Working copy
+  here* with the green picture, keeps *The originals are on PicPlace · 1
+  file · 2,9 MB* and *Download originals*, and gains a line — *Working copy
+  — Here · 1,3 MB · text, masks, shapes and crop work on it* — with
+  **Remove…** (`HeavyLine.Action.removeWorkingCopy`), its confirm *Remove
+  Working Copy* and the note *The working copy comes back from PicPlace when
+  you open the project to edit it.* `RemovalScope.workingCopy` has no
+  heavy kind: `performRemoval` routes it to `removeWorkingCopy`, which
+  deletes every `picture-*.heic` with no server check or claim (PicPlace
+  holds the copy), refuses while the originals are here (the holder's own
+  render), and posts the presence tier after. After it the card falls back
+  to *Preview only* with *Download originals*.
+- **Settings.** The *On PicPlace* row's subtitle adds *N MB of working
+  copies and tiles* — the bound library's figure from `/status`'s
+  `libraries[].renditions` when listed, else the account's. *Remove working
+  copies not opened in 30 days* (`workingCopyIdleDays`) appears under the
+  originals row with *N projects · about N MB* and its own confirm; the
+  estimate (`refreshFreeUpEstimate`) lists each candidate folder's copies
+  beside its heavy files and judges one stale when no source file is here
+  and the record's `workingCopyUsedAt` is older than 30 days or missing.
+  The clock is set by a fetch, by the editor mounting on a copy
+  (`noteWorkingCopyUsed`, once an hour), and by an originals removal that
+  leaves a copy behind (so a holder that frees its originals is not offered
+  the copy's removal the same day). `removeStaleWorkingCopies` runs the
+  copies through `removeWorkingCopy` as a free-up run (`Run.scope`,
+  `Result.scope` word the rows).
+- **The exempt copy on the server.** When a push finds the project its own
+  working copy (D6) it removes any local copy and, with
+  `features.rendition_delete`, retires the server's through `POST
+  assets/delete` (`{"assets":[{"id":…}]}`, the developer's `0a33ec9`):
+  `deleted` clears the pointer and the record's `proxyToken`;
+  `stale_revision` is logged and tried again after the next pull.
+- **Hooks.** `LL_PICPLACE_REMOVE=<uuid>:workingcopy` (`renditions` still
+  answers), `LL_PICPLACE_FREEUP=copies` (waits for the estimate),
+  `LL_PICPLACE_FILTER=workingCopyHere`; `LL_DUMP_PILLS=1` logs *Working
+  copy here*. Kit test `testAWorkingCopyHereStandsInForTheOriginals`.
+
+**The bench (picplace.test, 2026-10-03 22:51–23:05).** Vivid on the JPEG →
+the push rendered `picture-674a27a7786c.heic` (2160×3840, 1,28 MB) and sent
+it with the poster (*uploading 2 of 3, 1 already on PicPlace*); Upload sent
+the 2,9 MB original; Remove originals left the copy, posted presence
+`proxy` (read back from the server's table) and set the clock; the pill
+logged *Download available · Working copy here · Backed up*; the card and
+Settings photographed as above; the Settings removal freed 1,28 MB, posted
+`preview`, and the card fell back to *Preview only* with *Download
+originals*; the originals came back (presence `original`) and *Original*
+made the project exempt — the push removed the local copy and `POST
+assets/delete` answered `200`, *retired the working copy … the project is
+its own now*, the server's `proxy` row gone. The fixture stays: the
+`tiers-scratch` root bound to the synth account's *tiers-s5* library
+(`b848a419`) with the JPEG fork `2C0ECD5B`; mint a fresh token per bench.
+
+**Traps met.** (1) The first connection of a root to a *new* library evicts
+a local preview the server has no row for — a `LL_DROP_SOURCES` project
+made for a bench vanishes (folders and index rows only); bind a bench root
+with `link:<uuid>` to the library its projects live in, or make the preview
+after binding. (2) A project whose origin belongs to another account is
+re-minted as a fork on first push (`409` → new id): the bench project's id
+is the fork's, not the folder's old name. (3) `generic/platform=iOS
+Simulator` builds x86_64 too and the codecs static library is arm64-only —
+pass `ARCHS=arm64 ONLY_ACTIVE_ARCH=YES`, or name a Simulator device.
+
+## 16. The second look at production (2026-10-03, late night) — three faults, fixed in code
+
+Steven's Mac drew 21 preview-only projects with no picture and sat in
+*Checking PicPlace…* for twenty minutes after launch; his 18 Pro's card for
+one of them read *1 uploaded*, and the PicPlace web page had no picture.
+
+1. **Records alone on PicPlace.** The 21 (shot on the 18 Pro 27–30.9,
+   JPEG and HEIC photos, two DNG stacks from 23.8) went up as `records.aar`
+   only; no poster, so no tile, and since stage 3 a pull takes the tile
+   alone. The record on the phone said the push was done (`posterToken`
+   stamped), so nothing ever sent the poster. Fixed: the check of a device
+   that holds the originals clears the note when the row's
+   `renditions.poster` is null and queues a poster push (once per 6 h per
+   project, `posterResentAt`); a push whose poster render fails no longer
+   stamps the token and logs `ALARM poster:`. Whether the 30.9 pushes
+   negotiated a poster and lost the PUT, or never had one to send, is a
+   question for the developer's ledger — the heal covers both.
+2. **968 updated, 20 minutes.** A one-time migration: records written by
+   the pre-count-fix build counted working copies in `serverConfirmedSeen`,
+   the new accounting does not, so every project with a copy read as moved
+   once. The next checks did 3.
+3. **Three projects re-fetched every check.** A re-grade through the
+   records push left the old working copy on the server — the per-project
+   negotiate sent no `replaces` — and the row subtracts one copy by its
+   pointer while a listing leaves every copy out, so the row's count and
+   the listing's never agreed. Fixed: the push names the old copy
+   (`Project.replacesProxy`, a plain retry on `replaces_not_found`) — and
+   because the server's per-project negotiate drops `replaces` (probed with
+   a direct call; asks doc, ask 7), the run then reads the project's detail
+   and retires every other confirmed copy with `DELETE /assets/{id}` under
+   its claim — and the move test compares the row with its own last count
+   (`serverRowAccounted`), never the listing's.
+
+Device install owed: the 18 Pro holds the 21 originals; its first check on
+the new build should log *holds no poster … sending one again* 21 times,
+then the Mac's check fetches their tiles once the server cuts them.

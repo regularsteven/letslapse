@@ -82,7 +82,7 @@ struct PicPlaceStatusCard: View {
             .picplaceConflictsSheet(picplace)
             .confirmationDialog(removalTitle, isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
                                 titleVisibility: .visible, presenting: pendingRemoval) { scope in
-                Button(scope == .originals ? "Remove Originals" : "Remove Blends", role: .destructive) {
+                Button(removalButton(scope), role: .destructive) {
                     picplace.removeFromDevice(capture, scope: scope)
                 }
                 Button("Cancel", role: .cancel) {}
@@ -107,13 +107,25 @@ struct PicPlaceStatusCard: View {
         "Remove the \(pendingRemoval?.noun ?? "originals") from \(PicPlaceController.deviceWord)?"
     }
 
+    private func removalButton(_ scope: PicPlaceController.RemovalScope) -> String {
+        switch scope {
+        case .originals: return "Remove Originals"
+        case .blends: return "Remove Blends"
+        case .workingCopy: return "Remove Working Copy"
+        }
+    }
+
     private func removalMessage(_ scope: PicPlaceController.RemovalScope, capture: AppModel.CaptureProject) -> String {
+        if scope == .workingCopy {
+            let bytes = model.shownHoldings(for: capture.id)?.workingCopyBytes ?? 0
+            return "\(LLFormat.bytes(bytes)). PicPlace keeps the working copy — it comes down again when you open the project to edit text, masks, shapes or crop. Until then the project shows its preview."
+        }
         let part = picplace.originalsStatus(for: capture)?.row(scope).here ?? .init()
         let size = "\(part.files.formatted()) \(scope == .originals ? "file" : "blend")\(part.files == 1 ? "" : "s") · \(LLFormat.bytes(part.bytes))."
         switch scope {
         case .originals:
             return "\(size) Every file is checked with PicPlace first; they stay there — download them again whenever you need them. Until then the project shows its preview, and editing and new blends wait for the download."
-        case .blends:
+        case .blends, .workingCopy:
             return "\(size) Every file is checked with PicPlace first; they stay there — download them again whenever you need them. Until then each blend shows a still. Blends a collection uses stay on \(PicPlaceController.deviceWord)."
         }
     }
@@ -126,6 +138,8 @@ struct PicPlaceStatusCard: View {
         enum Action {
             case upload, remove(PicPlaceController.RemovalScope), download(PicPlaceOriginalsCheck.Kind)
             case replace(PicPlaceOriginalsCheck.Kind, [String])
+            /// The working copy's Remove (stage 5): no server check behind it.
+            case removeWorkingCopy
             /// An upload job waiting (2026-09-24): Resume / Try again, *Use
             /// mobile data* for this job alone, and Cancel beside either.
             case resumeUpload(String), useMobileData, cancelUpload
@@ -149,9 +163,17 @@ struct PicPlaceStatusCard: View {
             if case .syncing = state { return [] }
             return [uploadJobLine(job)]
         }
-        guard let status = picplace.originalsStatus(for: capture) else { return [] }
         var lines: [HeavyLine] = []
+        // The working copy here, with the originals not (stage 5): what
+        // text, masks, shapes and crop work on; Remove needs no check.
+        if isPreviewOnly(state), let holdings = model.shownHoldings(for: capture.id), holdings.hasWorkingCopy {
+            lines.append(HeavyLine(title: "Working copy",
+                                   detail: "Here · \(LLFormat.bytes(holdings.workingCopyBytes ?? 0)) · text, masks, shapes and crop work on it",
+                                   action: .removeWorkingCopy))
+        }
+        guard let status = picplace.originalsStatus(for: capture) else { return lines }
         func line(_ scope: PicPlaceController.RemovalScope, _ row: PicPlaceController.OriginalsStatus.Row) -> HeavyLine? {
+            guard let kind = scope.kind else { return nil }
             let noun = scope == .originals ? "file" : "blend"
             func count(_ part: PicPlaceController.OriginalsStatus.Part) -> String {
                 "\(part.files.formatted()) \(noun)\(part.files == 1 ? "" : "s") · \(LLFormat.bytes(part.bytes))"
@@ -162,7 +184,7 @@ struct PicPlaceStatusCard: View {
             if !row.divergent.isEmpty {
                 let detail = "\(count(row.divergent)) here differ\(row.divergent.files == 1 ? "s" : "") from PicPlace's"
                 return HeavyLine(title: title, detail: detail,
-                                 action: row.replaceable.isEmpty ? nil : .replace(scope.kind, row.replaceable),
+                                 action: row.replaceable.isEmpty ? nil : .replace(kind, row.replaceable),
                                  keptAsIs: row.replaceable.isEmpty)
             }
             if !row.here.isEmpty {
@@ -175,7 +197,7 @@ struct PicPlaceStatusCard: View {
                 return HeavyLine(title: title, detail: detail, action: .upload)
             }
             if !row.onlyThere.isEmpty {
-                return HeavyLine(title: title, detail: "On PicPlace · \(count(row.onlyThere))", action: .download(scope.kind))
+                return HeavyLine(title: title, detail: "On PicPlace · \(count(row.onlyThere))", action: .download(kind))
             }
             return nil
         }
@@ -251,6 +273,9 @@ struct PicPlaceStatusCard: View {
         case .remove(let scope):
             Button("Remove…") { pendingRemoval = scope }
                 .disabled(picplace.freeUp.run != nil)
+        case .removeWorkingCopy:
+            Button("Remove…") { pendingRemoval = .workingCopy }
+                .disabled(picplace.freeUp.run != nil)
         case .download(let kind):
             Button("Download") { picplace.downloadOriginals(capture, kinds: [kind]) }
         case .replace(let kind, let names):
@@ -282,6 +307,8 @@ struct PicPlaceStatusCard: View {
             notes.append(note)
         } else if offersRemove(lines) {
             notes.append(Self.removeNote)
+        } else if lines.contains(where: { if case .removeWorkingCopy = $0.action { return true } else { return false } }) {
+            notes.append("The working copy comes back from PicPlace when you open the project to edit it.")
         }
         let record = picplace.records[model.originID(of: capture)]
         if let changed = record?.changedFiles, !changed.isEmpty {
@@ -498,7 +525,9 @@ struct PicPlaceStatusCard: View {
         case .conflict, .failed:
             return .cloud(.attention)
         case .previewOnly:
-            return model.shownHoldings(for: captureID)?.tier == .blends ? .asset(.blends, .here) : .asset(.originals, .there)
+            let holdings = model.shownHoldings(for: captureID)
+            if holdings?.hasWorkingCopy == true { return .asset(.workingCopy, .here) }
+            return holdings?.tier == .blends ? .asset(.blends, .here) : .asset(.originals, .there)
         case .syncing(let progress):
             switch progress.phase {
             case .downloading: return .cloud(.downloading)
@@ -522,8 +551,12 @@ struct PicPlaceStatusCard: View {
             case .deletedHereEditedThere: return "Deleted here, changed on PicPlace"
             default: return "Needs your decision"
             }
-        // A blend still here says so, as the holdings pill's layers do.
-        case .previewOnly: return model.shownHoldings(for: captureID)?.tier == .blends ? "Blends here" : "Preview only"
+        // A blend still here says so, as the holdings pill's layers do; a
+        // working copy here (stage 5) is the picture the project edits on.
+        case .previewOnly:
+            let holdings = model.shownHoldings(for: captureID)
+            if holdings?.hasWorkingCopy == true { return "Working copy here" }
+            return holdings?.tier == .blends ? "Blends here" : "Preview only"
         case .elsewhere(let name): return name.map { "In “\($0)” on PicPlace" } ?? "In another library on PicPlace"
         case .signedOut: return "Keep a copy on PicPlace"
         case .notConnected: return "Library not connected"
@@ -718,6 +751,7 @@ struct PicPlaceSettingsCard: View {
     @State private var isConfirmingDisconnect = false
     @State private var serverRejected = false
     @State private var isConfirmingFreeUp = false
+    @State private var isConfirmingCopyFreeUp = false
     var body: some View {
         VStack(spacing: 0) {
             if let profile = picplace.profile {
@@ -829,6 +863,12 @@ struct PicPlaceSettingsCard: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("About \(LLFormat.bytes(picplace.freeUp.estimate?.bytes ?? 0)). Each project is checked with PicPlace file by file first — one that isn't fully there keeps its originals. They stay on PicPlace: download a project's originals again whenever you need them. Blends stay on \(PicPlaceController.deviceWord).")
+        }
+        .confirmationDialog(copyFreeUpConfirmTitle, isPresented: $isConfirmingCopyFreeUp, titleVisibility: .visible) {
+            Button("Remove Working Copies", role: .destructive) { picplace.removeStaleWorkingCopies() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("About \(LLFormat.bytes(picplace.freeUp.estimate?.staleCopyBytes ?? 0)). PicPlace keeps every one — a working copy comes down again when you open its project to edit text, masks, shapes or crop. Previews stay on \(PicPlaceController.deviceWord).")
         }
         .picplaceConnectAlert(picplace)
         .picplaceConflictsSheet(picplace)
@@ -1013,7 +1053,7 @@ struct PicPlaceSettingsCard: View {
         if picplace.binding?.initialSync.state == .done, picplace.canSync {
             let state = picplace.freeUp
             if let run = state.run {
-                LLRow(title: "Removing originals already on PicPlace…",
+                LLRow(title: run.scope == .workingCopy ? "Removing working copies…" : "Removing originals already on PicPlace…",
                       subtitle: "\(run.done) of \(run.total) project\(run.total == 1 ? "" : "s") checked · \(LLFormat.bytes(run.freedBytes)) freed\(run.current.map { " · \($0)" } ?? "")") {
                     Button {
                         picplace.stopFreeUp()
@@ -1048,6 +1088,21 @@ struct PicPlaceSettingsCard: View {
                         ProgressView().controlSize(.small)
                     }
                 }
+                // Working copies unopened for a month (stage 5): no server
+                // check behind the removal — PicPlace holds every one.
+                if let estimate = state.estimate, estimate.staleCopies > 0 {
+                    Button {
+                        isConfirmingCopyFreeUp = true
+                    } label: {
+                        LLRow(title: "Remove working copies not opened in \(PicPlaceController.workingCopyIdleDays) days",
+                              subtitle: "\(estimate.staleCopies) project\(estimate.staleCopies == 1 ? "" : "s") · about \(LLFormat.bytes(estimate.staleCopyBytes)). PicPlace keeps them — a working copy comes down again when you open its project to edit text, masks, shapes or crop.",
+                              titleColor: LL.accent) {
+                            EmptyView()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
                 // Not a run any more (2026-09-27): a job per project, each
                 // a row in Project Syncing with Pause / Resume, one at a time.
                 if let estimate = state.estimate, estimate.notUpProjects > 0 {
@@ -1078,10 +1133,16 @@ struct PicPlaceSettingsCard: View {
         return "Remove the originals of \(n) project\(n == 1 ? "" : "s") from \(PicPlaceController.deviceWord)?"
     }
 
+    private var copyFreeUpConfirmTitle: String {
+        let n = picplace.freeUp.estimate?.staleCopies ?? 0
+        return "Remove the working copies of \(n) project\(n == 1 ? "" : "s") from \(PicPlaceController.deviceWord)?"
+    }
+
     private func freeUpResultText(_ result: PicPlaceController.FreeUpState.Result) -> String {
         var parts: [String] = []
-        if result.projects > 0 { parts.append("originals of \(result.projects) project\(result.projects == 1 ? "" : "s") removed") }
-        if result.kept > 0 { parts.append("\(result.kept) kept \(result.kept == 1 ? "its" : "their") originals — \(result.reasons.joined(separator: "; "))") }
+        let what = result.scope == .workingCopy ? "working copies" : "originals"
+        if result.projects > 0 { parts.append("\(what) of \(result.projects) project\(result.projects == 1 ? "" : "s") removed") }
+        if result.kept > 0 { parts.append("\(result.kept) kept \(result.kept == 1 ? "its" : "their") \(what) — \(result.reasons.joined(separator: "; "))") }
         if let stopped = result.stopped { parts.append(stopped.lowercased() == "stopped" ? "stopped" : "stopped: \(stopped)") }
         return parts.isEmpty ? "Every project here was checked" : parts.joined(separator: " · ")
     }
@@ -1209,6 +1270,11 @@ struct PicPlaceSettingsCard: View {
         guard let t = picplace.tally else { return nil }
         var parts: [String] = []
         if t.onPicPlace > 0 { parts.append("originals for \(t.originalsOnPicPlace)") }
+        // The account's renditions — working copies and tiles — from
+        // `/status` (stage 5): what the picture tiers cost up there.
+        if let figure = picplace.serverRenditionsFigure, figure.bytes > 0 {
+            parts.append("\(LLFormat.bytes(figure.bytes)) of working copies and tiles")
+        }
         if t.notYet > 0 { parts.append("\(t.notYet) not on PicPlace yet") }
         if t.elsewhere > 0 { parts.append("\(t.elsewhere) here \(t.elsewhere == 1 ? "is" : "are") filed under other libraries on PicPlace") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")

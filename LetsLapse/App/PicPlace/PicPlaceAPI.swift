@@ -270,6 +270,17 @@ struct PPRendition: Decodable {
 }
 
 /// `storage.renditions` and `libraries[].renditions` in `/status`.
+/// `POST assets/delete`'s answer (stage 5): one row per id asked for.
+struct PPRetiredAssets: Decodable {
+    struct Row: Decodable {
+        var id: String
+        var deleted: Bool?
+        var error: String?
+        var currentRevision: Int?
+    }
+    var assets: [Row]
+}
+
 struct PPRenditionsFigure: Decodable, Equatable {
     var objects: Int
     var bytes: Int64
@@ -308,6 +319,12 @@ struct PPUpload: Decodable {
     var url: String
     var headers: [String: String]
     var expiresAt: Date
+}
+
+/// `DELETE assets/{id}`'s answer.
+struct PPDeleted: Decodable {
+    var deleted: Bool?
+    var id: String?
 }
 
 struct PPNegotiation: Decodable {
@@ -368,6 +385,9 @@ struct PPConfirmResult: Decodable {
     /// confirm retired (`replaces`), when it did.
     var project: String?
     var replaced: PPReplaced?
+    /// A confirm that retired a copy, or did not (2026-10-03: the
+    /// per-project negotiate drops `replaces`, so the run retires it itself).
+    var didReplace: Bool { replaced != nil }
 }
 
 struct PPReplaced: Decodable {

@@ -30,7 +30,11 @@ import SwiftUI
 
 /// One status glyph.
 enum StatusGlyph: Equatable {
-    enum Asset: Equatable { case originals, blends }
+    /// `workingCopy` (stage 5, picture tiers): the full-size graded copy
+    /// that stands in for the originals — a picture, not a camera. Drawn
+    /// green when here; it has no grey or slashed place of its own (the
+    /// camera beside it says where the originals are).
+    enum Asset: Equatable { case originals, blends, workingCopy }
     enum Place: Equatable { case here, there, nowhere }
     enum Cloud: Equatable { case safe, needsUploading, uploading, downloading, checking, waiting, attention }
     case asset(Asset, Place)
@@ -77,6 +81,8 @@ struct StatusGlyphView: View {
                 .compositingGroup()
         case (.originals, _):
             Image(systemName: "camera.fill")
+        case (.workingCopy, _):
+            Image(systemName: "photo.fill")
         case (.blends, .nowhere):
             Image(systemName: "square.3.layers.3d.slash")
         case (.blends, _):
@@ -145,10 +151,21 @@ struct HoldingsPill: View {
 /// A nil part is not drawn.
 struct HoldingsPillState: Equatable {
     var originals: StatusGlyph.Place?
+    /// The working copy — drawn only as *here*, beside a grey or slashed
+    /// camera (stage 5).
+    var workingCopy: StatusGlyph.Place?
     var blends: StatusGlyph.Place?
     var cloud: StatusGlyph.Cloud?
 
-    static let empty = HoldingsPillState(originals: nil, blends: nil, cloud: nil)
+    init(originals: StatusGlyph.Place? = nil, workingCopy: StatusGlyph.Place? = nil,
+         blends: StatusGlyph.Place? = nil, cloud: StatusGlyph.Cloud? = nil) {
+        self.originals = originals
+        self.workingCopy = workingCopy
+        self.blends = blends
+        self.cloud = cloud
+    }
+
+    static let empty = HoldingsPillState()
     var isEmpty: Bool { self == .empty }
 }
 
@@ -167,6 +184,10 @@ extension AppModel {
         let originalsHere = holdings.tier == .originals
         var originals: StatusGlyph.Place? = originalsHere ? .here
             : known && originalsOnPicPlace(origin: origin, record: record) ? .there : .nowhere
+        // The working copy: a picture here when the originals are not — text,
+        // masks, shapes and crop work on it (stage 5). Beside the originals'
+        // camera, so "here" and "originals elsewhere" read in one glance.
+        let workingCopy: StatusGlyph.Place? = !originalsHere && holdings.hasWorkingCopy ? .here : nil
         // The blends — a Photo's stack is its picture, not a blend here.
         // Green only when every one is here; grey when a missing one can
         // come down (or PicPlace has not said); slashed when none can.
@@ -223,7 +244,7 @@ extension AppModel {
                 cloud = .safe
             }
         }
-        return HoldingsPillState(originals: originals, blends: blends, cloud: cloud)
+        return HoldingsPillState(originals: originals, workingCopy: workingCopy, blends: blends, cloud: cloud)
     }
 
     /// Everything heavy here is verified on PicPlace — the heavy set's
@@ -286,10 +307,13 @@ struct HoldingsPillBody: View {
             if let place = state.originals {
                 StatusGlyphView(glyph: .asset(.originals, place), size: 9, surface: .photo)
             }
+            if let place = state.workingCopy {
+                StatusGlyphView(glyph: .asset(.workingCopy, place), size: 9, surface: .photo)
+            }
             if let place = state.blends {
                 StatusGlyphView(glyph: .asset(.blends, place), size: 9, surface: .photo)
             }
-            if state.originals != nil || state.blends != nil, state.cloud != nil {
+            if state.originals != nil || state.workingCopy != nil || state.blends != nil, state.cloud != nil {
                 Rectangle()
                     .fill(Color.white.opacity(0.35))
                     .frame(width: 0.5, height: 10)
@@ -325,6 +349,7 @@ struct HoldingsPillBody: View {
         case .nowhere?: parts.append("Not available to download")
         case nil: break
         }
+        if state.workingCopy == .here { parts.append("Working copy here") }
         switch state.blends {
         case .here?: parts.append("Blends on this device")
         case .there?: parts.append("Blends on PicPlace")
@@ -451,6 +476,10 @@ struct HoldingsPillSheet: View {
         ("Needs attention", .init(originals: .here, cloud: .attention)),
         ("Downloading", .init(originals: .there, cloud: .downloading)),
         ("Photos on PicPlace · blend here", .init(originals: .there, blends: .here, cloud: .safe)),
+        // Stage 5 (picture tiers): the working copy here, the originals not.
+        ("Working copy here", .init(originals: .there, workingCopy: .here, cloud: .safe)),
+        ("Working copy · originals gone", .init(originals: .nowhere, workingCopy: .here)),
+        ("Working copy · downloading", .init(originals: .there, workingCopy: .here, cloud: .downloading)),
     ]
 
     var body: some View {

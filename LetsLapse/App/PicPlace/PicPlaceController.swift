@@ -235,6 +235,10 @@ final class PicPlaceController: ObservableObject {
     private(set) var serverHasRenditions = false
     private(set) var serverHasTiles = false
     private(set) var serverHasRenditionBatches = false
+    /// `features.rendition_delete` (stage 5, proposed 2026-10-03): the
+    /// server lets a device delete an exempt project's leftover working
+    /// copy. Off until the developer ships it; nothing is sent before.
+    private(set) var serverHasRenditionDelete = false
     private(set) var serverRenditionKinds: [String] = []
     /// The renditions' share of the account's storage (`storage.renditions`,
     /// push 2) — the Settings card's "working copies on PicPlace · N GB".
@@ -339,6 +343,9 @@ final class PicPlaceController: ObservableObject {
     /// Settings' *Queue upload* was pressed before the estimate it reads
     /// existed (the launch hook): queue once the estimate lands.
     var queueUploadsAfterEstimate = false
+    /// `LL_PICPLACE_FREEUP=copies`: the stale working copies go once the
+    /// estimate that finds them lands (stage 5).
+    var removeStaleCopiesAfterEstimate = false
     /// The originals queue's last run was stopped between files (Pause, the
     /// Wi-Fi rule, iOS suspending the app): the walk stops too, rather than
     /// start the next project into the same stop.
@@ -941,17 +948,21 @@ final class PicPlaceController: ObservableObject {
         // filing (or a pull) left posters unnoted (`settlePosters`).
         serverListsAssetsInBatches = status.features["asset_lists_batch"] == true
         serverSyncsCollections = status.features["collections"] == true
-        let tiersBefore = (serverHasRenditions, serverHasTiles, serverHasRenditionBatches)
+        let tiersBefore = (serverHasRenditions, serverHasTiles, serverHasRenditionBatches, serverHasRenditionDelete)
         serverHasRenditions = status.features["renditions"] == true
         serverHasTiles = status.features["tiles"] == true
         serverHasRenditionBatches = status.features["rendition_batches"] == true
+        serverHasRenditionDelete = status.features["rendition_delete"] == true
         serverRenditionKinds = status.limits?.renditionKinds ?? []
-        serverRenditionsFigure = status.storage.renditions
-        if tiersBefore != (serverHasRenditions, serverHasTiles, serverHasRenditionBatches) {
+        // The Settings card's row is the bound library's: its own figure
+        // when `/status` lists it, else the account's (stage 5).
+        let scopeUUID = scope?.uuidString.lowercased()
+        serverRenditionsFigure = status.libraries?.first { $0.uuid?.lowercased() == scopeUUID }?.renditions ?? status.storage.renditions
+        if tiersBefore != (serverHasRenditions, serverHasTiles, serverHasRenditionBatches, serverHasRenditionDelete) {
             // Once per change, so a production check shows what the server
             // says (picture tiers: push 1 = pointers, the tile switch; push 2
             // = the batch endpoints).
-            LLog("picplace: picture tiers on \(sessionHost) — rendition pointers \(serverHasRenditions ? "on" : "off"), tiles \(serverHasTiles ? "on" : "off"), rendition batches \(serverHasRenditionBatches ? "on" : "off")\(serverRenditionKinds.isEmpty ? "" : " (\(serverRenditionKinds.joined(separator: ", ")))")")
+            LLog("picplace: picture tiers on \(sessionHost) — rendition pointers \(serverHasRenditions ? "on" : "off"), tiles \(serverHasTiles ? "on" : "off"), rendition batches \(serverHasRenditionBatches ? "on" : "off"), rendition delete \(serverHasRenditionDelete ? "on" : "off")\(serverRenditionKinds.isEmpty ? "" : " (\(serverRenditionKinds.joined(separator: ", ")))")")
         }
         noteNearbyKey(status)
         #if DEBUG
@@ -1928,7 +1939,7 @@ final class PicPlaceController: ObservableObject {
         let key = model.originID(of: capture)
         let policy = override ?? self.policy
         let folder = model.projectFolderURL(for: capture)
-        let tier = model.sourcesMissing(capture) ? "preview" : "original"
+        let tier = model.presenceTier(for: capture)
         let project = PicPlaceSyncRun.Project(
             serverID: key,
             folder: folder,
@@ -1941,7 +1952,8 @@ final class PicPlaceController: ObservableObject {
             manifestMaxBytes: manifestMaxBytes,
             tier: tier,
             library: serverHasLibraries ? scope : nil,
-            bucket: serverHasRenditionBatches ? Self.bucket(for: capture.createdAt) : nil)
+            bucket: serverHasRenditionBatches ? Self.bucket(for: capture.createdAt) : nil,
+            replacesProxy: replacedProxyID(for: capture))
         // Every originals run can be stopped between files (2026-09-24): a
         // job's Pause, Pause for all sending, the Wi-Fi rule, iOS about to
         // suspend the app. What finished is confirmed first.
@@ -1992,17 +2004,27 @@ final class PicPlaceController: ObservableObject {
                 activity.end()
                 transferActivities[capture.id] = nil
             }
+            // nil: no render was attempted (a preview's poster is the file it
+            // has); false: the render failed, and the record must not say the
+            // poster went (2026-10-03: a push that failed to render went up
+            // as records alone and was never asked again).
+            var posterRendered: Bool?
             do {
                 // A preview-only project's "source" IS its poster: nothing to
                 // render, the file it has is the one that goes.
                 if policy.sendsRecords, let posterSource, !ProjectFileRegistry.isFinishedPicture(fileName: posterSource.lastPathComponent) {
-                    _ = await PicPlacePoster.ensure(sourceURL: posterSource, kind: posterKind, grade: grade, token: posterToken,
-                                                    lastToken: lastPosterToken, in: folder)
+                    let rendered = await PicPlacePoster.ensure(sourceURL: posterSource, kind: posterKind, grade: grade, token: posterToken,
+                                                               lastToken: lastPosterToken, in: folder)
+                    posterRendered = rendered != nil
+                    if rendered == nil { LLog("picplace: ALARM poster: could not render the poster of \(capture.displayTitle) (\(key.uuidString.prefix(8))) — the records go without it; the check asks again") }
                     if let proxyToken {
                         _ = await PicPlaceProxy.ensure(sourceURL: posterSource, grade: grade,
                                                        nameToken: PicPlaceSyncRun.proxyNameToken(for: proxyToken), in: folder)
                     } else {
                         PicPlaceProxy.removeAll(in: folder)
+                        // The copy PicPlace holds of an exempt project is a
+                        // leftover nobody fetches (stage 5).
+                        await self.deleteServerWorkingCopy(origin: key, title: capture.displayTitle)
                     }
                 }
                 // Each blend here gets its still (`posters/<id>.jpg`, in the
@@ -2018,7 +2040,7 @@ final class PicPlaceController: ObservableObject {
                 let verifiedDigest = record.heavyDigest
                 let divergent = record.divergentFiles
                 let changed = record.changedFiles
-                record.posterToken = posterToken
+                record.posterToken = posterRendered == false ? nil : posterToken
                 record.proxyToken = proxyToken
                 let previousRecord = records[key]
                 if let previous = previousRecord {
@@ -2240,7 +2262,7 @@ final class PicPlaceController: ObservableObject {
                 refreshHeavyListing(for: capture)
                 // Blends alone leave the sources where they were: the tier
                 // says what this device holds of the originals.
-                let tier = model.sourcesMissing(capture) ? "preview" : "original"
+                let tier = model.presenceTier(for: capture)
                 let _: [String: [PPPresence]]? = try? await client.post("projects/\(key.uuidString.lowercased())/presence", json: ["revision": record.revision, "tier": tier])
                 LLog("picplace: downloaded the \(kinds == [.blend] ? "blends" : kinds == [.source] ? "originals" : "originals and blends") of \(capture.displayTitle): \(got.files) file(s), \(got.bytes) bytes")
             } catch is CancellationError {
@@ -2280,6 +2302,18 @@ final class PicPlaceController: ObservableObject {
             + (source.map { ProjectOrientation.shared.keySuffix(for: $0) } ?? "")
     }
 
+    /// The id of the working copy PicPlace's row names when it is not the
+    /// one this push renders (a re-grade): `replaces` on the new copy's
+    /// negotiate retires it as the new one confirms (2026-10-03). nil when
+    /// the names agree, when PicPlace names none, or when the project is its
+    /// own working copy (the push then retires the copy outright).
+    func replacedProxyID(for capture: AppModel.CaptureProject) -> String? {
+        guard let token = currentProxyToken(for: capture),
+              let pointer = serverRenditions[model.originID(of: capture)]?.proxy else { return nil }
+        let expected = ProjectFileRegistry.proxyPictureName(token: PicPlaceSyncRun.proxyNameToken(for: token))
+        return pointer.name == expected ? nil : pointer.id
+    }
+
     /// The working copy's token (docs/picture-tiers-plan.md §3.2): the
     /// grade's `proxyToken` — the cache token with the crop left out — plus
     /// the project's quarter turns, as the poster's carries them: the render
@@ -2289,6 +2323,32 @@ final class PicPlaceController: ObservableObject {
         guard model.needsProxy(for: capture), let source = model.thumbnailURL(for: capture),
               !ProjectFileRegistry.isFinishedPicture(fileName: source.lastPathComponent) else { return nil }
         return model.proxyRecipeToken(for: capture)
+    }
+
+    /// An exempt project's working copy on PicPlace (stage 5): its grade
+    /// went back to nothing on a JPEG or HEIC, so the copy up there is a
+    /// leftover nobody fetches. Retired through `POST assets/delete` when
+    /// the server offers `rendition_delete` (picplace `0a33ec9`: rendition
+    /// ids of any projects, no claim, under the push's revision rule — a
+    /// device behind the records is told `stale_revision` and tries again
+    /// after its next pull); until then it stays, harmless, and the next
+    /// render replaces it.
+    func deleteServerWorkingCopy(origin: UUID, title: String) async {
+        guard serverHasRenditionDelete, let pointer = serverRenditions[origin]?.proxy else { return }
+        do {
+            let reply: PPRetiredAssets = try await client.post("assets/delete", json: ["assets": [["id": pointer.id]]])
+            guard let row = reply.assets.first else { return }
+            if row.deleted == true {
+                serverRenditions[origin]?.proxy = nil
+                records[origin]?.proxyToken = nil
+                saveSyncState()
+                LLog("picplace: retired the working copy of \(title) on PicPlace (\(pointer.name)) — the project is its own now")
+            } else {
+                LLog("picplace: PicPlace kept the working copy of \(title) — \(row.error ?? "?")\(row.currentRevision.map { " (server revision \($0))" } ?? "")")
+            }
+        } catch {
+            LLog("picplace: could not retire the working copy of \(title) on PicPlace — \(Self.describe(error))")
+        }
     }
 
     func syncAndWait(_ capture: AppModel.CaptureProject, policy: PicPlaceSyncPolicy? = nil) async {
