@@ -366,3 +366,13 @@ document grants its claim to the sender; keep the body under
 the feed's slim row. Steps 6 and the two asks are three local commits
 (`3105460`, `e9750c2` …) deploying on Steven's word; the `resurrect`
 refusal switches on when he says — every device sends it now.
+
+**§B's client landed 2026-10-04 (`baf9445`, every device by 10:50; the Mac
+on Steven's rebuild):** records inline on the PUT, the whole index in the
+feed shape, every holder on a feed row. One correction to answer (7) as
+read on picplace.test: the holder's key is `device`, not `id` (the row reads
+`presence.devices[].device`); the client reads both, nothing to change.
+Nothing else diverged from the nine answers. Owed on the server side from
+this round: none. Next client job once the server offers it: step 5's second
+half (the pull reading `records` from the row, the bundle fetched only for
+what the row does not carry).
