@@ -85,65 +85,71 @@ Steven's priority order, with the state after the detour:
 
 Numbers are the spec's priority order, not its section numbers.
 
-## 4. The reopened question: does editing a preview need the working copy?
+## 4. Editing a preview on the poster — agreed 2026-10-04
+
+**Steven's goal, in his words:** shapes are added fast, one by one, and a
+person may or may not have the proxy or the originals on the device — and
+should not need them for that. Shapes drive shape-mations, a key subject of
+the photo. If finer work needs finer pixels, the person downloads the
+working copy; the download is never a gate in front of a shape.
 
 **Facts.** Shapes, text and mask shapes are stored in normalised 0…1
 coordinates over the levelled, uncropped frame; mask grades are
 display-referred on top of the finished grade; their saves are JSON writes
 with no render (`picture-tiers-plan.md` §3, "Overlays need no source
-pixels"). What reads pixels on those pages is small: Sky/Land segmentation
-(a 512 px render), Find shapes (1024/2048 px), the detail loupe, the
-Lightroom sidecar. A custom mask is a file in `masks/` drawn by hand.
+pixels"). What reads pixels on those pages is small and already low-res:
+Sky/Land segmentation (a 512 px render), Find shapes (1024/2048 px), the
+detail loupe, the Lightroom sidecar.
 
-**Why the working copy was chosen anyway.** Two reasons, both engineering,
-neither about the maths:
+**Why the working copy was required until now.** Two engineering reasons,
+neither about the maths: the editor's pages are one host whose write paths
+assume an unbaked, uncropped source (plan T6), and since 2026-10-04 the
+poster is the *finished picture* with text and shape layers baked into its
+pixels, so a live layer drawn over it would ghost when moved. Both change.
 
-1. The editor's pages are one host built around a full picture whose write
-   paths assume an unbaked, uncropped source (plan T6). Mounting them on
-   the working copy reused the host as it is; a second host for Masks and
-   Text on another picture meant rebuilding those pages.
-2. The poster became the **finished picture** on 2026-10-04 — crop, level,
-   text, shapes and mask grades baked in. It cannot be a canvas: an edited
-   text box would show twice, and the frame is not the one the overlays
-   are normalised over.
+**The plan (no new asset, no server change):**
 
-So "use the poster" is not available as it stands. The real cost Steven
-objects to is the download prompt and its size: a working copy is 1–4 MB
-(HEIC, full size), and the prompt stops the person before a job that needs
-no pixels at all.
+1. **The poster keeps the pixel work only** — grade, masked grades, level,
+   crop. Text and shape layers leave the poster render (`FinishedPicture`
+   grows a `poster` flavour without layers; the export flavour keeps them
+   at full quality). Every surface in the app draws the layers live from
+   the records over whatever picture it has: the item view, the pager, the
+   editor, the export composite. A text nudge becomes a 2 KB records push
+   instead of a poster re-render and re-upload to every device. Open
+   sub-decision: whether the grid draws layers over tiles too (default: from
+   the item view up; tiles later if wanted).
+2. **The Masks and Text pages mount on the poster for a preview.** A new
+   `EditorAsset.poster(url)` beside `.workingCopy`, with the §3.6 guards and
+   one addition: touches map through the inverse of the records' crop and
+   level into the uncropped frame (the poster is levelled and cropped). A
+   shape can only be placed inside the crop on a preview — fine for a
+   driver of shape-mation.
+3. **Without a download on a preview:** add, move and resize shapes; draw
+   custom masks; Sky/Land and Find from the poster; add, move and edit
+   text. **Behind the working-copy download:** crop (the poster is already
+   cropped), the masked-grade sliders (editing an existing masked grade over
+   pixels that already carry it would show it twice), the loupe and Detail.
+   The download affordance is an inline line on those controls, never a
+   sheet in front of the page. The existing `FetchPrompt` sheet goes from
+   the Masks and Text doors.
+4. **The web page.** Until the developer draws the layers from the records
+   (rectangles, ellipses, polygons, text boxes — an SVG over the poster, a
+   small ask filed in `docs/picplace-sync-cost-server-asks.md`), PicPlace's
+   page shows the poster without text and shape layers. Accepted.
 
-**Options.**
+**Size:** two to three days. The Masks and Text pages themselves need no
+design-first pass; the inline download line is the one visible change and
+is mirrored in the SVGs. Dropped: the "small working copy" (a fifth tier)
+— Steven: no new asset to draw a circle.
 
-- **A. A small working copy.** The same recipe as the proxy (grade only,
-  unlevelled, uncropped, same token) at ~2048 px long edge, HEIC, roughly
-  300–600 KB. The holder device renders it in the same pass as the full copy
-  (a second encode of the same render). The editor mounts it through the
-  existing `EditorAsset.workingCopy` path, so Masks, Text, crop, Sky/Land and
-  Find work unchanged (they already run at 512–2048 px). The full copy is
-  fetched only for *Download full size*: the detail loupe, pixel peeping,
-  export at full size from a device without originals. Needs a server kind
-  (one ask: a second proxy variant in `renditions`, index pointer, presence
-  tier), the batch paths, and the free-up rows to know two copies.
-  About two to three days, plus the developer's part.
-- **B. No new picture; no prompt on Wi-Fi.** Fetch the working copy silently
-  when the path is Wi-Fi and the copy is under a few MB; prompt only on
-  mobile data or for a large copy. One day. Removes the friction, not the
-  bytes.
-- **C. The poster as canvas.** Would need an *unbaked* poster, which undoes
-  the finished picture in the grid and on the web — not recommended.
-
-**Recommendation: B now, A as the next tiers stage.** B is a one-day change
-that answers the complaint on a home Wi-Fi. A is the right shape of the
-system — the pull-to-a-device rule Steven states ("the proxy and originals
-come down for a specific reason") — and it makes every preview editable at
-~0.5 MB. On "disable sky detection for the poster version": not needed;
-Sky/Land already works from a 512 px render, so it runs on a small copy as
-it does on the full one.
-
-**Decision needed from Steven** before A starts: a second rendition kind
-on PicPlace (yes/no), and whether the small copy replaces the full copy as
-the *default* download on a preview (recommended: yes; the full copy behind
-*Download full size*).
+**Done when:** on the Simulator (a preview with no copy and no originals),
+Masks opens on the poster with no prompt, a rectangle is added, resized
+and moved, a text box added; the Mac (holder) pulls the records and its
+export and poster show them in the same normalised place
+(`LL_DUMP_OVERLAYS=1` on both); the poster the Mac re-uploads carries no
+layer pixels; the Simulator's item view draws the layers live over the
+poster; the masked-grade sliders on the preview show the inline download
+line and nothing else blocks.
 
 ## 5. Rules for whoever picks this up
 

@@ -391,3 +391,22 @@ understood; the §B client is clear against production (it landed at 10:45).
 (the first connection's batch of records pushes, a library's re-sync), sized
 under `request_max_bytes`; the pull reading `records` from the row once
 the server carries them for every project.
+
+## Ask (2026-10-04, after the brief): draw the text and shape layers on the project page
+
+LetsLapse is moving text and shape layers out of the poster's pixels: the
+poster will carry the grade, the masked grades, the level and the crop, and
+the layers stay in the records, drawn live by every client (a text nudge is
+then a 2 KB records push, not a poster re-render and re-upload to every
+device; and a preview can edit them on the poster with no download). Until
+the page draws them, picplace.co shows the poster without text and shapes.
+
+**Ask.** Draw the layers over the poster on the project page from the
+records: `overlays.json` (text boxes and shape layers, normalised 0…1 over
+the levelled, uncropped frame — the crop rect and the level angle are in
+`project.json`'s adjustments) as an SVG overlay sized to the poster. The
+schema is LetsLapse's `SceneOverlay` (`App/Overlay/SceneOverlay.swift`);
+LetsLapse will hand over a one-page description of the fields and the
+geometry mapping when the client side lands. Not urgent; nothing breaks
+without it.
+

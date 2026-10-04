@@ -157,21 +157,23 @@ libraries (5 originals became server-side copies, nothing re-uploaded), a
 move between libraries seen from the Mac ("is in synth two … left alone
 here", no cost), and a twin by origin in another library being left unsynced.
 
-### Editing a preview without the full working copy — decision owed (2026-10-04)
+### Editing a preview on the poster — agreed 2026-10-04, not started
 
-Steven's question after the picture-tiers detour: masks, shapes and text on
-a preview are JSON edits over normalised coordinates and need no source
-pixels (plan §3), yet a preview asks for a 1–4 MB working copy before Masks
-or Text opens. The poster cannot be the canvas (it is the finished picture,
-overlays baked in). The brief `docs/brief-after-picture-tiers-2026-10-04.md`
-§4 lays out the options: **B** fetch the copy silently on Wi-Fi (one day,
-no new picture), **A** a small working copy (~2048 px, ~0.5 MB, the same
-recipe and token as the full one, a second rendition kind on PicPlace — the
-next tiers stage, two to three days plus the developer's part), C the
-poster (no). Recommended B now, A next. Decisions needed: a second rendition
-kind on the server, and the small copy as the default download on a preview
-with the full copy behind *Download full size*. Sky/Land needs no change —
-it already works from a 512 px render.
+Steven: shapes are added fast, one by one, and a person may or may not have
+the proxy or the originals on the device — nor should they need them for a
+shape; finer work downloads the working copy. Plan in
+`docs/brief-after-picture-tiers-2026-10-04.md` §4: (1) the poster keeps the
+pixel work only (grade, masked grades, level, crop) and text and shape
+layers leave its render — every surface draws them live from the records
+(item view, pager, editor, export composite; tiles an open sub-decision);
+(2) `EditorAsset.poster(url)` mounts the Masks and Text pages on the poster
+for a preview, touches mapped through the inverse crop and level, the §3.6
+guards; (3) on a preview without a download: shapes, custom masks, Sky/Land,
+Find, text; behind the working-copy download: crop, masked-grade sliders,
+the loupe, Detail — an inline line on the control, no sheet; (4) the web
+page shows the poster without layers until the developer draws them from
+the records (ask filed). No new asset (the small copy is dropped). Two to
+three days; done-when in the brief.
 
 ### PicPlace sync cost: the agreed client jobs from the one-photo trace (2026-09-30)
 
