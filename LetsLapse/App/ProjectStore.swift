@@ -21,7 +21,13 @@ import LetsLapseKit
 /// project through the owners this session has seen, else the index.
 final class ProjectStore: @unchecked Sendable {
 
-    static let capacity = 512
+    /// 4,096 since 2026-10-04: Steven's Mac library passed 1,700 projects,
+    /// and at 512 every index change (a size measured, a pull-update) evicted
+    /// the rows on screen, which the Projects list then decoded again on the
+    /// main thread — 66 % of it in `ProjectDocument.init(from:)` while the
+    /// Size sort re-measured 757 projects (docs/TODO.md, "Mac heat").
+    /// A document is a few kilobytes; the cache stays under ~20 MB.
+    static let capacity = 4096
 
     private let projectsRoot: URL
     private let index: LibraryIndex?

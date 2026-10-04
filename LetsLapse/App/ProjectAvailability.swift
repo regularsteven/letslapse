@@ -97,9 +97,15 @@ extension AppModel {
     }
 
     func holdingsInputs(for capture: CaptureProject) -> HoldingsInputs {
-        var inputs = Self.holdingsInputs(capture: capture, blends: blends(for: capture), folder: projectFolderURL(for: capture))
-        if capture.kind == .photos { inputs.workingCopyName = expectedProxyName(for: capture) }
-        return inputs
+        // The expected copy's name is NOT worked out here (2026-10-04, the
+        // Mac's Projects list at 66 % main-thread CPU): it costs the grade
+        // and the project's turns — a `project.json` read — per tile, on
+        // the main actor, for every row a list redraws. Any working copy in
+        // the folder counts, as the status sweep already reads it; a device
+        // keeps one copy at most, so the two differ only in the moment
+        // after another device re-grades. The editor and the card still
+        // open the exact copy (`workingCopyURL`).
+        Self.holdingsInputs(capture: capture, blends: blends(for: capture), folder: projectFolderURL(for: capture))
     }
 
     /// The same from a document read anywhere — the status sweep's, off the

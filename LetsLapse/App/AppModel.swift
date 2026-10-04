@@ -4963,7 +4963,8 @@ final class AppModel: ObservableObject {
         isMeasuringSizes = true
         defer { isMeasuringSizes = false }
         LLog("project sizes: measuring \(pending.count)")
-        for id in pending {
+        let started = Date()
+        for (index, id) in pending.enumerated() {
             let folder = captureFolderURL(for: id)
             guard let bytes = await MediaWorkQueue.shared.run({ Self.directorySize(folder) }) else {
                 continue
@@ -4975,7 +4976,13 @@ final class AppModel: ObservableObject {
                 capture.sizeBytes = bytes
                 capture.sizeMeasuredAt = Date()
             }
+            // Every write moves the index, and every index move redraws the
+            // Projects list (2026-10-04: 757 of these in a row on the Mac
+            // left the sort picker dead). A breath between them keeps the
+            // screen answering; the job is a background one by design.
+            if index % 10 == 9 { try? await Task.sleep(for: .milliseconds(250)) }
         }
+        LLog("project sizes: measured \(pending.count) in \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
     }
 
     /// Bytes on disk for one project. Returns nil when the walk was cancelled
