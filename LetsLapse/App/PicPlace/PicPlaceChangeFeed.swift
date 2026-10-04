@@ -294,6 +294,10 @@ extension PicPlaceController {
             syncMeta.changeSeqScope = nil
             try? FileManager.default.removeItem(at: PicPlaceIndexCache.url(inRoot: root))
         }
+        // The watermark is sync state: ask for the write, or a launch after
+        // an idle run finds the cache ahead of a state that never saw it
+        // (the 16 Pro and 12 Pro on 2026-10-04 read 3.6 MB at every launch).
+        saveSyncState()
         return index
     }
 
@@ -336,6 +340,7 @@ extension PicPlaceController {
         syncMeta.changeSeq = newWatermark
         syncMeta.changeSeqScope = key
         saveIndexCache()
+        saveSyncState()
         return (rows, pages, newWatermark)
     }
 
@@ -363,11 +368,22 @@ extension PicPlaceController {
     /// the sync state's own; otherwise the first check reads the whole index.
     func loadIndexCache() {
         let url = PicPlaceIndexCache.url(inRoot: root)
-        guard let data = try? Data(contentsOf: url),
-              let cache = try? JSONDecoder().decode(PicPlaceIndexCache.self, from: data),
-              cache.format == PicPlaceIndexCache.format,
-              cache.scope == feedScopeKey, cache.watermark == syncMeta.changeSeq, syncMeta.changeSeqScope == cache.scope
-        else { return }
+        guard let data = try? Data(contentsOf: url) else { return }
+        guard let cache = try? JSONDecoder().decode(PicPlaceIndexCache.self, from: data),
+              cache.format == PicPlaceIndexCache.format else {
+            LLog("picplace: feed — the index cache on disk could not be read (\(data.count) bytes); the whole index is read")
+            return
+        }
+        // The cache is written after the feed is applied and the state is
+        // written soon after — a kill in between leaves the cache ahead of
+        // the state, and the cache is then the later truth: its rows are
+        // the index at its watermark, which the state adopts. A cache behind
+        // the state (its write failed) or of another scope is not used.
+        guard cache.scope == feedScopeKey, syncMeta.changeSeqScope == cache.scope,
+              let stateWatermark = syncMeta.changeSeq, cache.watermark >= stateWatermark else {
+            LLog("picplace: feed — the index cache (scope \(cache.scope), watermark \(cache.watermark)) is not the state's (scope \(syncMeta.changeSeqScope ?? "none"), watermark \(syncMeta.changeSeq.map(String.init) ?? "none")); the whole index is read")
+            return
+        }
         for device in cache.devices {
             deviceNames[device.id] = PPDeviceSummary(id: device.id, name: device.name, platform: device.platform, revokedAt: nil)
         }
@@ -383,9 +399,17 @@ extension PicPlaceController {
                 rows[uuid] = project
             }
         }
-        guard rows.count == cache.rows.count else { return }
+        guard rows.count == cache.rows.count else {
+            LLog("picplace: feed — \(cache.rows.count - rows.count) of the index cache's \(cache.rows.count) row(s) could not be read; the whole index is read")
+            return
+        }
         feedRows = rows
         feedRaw = cache.rows
+        if cache.watermark != syncMeta.changeSeq {
+            LLog("picplace: feed — the index cache's watermark \(cache.watermark) is past the state's \(syncMeta.changeSeq.map(String.init) ?? "none"); the state adopts it")
+            syncMeta.changeSeq = cache.watermark
+            saveSyncState()
+        }
         LLog("picplace: feed — the index cache read: \(rows.count) row(s) at watermark \(cache.watermark)")
     }
 

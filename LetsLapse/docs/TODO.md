@@ -293,7 +293,13 @@ full-shape request, never a failed check. Bench on picplace.test (R1–R3):
 index in the feed shape 238 KB for 170 rows, decoded, watermark seeded.
 Owed: the pull reading `records` from the row instead of the bundle (step 5's
 second half, when the server offers it), and bulk PUT (step 6) for the
-migration paths.
+migration paths. Found on the first device logs the same hour and fixed: the
+feed moved its watermark in memory and never asked for a sync-state write, so
+on iOS (where a kill flushes nothing and an idle check dirties nothing) the
+cache ran ahead of the saved state and every launch after a feed page read
+the whole index again (3.6 MB on the 16 Pro and 12 Pro). The watermark now
+asks for the write wherever it moves, a cache at or past the state's watermark
+is read and the state adopts it, and a cache left unused says why in the log.
 
 **Agreed, not started — client (`App/PicPlace/`):**
 *(the first, fifth and sixth bullets below are the ones done above)*
