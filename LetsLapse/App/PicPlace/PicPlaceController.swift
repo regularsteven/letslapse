@@ -239,6 +239,9 @@ final class PicPlaceController: ObservableObject {
     /// server lets a device delete an exempt project's leftover working
     /// copy. Off until the developer ships it; nothing is sent before.
     private(set) var serverHasRenditionDelete = false
+    /// `features.md5_uploads` (sync-cost step 2): an `md5` declared at
+    /// negotiate is signed into the PUT and verifies the asset at confirm.
+    private(set) var serverHasMD5Uploads = false
     private(set) var serverRenditionKinds: [String] = []
     /// The renditions' share of the account's storage (`storage.renditions`,
     /// push 2) — the Settings card's "working copies on PicPlace · N GB".
@@ -953,6 +956,7 @@ final class PicPlaceController: ObservableObject {
         serverHasTiles = status.features["tiles"] == true
         serverHasRenditionBatches = status.features["rendition_batches"] == true
         serverHasRenditionDelete = status.features["rendition_delete"] == true
+        serverHasMD5Uploads = status.features["md5_uploads"] == true
         serverRenditionKinds = status.limits?.renditionKinds ?? []
         // The Settings card's row is the bound library's: its own figure
         // when `/status` lists it, else the account's (stage 5).
@@ -962,7 +966,7 @@ final class PicPlaceController: ObservableObject {
             // Once per change, so a production check shows what the server
             // says (picture tiers: push 1 = pointers, the tile switch; push 2
             // = the batch endpoints).
-            LLog("picplace: picture tiers on \(sessionHost) — rendition pointers \(serverHasRenditions ? "on" : "off"), tiles \(serverHasTiles ? "on" : "off"), rendition batches \(serverHasRenditionBatches ? "on" : "off"), rendition delete \(serverHasRenditionDelete ? "on" : "off")\(serverRenditionKinds.isEmpty ? "" : " (\(serverRenditionKinds.joined(separator: ", ")))")")
+            LLog("picplace: picture tiers on \(sessionHost) — rendition pointers \(serverHasRenditions ? "on" : "off"), tiles \(serverHasTiles ? "on" : "off"), rendition batches \(serverHasRenditionBatches ? "on" : "off"), rendition delete \(serverHasRenditionDelete ? "on" : "off"), md5 uploads \(serverHasMD5Uploads ? "on" : "off")\(serverRenditionKinds.isEmpty ? "" : " (\(serverRenditionKinds.joined(separator: ", ")))")")
         }
         noteNearbyKey(status)
         #if DEBUG
@@ -1953,7 +1957,8 @@ final class PicPlaceController: ObservableObject {
             tier: tier,
             library: serverHasLibraries ? scope : nil,
             bucket: serverHasRenditionBatches ? Self.bucket(for: capture.createdAt) : nil,
-            replacesProxy: replacedProxyID(for: capture))
+            replacesProxy: replacedProxyID(for: capture),
+            md5Uploads: serverHasMD5Uploads)
         // Every originals run can be stopped between files (2026-09-24): a
         // job's Pause, Pause for all sending, the Wi-Fi rule, iOS about to
         // suspend the app. What finished is confirmed first.

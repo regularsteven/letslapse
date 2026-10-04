@@ -19,6 +19,11 @@ struct PicPlaceRenditionItem {
     var url: URL
     var bytes: Int64
     var sha256: String
+    /// MD5 of the same bytes (sync-cost step 2): PicPlace signs it into the
+    /// PUT as `Content-MD5` and the store refuses other bytes; confirm then
+    /// marks the asset verified with no read-back. nil on a server without
+    /// `md5_uploads`, or when the hash was not computed.
+    var md5: String?
     var contentType: String
     /// The superseded asset of the same project and kind — the old proxy —
     /// deleted when this one confirms (`replaces`).
@@ -55,6 +60,7 @@ extension PicPlaceController {
                     "bytes": item.bytes, "sha256": item.sha256, "content_type": item.contentType,
                 ]
                 if let replaces = item.replaces { fields["replaces"] = replaces }
+                if let md5 = item.md5 { fields["md5"] = md5 }
                 return fields
             }]
             let answer: [String: [PPNegotiation]]

@@ -602,6 +602,17 @@ actor PicPlaceClient {
             LLog("picplace: rate limited (429) — pausing every request for \(Int(pause.rounded())) s")
             return
         }
+        if http.statusCode == 503 {
+            // Object storage behind PicPlace is not answering (sync-cost step
+            // 2, `storage_unavailable`): the whole queue holds for the
+            // server's `Retry-After` — a request that would reach storage
+            // fails the same way until then.
+            let asked = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 60
+            let pause = min(Self.maxRetryAfter, max(5, asked)) + Double.random(in: 0.2 ... 1.2)
+            pausedUntil = Date().addingTimeInterval(pause)
+            LLog("picplace: storage unavailable (503) — pausing every request for \(Int(pause.rounded())) s")
+            return
+        }
         if let remaining = http.value(forHTTPHeaderField: "X-RateLimit-Remaining").flatMap(Int.init),
            remaining <= Self.remainingReserve {
             // Another instance on the account (or a burst of hand presses)
@@ -783,10 +794,29 @@ actor PicPlaceClient {
         do {
             return try Self.decoder.decode(T.self, from: data)
         } catch {
+            // Most answers are read as a dictionary of one type (`[String:
+            // PPClaim]`, `[String: [PPPresence]]`), which a new top-level
+            // scalar the server adds beside the object breaks (2026-10-04:
+            // the change feed's `change_seq` next to `claim`). Such a field
+            // is dropped and the answer read again — the app models what it
+            // uses, and a scalar it does not model is not an error.
+            if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let scalars = object.filter { !($0.value is [String: Any]) && !($0.value is [Any]) }.map(\.key)
+                if !scalars.isEmpty, let slimmed = try? JSONSerialization.data(withJSONObject: object.filter { !scalars.contains($0.key) }),
+                   let decoded = try? Self.decoder.decode(T.self, from: slimmed) {
+                    if Self.droppedFieldsLogged.insert("\(path)|\(scalars.sorted())").inserted {
+                        LLog("picplace: \(method) \(path) — answer carried \(scalars.sorted().joined(separator: ", ")) beside what the app reads; read without")
+                    }
+                    return decoded
+                }
+            }
             LLog("picplace: \(method) \(path) → \(T.self) failed to decode: \(error); body: \(String(decoding: data.prefix(600), as: UTF8.self))")
             throw PicPlaceAPIError(status: http.statusCode, code: "bad_response", message: "PicPlace sent something LetsLapse couldn't read (\(Self.describe(error))).", claim: nil)
         }
     }
+
+    /// Paths whose answers carried an unmodelled scalar, logged once each.
+    nonisolated(unsafe) private static var droppedFieldsLogged = Set<String>()
 
     /// One request, as many times as it takes within reason: a `429` waits
     /// out the server's `Retry-After` and goes again; a `5xx` or a dropped

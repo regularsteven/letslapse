@@ -625,3 +625,24 @@ hold `records.aar` alone on picplace.co: did their first push negotiate a
 `poster.jpg` that was never confirmed (a lost PUT, reaped), or no poster
 at all? The app now re-sends a poster whenever a holder's row lacks one,
 so this is for the record, not a blocker.
+
+**2026-10-04, morning — step 2's client share is in, and a contract point
+for step 3.** The app declares `md5` at negotiate (hashed from the same read
+as the SHA-256; a file whose SHA-256 came from `assets.ndjson` is read once
+just before its PUT and negotiated again with the `md5`), holds every
+request for a `503`'s `Retry-After`, and says `"resurrect": true` on a push
+that brings a tombstone back — bench on picplace.test: a re-grade's two new
+files declared, `verified_at` set at confirm, `md5` stored. **Step 3, before
+it deploys:** the local draft adds `change_seq` as a top-level field beside
+`claim` on the claim answer, beside `presence`, and on the confirm answer.
+Every shipped build reads those answers as a dictionary of one type
+(`[String: PPClaim]`, `[String: [PPPresence]]`), so a top-level scalar
+breaks the claim, the presence post and the confirm on every device in the
+field — the first bench against the draft failed its push on exactly this.
+The build in this commit drops an unmodelled top-level scalar and reads the
+answer again, so it survives; the Mac, 18 Pro and 16 Pro builds before it
+do not. Please keep existing answers' top levels as they are — put
+`change_seq` inside the object it describes (`claim.change_seq`,
+`project.change_seq`, which the row already carries) or in a response
+header — and deploy step 3 only once every device runs a build from this
+commit or later.

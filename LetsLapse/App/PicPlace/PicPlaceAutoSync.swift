@@ -1001,13 +1001,13 @@ extension PicPlaceController {
                 let folder = model.projectFolderURL(for: capture)
                 guard let url = await PicPlaceProxy.ensure(sourceURL: source, grade: model.photoGrade(for: capture),
                                                            nameToken: PicPlaceSyncRun.proxyNameToken(for: token), in: folder) else { continue }
-                guard let sha = try? await Task.detached(priority: .utility, operation: { try PicPlaceSyncRun.sha256(of: url) }).value,
+                guard let hashes = try? await Task.detached(priority: .utility, operation: { try PicPlaceSyncRun.hashes(of: url) }).value,
                       let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil else { continue }
                 // The copy PicPlace holds now, retired when this one confirms.
                 let previous = serverRenditions[origin]?.proxy
                 batch.append((PicPlaceRenditionItem(
                     origin: origin, kind: PicPlaceSyncInventory.proxyKind, name: url.lastPathComponent, url: url,
-                    bytes: bytes, sha256: sha, contentType: "image/heic",
+                    bytes: bytes, sha256: hashes.sha256, md5: serverHasMD5Uploads ? hashes.md5 : nil, contentType: "image/heic",
                     replaces: previous.flatMap { $0.name == url.lastPathComponent ? nil : $0.id }), origin, token, capture.displayTitle))
                 if batch.count >= 100 { await flush() }
             } else {

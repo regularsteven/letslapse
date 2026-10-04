@@ -226,6 +226,10 @@ struct PicPlaceSyncRun {
         /// without it every re-grade left one more copy on the server, and
         /// every other device's count read as moved on each check).
         var replacesProxy: String? = nil
+        /// `features.md5_uploads` (sync-cost step 2): every file the run
+        /// sends declares its MD5 at negotiate, so the PUT carries
+        /// `Content-MD5` and confirm verifies it without a read-back.
+        var md5Uploads: Bool = false
     }
 
     struct Failed: LocalizedError {
@@ -254,6 +258,10 @@ struct PicPlaceSyncRun {
         /// A confirmed asset of the same project and kind this one retires
         /// when it confirms (`replaces`, push 2) — a re-grade's old copy.
         var replaces: String?
+        /// MD5 of the bytes (sync-cost step 2), from the same read as the
+        /// SHA-256 when the file was hashed here; nil when the SHA-256 came
+        /// from `assets.ndjson` (no read) — declared before the PUT then.
+        var md5: String?
 
         /// The item as a heavy file (a source frame or a blend), else nil —
         /// the heavy kinds are the check's own (`source`, `blend`).
@@ -340,6 +348,12 @@ struct PicPlaceSyncRun {
         await report { $0.phase = .claiming }
         var lastClaim = Date()
         var mayCreate = false
+        // The PUT says so in as many words (`"resurrect": true`, sync-cost
+        // step 2): a server with `resurrect_required` refuses any other PUT
+        // on a tombstone. The check decides which pushes of a deleted
+        // project reach here at all (a deliberate import or restore wins;
+        // every other push follows the deletion).
+        var resurrects = false
         do {
             let _: [String: PPClaim] = try await client.post("projects/\(uuid)/claim", json: ["ttl_seconds": Self.claimTTL])
         } catch let error as PicPlaceAPIError where error.status == 404 {
@@ -350,6 +364,7 @@ struct PicPlaceSyncRun {
             // device that still holds the project is pushing it on purpose).
             LLog("picplace: \(uuid) is a tombstone on the server — the push resurrects it")
             mayCreate = true
+            resurrects = true
         }
 
         do {
@@ -391,6 +406,7 @@ struct PicPlaceSyncRun {
                 "captured_at": ISO8601DateFormatter().string(from: project.capturedAt),
             ]
             if let bucket = project.bucket { body["bucket"] = bucket }
+            if resurrects { body["resurrect"] = true }
             if let origin = project.originUUID { body["origin_uuid"] = origin.uuidString.lowercased() }
             if mayCreate, let library = project.library { body["library"] = library.uuidString.lowercased() }
             let compactBytes = Int64((try? JSONSerialization.data(withJSONObject: manifest, options: [.withoutEscapingSlashes]).count) ?? manifestData.count)
@@ -405,8 +421,9 @@ struct PicPlaceSyncRun {
                 let _: [String: PPProject] = try await client.put("projects/\(uuid)", json: body)
                 try FileManager.default.createDirectory(at: manifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try manifestData.write(to: manifestURL, options: .atomic)
+                let manifestHashes = try Self.hashes(of: manifestURL)
                 let item = FileItem(name: ProjectFileRegistry.projectDocumentName, kind: "manifest", url: manifestURL,
-                                    bytes: Int64(manifestData.count), sha256: try Self.sha256(of: manifestURL))
+                                    bytes: Int64(manifestData.count), sha256: manifestHashes.sha256, md5: project.md5Uploads ? manifestHashes.md5 : nil)
                 let negotiated: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: ["assets": [Self.negotiateFields(item)]])
                 guard let result = negotiated["assets"]?.first, let manifestAsset = result.asset else {
                     throw Failed(caption: negotiated["assets"]?.first?.message ?? "PicPlace did not negotiate the manifest.")
@@ -475,6 +492,34 @@ struct PicPlaceSyncRun {
                         if item.heavyFile != nil, asset.verified != true { unverifiedHeavy.insert(item.name) }
                         await report { $0.filesDone += 1; $0.bytesDone += item.bytes }
                     }
+                }
+            }
+
+            // 4b. The MD5 of every file about to go (sync-cost step 2): a
+            //    file hashed from `assets.ndjson` was never read here, so it
+            //    is read once now and negotiated again with its `md5` —
+            //    PicPlace signs `Content-MD5` into the fresh URL and confirm
+            //    verifies the object without a read-back. A re-sync, where
+            //    nothing is pending, reads nothing.
+            if project.md5Uploads {
+                let undeclared = pending.indices.filter { pending[$0].item.md5 == nil }
+                if !undeclared.isEmpty {
+                    for index in undeclared {
+                        let url = pending[index].item.url
+                        pending[index].item.md5 = try await Task.detached(priority: .utility) { try Self.hashes(of: url).md5 }.value
+                    }
+                    for chunk in undeclared.chunked(Self.batchSize) {
+                        try Task.checkCancellation()
+                        lastClaim = try await reclaimIfStale(lastClaim)
+                        let request: [String: Any] = ["assets": chunk.map { Self.negotiateFields(pending[$0].item) }]
+                        let response: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: request)
+                        for (index, result) in zip(chunk, response["assets"] ?? []) {
+                            guard result.error == nil, let asset = result.asset, let upload = result.upload else { continue }
+                            pending[index].assetID = asset.id
+                            pending[index].upload = upload
+                        }
+                    }
+                    LLog("picplace: \(project.name) — md5 declared for \(undeclared.count) file(s) before sending")
                 }
             }
 
@@ -747,11 +792,13 @@ struct PicPlaceSyncRun {
         }
         if status == 400 || forced400, !rehashed {
             let url = pending.item.url
-            let fresh = try await Task.detached(priority: .utility) { try Self.sha256(of: url) }.value
+            let freshHashes = try await Task.detached(priority: .utility) { try Self.hashes(of: url) }.value
+            let fresh = freshHashes.sha256
             if fresh != pending.item.sha256 {
                 LLog("picplace: storage refused \(pending.item.name) — it no longer matches its recorded hash (\(pending.item.sha256.prefix(8)) → \(fresh.prefix(8))); sending it as it is now")
                 var item = pending.item
                 item.sha256 = fresh
+                if item.md5 != nil { item.md5 = freshHashes.md5 }
                 let negotiated: [String: [PPNegotiation]] = try await client.post("projects/\(uuid)/assets", json: ["assets": [Self.negotiateFields(item)]])
                 guard let result = negotiated["assets"]?.first else { throw Failed(caption: "PicPlace did not negotiate \(item.name).") }
                 if let error = result.error {
@@ -779,7 +826,7 @@ struct PicPlaceSyncRun {
         let fields: [String: Any?] = ["kind": item.kind, "name": item.name, "bytes": item.bytes, "sha256": item.sha256,
                                       "content_type": item.name == PicPlaceSyncInventory.bundleName
                                           ? PicPlaceSyncInventory.bundleContentType : contentType(for: item.url),
-                                      "replaces": item.replaces]
+                                      "replaces": item.replaces, "md5": item.md5]
         return fields.compactMapValues { $0 }
     }
 
@@ -798,17 +845,20 @@ struct PicPlaceSyncRun {
 
         func hashed(_ item: PicPlaceSyncItem, kind: String) async throws -> FileItem {
             let sha: String
+            var md5: String?
             var changed = false
             if let recorded = recordedHash(records[item.relativePath], url: item.url, bytes: item.bytes) {
                 sha = recorded
             } else {
                 let url = item.url
-                sha = try await Task.detached(priority: .utility) { try sha256(of: url) }.value
+                let both = try await Task.detached(priority: .utility) { try hashes(of: url) }.value
+                sha = both.sha256
+                md5 = both.md5
                 // A record that no longer describes the file: it changed
                 // after it was recorded, and the run says so.
                 if let old = PicPlaceOriginalsCheck.normalized(records[item.relativePath]?.hash), old != sha { changed = true }
             }
-            return FileItem(name: item.relativePath, kind: kind, url: item.url, bytes: item.bytes, sha256: sha, changedSinceRecorded: changed)
+            return FileItem(name: item.relativePath, kind: kind, url: item.url, bytes: item.bytes, sha256: sha, changedSinceRecorded: changed, md5: md5)
         }
 
         var files: [FileItem] = []
@@ -831,9 +881,9 @@ struct PicPlaceSyncRun {
                     try PicPlaceSyncInventory.buildBundle(members: members, in: folder)
                 }.value
                 let bytes = Int64((try? archive.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
-                let sha = try await Task.detached(priority: .utility) { try sha256(of: archive) }.value
+                let both = try await Task.detached(priority: .utility) { try hashes(of: archive) }.value
                 files.append(FileItem(name: PicPlaceSyncInventory.bundleName, kind: PicPlaceSyncInventory.bundleKind,
-                                      url: archive, bytes: bytes, sha256: sha))
+                                      url: archive, bytes: bytes, sha256: both.sha256, md5: both.md5))
                 bundleURL = archive
                 LLog("picplace: records bundle for \(folder.lastPathComponent): \(members.count) members → \(bytes) bytes")
             }
@@ -916,6 +966,24 @@ struct PicPlaceSyncRun {
             return true
         }) {}
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// SHA-256 and MD5 of a file from one read (sync-cost step 2): the MD5
+    /// PicPlace signs into the PUT describes the same bytes the SHA-256 does.
+    static func hashes(of url: URL) throws -> (sha256: String, md5: String) {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var sha = SHA256()
+        var md5 = Insecure.MD5()
+        while autoreleasepool(invoking: {
+            let chunk = handle.readData(ofLength: 4 * 1024 * 1024)
+            if chunk.isEmpty { return false }
+            sha.update(data: chunk)
+            md5.update(data: chunk)
+            return true
+        }) {}
+        return (sha.finalize().map { String(format: "%02x", $0) }.joined(),
+                md5.finalize().map { String(format: "%02x", $0) }.joined())
     }
 
     /// The twelve hex characters that name a working copy on PicPlace —

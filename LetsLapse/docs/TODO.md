@@ -211,9 +211,9 @@ report `docs/fieldtests/2026-10-01-sync-cost-bench-after-jobs/`):
   longer trashes a copy that joined the library after the project was deleted
   on PicPlace; it pushes it, which restores it there. Tested: export, delete,
   re-import with sync held, then a check ("the import wins; restoring it
-  there"). **Owed with the server:** `resurrect: true` on that push once
-  PicPlace answers `409 project_deleted` to any other
-  (`docs/picplace-sync-cost-server-asks.md`, the developer's reply).
+  there"). `resurrect: true` rides that push since 2026-10-04 (step 2's
+  client share, below), so the server's refusal of every other PUT on a
+  tombstone can be switched on once every device runs it.
 - *Device check against picplace.co* (the same evening, three devices):
   `docs/fieldtests/2026-10-01-device-check.md`. It held — one check per
   launch, six requests per originals upload, a 17 GB timelapse at the line's
@@ -227,6 +227,22 @@ report `docs/fieldtests/2026-10-01-sync-cost-bench-after-jobs/`):
 Byte counts of that run are not comparable with the first: the same photos
 were already on the account, so originals and identical posters became
 server-side copies.
+
+**Done 2026-10-04 — the client's share of step 2** (the developer's push
+`7316b0b`, flags `md5_uploads`, `storage_unavailable`, `noop_put`,
+`resurrect_required`): every file a run sends declares its `md5` at
+negotiate — hashed from the same read as the SHA-256 where the file is
+hashed here, and for a file whose SHA-256 came from `assets.ndjson` (no
+read) hashed once just before the PUT and negotiated again with it
+(`PicPlaceSyncRun`, step 4b: one extra negotiate per batch of new files, a
+re-sync reads nothing) — so PicPlace signs `Content-MD5` into the PUT and
+confirm marks the asset verified with no read-back; the batch renditions
+path declares it too. A `503` holds every request for the server's
+`Retry-After` (`noteRateLimit`), as a `429` does. A push that resurrects a
+tombstone says `"resurrect": true`. Confirm's `verified` already stopped
+the polling. Bench on picplace.test: a re-grade's two new files declared,
+PUT with `Content-MD5`, verified at confirm (`verified_at` set, `md5`
+stored). Not measurable here: Hetzner's read-back queue, which this empties.
 
 **Agreed, not started — client (`App/PicPlace/`):**
 *(the first, fifth and sixth bullets below are the ones done above)*
