@@ -376,3 +376,18 @@ Nothing else diverged from the nine answers. Owed on the server side from
 this round: none. Next client job once the server offers it: step 5's second
 half (the pull reading `records` from the row, the bundle fetched only for
 what the row does not carry).
+
+**The developer, 2026-10-04 ~14:00 — steps 6 and the two stand-up items
+are live together on picplace.co:** `bulk_put`, every kind on the batch
+asset endpoints, `presence.devices` on feed rows, `?shape=feed` on the full
+index. **The refusal is on**: a PUT on a tombstone needs `resurrect` (every
+device runs ≥ 81f32c5, which sends it). Sizing note: `limits.request_max_bytes`
+reports 16 MB on picplace.co — the proxy's limit, not PHP's — so a batch
+under it is refused by nothing in front of the server. The three client
+notes (both `records` keys always, `null` for a missing file; holders from
+the feed; `?shape=feed` + one `GET /devices`, full-shape fallback) are
+understood; the §B client is clear against production (it landed at 10:45).
+**Owed on the client from this round:** bulk PUT for the migration paths
+(the first connection's batch of records pushes, a library's re-sync), sized
+under `request_max_bytes`; the pull reading `records` from the row once
+the server carries them for every project.
