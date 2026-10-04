@@ -31,6 +31,12 @@ enum PicPlaceSyncState {
         /// last read or written (D3, 2026-09-25) — what a push is sent
         /// against.
         var collectionsRevision: Int?
+        /// The change feed's watermark (2026-10-04): the account's sequence
+        /// the last full index read or feed pass began at, and the scope —
+        /// the library's uuid or `"null"` — it was taken for. A watermark
+        /// for another scope is not used.
+        var changeSeq: Int?
+        var changeSeqScope: String?
     }
 
     private struct File: Codable {

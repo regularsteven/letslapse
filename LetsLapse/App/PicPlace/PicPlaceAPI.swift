@@ -42,6 +42,9 @@ struct PPStatus: Decodable {
     /// library while it holds a live project. Absent on a server from
     /// before libraries.
     var libraries: [PPLibrary]?
+    /// The account's change sequence and each library's head (the change
+    /// feed, 2026-10-04; `features.change_feed`). nil before it.
+    var changeSeq: PPChangeSeq?
     /// The account's current nearby key, by id — never the key itself
     /// (docs/picplace-nearby-key-ask.md §4.3). nil until the first
     /// `GET /nearby/key` mints one.
@@ -190,6 +193,9 @@ struct PPProject: Decodable {
     /// The capture month, `YYYY-MM` (push 2): what the app sent, or the UTC
     /// month the server derived for a row that never said.
     var bucket: String?
+    /// The row's place on the account's change sequence (the change feed,
+    /// 2026-10-04). nil from a server before it.
+    var changeSeq: Int?
 
     var isTombstone: Bool { deletedAt != nil }
     var libraryUUID: UUID? { library.flatMap(UUID.init(uuidString:)) }

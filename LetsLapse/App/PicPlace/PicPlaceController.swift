@@ -242,6 +242,20 @@ final class PicPlaceController: ObservableObject {
     /// `features.md5_uploads` (sync-cost step 2): an `md5` declared at
     /// negotiate is signed into the PUT and verifies the asset at confirm.
     private(set) var serverHasMD5Uploads = false
+    /// `features.change_feed` (sync cost step 3, 2026-10-04): `/status`
+    /// carries each library's head and `GET /changes` the rows since a
+    /// watermark (`PicPlaceChangeFeed.swift`).
+    private(set) var serverHasChangeFeed = false
+    /// The virtual index: every row by uuid (lowercased) from the last full
+    /// read, patched by the feed. Empty until a full read.
+    var feedRows: [String: PPProject] = [:]
+    /// The same rows as the server sent them, for the cache on disk.
+    var feedRaw: [String: PicPlaceIndexCache.Row] = [:]
+    /// Device summaries by id, for feed rows that name devices by id alone.
+    var deviceNames: [String: PPDeviceSummary] = [:]
+    /// Checks the feed answered without reading anything (the log's figure).
+    var feedIdleChecks = 0
+    var feedResetApplied = false
     private(set) var serverRenditionKinds: [String] = []
     /// The renditions' share of the account's storage (`storage.renditions`,
     /// push 2) — the Settings card's "working copies on PicPlace · N GB".
@@ -565,6 +579,9 @@ final class PicPlaceController: ObservableObject {
             }
         }
         stagedState = Self.stagedState(from: ProcessInfo.processInfo.environment["LL_PICPLACE"])
+        // The virtual index from the last run, once the profile that names
+        // this device is known (the change feed, 2026-10-04).
+        loadIndexCache()
         // `LL_PICPLACE_LIBRARIES=<n>` stages the connect sheet (stage C) with
         // n demo libraries and the unfiled entry, no server.
         if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_LIBRARIES"], let n = Int(raw) {
@@ -957,6 +974,7 @@ final class PicPlaceController: ObservableObject {
         serverHasRenditionBatches = status.features["rendition_batches"] == true
         serverHasRenditionDelete = status.features["rendition_delete"] == true
         serverHasMD5Uploads = status.features["md5_uploads"] == true
+        serverHasChangeFeed = status.features["change_feed"] == true
         serverRenditionKinds = status.limits?.renditionKinds ?? []
         // The Settings card's row is the bound library's: its own figure
         // when `/status` lists it, else the account's (stage 5).
@@ -966,7 +984,7 @@ final class PicPlaceController: ObservableObject {
             // Once per change, so a production check shows what the server
             // says (picture tiers: push 1 = pointers, the tile switch; push 2
             // = the batch endpoints).
-            LLog("picplace: picture tiers on \(sessionHost) — rendition pointers \(serverHasRenditions ? "on" : "off"), tiles \(serverHasTiles ? "on" : "off"), rendition batches \(serverHasRenditionBatches ? "on" : "off"), rendition delete \(serverHasRenditionDelete ? "on" : "off"), md5 uploads \(serverHasMD5Uploads ? "on" : "off")\(serverRenditionKinds.isEmpty ? "" : " (\(serverRenditionKinds.joined(separator: ", ")))")")
+            LLog("picplace: picture tiers on \(sessionHost) — rendition pointers \(serverHasRenditions ? "on" : "off"), tiles \(serverHasTiles ? "on" : "off"), rendition batches \(serverHasRenditionBatches ? "on" : "off"), rendition delete \(serverHasRenditionDelete ? "on" : "off"), md5 uploads \(serverHasMD5Uploads ? "on" : "off"), change feed \(serverHasChangeFeed ? "on" : "off")\(serverRenditionKinds.isEmpty ? "" : " (\(serverRenditionKinds.joined(separator: ", ")))")")
         }
         noteNearbyKey(status)
         #if DEBUG
@@ -1119,7 +1137,14 @@ final class PicPlaceController: ObservableObject {
         // The check's index carries tombstones; a deleted project is not one
         // this library is missing.
         var rows: [PPProject] = (given ?? []).filter { !$0.isTombstone }
-        if given == nil {
+        if given == nil, !feedRows.isEmpty {
+            // The virtual index (the change feed, 2026-10-04): no read.
+            rows = feedRows.values.filter { !$0.isTombstone }
+        } else if given == nil, serverHasChangeFeed {
+            // The check that follows reads the index and brings its rows
+            // here itself; a read now would be the launch's second.
+            return
+        } else if given == nil {
             do {
                 let index: PPProjectIndex = try await client.get("projects")
                 rows = index.projects

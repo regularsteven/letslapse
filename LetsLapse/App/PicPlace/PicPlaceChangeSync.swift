@@ -226,11 +226,13 @@ extension PicPlaceController {
             if scope != nil, !librariesKnown {
                 throw PicPlaceSyncRun.Failed(caption: "PicPlace has not said which libraries the account has yet.")
             }
-            // The whole index, tombstones included, every time: the merge
-            // table needs every row — a project only THIS device edited sits
-            // beside a server row that `updated_since` would not list. The
-            // watermark is kept for a later, incremental pass at scale.
-            let index: PPProjectIndex = try await client.get("projects", query: ["include_deleted": "1"])
+            // The index, tombstones included: the merge table needs every
+            // row — a project only THIS device edited sits beside a server
+            // row that a delta would not list. Since 2026-10-04 that is the
+            // VIRTUAL index (`PicPlaceChangeFeed.swift`): the whole thing
+            // once, then patched from `GET /changes` — or left alone when
+            // `/status` says the library has not moved.
+            let index = try await readIndex(status: checkStatus, reason: reason)
             guard let libraryIndex = model.libraryIndex else { throw PicPlaceSyncRun.Failed(caption: "The library index is not open.") }
 
             // This library's side in one pass off the main actor

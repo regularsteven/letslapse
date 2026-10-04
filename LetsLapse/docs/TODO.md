@@ -69,9 +69,9 @@ same renderer, an overlay edit marking the project edited) and **the
 mirrors were drawn** (both sidebars' *Working copy here* row, the pill's
 three copy states, the card's working-copy state on phone and Mac,
 Settings' free-up variant — the platform INDEX notes of 2026-10-04);
-**owed:** a phone capture of the two new iOS screens, Steven's look at the
-pill sheet on a device, and the change-feed client (step 3) once every
-device runs `81f32c5` or later). Supersedes connected-asset-states plan D2. Steven's issues 2 and 5
+**owed:** a phone capture of the two new iOS screens and Steven's look at
+the pill sheet on a device; the change-feed client landed 2026-10-04 — see
+"PicPlace sync cost" below). Supersedes connected-asset-states plan D2. Steven's issues 2 and 5
 of 2026-10-03 (Masks and Text on a preview) land on the proxy in stage 4, not
 on the poster. · large · seams: the editor's write paths that assume a source
 (plan T6) — the working-copy mode guards `persist()` (crop only), the white
@@ -250,6 +250,25 @@ tombstone says `"resurrect": true`. Confirm's `verified` already stopped
 the polling. Bench on picplace.test: a re-grade's two new files declared,
 PUT with `Content-MD5`, verified at confirm (`verified_at` set, `md5`
 stored). Not measurable here: Hetzner's read-back queue, which this empties.
+
+**Done 2026-10-04 — step 3's client, the change feed** (the developer's
+`77d1c4f`, live on picplace.co the same morning; `features.change_feed`):
+the check keeps a virtual index (`PicPlaceChangeFeed.swift`) — the whole
+index once, kept on disk beside the sync state as the server sent it
+(`PicPlace/index-cache.json`, rows tagged by shape, the device names the
+feed's rows need with it), then `GET /changes?since_seq=&library=&limit=500`
+patched in whenever `/status`'s head for this library is above the
+watermark, and no read at all when it is not; `410 resync_required` reads
+the whole index again. The merge pass runs over the virtual index exactly
+as it ran over the real one, so local edits are still found and queued.
+The usage line reads it too, which removes the launch's second index read.
+Bench on picplace.test (170 rows): a launch after `LL_PICPLACE_FEED=reset`
+reads the whole index once (267 KB) and seeds the watermark from `/status`;
+the next launch reads the cache and `/status` and nothing else; an edit's
+push moves the sequence, and the following launch takes one `/changes` page
+with that one row. On Steven's Mac this replaces a 250 KB index read per
+check. Owed: a watch on production — the first full read per device after
+the install, then `picplace: feed —` lines only.
 
 **Agreed, not started — client (`App/PicPlace/`):**
 *(the first, fifth and sixth bullets below are the ones done above)*
