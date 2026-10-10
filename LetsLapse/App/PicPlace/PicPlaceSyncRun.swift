@@ -6,7 +6,10 @@ import LetsLapseKit
 struct PicPlaceSyncProgress: Equatable {
     /// `verifying` and `removing` are free up space's (2026-09-23): the
     /// file-by-file check with PicPlace, then the removal from this device.
-    enum Phase: Equatable { case claiming, preparing, manifest, negotiating, uploading, confirming, finishing, downloading, verifying, removing }
+    /// `checksumming` (2026-10-10): the MD5 of every file about to go, read
+    /// before the first PUT — 43 GB for a 4,034-frame DNG project, minutes
+    /// with nothing moving until it counted.
+    enum Phase: Equatable { case claiming, preparing, manifest, negotiating, checksumming, uploading, confirming, finishing, downloading, verifying, removing }
     var phase: Phase = .claiming
     var filesDone = 0
     var filesTotal = 0
@@ -15,10 +18,181 @@ struct PicPlaceSyncProgress: Equatable {
     /// The device the files come from, when it is a nearby one, not
     /// PicPlace ("iPhone 18 Pro") — the words say *Importing* then.
     var source: String?
+    /// What has gone of the files still on their way (2026-10-10). The line
+    /// moved only as a whole file finished, so a 600 MB video sat on
+    /// "4 of 6 files" for minutes and read as stuck — and was paused, which
+    /// threw its bytes away. Not in `bytesDone`: a pause loses these.
+    var bytesSending: Int64 = 0
+    /// How fast the files are going, over the last few seconds; nil until
+    /// there is enough to say.
+    var bytesPerSecond: Double?
 
+    /// The checksum pass before the upload: files and bytes read of those
+    /// to read. Kept once the pass is over, so the Lock Screen's measure
+    /// (`workDone` of `workTotal`) never goes back.
+    var checksummedFiles = 0
+    var checksumFiles = 0
+    var checksummedBytes: Int64 = 0
+    var checksumBytes: Int64 = 0
+
+    /// What the line and the bar count: finished files and the parts in flight.
+    var bytesMoved: Int64 { bytesDone + bytesSending }
+
+    /// The bar: the checksum pass while it runs, the bytes sent after.
     var fraction: Double {
+        if phase == .checksumming, checksumBytes > 0 {
+            return min(1, Double(checksummedBytes) / Double(checksumBytes))
+        }
         guard bytesTotal > 0 else { return 0 }
-        return min(1, Double(bytesDone) / Double(bytesTotal))
+        return min(1, Double(bytesMoved) / Double(bytesTotal))
+    }
+
+    /// The whole run as one measure, for the Lock Screen: the bytes read for
+    /// checksums and the bytes sent. iOS ends a continued task whose
+    /// progress stands still, so the pass has to count there too.
+    var workDone: Int64 { checksummedBytes + bytesMoved }
+    var workTotal: Int64 { checksumBytes + bytesTotal }
+
+    /// "Preparing 1,234 of 4,034 files" while the checksum pass runs.
+    var checksumFilesLine: String {
+        "Preparing \(checksummedFiles.formatted()) of \(checksumFiles.formatted()) files"
+    }
+
+    /// The card's and the drawer's line: the files and what they weigh.
+    var checksumLine: String {
+        "\(checksumFilesLine) · \(LLFormat.bytes(checksummedBytes)) of \(LLFormat.bytes(checksumBytes))"
+    }
+
+    /// "4,5 MB/s · about 3 min left" while files are on their way.
+    var rate: String? {
+        guard let bytesPerSecond else { return nil }
+        guard bytesPerSecond >= 1024 else { return "waiting for the network" }
+        let speed = "\(LLFormat.bytes(Int64(bytesPerSecond)))/s"
+        let left = Double(max(0, bytesTotal - bytesMoved)) / bytesPerSecond
+        guard left >= 1 else { return speed }
+        if left < 60 { return "\(speed) · under a minute left" }
+        let minutes = Int((left / 60).rounded(.up))
+        if minutes < 60 { return "\(speed) · about \(minutes) min left" }
+        return "\(speed) · about \(minutes / 60) h \(minutes % 60) min left"
+    }
+}
+
+/// Counts the bytes of the PUTs in flight for one upload run, from each
+/// task's own delegate, and the rate they go at — read once a second by
+/// the run, so the card's line moves while a big file is on its way.
+final class PicPlaceSendMeter: @unchecked Sendable {
+    private let lock = NSLock()
+    /// Bytes sent so far of each file in flight, by its name in the project.
+    private var partial: [String: Int64] = [:]
+    /// Every byte this run has sent, retries included: what the rate reads.
+    private var sent: Int64 = 0
+    private var samples: [(at: TimeInterval, sent: Int64)] = []
+    private static let window: TimeInterval = 8
+
+    /// The delegate for one PUT of `name`; a retry's new task starts at zero.
+    func delegate(for name: String) -> URLSessionTaskDelegate {
+        Delegate(name: name, meter: self)
+    }
+
+    /// The file finished or failed: its bytes leave the in-flight count.
+    func settle(_ name: String) {
+        lock.withLock { _ = partial.removeValue(forKey: name) }
+    }
+
+    /// What is in flight now, and the rate over the last few seconds (nil
+    /// for the first two, when one burst of a socket buffer would read as
+    /// a speed).
+    func reading() -> (sending: Int64, perSecond: Double?) {
+        lock.withLock {
+            let now = ProcessInfo.processInfo.systemUptime
+            note(at: now)
+            let sending = partial.values.reduce(0, +)
+            guard let first = samples.first, now - first.at >= 2 else { return (sending, nil) }
+            return (sending, Double(sent - first.sent) / (now - first.at))
+        }
+    }
+
+    private func didSend(_ name: String, total: Int64) {
+        lock.withLock {
+            let before = partial[name] ?? 0
+            partial[name] = total
+            if total > before { sent += total - before }
+            note(at: ProcessInfo.processInfo.systemUptime)
+        }
+    }
+
+    /// At most one sample a quarter second, the oldest dropped past the
+    /// window (one kept from before it, so the window is always spanned).
+    private func note(at now: TimeInterval) {
+        if let last = samples.last, now - last.at < 0.25 { return }
+        samples.append((now, sent))
+        while samples.count > 2, now - samples[1].at > Self.window { samples.removeFirst() }
+    }
+
+    private final class Delegate: NSObject, URLSessionTaskDelegate {
+        let name: String
+        let meter: PicPlaceSendMeter
+
+        init(name: String, meter: PicPlaceSendMeter) {
+            self.name = name
+            self.meter = meter
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
+                        totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+            meter.didSend(name, total: totalBytesSent)
+        }
+    }
+}
+
+/// The MD5s an upload read before its first PUT, kept per project in the
+/// library's `PicPlace/checksums/` until the upload finishes (2026-10-10:
+/// each retry of a 4,034-frame upload read all 43 GB again for them). An
+/// entry counts only while the file has the size and SHA-256 it was read
+/// with; a stale one storage refuses re-hashes the file, as any would.
+struct PicPlaceChecksumCache: Codable {
+    struct Entry: Codable {
+        var sha256: String
+        var bytes: Int64
+        var md5: String
+    }
+
+    var entries: [String: Entry] = [:]
+
+    static func url(inRoot root: URL, originID: UUID) -> URL {
+        PicPlaceBindingRecord.syncStateURL(inRoot: root).deletingLastPathComponent()
+            .appendingPathComponent("checksums", isDirectory: true)
+            .appendingPathComponent("\(originID.uuidString.lowercased()).json")
+    }
+
+    static func load(_ url: URL?) -> PicPlaceChecksumCache {
+        guard let url, let data = try? Data(contentsOf: url),
+              let cache = try? JSONDecoder().decode(PicPlaceChecksumCache.self, from: data) else { return .init() }
+        return cache
+    }
+
+    func save(_ url: URL?) {
+        guard let url else { return }
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(self).write(to: url, options: .atomic)
+        } catch {
+            LLog("picplace: could not keep the checksums in \(url.lastPathComponent): \(error.localizedDescription)")
+        }
+    }
+
+    static func remove(_ url: URL?) {
+        guard let url else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    func md5(for item: PicPlaceSyncRun.FileItem) -> String? {
+        guard let entry = entries[item.name], entry.sha256 == item.sha256, entry.bytes == item.bytes else { return nil }
+        return entry.md5
+    }
+
+    mutating func note(_ item: PicPlaceSyncRun.FileItem, md5: String) {
+        entries[item.name] = Entry(sha256: item.sha256, bytes: item.bytes, md5: md5)
     }
 }
 
@@ -247,6 +421,9 @@ struct PicPlaceSyncRun {
         /// its index at once. The bundle still carries them.
         var recordsInline: Bool = false
         var recordsMaxBytes: Int64 = 8 * 1024 * 1024
+        /// Where this project's MD5s are kept between tries
+        /// (`PicPlaceChecksumCache`); nil keeps none.
+        var checksumCacheURL: URL? = nil
     }
 
     struct Failed: LocalizedError {
@@ -302,10 +479,12 @@ struct PicPlaceSyncRun {
         var upload: PPUpload
     }
 
-    /// What the upload group hears: a file done, or the stop signal.
+    /// What the upload group hears: a file done, the stop signal, or the
+    /// second's tick that moves the line while big files are on their way.
     private enum UploadEvent {
         case done(Uploaded)
         case stopRequested
+        case tick
     }
 
     /// What one PUT ended as.
@@ -330,6 +509,8 @@ struct PicPlaceSyncRun {
     /// A pause request, read between files (an originals upload's job).
     var stop: PicPlaceStopSignal? = nil
     let progress: @MainActor (PicPlaceSyncProgress) -> Void
+    /// The bytes of the PUTs in flight, and how fast they go.
+    let sendMeter = PicPlaceSendMeter()
 
     private static let batchSize = 100
     private static let concurrentUploads = 4
@@ -395,6 +576,16 @@ struct PicPlaceSyncRun {
             bundleURL = inventory.bundleURL
             var files = inventory.files
             try Task.checkCancellation()
+            // The MD5s an earlier try of this upload read: its negotiate
+            // declares them at once, and the checksum pass skips those files.
+            var checksums = project.md5Uploads ? PicPlaceChecksumCache.load(project.checksumCacheURL) : PicPlaceChecksumCache()
+            if !checksums.entries.isEmpty {
+                var reused = 0
+                for index in files.indices where files[index].md5 == nil {
+                    if let md5 = checksums.md5(for: files[index]) { files[index].md5 = md5; reused += 1 }
+                }
+                if reused > 0 { LLog("picplace: \(project.name) — \(reused) checksum(s) kept from an earlier try") }
+            }
 
             // Copies PicPlace refuses to replace (its write-once rule for
             // confirmed originals — a per-server switch, off until every
@@ -540,10 +731,44 @@ struct PicPlaceSyncRun {
             if project.md5Uploads {
                 let undeclared = pending.indices.filter { pending[$0].item.md5 == nil }
                 if !undeclared.isEmpty {
+                    // Counted on the card and the Lock Screen, heard by Pause,
+                    // and kept as it goes so a retry reads none of it again
+                    // (2026-10-10: 4,034 DNGs read for ~2½ minutes with
+                    // nothing moving, and the first Resume ended in iOS's
+                    // "failed").
+                    let toRead = undeclared.reduce(Int64(0)) { $0 + pending[$1].item.bytes }
+                    await report { $0.phase = .checksumming; $0.checksumFiles = undeclared.count; $0.checksumBytes = toRead }
+                    let started = Date()
+                    var lastReport = Date.distantPast
+                    var lastSave = Date()
+                    var read = 0
+                    var readBytes: Int64 = 0
                     for index in undeclared {
+                        if stop?.isRequested == true || Task.isCancelled {
+                            checksums.save(project.checksumCacheURL)
+                            try Task.checkCancellation()
+                            LLog("picplace: \(project.name) — paused while preparing, \(read) of \(undeclared.count) checksum(s) read and kept")
+                            throw Paused()
+                        }
                         let url = pending[index].item.url
-                        pending[index].item.md5 = try await Task.detached(priority: .utility) { try Self.hashes(of: url).md5 }.value
+                        let md5 = try await Task.detached(priority: .utility) { try Self.hashes(of: url).md5 }.value
+                        pending[index].item.md5 = md5
+                        checksums.note(pending[index].item, md5: md5)
+                        read += 1
+                        readBytes += pending[index].item.bytes
+                        if Date().timeIntervalSince(lastReport) >= 0.5 || read == undeclared.count {
+                            lastReport = Date()
+                            let (doneFiles, doneBytes) = (read, readBytes)
+                            await report { $0.checksummedFiles = doneFiles; $0.checksummedBytes = doneBytes }
+                        }
+                        if Date().timeIntervalSince(lastSave) >= 10 {
+                            lastSave = Date()
+                            checksums.save(project.checksumCacheURL)
+                        }
                     }
+                    checksums.save(project.checksumCacheURL)
+                    LLog("picplace: \(project.name) — read \(undeclared.count) checksum(s), \(LLFormat.bytes(toRead)), in \(Int(Date().timeIntervalSince(started).rounded())) s")
+                    await report { $0.phase = .negotiating }
                     for chunk in undeclared.chunked(Self.batchSize) {
                         try Task.checkCancellation()
                         lastClaim = try await reclaimIfStale(lastClaim)
@@ -577,6 +802,7 @@ struct PicPlaceSyncRun {
             var unconfirmed: [Uploaded] = []
             var failures: [String] = []
             var stopped = false
+            let sendStarted = Date()
             let heavyNames = Set(files.filter { $0.heavyFile != nil }.map(\.name))
             // A batch leaves `unconfirmed` only once PicPlace has answered, so
             // the error path's last try still covers one that failed to go.
@@ -609,7 +835,20 @@ struct PicPlaceSyncRun {
                     func enqueue() {
                         guard let next = iterator.next() else { return }
                         inFlight += 1
-                        group.addTask { .done(try await self.upload(next)) }
+                        group.addTask {
+                            do {
+                                return .done(try await self.upload(next))
+                            } catch {
+                                self.sendMeter.settle(next.item.name)
+                                throw error
+                            }
+                        }
+                    }
+                    func tick() {
+                        group.addTask {
+                            try await Task.sleep(nanoseconds: 1_000_000_000)
+                            return .tick
+                        }
                     }
                     // A pause is heard within a third of a second, not when
                     // the next 40 MB file happens to finish.
@@ -620,13 +859,29 @@ struct PicPlaceSyncRun {
                         }
                     }
                     for _ in 0 ..< Self.concurrentUploads { enqueue() }
+                    var ticks = 0
+                    tick()
                     while inFlight > 0 {
                         guard let event = try await group.next() else { break }
+                        if case .tick = event {
+                            let (sending, perSecond) = sendMeter.reading()
+                            await report { $0.bytesSending = sending; $0.bytesPerSecond = perSecond }
+                            // The log's sign of life on a long upload, which
+                            // otherwise says nothing between start and end.
+                            ticks += 1
+                            if ticks % 30 == 0 {
+                                LLog("picplace: \(project.name) — \(state.filesDone) of \(state.filesTotal) files, \(LLFormat.bytes(state.bytesMoved)) of \(LLFormat.bytes(state.bytesTotal))\(state.rate.map { " · \($0)" } ?? "")")
+                            }
+                            tick()
+                            continue
+                        }
                         if case .done(let done) = event {
                             inFlight -= 1
                             uploaded.append(done)
                             unconfirmed.append(done)
-                            await report { $0.filesDone += 1; $0.bytesDone += done.bytes }
+                            sendMeter.settle(done.name)
+                            let sending = sendMeter.reading().sending
+                            await report { $0.filesDone += 1; $0.bytesDone += done.bytes; $0.bytesSending = sending }
                             if unconfirmed.count >= Self.confirmEvery { try await confirmFinished() }
                         }
                         if case .stopRequested = event { stopped = true }
@@ -639,6 +894,7 @@ struct PicPlaceSyncRun {
                                 if case .success(.done(let done)) = result {
                                     uploaded.append(done)
                                     unconfirmed.append(done)
+                                    sendMeter.settle(done.name)
                                     await report { $0.filesDone += 1; $0.bytesDone += done.bytes }
                                 }
                             }
@@ -647,7 +903,7 @@ struct PicPlaceSyncRun {
                         try Task.checkCancellation()
                         enqueue()
                     }
-                    // The stop watcher, when there is one, is still waiting.
+                    // The stop watcher, when there is one, and the tick are still waiting.
                     group.cancelAll()
                 }
             } catch {
@@ -655,6 +911,11 @@ struct PicPlaceSyncRun {
                 // connection costs the files in flight, not the run.
                 if !(error is CancellationError) { try? await confirmFinished() }
                 throw error
+            }
+            let sentBytes = uploaded.filter { !$0.divergent }.reduce(Int64(0)) { $0 + $1.bytes }
+            let sendSeconds = Date().timeIntervalSince(sendStarted)
+            if sentBytes > 0, sendSeconds >= 1 {
+                LLog("picplace: \(project.name) — sent \(LLFormat.bytes(sentBytes)) in \(Int(sendSeconds.rounded())) s, \(LLFormat.bytes(Int64(Double(sentBytes) / sendSeconds)))/s")
             }
             divergent += uploaded.filter(\.divergent).map(\.name)
             // A file that had changed since it was recorded — seen before the
@@ -685,7 +946,7 @@ struct PicPlaceSyncRun {
 
             // 6. Confirm what is left (the server checks each object's size
             //    and records it) — or, paused, keep what finished and step aside.
-            await report { $0.phase = .confirming }
+            await report { $0.phase = .confirming; $0.bytesSending = 0; $0.bytesPerSecond = nil }
             if stopped {
                 try? await confirmFinished()
                 LLog("picplace: \(project.name) — paused with \(uploaded.count) of \(pending.count) file(s) sent this run; the rest go when it resumes")
@@ -745,6 +1006,8 @@ struct PicPlaceSyncRun {
                 record.divergentFiles = divergent.isEmpty ? nil : divergent
                 record.changedFiles = changed.isEmpty ? nil : changed
             }
+            // Everything is up: what a retry would have reused is not needed.
+            PicPlaceChecksumCache.remove(project.checksumCacheURL)
             return record
         } catch {
             // Whatever happened, do not leave the project locked for the next device.
@@ -789,7 +1052,8 @@ struct PicPlaceSyncRun {
                 #if DEBUG
                 let started = Date()
                 #endif
-                let (data, response) = try await Self.uploadSession.upload(for: request, fromFile: pending.item.url)
+                let (data, response) = try await Self.uploadSession.upload(for: request, fromFile: pending.item.url,
+                                                                           delegate: sendMeter.delegate(for: pending.item.name))
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                 #if DEBUG
                 PicPlaceTransfer.trace("PUT", pending.item.name, status: status, bytes: Int(pending.item.bytes), since: started)

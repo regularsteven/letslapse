@@ -270,6 +270,17 @@ extension PicPlaceController {
         // PicPlace not answering holds them too; its answer resumes them
         // (`noteServerReachable`, 2026-09-29).
         guard !isShutDown, canSync, !sendsPaused, !isUnreachable else { return }
+        // Not before this session's first `/status`: a run takes the
+        // server's features as they are when it starts, and one resumed at
+        // launch ahead of the answer (2026-10-10, 12:17:30.8 against the
+        // features at 12:17:31.9) sent 43 GB with no MD5s — PicPlace reads
+        // every object back to verify it then — and its records in the
+        // bundle. `noteLibraries` resumes them on that first answer.
+        guard librariesKnown else {
+            let waiting = uploadJobs.filter { syncTasks[$0.key] == nil && ($0.value.hold == nil || $0.value.hold == .interrupted || $0.value.hold == .waitingForWiFi) }
+            if !waiting.isEmpty { LLog("picplace: \(waiting.count) upload job(s) wait for PicPlace's first answer (\(reason))") }
+            return
+        }
         // Oldest first, so the job that has waited longest takes the free
         // slot; the limit holds the rest.
         for (id, job) in uploadJobs.sorted(by: { $0.value.startedAt < $1.value.startedAt }) where syncTasks[id] == nil {
@@ -450,9 +461,15 @@ extension PicPlaceController {
         guard !Self.uploadHookRan, let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_UPLOAD"],
               let id = UUID(uuidString: raw), let capture = model.capture(id: id) else { return }
         Self.uploadHookRan = true
-        LLog("picplace hook: Upload the originals of \(capture.displayTitle)")
-        uploadOriginals(capture)
-        runUploadJobHooks(for: id)
+        // A person presses once the app is up, after PicPlace's first answer;
+        // a press ahead of it would run without the features it names.
+        Task { @MainActor [weak self] in
+            for _ in 0 ..< 150 where self?.librariesKnown == false { try? await Task.sleep(nanoseconds: 200_000_000) }
+            guard let self else { return }
+            LLog("picplace hook: Upload the originals of \(capture.displayTitle)")
+            self.uploadOriginals(capture)
+            self.runUploadJobHooks(for: id)
+        }
     }
 
     /// The bench's presses on the upload `LL_PICPLACE_UPLOAD` started:

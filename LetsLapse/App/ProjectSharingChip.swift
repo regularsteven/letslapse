@@ -533,7 +533,9 @@ struct ProjectSyncSheet: View {
     private func uploadDetail(_ row: PicPlaceController.UploadJobRow) -> String {
         if let progress = row.progress {
             guard progress.filesTotal > 0 else { return "Getting ready…" }
-            return "\(progress.filesDone.formatted()) of \(progress.filesTotal.formatted()) files · \(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
+            if progress.phase == .checksumming { return progress.checksumLine }
+            return "\(progress.filesDone.formatted()) of \(progress.filesTotal.formatted()) files · \(LLFormat.bytes(progress.bytesMoved)) of \(LLFormat.bytes(progress.bytesTotal))"
+                + (progress.rate.map { " · \($0)" } ?? "")
                 + (row.job.allowsMobileData ? " · mobile data allowed" : "")
         }
         var parts: [String] = []

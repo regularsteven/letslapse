@@ -11,6 +11,33 @@ live inline.
 
 ## Open
 
+### PicPlace transfers: what is left after byte-level progress (2026-10-10)
+
+Shipped 2026-10-10: uploads count the bytes in flight with the rate and time
+left (`PicPlaceSendMeter`), a progress log line every 30 s, the checksum pass
+counted on the card and the Lock Screen and kept between tries
+(`PicPlaceChecksumCache`), and resumed jobs waiting for the session's first
+`/status`. The server's half (the project PUT's memory,
+`docs/picplace-project-put-memory-ask.md`) is live on picplace.co. Left open:
+
+- **Downloads have the same gap.** `PicPlaceDownloadRun` uses
+  `download(for:)` per file and reports only when a file lands — a big
+  original coming down sits still the same way. The same meter fits
+  (`didWriteData` on a per-task delegate).
+- **Pause throws away the file in flight.** A presigned PUT is all or
+  nothing, so pausing 47 s into a 599 MB segment (2026-10-07) cost every byte
+  sent. Options: let Pause finish a file that is mostly sent, or say on the
+  button what a pause costs. Steven to choose.
+- **A long upload and a locked phone.** Only a press asks iOS to hold the app
+  (a job resumed at launch gets 30 s), and uploads don't keep the screen on
+  as blends and capture do; on 2026-10-07 even the pressed continued task ran
+  out after 8 minutes. Options: keep the screen awake while a person's upload
+  runs in front, or ask iOS on a resume too. Steven to choose.
+- **Two server rounds of 30 s each.** A big first upload still asks PicPlace
+  for addresses twice (before and after the checksum pass, ~30 s each for
+  4,034 files) with nothing moving on the card; a retry with kept checksums
+  asks once.
+
 ### Picture tiers — tile · poster · proxy (2026-10-03: contract written, picplace `c43f970`, pushes 1 and 2 live on picplace.co, tiles on and backfilled; stages 0–4 COMMITTED `e50aefc` and on every device; stage 5 BUILT the same night, uncommitted)
 
 Steven's brief (2026-10-03): a full-size graded **working copy** per project on

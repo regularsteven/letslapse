@@ -274,6 +274,7 @@ final class PicPlaceContinuedTransfer {
     private var task: BGContinuedProcessingTask?
     private var onExpire: (@MainActor () -> Void)?
     private var lastFiles = -1
+    private var lastSubtitleAt = Date.distantPast
     private var done = false
 
     /// True while iOS runs the task — the app is held by it.
@@ -360,9 +361,19 @@ final class PicPlaceContinuedTransfer {
 
     func update(_ progress: PicPlaceSyncProgress) {
         guard let task, !done else { return }
-        if progress.bytesTotal > 0 {
-            task.progress.totalUnitCount = progress.bytesTotal
-            task.progress.completedUnitCount = min(progress.bytesDone, progress.bytesTotal)
+        // One measure for the whole run — the checksum pass, then the bytes
+        // sent — so the bar moves through both and never goes back.
+        if progress.workTotal > 0 {
+            task.progress.totalUnitCount = progress.workTotal
+            task.progress.completedUnitCount = min(progress.workDone, progress.workTotal)
+        }
+        if progress.phase == .checksumming {
+            if Date().timeIntervalSince(lastSubtitleAt) >= 1 {
+                lastSubtitleAt = Date()
+                task.updateTitle(title, subtitle: progress.checksumFilesLine)
+            }
+            lastFiles = -1
+            return
         }
         if progress.filesTotal > 0, progress.filesDone != lastFiles {
             lastFiles = progress.filesDone

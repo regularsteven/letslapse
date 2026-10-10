@@ -975,8 +975,12 @@ final class PicPlaceController: ObservableObject {
 
     /// What the server keeps apart (stage C): the feature and the list.
     func noteLibraries(_ status: PPStatus) {
+        let firstAnswer = !librariesKnown
         serverHasLibraries = status.hasLibraries
         librariesKnown = true
+        // The upload jobs that waited for this session's first answer
+        // (`resumeUploadJobs`) go now, with the features it named.
+        defer { if firstAnswer { resumeUploadJobs(reason: "PicPlace answered") } }
         serverLibraries = status.libraries ?? []
         // Not a library matter, but read off the same answer: many
         // projects' asset lists in one request — what the check asks when a
@@ -2002,7 +2006,8 @@ final class PicPlaceController: ObservableObject {
             replacesProxy: replacedProxyID(for: capture),
             md5Uploads: serverHasMD5Uploads,
             recordsInline: serverHasRecordsInline,
-            recordsMaxBytes: Self.recordsCapHook ?? serverRecordsMaxBytes)
+            recordsMaxBytes: Self.recordsCapHook ?? serverRecordsMaxBytes,
+            checksumCacheURL: policy.sendsHeavy ? PicPlaceChecksumCache.url(inRoot: root, originID: key) : nil)
         // Every originals run can be stopped between files (2026-09-24): a
         // job's Pause, Pause for all sending, the Wi-Fi rule, iOS about to
         // suspend the app. What finished is confirmed first.

@@ -628,8 +628,10 @@ struct PicPlaceStatusCard: View {
             case .preparing: return progress.filesTotal > 0 ? "Checking \(progress.filesTotal) files…" : "Reading the project…"
             case .manifest: return "Sending the manifest…"
             case .negotiating: return "Comparing \(progress.filesTotal) files with the server…"
+            case .checksumming: return progress.checksumLine
             case .uploading, .confirming:
-                return "\(progress.filesDone) of \(progress.filesTotal) files · \(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
+                return "\(progress.filesDone) of \(progress.filesTotal) files · \(LLFormat.bytes(progress.bytesMoved)) of \(LLFormat.bytes(progress.bytesTotal))"
+                    + (progress.rate.map { " · \($0)" } ?? "")
             case .downloading:
                 return progress.filesTotal == 0 ? "Listing the originals…"
                     : "Downloading \(progress.filesDone) of \(progress.filesTotal) files · \(LLFormat.bytes(progress.bytesDone)) of \(LLFormat.bytes(progress.bytesTotal))"
