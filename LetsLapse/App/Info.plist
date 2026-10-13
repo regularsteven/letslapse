@@ -175,7 +175,51 @@
 				<string>com.regularsteven.letslapse.project</string>
 			</array>
 		</dict>
+		<!-- Photos (2026-10-13): a photo opened in LetsLapse from another
+		     app — Files, Mail, an "Open in" — arrives copied into
+		     Documents/Inbox and is handed to `onOpenURL`
+		     (AppModel.openURLs); a JPEG that is half of a RAW+JPEG pair in
+		     the library is imported as its RAW (PhotoLibraryOriginals). On
+		     the Mac the same entry puts LetsLapse in the Finder's Open With.
+		     Photos' share sheet offers it for ONE photo at a time: in the
+		     iOS 27 Simulator in the row of apps; on the 16 Pro (iOS 26.6)
+		     and the 18 Pro (iOS 27) under More ▸ Apps, at the foot of
+		     Suggestions with the apps never shared to, until Edit adds it
+		     to Favourites. The in-place key changed nothing there (probes,
+		     2026-10-13). Several photos at once need a share extension
+		     (TODO.md).
+
+		     Alternate, not Owner or Default: LetsLapse is one more place a
+		     photo can go, and must never become what a double-click on a
+		     JPEG opens. The types are the stills the importer takes
+		     (ImportedStills.stillExtensions) — public.camera-raw-image
+		     covers every camera's raw, com.adobe.raw-image is named because
+		     DNG is the one that matters most. -->
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Photo</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.jpeg</string>
+				<string>public.heic</string>
+				<string>public.heif</string>
+				<string>public.png</string>
+				<string>public.tiff</string>
+				<string>public.camera-raw-image</string>
+				<string>com.adobe.raw-image</string>
+			</array>
+		</dict>
 	</array>
+	<!-- No LSSupportsOpeningDocumentsInPlace, on purpose. Unset, iOS copies
+	     an opened file into Documents/Inbox, and a photo's import removes
+	     that copy once it has its own. NO cannot be said: this plist is the
+	     Mac's too, and macOS fails the build on NO — and an SDK-conditioned
+	     INFOPLIST_KEY_ build setting leaks into the Mac's plist step all the
+	     same (Xcode 27, 2026-10-13). -->
 	<!-- PicPlace transfers a person starts (Upload, Resume, Use mobile data,
 	     Download) ask iOS 26+ to keep the app running as a continued-processing
 	     task (`PicPlaceContinuedTransfer`). The wildcard only PERMITS identifiers

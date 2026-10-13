@@ -8136,6 +8136,23 @@ final class AppModel: ObservableObject {
 
     @Published var mediaImport: MediaImportProgress?
 
+    /// Photos being fetched for an import before it starts — the RAW of a
+    /// RAW+JPEG pair out of the library, what the picker hands over — which
+    /// can mean an iCloud download. Create shows its spinner meanwhile.
+    @Published var preparingImport = false
+
+    /// Photos opened from outside, gathered for a moment into one import
+    /// (`AppModel+PhotoImport.swift`), the timer that ends the moment, and the
+    /// last set imported — so a second delivery of the same files is dropped.
+    var openedStills: [URL] = []
+    var openedStillsFlush: Task<Void, Never>?
+    var lastOpenedStills: (paths: Set<String>, at: Date)?
+
+    /// Bumped as photos handed in from another app start importing, so a
+    /// camera standing over the screen they will land on closes — when it is
+    /// idle; a shoot keeps its screen (`CaptureView.canStandAside`).
+    @Published var cameraStandAsideRequest = 0
+
     /// The `mode` line a still sequence imported from outside the app
     /// registers with.
     ///
@@ -8197,9 +8214,21 @@ final class AppModel: ObservableObject {
     /// `syntheticNames` are file names the caller invented — the Photos
     /// library path stages `photo-0001…` when the library has lost the
     /// camera's name — which the reading must not mistake for a sequence.
-    func importStills(from selection: [URL], syntheticNames: Set<String> = []) {
-        guard mediaImport == nil, stillsImportQuestion == nil else { return }
-        Task { await runStillsImport(selection, syntheticNames: syntheticNames) }
+    ///
+    /// `completion` runs once the import is over, however it ended — the
+    /// point at which files staged for it can go. False, and nothing runs,
+    /// when another import is already under way.
+    @discardableResult
+    func importStills(
+        from selection: [URL], syntheticNames: Set<String> = [],
+        completion: (() -> Void)? = nil
+    ) -> Bool {
+        guard mediaImport == nil, stillsImportQuestion == nil else { return false }
+        Task {
+            await runStillsImport(selection, syntheticNames: syntheticNames)
+            completion?()
+        }
+        return true
     }
 
     /// The sheet's answer. Resumes the import waiting on it.
@@ -8374,13 +8403,19 @@ final class AppModel: ObservableObject {
     }
 
     /// The folder every frame came out of, when they all came out of one.
+    /// Never one the app made itself: the Photos library path stages its
+    /// picks in `tmp/import-<uuid>/`, a name nobody chose — read as the shoot's
+    /// own folder it titled the import sheet, and named every interval shoot
+    /// brought in from the library.
     nonisolated static func commonFolderName(of sequence: ImportedStills.Sequence) -> String? {
         let folders = Set(sequence.frames.map { $0.url.deletingLastPathComponent().path })
         guard folders.count == 1,
-              let folder = sequence.frames.first?.url.deletingLastPathComponent()
-                  .lastPathComponent.trimmingCharacters(in: .whitespaces),
-              !folder.isEmpty, folder != "/"
+              let enclosing = sequence.frames.first?.url.deletingLastPathComponent(),
+              enclosing.deletingLastPathComponent().resolvingSymlinksInPath().path
+                  != FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path
         else { return nil }
+        let folder = enclosing.lastPathComponent.trimmingCharacters(in: .whitespaces)
+        guard !folder.isEmpty, folder != "/" else { return nil }
         return folder
     }
 
@@ -8579,13 +8614,7 @@ final class AppModel: ObservableObject {
         if sequence.count == 1, let only = sequence.frames.first {
             return only.url.lastPathComponent
         }
-        let folders = Set(sequence.frames.map { $0.url.deletingLastPathComponent().path })
-        if folders.count == 1,
-           let folder = sequence.frames.first?.url.deletingLastPathComponent()
-               .lastPathComponent.trimmingCharacters(in: .whitespaces),
-           !folder.isEmpty, folder != "/" {
-            return folder
-        }
+        if let folder = commonFolderName(of: sequence) { return folder }
         if let camera = sequence.cameraName { return camera }
         return "\(sequence.count) photos"
     }

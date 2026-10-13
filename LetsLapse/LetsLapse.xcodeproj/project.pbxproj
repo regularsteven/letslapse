@@ -426,6 +426,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots when Record audio is on in Settings, and when you record an audio field note on a project.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "LetsLapse imports the photos you choose as their originals, such as the RAW of a RAW+JPEG photo instead of its JPEG, under their own file names.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LetsLapse transcribes audio field notes on this device, so a spoken memo can also be saved as a written note. Nothing leaves your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -479,6 +480,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots when Record audio is on in Settings, and when you record an audio field note on a project.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "LetsLapse imports the photos you choose as their originals, such as the RAW of a RAW+JPEG photo instead of its JPEG, under their own file names.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LetsLapse transcribes audio field notes on this device, so a spoken memo can also be saved as a written note. Nothing leaves your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

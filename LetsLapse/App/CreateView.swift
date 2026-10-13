@@ -179,7 +179,7 @@ struct CreateView: View {
                     MediaImportCard(progress: progress)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
-                } else if isImporting {
+                } else if isImporting || model.preparingImport {
                     HStack(spacing: 10) {
                         ProgressView()
                         Text("Importing…")
@@ -349,13 +349,20 @@ struct CreateView: View {
         }
         .onChange(of: photoItems) { items in
             guard !items.isEmpty else { return }
-            importLibraryPhotos(items)
+            model.importLibraryPhotos(items)
+            photoItems = []
         }
+        // `photoLibrary: .shared()` is what makes each item carry its asset's
+        // identifier — the handle the model needs to read a RAW+JPEG pair's
+        // RAW out of the library (`PhotoLibraryOriginals`). `.current` keeps
+        // what the picker hands over in its own format: a HEIC stays a HEIC.
         .photosPicker(
             isPresented: $pickingLibraryPhotos,
             selection: $photoItems,
             maxSelectionCount: 500,
-            matching: .images
+            matching: .images,
+            preferredItemEncoding: .current,
+            photoLibrary: .shared()
         )
         .sheet(isPresented: $showDeviceImport) {
             ProjectTransferImportView()
@@ -567,10 +574,18 @@ struct CreateView: View {
             titleVisibility: .visible
         ) {
             Button("From Files…") { pickFiles(for: .stills) }
-            Button("From Photos…") { pickingLibraryPhotos = true }
+            Button("From Photos…") {
+                // The RAW of a RAW+JPEG pair is only reachable through the
+                // library itself, so this is where access is asked for —
+                // once; whatever the answer, the picker follows.
+                Task {
+                    await PhotoLibraryOriginals.requestAccessIfUndetermined()
+                    pickingLibraryPhotos = true
+                }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("A folder of frames from a card or a drive, or photos already in your library. Raw files keep their own names when they come from Files.")
+            Text("A folder of frames from a card or a drive, or photos already in your library. A RAW+JPEG photo comes in as its RAW when LetsLapse has full access to Photos.")
         }
         #endif
     }
@@ -677,76 +692,6 @@ struct CreateView: View {
         }
     }
 
-    /// Stages the Photos library's answer on disk and hands it to the same
-    /// importer the Files path uses.
-    ///
-    /// Two things this now does that it didn't:
-    ///
-    /// - **The staged file keeps an extension**, taken from the item's own
-    ///   content type. Without one nothing downstream can tell a raw from a
-    ///   JPEG — not the decoder's raw gate, not the project's format pill —
-    ///   and every frame of every library import read as typeless.
-    /// - **It keeps the camera's file name** where the library still knows it
-    ///   (`PHAssetResource.originalFilename`), falling back to the picked
-    ///   order. An imported frame's name is its identity everywhere after
-    ///   this, Bad Frames included.
-    private func importLibraryPhotos(_ items: [PhotosPickerItem]) {
-        isImporting = true
-        Task {
-            let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("import-\(UUID().uuidString)")
-            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            var urls: [URL] = []
-            var used = Set<String>()
-            var invented = Set<String>()
-            for (index, item) in items.enumerated() {
-                guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-                let (name, isInvented) = Self.stagedName(
-                    for: item, fallbackIndex: index, taken: &used)
-                let url = directory.appendingPathComponent(name)
-                if (try? data.write(to: url)) != nil {
-                    urls.append(url)
-                    if isInvented { invented.insert(name) }
-                }
-            }
-            photoItems = []
-            isImporting = false
-            // Whatever the picker handed over IS the import, one photo
-            // included — a single photo registers as a photo project rather
-            // than a one-frame shoot (`AppModel.importedPhotoMode`). The only
-            // failure left is nothing staging at all.
-            guard !urls.isEmpty else {
-                model.errorMessage = items.count == 1
-                    ? "Couldn't load that photo."
-                    : "Couldn't load those photos."
-                return
-            }
-            // The invented names travel with the import so its reading knows
-            // `photo-0001, photo-0002…` is not a camera's sequence.
-            model.importStills(from: urls, syntheticNames: invented)
-        }
-    }
-
-    /// The name one library item is staged under: its original camera file
-    /// name when the library still has it, else `photo-0001` plus whatever
-    /// extension its content type implies — and whether it was the latter.
-    private static func stagedName(
-        for item: PhotosPickerItem, fallbackIndex: Int, taken: inout Set<String>
-    ) -> (name: String, invented: Bool) {
-        let ext = item.supportedContentTypes
-            .compactMap(\.preferredFilenameExtension).first ?? "jpg"
-        var name: String?
-        if let identifier = item.itemIdentifier {
-            let assets = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
-            if let asset = assets.firstObject {
-                name = PHAssetResource.assetResources(for: asset).first?.originalFilename
-            }
-        }
-        let candidate = name ?? String(format: "photo-%04d.%@", fallbackIndex + 1, ext)
-        let staged = AppModel.uniqueImportName(
-            for: URL(fileURLWithPath: candidate), taken: &taken)
-        return (staged, name == nil)
-    }
     #else
     private static let videoContentTypes: [UTType] = [
         .movie,

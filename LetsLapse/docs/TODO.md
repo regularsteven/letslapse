@@ -11,6 +11,21 @@ live inline.
 
 ## Open
 
+### Share extension — many photos (and videos) from the share sheet (not started)
+
+Since `79c1d91` the image document types in `App/Info.plist` put LetsLapse in
+Photos' share sheet for ONE photo at a time (under More ▸ Apps on a device —
+the 16 Pro and the 18 Pro; select two and it is gone); a timelapse set chosen
+in Photos needs a share extension (`com.apple.share-services`), which is
+offered for many photos at once. Measured 2026-10-13 with a probe in the Simulator: it appears in the row, gets
+one `public.jpeg` attachment per photo (never the RAW), and inherits the app's
+Photos access — so the same name + capture-time lookup reaches the RAW. It
+cannot open LetsLapse (only an unofficial responder-chain call can) nor reach
+the library in the app's container, so it would copy into an App Group inbox
+(a new group, `group.com.regularsteven.letslapse`, on the app and the
+extension) and the app would import from there on its next open — and it needs
+its own small sheet, so design first. Videos could ride the same extension.
+
 ### PicPlace transfers: what is left after byte-level progress (2026-10-10)
 
 Shipped 2026-10-10: uploads count the bytes in flight with the rate and time

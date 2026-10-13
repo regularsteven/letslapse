@@ -910,6 +910,13 @@ struct CaptureView: View {
         .onChange(of: testRig.phase) { _ in updateTestCardWatch() }
         #if os(iOS)
         .onChange(of: allowRemoteAccess) { _ in watchRemote.syncLocalNetwork() }
+        // A photo handed in from another app (the share sheet's LetsLapse) is
+        // being imported under this cover, on its way to its project screen:
+        // an idle camera steps aside for it, exactly as if closed by hand.
+        .onChange(of: model.cameraStandAsideRequest) { _ in
+            guard canStandAside else { return }
+            closeCapture()
+        }
         #endif
         .onChange(of: camera.recordingStartedAt) { _ in
             now = Date()
@@ -4593,6 +4600,23 @@ struct CaptureView: View {
     private var isCapturing: Bool {
         camera.isRecording || camera.isIntervalRunning || camera.isLiveBlendRunning
     }
+
+    #if os(iOS)
+    /// Whether closing the camera now would cost nothing — no shoot or scan
+    /// running, no shutter counting down or armed for later, no burst still
+    /// landing, no test-card run, no editor open over the viewfinder. Only an
+    /// unasked close (`cameraStandAsideRequest`) checks this; the close button
+    /// is the person's own call.
+    private var canStandAside: Bool {
+        if isCapturing || camera.isScannerActive || burstPillPhase != .hidden { return false }
+        if delayedStartAt != nil || scheduledStartTimer != nil || standbyActive { return false }
+        if model.scheduledRecording != nil || recentPager != nil { return false }
+        switch testRig.phase {
+        case .countdown, .running: return false
+        case .idle, .finished: return true
+        }
+    }
+    #endif
 
     // MARK: - Settings ▸ Display
 

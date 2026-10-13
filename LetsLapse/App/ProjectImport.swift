@@ -110,8 +110,9 @@ final class ArchiveImportMeter: @unchecked Sendable {
 /// once the app is up, a second double-click never reaches it: with a
 /// single-`Window` scene there is no new window for SwiftUI to route the open
 /// into, and the event stops at AppKit. Both halves are needed, and both feed
-/// `AppModel.openArchive`, which claims a URL synchronously and so cannot start
-/// the same file twice if they ever overlap.
+/// `AppModel.openURLs` — where `openArchive` claims a `.lapse` synchronously
+/// and photos are gathered for a moment, so neither can start the same file
+/// twice if the two deliveries ever overlap.
 final class LetsLapseAppDelegate: NSObject, NSApplicationDelegate {
     /// Set once the model exists. A file that launched the app can arrive
     /// before there is anything to hand it to, so it waits here instead.

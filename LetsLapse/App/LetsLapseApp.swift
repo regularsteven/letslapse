@@ -230,10 +230,10 @@ struct LetsLapseApp: App {
             // the URL ever arriving here, so opening a project silently does
             // nothing at all. The single-window scene below is the fix.
             .onOpenURL { url in
-                // The PicPlace sign-in callback (letslapse://…) or a .lapse file.
-                if !model.picplace.handleCallbackURL(url) {
-                    model.openArchive(at: url)
-                }
+                // The PicPlace sign-in callback (letslapse://…), a .lapse
+                // file, or a photo — the share sheet's LetsLapse on iOS, Open
+                // With on the Mac (the image types in App/Info.plist).
+                model.openURLs([url])
             }
             #if os(macOS)
             // The warm half of the same door, and the earliest point a file
@@ -241,9 +241,7 @@ struct LetsLapseApp: App {
             // here, so anything the delegate caught before now is released.
             .onAppear {
                 LetsLapseAppDelegate.handler = { url in
-                    if !model.picplace.handleCallbackURL(url) {
-                        model.openArchive(at: url)
-                    }
+                    model.openURLs([url])
                 }
                 // The last queued write lands before the process goes (W6),
                 // the compatibility export is regenerated from the documents
@@ -833,10 +831,14 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE", "LL_PILL_SHEET", "LL_BLEND_RESUME", "LL_BLEND_CANT_RESUME", "LL_RENDITIONS"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_OPEN_FILES", "LL_IMPORT_LIBRARY", "LL_SEED_PHOTOS_PAIR", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE", "LL_PILL_SHEET", "LL_BLEND_RESUME", "LL_BLEND_CANT_RESUME", "LL_RENDITIONS"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
+        // A photo shared in from another app launched the app, and is on its
+        // way to its project screen: a camera opening now would cover it.
+        guard model.openedStills.isEmpty, !model.preparingImport, model.mediaImport == nil
+        else { return false }
         openCameraForCreateTab()
         return true
     }
@@ -1120,6 +1122,50 @@ struct ContentView: View {
         if let path = environment["LL_IMPORT_VIDEO"], !path.isEmpty {
             model.importVideo(from: URL(fileURLWithPath: path))
         }
+        // LL_OPEN_FILES=<path>[:<path>…] — hands files to the app's open door
+        // (`AppModel.openURLs`), as the share sheet's LetsLapse does on iOS
+        // and Open With does on the Mac. On iOS each file is first copied into
+        // Documents/Inbox, as iOS itself does, so the import's clean-up of
+        // that copy runs too; the file named is never touched.
+        if let paths = environment["LL_OPEN_FILES"], !paths.isEmpty {
+            var urls = paths.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
+            #if os(iOS)
+            if let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let inbox = documents.appendingPathComponent("Inbox", isDirectory: true)
+                try? FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+                urls = urls.map { url in
+                    let copy = inbox.appendingPathComponent(url.lastPathComponent)
+                    try? FileManager.default.removeItem(at: copy)
+                    return (try? FileManager.default.copyItem(at: url, to: copy)) != nil ? copy : url
+                }
+            }
+            #endif
+            model.openURLs(urls)
+        }
+        #if os(iOS)
+        // LL_SEED_PHOTOS_PAIR=<jpeg>:<raw> — adds a RAW+JPEG pair to the photo
+        // library the way a camera app saves one (the JPEG the photo, the RAW
+        // its alternate), so a Simulator has a pair to find. Then
+        // LL_IMPORT_LIBRARY=latest|<localIdentifier>[,…] — Create ▸ Import
+        // photos ▸ From Photos… without the picker, which no headless run can
+        // drive: the same import over items made from library identifiers.
+        // Both need the library (`simctl privacy <udid> grant photos <bundle>`
+        // skips the prompts); run in one launch, the seed lands first.
+        let seedPair = environment["LL_SEED_PHOTOS_PAIR"]
+        let libraryImport = environment["LL_IMPORT_LIBRARY"]
+        if seedPair != nil || libraryImport != nil {
+            Task {
+                if let parts = seedPair?.split(separator: ":"), parts.count == 2 {
+                    await PhotoLibraryOriginals.seedPair(
+                        jpeg: URL(fileURLWithPath: String(parts[0])),
+                        raw: URL(fileURLWithPath: String(parts[1])))
+                }
+                if let which = libraryImport, !which.isEmpty {
+                    await model.importLibraryPhotos(identifiers: which)
+                }
+            }
+        }
+        #endif
         // LL_IMPORT_ARCHIVE=<path.lapse> — and the `.lapse` door, the same
         // one a Finder double-click or the picker opens, so the duplicate
         // question (by origin, Phase 1 W3) and the install can be driven
