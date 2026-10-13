@@ -49,6 +49,11 @@ struct ProjectThumbnailView: View {
     /// the Gallery's tiles and its panel's hero, so a preset shows the moment
     /// it lands (2026-09-13). Nil is the plain, file-keyed thumbnail.
     var grade: PhotoGrade? = nil
+    /// True: the view takes the picture's own shape at the width it is given
+    /// — the Gallery pane's hero (2026-10-11), whole, its height following
+    /// the picture. False: it fills whatever frame the caller set, cutting
+    /// the picture to it (every grid tile).
+    var fitsPicture = false
     @State private var thumbnail: Image?
     /// Which asset `thumbnail` belongs to, so a reload for the *same* asset can
     /// keep the current image on screen while it runs.
@@ -60,8 +65,7 @@ struct ProjectThumbnailView: View {
     var body: some View {
         // The base rectangle defines the reported size; the fill image lives
         // in an overlay so it can never push the view past its frame.
-        Rectangle()
-            .fill(.quaternary)
+        slot
             .overlay {
                 if let thumbnail {
                     thumbnail
@@ -97,6 +101,20 @@ struct ProjectThumbnailView: View {
                     thumbnail = image
                 }
             }
+    }
+
+    /// The base rectangle. Fitted, it reads the shape the grid tile already
+    /// taught the cache, so the slot is right on its first paint; 4:3 only
+    /// for a picture nothing has drawn yet, until its own load lands.
+    @ViewBuilder private var slot: some View {
+        if fitsPicture {
+            Rectangle()
+                .fill(.quaternary)
+                .aspectRatio(cache.aspect(for: url) ?? 4 / 3, contentMode: .fit)
+        } else {
+            Rectangle()
+                .fill(.quaternary)
+        }
     }
 
     /// A project's `poster.jpg` standing in for media that is not on this

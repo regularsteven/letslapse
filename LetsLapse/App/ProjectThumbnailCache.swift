@@ -86,6 +86,9 @@ final class ProjectThumbnailCache: ObservableObject {
         }
         let key = "\(url.path)|\(grade.cacheToken)\(Self.turnSuffix(url))" as NSString
         if let cached = gradedCache.object(forKey: key) {
+            // An invalidation forgets shapes but not graded renders, so a
+            // hit teaches the shape again.
+            noteAspect(of: cached, for: url)
             return Image(decorative: cached, scale: 1)
         }
         let rendered = await MediaWorkQueue.shared.run { () -> CGImage? in
@@ -100,6 +103,9 @@ final class ProjectThumbnailCache: ObservableObject {
             return await thumbnail(for: url, kind: kind)
         }
         gradedCache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
+        // A graded tile never passes through the plain path, so its shape is
+        // learned here or not at all (the Gallery pane sizes itself by it).
+        noteAspect(of: image, for: url)
         return Image(decorative: image, scale: 1)
     }
 
@@ -118,8 +124,10 @@ final class ProjectThumbnailCache: ObservableObject {
         // is that tier). Without a tile the poster is cut, as before.
         let tile = Self.tileSubstitute(for: url)
             ?? (ProjectFileRegistry.isTile(fileName: url.lastPathComponent) ? url : nil)
+        let requested = url
         let url = tile ?? url
         if let cached = cache.object(forKey: Self.memoryKey(url)) {
+            if tile != nil { noteAspect(of: cached, for: requested) }
             return Image(decorative: cached, scale: 1)
         }
         // One trip off the main actor for the whole load. Splitting identity,
@@ -156,6 +164,9 @@ final class ProjectThumbnailCache: ObservableObject {
             return nil
         }
         remember(image, forKey: Self.memoryKey(url))
+        // The tile is the poster cut down, so its shape answers for the
+        // poster the caller asked about.
+        if tile != nil { noteAspect(of: image, for: requested) }
         #if DEBUG
         if let tile, ProcessInfo.processInfo.environment["LL_TILES_LOG"] != nil {
             LLog("thumbnail: \(tile.deletingLastPathComponent().lastPathComponent) drawn from \(tile.lastPathComponent) (\(image.width)×\(image.height))")
@@ -197,9 +208,12 @@ final class ProjectThumbnailCache: ObservableObject {
 
     private func remember(_ image: CGImage, forKey key: NSURL) {
         cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
-        if image.height > 0 {
-            aspects[Self.aspectKey(key as URL)] = Double(image.width) / Double(image.height)
-        }
+        noteAspect(of: image, for: key as URL)
+    }
+
+    private func noteAspect(of image: CGImage, for url: URL) {
+        guard image.height > 0 else { return }
+        aspects[Self.aspectKey(url)] = Double(image.width) / Double(image.height)
     }
 
     /// What shape this asset is, if anything has already looked at it — a

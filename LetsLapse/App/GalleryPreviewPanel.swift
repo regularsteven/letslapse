@@ -13,8 +13,10 @@ import SwiftUI
 ///
 /// One order for both dresses (Steven, 2026-09-27) — what a person manages
 /// first, what the files said last:
-/// - Thumbnail (150pt height) — `.pane` only; the inspector's picture is on
-///   screen beside it
+/// - Thumbnail — `.pane` only; the inspector's picture is on screen beside
+///   it. The column's full width at the picture's own shape, whole — a
+///   portrait stands tall, a panorama sits low (2026-10-11; it was a 150 pt
+///   strip that cut every picture to fill it)
 /// - Title, date, size
 /// - Open — `.pane` only, and alone: it already lands in the editor (the
 ///   item view on the Mac, the pager on iOS), so the Edit / Text / Shapes /
@@ -247,8 +249,7 @@ struct GalleryPreviewPanel: View {
         let grade = model.photoGrade(for: capture)
         return ProjectThumbnailView(
             url: thumbnailURL, kind: mediaKind, cornerRadius: 10,
-            grade: grade.isIdentity ? nil : grade)
-            .frame(height: 150)
+            grade: grade.isIdentity ? nil : grade, fitsPicture: true)
             .frame(maxWidth: .infinity)
             .onTapGesture {
                 let url = capture.isPhotoCapture
