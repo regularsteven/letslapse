@@ -284,6 +284,14 @@ struct PicPlaceSyncRecord: Codable, Equatable {
     var posterFailedRecently: Bool {
         posterFailedAt.map { Date().timeIntervalSince($0) < Self.posterResendInterval } ?? false
     }
+    /// When a push last went without rendering the poster or the working
+    /// copy because the app was in the background (2026-10-16: iOS aborts
+    /// GPU work there — fifteen of twenty projects the 18 Pro auto-pushed
+    /// after a lock went up as records alone, and each counted as a failed
+    /// render gated for six hours). Not a failure: the check queues a poster
+    /// push for it at once, in front, whatever the index row says
+    /// (`PicPlacePushGate`); the push that renders it clears the stamp.
+    var posterDeferredAt: Date?
     /// The failure behind `lastError`: when, how many times in a row, and
     /// which policy was being sent. The check retries a failed push once
     /// `failedAt` plus the backoff for `failures` has passed; a person's
@@ -439,6 +447,16 @@ struct PicPlaceSyncRun {
     /// confirmed first, so the next run finds it unchanged and sends only
     /// what is left. Not a failure.
     struct Paused: Error {}
+
+    /// The push stopped before the run because the app was in the
+    /// background, where no poster can be rendered, and this push would
+    /// have left PicPlace without one (2026-10-16, `PicPlacePushGate`):
+    /// `whole` for a project PicPlace has never had from this device, else
+    /// a poster catch-up with nothing else to send. Nothing was sent; the
+    /// push stays due for the front. Not a failure.
+    struct Deferred: Error {
+        var whole: Bool
+    }
 
     struct FileItem {
         var name: String          // path within the project

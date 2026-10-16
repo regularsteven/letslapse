@@ -89,6 +89,9 @@ extension PicPlaceController {
         #endif
         foregroundObserver = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
+                // A push the background put off — its poster could not be
+                // rendered there — goes again first (2026-10-16).
+                self?.resumeDeferredPushes(reason: "foreground")
                 self?.checkForChanges(reason: "foreground")
                 // An upload iOS suspended, or the connection dropped, goes again.
                 self?.resumeUploadJobs(reason: "foreground")
@@ -420,6 +423,18 @@ extension PicPlaceController {
                        let tile = renditions.tile, record?.tileSHA256 != tile.sha256,
                        tileCandidates.count < (serverHasRenditionBatches ? 1_000 : 100) {
                         tileCandidates.append((row, localID))
+                    }
+                    // A poster or working copy the last push put off for the
+                    // front (2026-10-16, `posterDeferredAt`: the app was in
+                    // the background, where none can be rendered): queued
+                    // now, whatever the row says — it may name the stale
+                    // poster that push's walk found on disk, which the branch
+                    // below would adopt as current. In the background the
+                    // push defers again and sends nothing.
+                    if !project.sourcesMissing, syncTasks[localID] == nil, records[origin]?.posterDeferredAt != nil {
+                        enqueuePush(localID, reason: .poster, manual: manual)
+                        outcome.queued += 1
+                        continue
                     }
                     // A poster PicPlace's row says it lacks, from a device that
                     // holds the originals (2026-10-03: 21 of Steven's projects

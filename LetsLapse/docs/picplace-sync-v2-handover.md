@@ -106,6 +106,27 @@ the design index rows marked 🟡.
 
 Client, found and fixed on the way:
 
+- **iOS renders nothing in the background** (2026-10-16): the push rendered
+  the poster and the working copy right before `run.run()` with no look at
+  the application state. An automatic push gets iOS's thirty seconds after a
+  lock (`PicPlaceBackgroundActivity`; *continued* is a person's press only),
+  in which Metal work is aborted, so the 18 Pro's run of twenty new projects
+  at 12:13 UTC sent the five rendered in front whole and the fifteen after
+  the lock as records alone — every other device drew them blank, and each
+  was gated six hours as a *failed* render. The gate (`PicPlacePushGate`,
+  Kit) now decides before any GPU work: a new project is not sent at all and
+  goes again the moment the app is in front (`deferredPushes`, queued on
+  `didBecomeActive` ahead of the check); an edit's records go with
+  `posterDeferredAt` on the record, which the check turns into a poster push
+  at once, whatever the index row says (the walk may have sent a stale
+  poster); a catch-up with nothing else to send waits. A render that comes
+  back empty is re-read against the state: the app having left the front
+  meanwhile is the same deferral, a failure in front keeps the six-hour
+  gate. The log says which: `deferred: app in background` / `deferred: app
+  left the front while it rendered` / `ALARM poster: render failed`.
+  `LL_PICPLACE_BACKGROUND=1|<start>:<seconds>` stages it on the Mac and the
+  Simulator, where nothing leaves the front.
+
 - **Keychain**: an unentitled build's `save` fell back to the login
   keychain but `load` only fell back on two error codes → every relaunch
   signed out (stage 1's first hand test). Both fall back on anything short
@@ -184,7 +205,28 @@ Server side (the developer's, reported): first-negotiate `bytes: null`
   timer check; the originals queue; the Wi-Fi holds and their release
   (simulated path); unchanged copies trashed; the poster push.
 - Kit tests: `PicPlaceBindingTests` (4), `ProjectFileRegistryTests` (3),
-  `DirectoryArchiveDeterminismTests` (1).
+  `DirectoryArchiveDeterminismTests` (1), `PicPlacePushGateTests` (4, the
+  render gate: in front renders; a new project in the background is deferred
+  whole; an edit goes as records alone; a catch-up waits).
+- **2026-10-16, the render gate** on the Mac bench (`libraries/sync-gate-bench`,
+  bound to picplace.test, two projects never on the server; `LL_APP` = the
+  `dd-mac` Debug build, a tinker token for the run, revoked after):
+  `LL_PICPLACE_BACKGROUND=1` → the launch check queues 2, both log
+  `deferred: app in background — a new project goes up with its poster;
+  nothing sent`, zero PUTs in the trace, records untouched;
+  `LL_PICPLACE_BACKGROUND=1:30` → the one deferred inside the window logs
+  `in front again` → `1 push(es) put off for the background go again (hook)`
+  → `poster for …` → PUT 201 + records.aar + poster.jpg; then
+  `LL_APPLY_PRESET=<uuid>:Vivid@8` inside `LL_PICPLACE_BACKGROUND=5:45` →
+  `poster of … deferred: app in background — the records go without` → PUT
+  200 with no poster PUT, `posterDeferredAt` set, `posterFailedAt` nil; the
+  next launch's check queues it (`1 queued … 1 poster catch-up`) and renders
+  it in front, and a second preset inside a new window defers again and is
+  re-queued by the window's end without a check — final record
+  `posterToken = …|Matte|…`, no stamps. Traps: `launch_wait.sh` stops at its
+  first pattern, so the window's second half is read from the log after it;
+  the two bench projects now live on the server (rows + poster), so a fresh
+  "never on PicPlace" run needs `LL_PICPLACE_DELETE` or their rows dropped.
 - **2026-09-18, the first-connection fixes** (TODO "PicPlace first connection
   — done with failures…"): the bench's `launch_wait.sh` with `LL_APP` on the
   isolated `dd-mac` build, `LL_PICPLACE_TOKENS` from a personal-access token

@@ -395,6 +395,22 @@ final class PicPlaceController: ObservableObject {
     /// pause, or PicPlace not answering — held them. Published for the
     /// drawer's "N changes waiting".
     @Published var heldPushes: Set<UUID> = []
+    /// A push the background put off (2026-10-16, `PicPlacePushGate`): the
+    /// reason to queue it under the moment the app is in front
+    /// (`resumeDeferredPushes`), and whether its records went meanwhile —
+    /// a new project sent nothing and goes again whole; an edit's records
+    /// went and only the poster (or working copy) is owed.
+    struct DeferredPush {
+        var reason: PushReason
+        var sentRecords: Bool
+    }
+    /// The pushes the background put off, by local id. In memory only: a
+    /// launch's check finds them anyway (no record for a new project;
+    /// `posterDeferredAt` on an edited one).
+    var deferredPushes: [UUID: DeferredPush] = [:]
+    /// `LL_PICPLACE_BACKGROUND` (DEBUG): the render gate reads the app as
+    /// in the background while this is set.
+    var backgroundHookActive = false
     var heldCheck = false
     var forcedNetwork = false
     var autoTimer: Timer?
@@ -1823,6 +1839,7 @@ final class PicPlaceController: ObservableObject {
         pushQueue.removeAll()
         heldPushes.removeAll()
         pushReasons.removeAll()
+        deferredPushes.removeAll()
         pushQueueManual = false
         sendRun = nil
         sendRunIDs.removeAll()
@@ -2051,6 +2068,22 @@ final class PicPlaceController: ObservableObject {
                     for: capture, source: copy, grade: PhotoGrade(preset: .original, adjustments: grade.adjustments.geometryOnly), in: model)
             }
         }
+        // The render gate's reading of the folder (2026-10-16,
+        // `PicPlacePushGate`): what is on disk and current needs no GPU
+        // work and goes as ever, in front or not; what would have to be
+        // rendered is put off when the app is in the background.
+        let posterOnDisk = lastPosterToken == posterToken
+            && FileManager.default.fileExists(atPath: folder.appendingPathComponent(ProjectFileRegistry.posterName).path)
+        let proxyOnDisk = proxyToken.map {
+            FileManager.default.fileExists(atPath: folder.appendingPathComponent(
+                ProjectFileRegistry.proxyPictureName(token: PicPlaceSyncRun.proxyNameToken(for: $0))).path)
+        } ?? true
+        let posterBranch = policy.sendsRecords
+            && posterSource.map { !ProjectFileRegistry.isFinishedPicture(fileName: $0.lastPathComponent) } == true
+        let copyBranch = policy.sendsRecords && !posterBranch && posterFromCopy != nil && finished != nil
+        let rendersNeeded = (posterBranch && !(posterOnDisk && proxyOnDisk)) || (copyBranch && !posterOnDisk)
+        // A push going again clears its deferral: this attempt decides anew.
+        deferredPushes[capture.id] = nil
         syncTasks[capture.id] = Task {
             // A job a person just started — Upload, Resume, Use mobile data —
             // asks iOS to hold the app while it runs. Everything else keeps
@@ -2080,39 +2113,95 @@ final class PicPlaceController: ObservableObject {
             // poster went (2026-10-03: a push that failed to render went up
             // as records alone and was never asked again).
             var posterRendered: Bool?
+            // A render put off for the front (2026-10-16, `PicPlacePushGate`):
+            // the poster, the working copy, or both — the records go without
+            // them (an edit), the record says so (`posterDeferredAt`), and
+            // the next check in front queues the poster push at once. Never
+            // the 6-hour gate: that is for a render that fails in front.
+            var posterDeferred = false
+            var proxyDeferred = false
             do {
+                // Before any GPU work: in the background a new project is not
+                // sent at all (it goes up whole in front), a poster catch-up
+                // waits, an edit goes as records alone.
+                if let outcome = renderDeferral(for: key, capture: capture, rendersNeeded: rendersNeeded) {
+                    switch outcome {
+                    case .deferWhole, .deferPoster:
+                        throw PicPlaceSyncRun.Deferred(whole: outcome == .deferWhole)
+                    case .sendRecordsOnly:
+                        posterDeferred = !posterOnDisk
+                        proxyDeferred = posterBranch && !proxyOnDisk
+                        LLog("picplace: \(Self.renditionsWord(poster: posterDeferred, proxy: proxyDeferred)) of \(capture.displayTitle) (\(key.uuidString.prefix(8))) deferred: app in background — the records go without; the next check in front sends it")
+                    case .render:
+                        break
+                    }
+                }
                 // A preview-only project's "source" IS its poster: nothing to
                 // render, the file it has is the one that goes.
                 if policy.sendsRecords, let posterSource, !ProjectFileRegistry.isFinishedPicture(fileName: posterSource.lastPathComponent) {
-                    let rendered = await PicPlacePoster.ensure(sourceURL: posterSource, kind: posterKind, grade: grade, token: posterToken,
-                                                               lastToken: lastPosterToken, in: folder, finished: finished)
-                    posterRendered = rendered != nil
-                    if rendered != nil, lastPosterToken != posterToken { self.model.noteFilesChanged(for: capture.id) }
-                    if rendered == nil { LLog("picplace: ALARM poster: could not render the poster of \(capture.displayTitle) (\(key.uuidString.prefix(8))) — the records go without it; the check asks again in \(Int(PicPlaceSyncRecord.posterResendInterval / 3600)) h") }
+                    if !posterDeferred {
+                        let rendered = await PicPlacePoster.ensure(sourceURL: posterSource, kind: posterKind, grade: grade, token: posterToken,
+                                                                   lastToken: lastPosterToken, in: folder, finished: finished)
+                        if rendered == nil, let outcome = renderDeferral(for: key, capture: capture, rendersNeeded: true) {
+                            // The app left the front while it rendered (the
+                            // lock, an app switch — the 2026-10-16 run): the
+                            // same deferral, not a failure.
+                            switch outcome {
+                            case .deferWhole, .deferPoster:
+                                throw PicPlaceSyncRun.Deferred(whole: outcome == .deferWhole)
+                            case .sendRecordsOnly, .render:
+                                posterDeferred = true
+                                proxyDeferred = proxyToken != nil && !proxyOnDisk
+                                LLog("picplace: \(Self.renditionsWord(poster: true, proxy: proxyDeferred)) of \(capture.displayTitle) (\(key.uuidString.prefix(8))) deferred: app left the front while it rendered — the records go without; the next check in front sends it")
+                            }
+                        } else {
+                            posterRendered = rendered != nil
+                            if rendered != nil, lastPosterToken != posterToken { self.model.noteFilesChanged(for: capture.id) }
+                            if rendered == nil { LLog("picplace: ALARM poster: render failed — could not render the poster of \(capture.displayTitle) (\(key.uuidString.prefix(8))) in front; the records go without it; the check asks again in \(Int(PicPlaceSyncRecord.posterResendInterval / 3600)) h") }
+                        }
+                    }
                     if let proxyToken {
-                        _ = await PicPlaceProxy.ensure(sourceURL: posterSource, grade: grade,
-                                                       nameToken: PicPlaceSyncRun.proxyNameToken(for: proxyToken), in: folder)
+                        if !proxyDeferred {
+                            let copy = await PicPlaceProxy.ensure(sourceURL: posterSource, grade: grade,
+                                                                  nameToken: PicPlaceSyncRun.proxyNameToken(for: proxyToken), in: folder)
+                            if copy == nil, !rendersAllowedNow {
+                                proxyDeferred = true
+                                LLog("picplace: working copy of \(capture.displayTitle) (\(key.uuidString.prefix(8))) deferred: app left the front while it rendered — the next check in front sends it")
+                            }
+                        }
                     } else {
                         PicPlaceProxy.removeAll(in: folder)
                         // The copy PicPlace holds of an exempt project is a
                         // leftover nobody fetches (stage 5).
                         await self.deleteServerWorkingCopy(origin: key, title: capture.displayTitle)
                     }
-                } else if policy.sendsRecords, let copy = posterFromCopy, let finished {
+                } else if policy.sendsRecords, !posterDeferred, let copy = posterFromCopy, let finished {
                     // A device without the originals, holding the working
                     // copy: the poster from the copy and the records (the
                     // copy itself stays as it is — it is not re-rendered here).
                     let rendered = await PicPlacePoster.ensure(sourceURL: copy, kind: posterKind, grade: grade, token: posterToken,
                                                                lastToken: lastPosterToken, in: folder, finished: finished)
-                    posterRendered = rendered != nil
-                    if rendered != nil, lastPosterToken != posterToken { self.model.noteFilesChanged(for: capture.id) }
+                    if rendered == nil, let outcome = renderDeferral(for: key, capture: capture, rendersNeeded: true) {
+                        switch outcome {
+                        case .deferWhole, .deferPoster:
+                            throw PicPlaceSyncRun.Deferred(whole: outcome == .deferWhole)
+                        case .sendRecordsOnly, .render:
+                            posterDeferred = true
+                            LLog("picplace: poster of \(capture.displayTitle) (\(key.uuidString.prefix(8))) deferred: app left the front while it rendered — the records go without; the next check in front sends it")
+                        }
+                    } else {
+                        posterRendered = rendered != nil
+                        if rendered != nil, lastPosterToken != posterToken { self.model.noteFilesChanged(for: capture.id) }
+                        if rendered == nil { LLog("picplace: ALARM poster: render failed — could not render the poster of \(capture.displayTitle) (\(key.uuidString.prefix(8))) from its working copy in front; the records go without it; the check asks again in \(Int(PicPlaceSyncRecord.posterResendInterval / 3600)) h") }
+                    }
                 }
                 // Each blend here gets its still (`posters/<id>.jpg`, in the
                 // records bundle) before the records go, so a device that
                 // pulls the project shows every blend row with a picture —
                 // until 2026-09-25 a still was made only when a blend left
-                // this device, and a pulled row was a placeholder (D1).
-                if policy.sendsRecords {
+                // this device, and a pulled row was a placeholder (D1). Not
+                // in the background either: the poster push in front makes them.
+                if policy.sendsRecords, !posterDeferred, !proxyDeferred {
                     let here = model.blends(for: capture).filter { !model.blendFileMissing($0) }.map(\.outputFileName)
                     if !here.isEmpty { _ = await model.ensureBlendPosters(for: capture, fileNames: Set(here)) }
                 }
@@ -2120,14 +2209,19 @@ final class PicPlaceController: ObservableObject {
                 let verifiedDigest = record.heavyDigest
                 let divergent = record.divergentFiles
                 let changed = record.changedFiles
-                record.posterToken = posterRendered == false ? nil : posterToken
-                record.proxyToken = proxyToken
+                record.posterToken = posterRendered == false || posterDeferred ? nil : posterToken
+                record.proxyToken = proxyDeferred ? nil : proxyToken
                 let previousRecord = records[key]
                 // The check's stamps live on the record the push replaces
                 // (2026-10-04: a new record each push forgot them, so the
                 // 6-hour gate on a poster re-send never held).
                 record.posterResentAt = previousRecord?.posterResentAt
-                record.posterFailedAt = posterRendered == false ? Date() : (posterRendered == true ? nil : previousRecord?.posterFailedAt)
+                // A render put off for the front is not a failure: the gate
+                // is reset, so the push in front renders once and decides.
+                record.posterFailedAt = posterDeferred ? nil : (posterRendered == false ? Date() : (posterRendered == true ? nil : previousRecord?.posterFailedAt))
+                record.posterDeferredAt = posterDeferred || proxyDeferred
+                    ? (previousRecord?.posterDeferredAt ?? Date())
+                    : (policy.sendsRecords ? nil : previousRecord?.posterDeferredAt)
                 if let previous = previousRecord {
                     // A push of one policy keeps what the other recorded.
                     record.serverHeavyFiles = previous.serverHeavyFiles
@@ -2141,8 +2235,12 @@ final class PicPlaceController: ObservableObject {
                     record.changedFiles = previous.changedFiles
                     record.blendsDigest = previous.blendsDigest
                     // A render that failed is not said to have gone (the
-                    // 2026-10-04 loop: this line said it had).
-                    if policy == .minimal { record.posterToken = posterRendered == false ? nil : posterToken; record.proxyToken = proxyToken }
+                    // 2026-10-04 loop: this line said it had) — nor one put
+                    // off for the front.
+                    if policy == .minimal {
+                        record.posterToken = posterRendered == false || posterDeferred ? nil : posterToken
+                        record.proxyToken = proxyDeferred ? nil : proxyToken
+                    }
                 }
                 record.clearFailure()
                 if policy == .blends {
@@ -2184,6 +2282,9 @@ final class PicPlaceController: ObservableObject {
                     refreshHeavyListing(for: capture)
                 }
                 records[key] = record
+                // The records went without their poster or working copy:
+                // the poster push goes the moment the app is in front.
+                if posterDeferred || proxyDeferred { deferredPushes[capture.id] = DeferredPush(reason: .poster, sentRecords: true) }
                 // PicPlace reads what it received back within a minute or
                 // two: until then the pill says *checking* (not *needs
                 // uploading* beside "Here and on PicPlace" — Steven,
@@ -2204,6 +2305,14 @@ final class PicPlaceController: ObservableObject {
                 // Stopped between files on request: what finished is on
                 // PicPlace, the rest waits. Not a failure.
                 if job { noteUploadRunEnded(capture.id, outcome: .paused) } else { originalsRunPaused = true }
+            } catch let deferred as PicPlaceSyncRun.Deferred {
+                // Nothing was sent (2026-10-16): the app is in the background,
+                // where no poster can be rendered, and this push would have
+                // left PicPlace without one. It stays due — queued again the
+                // moment the app is in front (`resumeDeferredPushes`), and a
+                // check finds it besides. The record is as it was.
+                deferredPushes[capture.id] = DeferredPush(reason: deferred.whole ? .new : .poster, sentRecords: false)
+                LLog("picplace: push of \(capture.displayTitle) (\(key.uuidString.prefix(8))) deferred: app in background — \(deferred.whole ? "a new project goes up with its poster" : "only its poster was due"); nothing sent, it goes again in front")
             } catch is CancellationError {
                 // Cancelled by the user: the card goes back to what it was.
                 // A job's run is only cancelled from outside (a library

@@ -53,6 +53,28 @@ counted on the card and the Lock Screen and kept between tries
   4,034 files) with nothing moving on the card; a retry with kept checksums
   asks once.
 
+### PicPlace: render the poster at capture and import time (2026-10-16, not started)
+
+Shipped 2026-10-16 (`PicPlacePushGate` in the Kit, `posterDeferredAt` on the
+sync record, `LL_PICPLACE_BACKGROUND`): the push renders nothing while the app
+is in the background — iOS aborts GPU work there, which is how fifteen of the
+18 Pro's twenty auto-pushed projects went up as records alone on 2026-10-16
+and were gated for six hours as failed renders. Now a new project waits for
+the front and goes up whole (queued again on `didBecomeActive`), an edit's
+records go without the poster and the poster push is queued at the next check
+in front, and a poster catch-up waits. Still open: most pushes find no poster
+on disk and render at push time — the 20-second debounce after a shoot — so a
+phone locked inside those seconds defers every one of them. A poster rendered
+at registration (`processPhotoBurst` / `setSource` / `registerImportedStills`,
+in front, through `PicPlacePoster.ensure` with the auto-apply grade) would
+make the push's `lastToken == token && file exists` fast path the common case
+and take the GPU work out of the push. What it needs: the token on disk beside
+the poster (a sidecar or an xattr), since the fast path reads it from the sync
+record and a new project has none; a decision on the working copy (seconds of
+GPU per DNG — better left to the push or the sweep, which already stands down
+at `serious`); and a thermal rule, because right after a long shoot the device
+is hot. Not a contained change, so parked here.
+
 ### Picture tiers — tile · poster · proxy (2026-10-03: contract written, picplace `c43f970`, pushes 1 and 2 live on picplace.co, tiles on and backfilled; stages 0–4 COMMITTED `e50aefc` and on every device; stage 5 BUILT the same night, uncommitted)
 
 Steven's brief (2026-10-03): a full-size graded **working copy** per project on

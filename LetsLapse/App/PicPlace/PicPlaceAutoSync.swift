@@ -80,6 +80,29 @@ extension PicPlaceController {
                 }
             }
         }
+        // `LL_PICPLACE_BACKGROUND=1|<start>:<seconds>`: the push's render gate
+        // reads the app as in the background — for the whole run, or from
+        // `start` seconds after launch for `seconds`, after which the pushes
+        // it put off go again as a foreground does (2026-10-16) — on the
+        // Simulator and the Mac bench, where nothing leaves the front.
+        if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_BACKGROUND"] {
+            let parts = raw.split(separator: ":").compactMap { Double($0) }
+            if raw == "1" {
+                backgroundHookActive = true
+                LLog("picplace hook: the app is in the background for this run — renders deferred")
+            } else if parts.count == 2 {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(parts[0] * 1_000_000_000))
+                    guard let self else { return }
+                    self.backgroundHookActive = true
+                    LLog("picplace hook: the app is in the background — renders deferred for \(Int(parts[1])) s")
+                    try? await Task.sleep(nanoseconds: UInt64(parts[1] * 1_000_000_000))
+                    self.backgroundHookActive = false
+                    LLog("picplace hook: the app is in front again")
+                    self.resumeDeferredPushes(reason: "hook")
+                }
+            }
+        }
         #endif
         autoTimer = Timer.scheduledTimer(withTimeInterval: Self.checkInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -317,6 +340,7 @@ extension PicPlaceController {
             pushQueueTask?.cancel()
             pushQueueTask = nil
             pushReasons.removeAll()
+            deferredPushes.removeAll()
             pushQueueManual = false
             sendRun = nil
             sendRunIDs.removeAll()
@@ -627,7 +651,10 @@ extension PicPlaceController {
         case .retry:
             guard moved || record?.lastError != nil else { return .nothing }
         case .poster:
-            guard moved || (record?.posterToken == nil && !model.sourcesMissing(capture) && record?.posterFailedRecently != true) else { return .nothing }
+            // A poster or working copy put off for the front (2026-10-16)
+            // is due whatever the row says — it may name a stale poster.
+            guard moved || (record?.posterDeferredAt != nil && !model.sourcesMissing(capture))
+                || (record?.posterToken == nil && !model.sourcesMissing(capture) && record?.posterFailedRecently != true) else { return .nothing }
         }
         if var run = sendRun { run.current = capture.displayTitle; run.started = true; sendRun = run }
         let run = sendRun
@@ -635,7 +662,66 @@ extension PicPlaceController {
             ? "Syncing \((run?.done ?? 0) + 1) of \(run?.total ?? 0) · \(capture.displayTitle)…"
             : "Syncing \(capture.displayTitle)…"
         await syncAndWait(capture, policy: await wholePushPolicy(for: capture, record: record))
+        // Put off whole for the front (2026-10-16): not sent, not failed —
+        // it leaves the run's count and comes back when the app is in front.
+        if let deferred = deferredPushes[id], !deferred.sentRecords { return .nothing }
         return records[origin]?.lastError == nil ? .sent : .failed
+    }
+
+    // MARK: The render gate (2026-10-16)
+
+    /// Whether a push may render a poster or a working copy right now: on
+    /// iOS only in front — Metal work from a backgrounded app is aborted,
+    /// so a render there comes back empty and the project went up without
+    /// its picture (fifteen of the 18 Pro's twenty, 2026-10-16). `.inactive`
+    /// is the doorway to the background (the lock, the app switcher): not
+    /// in front either. The Mac renders whenever.
+    var rendersAllowedNow: Bool {
+        #if DEBUG
+        if backgroundHookActive { return false }
+        #endif
+        #if os(iOS)
+        return UIApplication.shared.applicationState == .active
+        #else
+        return true
+        #endif
+    }
+
+    /// What the push does instead of rendering (`PicPlacePushGate`): nil in
+    /// front, or when nothing needs a render — what is on disk and current
+    /// goes as ever.
+    func renderDeferral(for origin: UUID, capture: AppModel.CaptureProject, rendersNeeded: Bool) -> PicPlacePushGate.Outcome? {
+        guard rendersNeeded, !rendersAllowedNow else { return nil }
+        let record = records[origin]
+        return PicPlacePushGate.outcome(inFront: false,
+                                        recordsOnServer: record?.recordsReachedServer == true,
+                                        recordsMoved: record.map { revision(of: capture) != $0.revision } ?? true)
+    }
+
+    /// The log's word for what a push put off.
+    static func renditionsWord(poster: Bool, proxy: Bool) -> String {
+        switch (poster, proxy) {
+        case (true, true): return "poster and working copy"
+        case (false, true): return "working copy"
+        default: return "poster"
+        }
+    }
+
+    /// The pushes the background put off go again now that the app is in
+    /// front — queued directly, ahead of the check's own pass and its
+    /// one-a-minute foreground limit. With auto-sync off they wait for a
+    /// person's check or Sync, which find them anyway (no record for a new
+    /// project; `posterDeferredAt` on an edited one).
+    func resumeDeferredPushes(reason: String) {
+        guard !deferredPushes.isEmpty, !isShutDown, canSync, rendersAllowedNow else { return }
+        guard autoSyncEnabled else {
+            LLog("picplace: \(deferredPushes.count) push(es) put off for the background wait for a person's check — auto-sync is off")
+            return
+        }
+        let pending = deferredPushes
+        deferredPushes.removeAll()
+        LLog("picplace: \(pending.count) push(es) put off for the background go again (\(reason))")
+        for (id, deferred) in pending { enqueuePush(id, reason: deferred.reason) }
     }
 
     /// The "Auto-sync problem" line: how many pushes stand failed, the
