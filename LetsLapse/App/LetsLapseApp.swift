@@ -847,6 +847,17 @@ struct ContentView: View {
     #if DEBUG
     /// Drive the app into a specific screen from `simctl launch` env vars,
     /// so screens can be screenshot-verified without tap automation.
+    /// A hook's file path: absolute as given, else relative to the app's
+    /// own data container — `tmp/<name>`, `Documents/<name>` — the way
+    /// `xcrun devicectl device copy to … --destination tmp/<name>` addresses
+    /// it (2026-10-17: a device's container path is unknowable from the
+    /// Mac; this is the registration door on a phone).
+    private static func hookFileURL(_ path: String) -> URL {
+        path.hasPrefix("/") || path.hasPrefix("~")
+            ? URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            : FileManager.default.temporaryDirectory.deletingLastPathComponent().appendingPathComponent(path)
+    }
+
     private func applyUIPreviewHooks() {
         let environment = ProcessInfo.processInfo.environment
         // `LL_DNGPROBE=1` — print the DNG archive capability table (ImageIO
@@ -1114,9 +1125,7 @@ struct ContentView: View {
             model.stagedStillsImportAnswer = answer
         }
         if let paths = environment["LL_IMPORT_STILLS"], !paths.isEmpty {
-            model.importStills(from: paths.split(separator: ":").map {
-                URL(fileURLWithPath: String($0))
-            })
+            model.importStills(from: paths.split(separator: ":").map { Self.hookFileURL(String($0)) })
         }
         // LL_IMPORT_VIDEO=<path> — its movie twin.
         if let path = environment["LL_IMPORT_VIDEO"], !path.isEmpty {
@@ -1205,7 +1214,7 @@ struct ContentView: View {
         if let raw = environment["LL_REGISTER"] {
             let parts = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
             if parts.count >= 2, let mode = CaptureMode(token: parts[0].capitalized) {
-                let sources = parts[1].split(separator: ",").map { URL(fileURLWithPath: String($0)) }
+                let sources = parts[1].split(separator: ",").map { Self.hookFileURL(String($0)) }
                 let flat = parts.count >= 3 && parts[2] == "flat"
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     let staging = FileManager.default.temporaryDirectory

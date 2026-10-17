@@ -981,7 +981,10 @@ extension PicPlaceController {
     /// the sweep over an old library is hours of it. The Mac renders
     /// whenever the rules hold.
     var proxyRendersAllowed: Bool {
-        guard heavyChecksAllowed else { return false }
+        // Not in the background either (2026-10-17): the sweep followed a
+        // records-only push inside iOS's thirty seconds and would have
+        // rendered into an aborted GPU — the same gate as the push's.
+        guard heavyChecksAllowed, rendersAllowedNow else { return false }
         // A render per project back to back is heat; the sweep stands down
         // at `serious` and carries on when the device has cooled (the walk
         // resumes where the rules let it).

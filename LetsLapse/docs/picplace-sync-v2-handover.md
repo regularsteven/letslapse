@@ -227,6 +227,27 @@ Server side (the developer's, reported): first-negotiate `bytes: null`
   first pattern, so the window's second half is read from the log after it;
   the two bench projects now live on the server (rows + poster), so a fresh
   "never on PicPlace" run needs `LL_PICPLACE_DELETE` or their rows dropped.
+- **2026-10-17, the render gate on the devices** (the 18 Pro by USB, the
+  iPad Air 13" M3 by network; a Release build with the DEBUG hooks on,
+  `dd-device-hooks`; four throwaway JPEGs dropped into each app container
+  with `devicectl device copy to … --destination tmp/gate-N.jpg` and
+  registered with `LL_REGISTER=photo:tmp/gate-N.jpg`, one project per
+  launch, against picplace.co): pass A (no window) — registered, the
+  foreground check queued it, `poster for …`, sent, and the other device
+  pulled it; pass B (`LL_PICPLACE_BACKGROUND=1:45`) — `deferred: app in
+  background — a new project goes up with its poster; nothing sent` twice
+  (the check's queue and the debounce both met the gate), then `in front
+  again` → `1 push(es) put off for the background go again (hook)` →
+  poster → sent, on both devices; pass C (18 Pro, `LL_APPLY_PRESET=<uuid>:Vivid@8`
+  inside `LL_PICPLACE_BACKGROUND=5:40`) — `poster and working copy of …
+  deferred: app in background — the records go without`, a records-only
+  send, then at the window's end the poster push with `1 poster
+  catch-up`. Found on the way: the working-copy sweep ran 34 ms after that
+  records-only push and rendered the copy with no look at the state —
+  `proxyRendersAllowed` now takes `rendersAllowedNow` too. Throwaways
+  tombstoned with `LL_PICPLACE_DELETE=<uuid>,<uuid>` on each device. Not
+  yet done: a real lock mid-push (the hook stands in for the state; the
+  GPU abort itself was not provoked).
 - **2026-09-18, the first-connection fixes** (TODO "PicPlace first connection
   — done with failures…"): the bench's `launch_wait.sh` with `LL_APP` on the
   isolated `dd-mac` build, `LL_PICPLACE_TOKENS` from a personal-access token
