@@ -417,7 +417,9 @@ struct VideoEditorView: View {
     /// player gets an exact frame so the scroll view can only take the room left
     /// over — the ordering that stops a greedy `ScrollView` claiming the screen.
     /// The Editor page never comes through here — `body` gives it its own
-    /// layouts.
+    /// layouts. The top row is the Editor page's — Back · ⓘ · the tab pill
+    /// over the picture — since 2026-10-16, as in the photo editor's
+    /// `stackedBody`; the rail bar under the media went with it.
     private func stackedBody(in container: CGSize) -> some View {
         let media = metrics.frame(in: container, scale: mediaScale)
         let span = metrics.dragSpan(in: container)
@@ -425,7 +427,13 @@ struct VideoEditorView: View {
             playerPane
                 .frame(width: media.width, height: media.height)
                 .frame(maxWidth: .infinity)
-                .overlay(alignment: .top) { chrome }
+                .overlay(alignment: .top) {
+                    #if os(iOS)
+                    touchChrome(showsBadge: false)
+                    #else
+                    chrome
+                    #endif
+                }
             // Between the player and the controls, and on the player's side of
             // the handle: the strip says which moment is on screen, so it moves
             // with the picture rather than with the panel.
@@ -438,10 +446,12 @@ struct VideoEditorView: View {
             if span > 0 {
                 MediaResizeHandle(scale: $mediaScale, span: span)
             }
+            #if os(macOS)
             railTabBar
                 .padding(.horizontal, 16)
                 .padding(.top, 6)
                 .padding(.bottom, 2)
+            #endif
             ScrollView(.vertical) {
                 controlStack(isWide: false)
                     .padding(16)
@@ -543,9 +553,10 @@ struct VideoEditorView: View {
     }
 
     /// True while a swipe across the movie may page to the next project —
-    /// see `PhotoViewerView.allowsPaging`.
+    /// see `PhotoViewerView.allowsPaging`. On the Text page too, since
+    /// 2026-10-16; the swipe lands the next project on the same page.
     private var allowsPaging: Bool {
-        paging != nil && railTab == .editor && openGroup == nil
+        paging != nil && openGroup == nil
             && !isOfferingPresetSave && !isNamingPreset
     }
 
@@ -590,6 +601,7 @@ struct VideoEditorView: View {
     private func pagingState(in proxy: GeometryProxy, anchor: PhotoZoomGeometry.Anchor) -> EditorPagingState {
         EditorPagingState(
             canPage: allowsPaging,
+            page: railTab,
             paneFrame: proxy.frame(in: .named(EditorPagingState.hostSpace)),
             anchor: anchor,
             hasPicture: surfaceReady,

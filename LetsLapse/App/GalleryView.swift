@@ -1105,7 +1105,7 @@ struct GalleryView: View {
         guard pagerRequest == nil else { return }
         #endif
         let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
-        let page = parts.count > 1 ? (RailTab(rawValue: parts[1].capitalized) ?? .editor) : .editor
+        let page = parts.count > 1 ? (RailTab(hook: parts[1]) ?? .editor) : .editor
         let capture: AppModel.CaptureProject?
         if parts[0] == "latest" {
             capture = sortedIDs.first.flatMap { model.capture(id: $0) }

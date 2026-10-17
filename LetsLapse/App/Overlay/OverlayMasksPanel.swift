@@ -2,7 +2,8 @@ import SwiftUI
 import LetsLapseKit
 import UniformTypeIdentifiers
 
-/// The Masks tab: the project's regions, and the shape of each one.
+/// The Regions tab (called Masks until 2026-10-16): the project's regions —
+/// its masks and its shapes — and the shape of each one.
 ///
 /// Separate from Text because what it authors belongs to the PROJECT, not to
 /// a layer — every text layer can pick any of these regions, and so can any
@@ -14,7 +15,15 @@ import UniformTypeIdentifiers
 /// tab owns its **grade**. Same mask, two sides of it, and the tab is the
 /// mode: a drag on the picture here draws masks, and a drag on the picture
 /// there sets an armed slider.
+///
+/// On a rail (the Mac, the iPad) the page is one stack: toolbar, the masks
+/// deck, the Shapes card, the custom masks. On the phone (`tabbed`) it is two
+/// sections — **Masks | Shapes** — because the stack is tall and the deck,
+/// Sky above all, stood between a person and the shapes; the section last
+/// chosen stays open across projects and launches (`RegionsSection`).
 struct OverlayMasksPanel: View {
+    /// The phone's two-section form; a rail passes false.
+    var tabbed: Bool = false
     @Binding var document: OverlayDocument
     /// The region being inspected — drives the debug tint, the handles on the
     /// picture, and which mask to fetch. Editor state, not part of the piece.
@@ -89,6 +98,9 @@ struct OverlayMasksPanel: View {
     @State private var importError: String?
     @State private var findMode = ShapeDetectionMode.load()
     @State private var finding = false
+    /// The phone's open section — the last one a person chose, kept across
+    /// projects and launches ("whatever they did last remains open").
+    @AppStorage("editor.regionsSection") private var sectionRaw = RegionsSection.masks.rawValue
 
     /// The mask the deck has selected, derived from the inspected region so
     /// the tint, the handles and the detail card can never disagree.
@@ -98,21 +110,141 @@ struct OverlayMasksPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            toolbar
-            deckCard
-            if let mask = selectedMask {
-                detailCard(for: mask)
+            if tabbed {
+                sectionBar
+                switch section {
+                case .masks:
+                    maskToolbar
+                    deckCard
+                    if let mask = selectedMask {
+                        detailCard(for: mask)
+                    }
+                    customMasksCard
+                case .shapes:
+                    shapeToolMenu
+                    shapesCard
+                    if let shape = selectedShape {
+                        shapeDetailCard(shape)
+                    }
+                }
+            } else {
+                toolbar
+                deckCard
+                if let mask = selectedMask {
+                    detailCard(for: mask)
+                }
+                shapesCard
+                if let shape = selectedShape {
+                    shapeDetailCard(shape)
+                }
+                customMasksCard
             }
-            shapesCard
-            if let shape = selectedShape {
-                shapeDetailCard(shape)
-            }
-            customMasksCard
         }
+        .onAppear(perform: followSelection)
+        .onChange(of: selectedRef) { _, _ in followSelection() }
+        .onChange(of: selectedShapeID) { _, _ in followSelection() }
+        .onChange(of: tool) { _, _ in followSelection() }
+        .onChange(of: shapeTool) { _, _ in followSelection() }
+        #if DEBUG
+        .task { await consumeSectionHook() }
+        #endif
     }
+
+    #if DEBUG
+    /// `LL_REGIONS=masks|shapes[@<seconds>]` presses the phone's section
+    /// switcher that many seconds after the page appears (default 2) —
+    /// through `open(_:)`, so the press is the real one: the other
+    /// section's selection and tool go, and the choice is remembered for the
+    /// next launch. A screenshot run's finger; a rail ignores it.
+    private func consumeSectionHook() async {
+        guard tabbed, let raw = ProcessInfo.processInfo.environment["LL_REGIONS"] else { return }
+        let parts = raw.split(separator: "@", maxSplits: 1).map(String.init)
+        guard let wanted = RegionsSection.allCases.first(where: { $0.rawValue.lowercased() == parts[0].lowercased() }) else {
+            LLog("LL_REGIONS: no section called \(parts[0])")
+            return
+        }
+        let delay = parts.count > 1 ? (Double(parts[1]) ?? 2) : 2
+        try? await Task.sleep(for: .seconds(delay))
+        guard !Task.isCancelled else { return }
+        LLog("LL_REGIONS: opening the \(wanted.rawValue) section")
+        open(wanted)
+    }
+    #endif
 
     private var selectedShape: DetectedShape? {
         selectedShapeID.flatMap { id in shapes.first { $0.id == id } }
+    }
+
+    // MARK: - Sections (the phone)
+
+    /// The phone's two halves of the page. The raw values are what the
+    /// switcher prints.
+    enum RegionsSection: String, CaseIterable {
+        case masks = "Masks"
+        case shapes = "Shapes"
+    }
+
+    private var section: RegionsSection {
+        RegionsSection(rawValue: sectionRaw) ?? .masks
+    }
+
+    /// Masks | Shapes, in the rail tab bar's dress (`RailTabBar`: capsule
+    /// seats in a capsule card track, the chosen seat filled with the
+    /// accent) — the row under the grabber held that bar until 2026-10-16,
+    /// and this is the page's own switcher in its seat. Black on amber, as
+    /// the dark editors print every selected seat.
+    private var sectionBar: some View {
+        HStack(spacing: 2) {
+            ForEach(RegionsSection.allCases, id: \.self) { candidate in
+                let selected = candidate == section
+                Button {
+                    open(candidate)
+                } label: {
+                    Text(candidate.rawValue)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(selected ? Color.black : accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(selected ? accent : Color.clear))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
+                .accessibilityLabel("\(candidate.rawValue) section")
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(LL.cardBackground))
+    }
+
+    /// A tap on the switcher. The other section's selection and armed tool
+    /// go with it: a mask's handles left on the picture under the Shapes
+    /// section — or a Linear tool armed with its button out of sight — would
+    /// take the next drag for a region nobody can see listed.
+    private func open(_ new: RegionsSection) {
+        guard new != section else { return }
+        switch new {
+        case .masks:
+            selectedShapeID = nil
+            shapeTool = nil
+        case .shapes:
+            inspectedRegion = nil
+            tool = nil
+        }
+        withAnimation(.easeInOut(duration: 0.18)) { sectionRaw = new.rawValue }
+    }
+
+    /// A selection or an armed tool made from outside the page — the Editor
+    /// tab's Masks card (Manage ›, New Linear mask…), "Use as mask", a hook —
+    /// lands on the section that owns it. Nothing to follow leaves the last
+    /// chosen section where it was.
+    private func followSelection() {
+        guard tabbed else { return }
+        if selectedMask != nil || tool != nil {
+            sectionRaw = RegionsSection.masks.rawValue
+        } else if selectedShape != nil || shapeTool != nil {
+            sectionRaw = RegionsSection.shapes.rawValue
+        }
     }
 
     // MARK: - Toolbar
@@ -125,21 +257,36 @@ struct OverlayMasksPanel: View {
             toolButton(.linear)
             toolButton(.radial)
             shapeToolMenu
-            Button { importing = true } label: {
-                Text("＋ Custom…")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(accent)
-                    .frame(maxWidth: .infinity, minHeight: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(accent.opacity(0.04)))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(accent.opacity(0.45),
-                                          style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
-            }
-            .buttonStyle(.plain)
+            customMaskButton
         }
+    }
+
+    /// The Masks section's toolbar on the phone: the mask tools alone — the
+    /// ＋ Shape menu heads the Shapes section.
+    private var maskToolbar: some View {
+        HStack(spacing: 8) {
+            toolButton(.linear)
+            toolButton(.radial)
+            customMaskButton
+        }
+    }
+
+    /// "＋ Custom…": the file importer.
+    private var customMaskButton: some View {
+        Button { importing = true } label: {
+            Text("＋ Custom…")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(accent)
+                .frame(maxWidth: .infinity, minHeight: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(accent.opacity(0.04)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(accent.opacity(0.45),
+                                      style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
+        }
+        .buttonStyle(.plain)
     }
 
     /// "＋ Shape": arms the ellipse or rectangle tool — the next drag on the

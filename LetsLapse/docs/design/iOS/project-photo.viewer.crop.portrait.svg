@@ -58,12 +58,12 @@
   <path d="M37 83 L31 89 L37 95" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
 </g>
 <g id="tab-pill"><!-- EditorTabPill top-right over the picture: rgba(28,28,30,.85) over material, amber on ink -->
-<rect x="124.7" y="74" width="252.3" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
-<rect x="127.7" y="77" width="58.8" height="24" rx="12" fill="#FFB340"/>
-<text x="157.1" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
-<text x="213.4" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
-<text x="274.9" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Frames</text>
-<text x="342.8" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Masks</text>
+<rect x="115.1" y="74" width="261.9" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+<rect x="118.1" y="77" width="58.8" height="24" rx="12" fill="#FFB340"/>
+<text x="147.5" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+<text x="203.8" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+<text x="265.3" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Frames</text>
+<text x="338" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Regions</text>
 </g>
 </g>
 <g id="pixel-zoom"><!-- `zoomControls`: the 1:1 toggle, bottom-trailing of the picture pane, 12 pt in; while cropping the pane already ends above the foot (no lift), so it sits at the crop room's corner; shown only while `hasPixelsToReveal` -->

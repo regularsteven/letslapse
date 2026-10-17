@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="393" height="852" viewBox="0 0 393 852" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Photo editor · Regions page · Masks section · portrait</title>
+  <desc>Mirrors App/PhotoViewerView.swift (stackedBody, touchChrome, markedRailTabs, masksTab(tabbed: true)) hosting App/Overlay/OverlayMasksPanel.swift in its PHONE form (tabbed — RegionsSection, sectionBar, maskToolbar, deckCard, customMasksCard) with App/EditorControls/EditorTabPill.swift in the top row. Code first (Steven's consistency audit, 2026-10-16), drawn from the iPhone 16 Pro simulator the same afternoon (regions-masks4.png: LL_TAB=gallery LL_ITEM=0633D6E7…:regions on the tram library's &quot;Photo 13. 9. at 13:45&quot;, a 3:4 still with ONE register shape; measured at 402 pt wide and carried to this 393 pt canvas — trailing positions sit 9 pt further left here). THE PAGE: the Masks tab is called REGIONS since 2026-10-16 — it holds the project's masks AND its shapes, and &quot;Masks&quot; named half of it; the RailTab case and every hook keep the old word (LL_RAIL=masks, LL_ITEM=&lt;id&gt;:masks — `regions` answers too). THE PILL: `Regions*` — the trailing asterisk says the project holds a region of its own (RailTab.label(marked:) over PhotoViewerView.markedRailTabs: a drawn mask, a custom mask file or a register shape; Sky and Land are the analysis's, a grade inside a mask the Editor page's); with none the seat reads Regions. Seats content-sized (label + 24, 2 pt apart, 3 pt inset, right edge 377): Editor 58.8 · Text 50 · Regions* 77.7 (Regions 72.0), the selected seat amber with a black label. TOP ROW = the Editor page's (touchChrome: back disc, ⓘ disc, the pill), the same on every page since this date, so a tap on Text or Regions moves the highlight and nothing else; the RailTabBar that sat under the grabber on the Text / Frames / Masks pages is gone on iOS. A SWIPE on the picture pages to the next or previous project ON THIS PAGE (allowsPaging on every page; EditorPagingState.page carries it; a mask handle's own drag still wins). LAYOUT (stackedBody): the picture 393×524 (3:4) pinned under the status bar, the chrome row floating over its head, the ⤢ 1:1 control bottom-trailing 12 pt in; the MediaResizeHandle row (28 pt, the 36×5 grabber white 35 %); then the scroll view, 16 pt sides, 14 pt top. THE SECTION SWITCHER (sectionBar, NEW): Masks | Shapes in the rail tab bar's dress — a 36 pt #1C1C1E capsule track, two equal seats (176.5) 2 pt apart, the chosen one amber with a black 13/600 label, the other's label amber — where the RailTabBar used to be; the choice is remembered in @AppStorage(&quot;editor.regionsSection&quot;) across projects and launches (&quot;whatever they did last remains open&quot;); a tap clears the other section's selection and armed tool (a mask's handles left under the Shapes section would take the next drag), and a selection or tool made from outside the page — the Editor tab's Masks card's Manage › / New Linear mask…, &quot;Use as mask&quot;, a hook — lands on the section that owns it (followSelection). The Mac and the iPad rail keep the one stack. MASKS SECTION: the mask toolbar (maskToolbar: Linear · Radial · ＋ Custom… — three equal 115 pt buttons, 8 pt gaps, 30 pt; Linear/Radial on #1C1C1E with amber 12.5/600 labels, armed = amber fill; ＋ Custom… dashed amber-45 % on amber-4 %), then the MASKS deck card (14 pt padding, radius 12, #1C1C1E): &quot;Masks&quot; 13/600 white 55 % with the mono count &quot;2 masks&quot;, a 3-column grid of 4:3 tiles (105.7×79.25, 8 pt columns, 10 pt rows) — Sky and Land with their AUTO chip, drawn DIMMED TO 40 % as captured (the simulator has no segmentation model; installed, they are full strength and tappable), the Sky tile's cached horizon — the card runs under the fold (the legend line and the CUSTOM MASKS card below it scroll into view; desc-only). SHAPES SECTION: project-photo.viewer.regions.shapes.portrait.svg. NOT DRAWN: a selected mask's detail card, an armed tool's HUD pill, the magenta Show mask tint, the model-missing note in the Custom Masks card. Hooks: LL_TAB=gallery LL_ITEM=&lt;uuid|latest&gt;:regions (or :masks), LL_REGIONS=masks|shapes[@&lt;seconds&gt;] presses the switcher through the real path (DEBUG, 2026-10-16), LL_MASKTOOL=linear|radial, LL_SHAPETOOL=ellipse|rect|square.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="0" y="0" width="393" height="852"/></clipPath>
+    <clipPath id="pane"><rect x="0" y="59" width="393" height="524"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B9BFC6"/>
+      <stop offset="1" stop-color="#D9DCDF"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8E9093"/>
+      <stop offset="1" stop-color="#6E7073"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#screen)">
+    <rect width="393" height="852" fill="#000000"/>
+    <!-- Status bar -->
+    <text x="46" y="36" font-size="15" class="sb" fill="#FFFFFF">16:53</text>
+    <rect x="330" y="26" width="24" height="12" rx="3" fill="none" stroke="#FFFFFF" stroke-opacity="0.5"/><rect x="332" y="28" width="18" height="8" rx="1.5" fill="#FFFFFF"/>
+
+    <!-- Image pane 393×524 (a 3:4 still): the tram at its stop, stand-in strokes for the photograph -->
+    <g clip-path="url(#pane)">
+      <rect x="0" y="59" width="393" height="524" fill="url(#sky)"/>
+      <rect x="0" y="130" width="393" height="150" fill="#6F7B72"/>
+      <rect x="110" y="110" width="283" height="190" fill="#9C8A78"/>
+      <rect x="110" y="110" width="283" height="36" fill="#5E7E72"/>
+      <g fill="#2F2F33" opacity="0.6">
+        <rect x="135" y="160" width="16" height="22"/><rect x="175" y="160" width="16" height="22"/><rect x="215" y="160" width="16" height="22"/><rect x="255" y="160" width="16" height="22"/><rect x="295" y="160" width="16" height="22"/><rect x="335" y="160" width="16" height="22"/>
+        <rect x="135" y="210" width="16" height="22"/><rect x="175" y="210" width="16" height="22"/><rect x="215" y="210" width="16" height="22"/><rect x="255" y="210" width="16" height="22"/><rect x="295" y="210" width="16" height="22"/><rect x="335" y="210" width="16" height="22"/>
+      </g>
+      <path d="M0 215 L60 205 L130 225 L130 300 L0 310 Z" fill="#4F5F48"/>
+      <rect x="0" y="355" width="393" height="228" fill="url(#road)"/>
+      <path d="M0 400 L393 392 L393 396 L0 404 Z" fill="#B5B7BA" opacity="0.5"/>
+      <path d="M0 520 L393 470 L393 476 L0 526 Z" fill="#C9B890" opacity="0.8"/>
+      <!-- the tram -->
+      <path d="M150 300 L330 292 L350 330 L350 405 L150 410 Z" fill="#E7E2D8"/>
+      <path d="M150 300 L330 292 L336 312 L150 320 Z" fill="#F2B544"/>
+      <path d="M150 376 L350 370 L350 405 L150 410 Z" fill="#D63A2F"/>
+      <rect x="160" y="322" width="90" height="42" rx="4" fill="#2B3A44"/>
+      <rect x="262" y="322" width="80" height="40" rx="4" fill="#2B3A44"/>
+      <text x="205" y="358" font-size="9" class="sb" fill="#FFFFFF" text-anchor="middle">9384</text>
+      <rect x="236" y="250" width="3" height="50" fill="#333"/>
+    </g>
+
+    <g id="touch-chrome"><!-- touchChrome: the Editor page's row, unchanged on every page since 2026-10-16 — back disc, ⓘ disc, the tab pill trailing; 16/12 padding under the safe area -->
+      <circle cx="34" cy="89" r="18" fill="#000" fill-opacity="0.4"/>
+      <text x="34" y="94.5" font-size="15" class="sb" fill="#FFFFFF" text-anchor="middle" data-symbol="chevron.left">‹</text>
+      <circle cx="78" cy="89" r="18" fill="#000" fill-opacity="0.4"/>
+      <circle cx="78" cy="89" r="7.5" fill="none" stroke="#FFFFFF" stroke-width="1.5" data-symbol="info.circle"/>
+      <rect x="77.25" y="87.5" width="1.5" height="5.5" fill="#FFFFFF"/><circle cx="78" cy="85.3" r="0.9" fill="#FFFFFF"/>
+      <g id="tab-pill"><!-- EditorTabPill: rgba(28,28,30,.85) over material; seats Editor 58.8 · Text 50 · Regions* 77.7, 2 pt apart, 3 pt inset, right edge 377; the selected seat amber with a black label; the asterisk = RailTab.label(marked:) -->
+        <rect x="180.5" y="74" width="196.5" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+        <rect x="296.3" y="77" width="77.7" height="24" rx="12" fill="#FFB340"/>
+        <text x="212.9" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Editor</text>
+        <text x="269.3" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+        <text x="335.2" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Regions*</text>
+      </g>
+    </g>
+    <!-- zoomControls: the 1:1 toggle bottom-trailing of the pane, 12 pt in -->
+    <circle cx="365" cy="555" r="16" fill="#000" fill-opacity="0.45"/>
+    <text x="365" y="560" font-size="12" class="sb" fill="#FFFFFF" text-anchor="middle" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
+
+    <!-- MediaResizeHandle: the 28 pt row under the pane, grabber 36×5 white 35 % -->
+    <rect x="178.5" y="597" width="36" height="5" rx="2.5" fill="#FFFFFF" fill-opacity="0.35"/>
+
+    <!-- Scroll view (16 pt sides, 14 pt top): the section switcher, the mask toolbar, the deck card, the custom masks card (under the fold) -->
+    <g id="section-bar"><!-- sectionBar: Masks | Shapes in RailTabBar's dress — #1C1C1E capsule track, two equal seats 176.5 wide, 2 pt apart, 3 pt inset; the chosen seat amber, black 13/600 label; remembered in @AppStorage("editor.regionsSection") -->
+      <rect x="16" y="625" width="361" height="36" rx="18" fill="#1C1C1E"/>
+      <rect x="19" y="628" width="176.5" height="30" rx="15" fill="#FFB340"/>
+      <text x="107.25" y="647.5" font-size="13" class="sb" fill="#000" text-anchor="middle">Masks</text>
+      <text x="285.75" y="647.5" font-size="13" class="sb" fill="#FFB340" text-anchor="middle">Shapes</text>
+    </g>
+
+    <g id="mask-toolbar"><!-- maskToolbar: Linear · Radial (toolButton — arm a creation tool; amber fill while armed) · ＋ Custom… (the file importer); 115 pt each, 8 pt gaps, 30 pt tall, radius 9 -->
+      <rect x="16" y="673" width="115" height="30" rx="9" fill="#1C1C1E"/>
+      <text x="73.5" y="692.5" font-size="12.5" class="sb" fill="#FFB340" text-anchor="middle">Linear</text>
+      <rect x="139" y="673" width="115" height="30" rx="9" fill="#1C1C1E"/>
+      <text x="196.5" y="692.5" font-size="12.5" class="sb" fill="#FFB340" text-anchor="middle">Radial</text>
+      <rect x="262" y="673" width="115" height="30" rx="9" fill="#FFB340" fill-opacity="0.04"/>
+      <rect x="262.75" y="673.75" width="113.5" height="28.5" rx="8.25" fill="none" stroke="#FFB340" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="319.5" y="692.5" font-size="12.5" class="sb" fill="#FFB340" text-anchor="middle">＋ Custom…</text>
+    </g>
+
+    <g id="deck-card"><!-- deckCard: "Masks" 13/600 secondary · the mono count; a 3-column grid of 4:3 tiles (105.7×79.25) — Sky and Land (AUTO, re-segmented per seam) dimmed to 40 % because the simulator has no segmentation model; the legend and the Custom Masks card follow under the fold -->
+      <rect x="16" y="715" width="361" height="160" rx="12" fill="#1C1C1E"/>
+      <text x="30" y="740" font-size="13" class="sb" fill="#FFFFFF" fill-opacity="0.55">Masks</text>
+      <text x="363" y="740" font-size="11" class="mono" fill="#FFFFFF" fill-opacity="0.55" text-anchor="end">2 masks</text>
+      <g id="tile-sky" opacity="0.4">
+        <rect x="30" y="756" width="105.7" height="79.25" rx="7" fill="#3A3A3C"/>
+        <path d="M30 790 L50 786 L72 795 L95 784 L118 792 L135.7 787 L135.7 835.25 L30 835.25 Z" fill="#FFFFFF" fill-opacity="0.45"/>
+        <rect x="34" y="760" width="26" height="10" rx="3" fill="#FFFFFF" fill-opacity="0.18"/>
+        <text x="47" y="767.5" font-size="7" class="b" fill="#FFFFFF" text-anchor="middle">AUTO</text>
+        <text x="82.85" y="849" font-size="11" class="sb" fill="#FFFFFF" text-anchor="middle">Sky</text>
+      </g>
+      <g id="tile-land" opacity="0.4">
+        <rect x="143.7" y="756" width="105.7" height="79.25" rx="7" fill="#3A3A3C"/>
+        <rect x="147.7" y="760" width="26" height="10" rx="3" fill="#FFFFFF" fill-opacity="0.18"/>
+        <text x="160.7" y="767.5" font-size="7" class="b" fill="#FFFFFF" text-anchor="middle">AUTO</text>
+        <text x="196.55" y="849" font-size="11" class="sb" fill="#FFFFFF" text-anchor="middle">Land</text>
+      </g>
+    </g>
+    <!-- The card's lower edge and the Custom Masks card lie under the fold (the scroll view runs to the safe area's foot at 818). -->
+    <rect x="0" y="818" width="393" height="34" fill="#000000"/>
+    <!-- Home indicator -->
+    <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFFFFF" fill-opacity="0.35"/>
+  </g>
+</svg>

@@ -80,11 +80,11 @@
            centres the 30 pt pill on the 36 pt back disc); rgba(28,28,30,.85)
            over blur, radius 18 → a capsule at this height -->
       <g id="tab-pill">
-        <rect x="985" y="40" width="179" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
-        <rect x="988" y="43" width="59" height="24" rx="12" fill="#FFB340"/>
-        <text x="1017.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
-        <text x="1073.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
-        <text x="1130.5" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Masks</text>
+        <rect x="975.4" y="40" width="188.6" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+        <rect x="978.4" y="43" width="59" height="24" rx="12" fill="#FFB340"/>
+        <text x="1007.9" y="59" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+        <text x="1063.9" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+        <text x="1125.7" y="59" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Regions</text>
       </g>
 
       <!-- EditorGroupBar(.padPill): right 16 / 16 above the safe area; padding 6,

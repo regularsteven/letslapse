@@ -11,6 +11,41 @@ live inline.
 
 ## Open
 
+### Editor pages after the 2026-10-16 consistency audit — what is left
+
+Shipped 2026-10-16 (code first, mirrors the same day): the Masks page is
+**Regions** (`RailTab.title`; the case and the hooks keep `masks`, `regions`
+answers too), `Regions*` once the project holds a drawn mask, a custom mask
+file or a register shape (`PhotoViewerView.markedRailTabs`), the stacked
+layout's Text / Frames / Regions pages draw the Editor page's top row
+(`touchChrome`) and no rail bar, a swipe pages from every page and lands on
+the same one (`EditorPagingState.page`, `EditorPager.carriedPage`), and the
+phone's Regions page is two remembered sections (`OverlayMasksPanel(tabbed:)`,
+`LL_REGIONS`). Left open, each small:
+
+- **iPad landscape still moves the pill.** The floating layout (≥ 900 pt,
+  wider than tall) draws the pill in the top row on the Editor page, but the
+  Text / Regions pages take `railBody`, whose pill is the head of the rail —
+  the very jump the audit removed on the phone. A floating Text / Regions
+  card (the group panel's dress) is a design question first: no iPadOS file
+  draws those pages. Portrait is fine (the rail holds the pill on every page).
+- **Text carries no mark.** `Regions*` says a region exists; the Text seat
+  could say the same for text layers (`overlayDocument.overlays`) — one line
+  in `markedRailTabs` — once Steven wants it. The preview page's pill
+  (`EditorPreviewPage`) marks nothing either: it loads no overlay document.
+- **Frames does not carry across a swipe** — `consumePageRequest` refuses
+  the page from outside (it exists only once a shoot's frames have loaded),
+  so a swipe made on Frames lands on Editor. Letting it through needs the
+  pill's selection to fold with `effectiveRailTab`, or every single still
+  shows no selected seat.
+- **The Simulator MCP backgrounds the app** (2026-10-16, iPhone 16 Pro sim):
+  its `screenshot` and `tap` sent LetsLapse to the Home screen with the
+  process alive — hooks (`LL_REGIONS`, `LL_PAGE`) and `simctl io screenshot`
+  are the bench until that is understood; and `driver.py sim` reinstalls
+  the app every run, which gave a fresh data container each time (the
+  library survived, the `@AppStorage` section did not) — relaunch with
+  `simctl launch --terminate-running-process` to check anything remembered.
+
 ### Share extension — many photos (and videos) from the share sheet (not started)
 
 Since `79c1d91` the image document types in `App/Info.plist` put LetsLapse in
@@ -4572,12 +4607,14 @@ Editor-tab files (`project-photo.viewer.{landscape,keyframes,presets,crop}
   row says the video editor reuses the same rail and panel with the VIDEO
   badge top-left of the pane and no Auto button / no Masks card
   (`mac-video-light.png`). Draw it as its own file rather than a note.
-- **The iPhone Masks page** — the Masks tab and the Editor tab's Masks
-  card on iOS have never been drawn (🟡 in the iOS INDEX); see *Masks as
-  adjustment layers — iOS design pass* for the design decision that has to
-  come first, and note the touch layouts' Masks card is a STOPGAP
-  (`touchMasksCard`, below the picture while a grade is expanded and no
-  group is open) that the boards do not show at all.
+- **The iPhone Regions page** — DRAWN 2026-10-16 as its two sections
+  (`iOS/project-photo.viewer.regions.portrait.svg`, `….regions.shapes.portrait.svg`,
+  the Masks | Shapes split of Steven's consistency audit). Still undrawn:
+  the Editor tab's Masks card on iOS — see *Masks as adjustment layers —
+  iOS design pass* for the design decision that has to come first, and note
+  the touch layouts' Masks card is a STOPGAP (`touchMasksCard`, below the
+  picture while a grade is expanded and no group is open) that the boards
+  do not show at all.
 - The stacked layout's **Frames** page, never drawn on iOS.
 
 ### iOS tab host still folds tabs 5+ into UIKit's invisible "More" controller

@@ -512,7 +512,7 @@ private struct EditorPreviewPageContent: View {
         var subject: String {
             switch self {
             case .group(let group): return group.title
-            case .tab(let tab): return "The \(tab.rawValue) page"
+            case .tab(let tab): return "The \(tab.title) page"
             case .line: return "Editing"
             }
         }
@@ -821,7 +821,7 @@ private struct EditorPreviewPageContent: View {
         let tapped: Tapped
         if let group = EditorGroup.allCases.first(where: { $0.title.lowercased() == raw }) {
             tapped = .group(group)
-        } else if let tab = RailTab.allCases.first(where: { $0.rawValue.lowercased() == raw }) {
+        } else if let tab = RailTab(hook: raw) {
             tapped = .tab(tab)
         } else {
             tapped = .line

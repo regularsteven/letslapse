@@ -85,7 +85,7 @@
         <text x="1054.75" y="138" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
         <text x="1128.25" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Text</text>
         <text x="1201.75" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Frames</text>
-        <text x="1275.25" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Masks</text>
+        <text x="1275.25" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Regions</text>
         </g>
         <g id="groupbar"><!-- EditorGroupBar(style: .macCard, locked: true) — App/EditorControls/EditorGroupBar.swift: the white rail card (llCard, radius 12, padding 6), six 46 pt cells spread edge to edge — 18 pt symbol, 9.5 pt semibold label, 4 pt dot; locked: every cell #6D6D72 at 42 %, none selected (lockedGroup never sets — a click asks), still clickable; the dots still say which groups hold an edit (the grade is a record, here even when the pixels are not), LL.accent at 55 % — Presets and Light on this shoot -->
         <rect x="1016" y="163" width="298" height="62" rx="12" fill="#FFFFFF"/>

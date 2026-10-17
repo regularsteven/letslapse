@@ -81,7 +81,7 @@
         <rect x="709.0" y="65" width="96.0" height="30" rx="15" fill="#C36A00"/>
         <text x="757.0" y="85" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
         <text x="855.0" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
-        <text x="953.0" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
+        <text x="953.0" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Regions</text>
       </g>
 
       <!-- EditorGroupBar (.macCard): a white card, padding 6, six 46 pt cells

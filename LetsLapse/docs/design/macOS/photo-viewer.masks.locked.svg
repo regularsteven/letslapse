@@ -69,7 +69,7 @@
         <rect x="903" y="120" width="96" height="30" rx="15" fill="#C36A00"/>
         <text x="757" y="140.5" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Editor</text>
         <text x="854" y="140.5" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
-        <text x="951" y="140.5" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Masks</text>
+        <text x="951" y="140.5" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Regions</text>
       </g>
       <!-- the rail's scroller (always-on scroll bars on the bench), unscrolled -->
       <rect x="1006" y="162" width="10.5" height="262" rx="5.25" fill="#747476"/>

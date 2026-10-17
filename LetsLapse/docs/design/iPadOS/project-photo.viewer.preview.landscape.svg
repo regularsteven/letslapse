@@ -52,13 +52,13 @@
   <g data-symbol="info.circle" fill="none" stroke="#FFF" stroke-linecap="round"><circle cx="78" cy="54" r="7.7" stroke-width="1.7"/><path d="M76.6 53.1H78.1V58.1M76.4 58.3H79.8" stroke-width="1.6" stroke-linejoin="round"/></g>
   <circle cx="78" cy="50.1" r="1.15" fill="#FFF"/>
 </g>
-<g id="tab-pill"><!-- EditorTabPill(locked: Text · Frames · Masks): rgba(28,28,30,.85) over material, radius 18; the Editor page selected (amber, black label); a locked page's label is amber at 38 % — still tappable, the tap asks (hint "Needs the originals") -->
-<rect x="914.7" y="39" width="249.3" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
-<rect x="917.7" y="42" width="59.2" height="24" rx="12" fill="#FFB340"/>
-<text x="947.3" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
-<text x="1003.4" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Text</text>
-<text x="1063.7" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Frames</text>
-<text x="1130.2" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Masks</text>
+<g id="tab-pill"><!-- EditorTabPill(locked: Text · Frames · Regions): rgba(28,28,30,.85) over material, radius 18; the Editor page selected (amber, black label); a locked page's label is amber at 38 % — still tappable, the tap asks (hint "Needs the originals") -->
+<rect x="905.1" y="39" width="258.9" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+<rect x="908.1" y="42" width="59.2" height="24" rx="12" fill="#FFB340"/>
+<text x="937.7" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+<text x="993.8" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Text</text>
+<text x="1054.1" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Frames</text>
+<text x="1125.4" y="58.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Regions</text>
 </g>
 </g>
       <g id="foot-row"><!-- HStack(alignment: .bottom, spacing 18) { statusCard(.dark).frame(maxWidth: .infinity) ; EditorGroupBar(.padPill) } .padding(16) — the card takes the editor's timeline-capsule seat, x 16 → 766 -->

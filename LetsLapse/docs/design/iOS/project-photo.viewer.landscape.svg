@@ -56,7 +56,7 @@
 <rect x="503.7" y="17" width="88.8" height="30" rx="15" fill="#FFB340"/>
 <text x="548.1" y="36.7" text-anchor="middle" font-size="13" class="sb" fill="#000">Editor</text>
 <text x="638.9" y="36.7" text-anchor="middle" font-size="13" class="sb" fill="#FFB340">Text</text>
-<text x="729.6" y="36.7" text-anchor="middle" font-size="13" class="sb" fill="#FFB340">Masks</text>
+<text x="729.6" y="36.7" text-anchor="middle" font-size="13" class="sb" fill="#FFB340">Regions</text>
 </g>
 <g id="main-buttons"><!-- EditorGroupBar(style: .macCard) drawn dark: six 46 pt cells (icon 18, 9.5 pt semibold label, 4 pt dot, radius 12) in a padded-6 card — at this 276 pt rail the six cells overrun the card's padding and sit flush with its edges -->
 <rect x="500.7" y="62" width="276.3" height="61.7" rx="12" fill="#1C1C1E"/>

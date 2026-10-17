@@ -54,7 +54,7 @@
 <text x="744.75" y="85" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
 <text x="818.25" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Text</text>
 <text x="891.75" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Frames</text>
-<text x="965.25" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Masks</text>
+<text x="965.25" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00" fill-opacity="0.38">Regions</text>
 </g>
 <g id="groupbar"><!-- EditorGroupBar(.macCard, locked: true): the white card, padding 6, six 46 pt cells spread edge to edge — 18 pt symbol, 9.5 pt semibold label, 4 pt dot; every cell #6D6D72 at 42 %, none selected; the dots LL.accent at 55 % (Presets, Light) -->
 <rect x="706" y="110" width="298" height="62" rx="12" fill="#FFFFFF"/>

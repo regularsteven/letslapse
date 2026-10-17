@@ -56,7 +56,7 @@ NOTHING LEAVES THE DEVICE: this is the same on-device Gemma 4 E2B the Scenes wor
       <rect x="775" y="63" width="74" height="30" rx="15" fill="#C36A00"/>
       <text x="812" y="82.5" font-size="13" class="sb" fill="#FFFFFF" text-anchor="middle">Text</text>
       <text x="888" y="82.5" font-size="13" class="sb" fill="#C36A00" text-anchor="middle">Frames</text>
-      <text x="964" y="82.5" font-size="13" class="sb" fill="#C36A00" text-anchor="middle">Masks</text>
+      <text x="964" y="82.5" font-size="13" class="sb" fill="#C36A00" text-anchor="middle">Regions</text>
     </g>
     <g id="rail">
       <rect x="696" y="112" width="308" height="44" rx="12" fill="#1C1C1E"/>

@@ -128,7 +128,7 @@
         <text x="1054.75" y="138" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
         <text x="1128.25" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
         <text x="1201.75" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
-        <text x="1275.25" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
+        <text x="1275.25" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Regions</text>
       </g>
       <g id="groupbar" transform="translate(310,53)">
         <rect x="706" y="110" width="298" height="62" rx="12" fill="#FFFFFF"/>

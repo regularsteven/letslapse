@@ -68,6 +68,10 @@ struct EditorPager: View {
     @State private var dragAxis: Axis?
     /// What the editor on the page allows and where its picture is.
     @State private var pagingState: EditorPagingState?
+    /// The page the editor on screen is showing, as its last preference
+    /// said — kept apart from `pagingState` so a page turn can read it after
+    /// the leaving editor has stopped publishing.
+    @State private var pageOnScreen: RailTab
     /// Clear preview, carried across pages.
     @State private var clearPreview: Bool
     @State private var showsInfo = false
@@ -124,6 +128,7 @@ struct EditorPager: View {
         self.dismissesItself = dismissesItself
         _currentID = State(initialValue: request.current)
         _clearPreview = State(initialValue: request.startsClear)
+        _pageOnScreen = State(initialValue: request.page)
     }
 
     var body: some View {
@@ -171,6 +176,7 @@ struct EditorPager: View {
         .background(Color.black.ignoresSafeArea())
         .onPreferenceChange(EditorPagingStateKey.self) { state in
             pagingState = state
+            if let state { pageOnScreen = state.page }
             // The poster goes once the editor under it has a picture of
             // its own — the new editor's, not the last frame of the old.
             if let state, state.hasPicture, let captureID = state.captureID { pictureArrived(captureID) }
@@ -310,8 +316,9 @@ struct EditorPager: View {
         case .move(let next):
             PageTurnTrace.mark("exit")
             // The poster of the arriving page is at rest where the editor
-            // will draw: mount the editor and drop the drag in one pass.
-            stage(next, page: .editor, poster: true)
+            // will draw: mount the editor and drop the drag in one pass —
+            // on the page the last one was showing.
+            stage(next, page: carriedPage(to: next), poster: true)
             drag = .zero
             follow(next)
         case .back(let landing):
@@ -326,6 +333,19 @@ struct EditorPager: View {
             followTask?.cancel()
             close()
             onClose?(.back(currentID))
+        }
+    }
+
+    /// The page a swipe carries over (2026-10-16): the one on screen, so a
+    /// person working through Text or Regions stays on it — the Mac's
+    /// filmstrip rule (`GalleryView.move(to:)`). A movie has no Regions page
+    /// and Frames exists only once a shoot's frames have loaded, so those two
+    /// land on Editor.
+    private func carriedPage(to id: UUID) -> RailTab {
+        switch pageOnScreen {
+        case .masks where model.capture(id: id)?.kind == .video: return .editor
+        case .frames: return .editor
+        default: return pageOnScreen
         }
     }
 

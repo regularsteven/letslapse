@@ -46,13 +46,13 @@
   <g data-symbol="info.circle" fill="none" stroke="#FFF" stroke-linecap="round"><circle cx="78" cy="89" r="7.7" stroke-width="1.7"/><path d="M76.6 88.1H78.1V93.1M76.4 93.3H79.8" stroke-width="1.6" stroke-linejoin="round"/></g>
   <circle cx="78" cy="85.1" r="1.15" fill="#FFF"/>
 </g>
-<g id="tab-pill"><!-- EditorTabPill(locked: Text · Frames · Masks): rgba(28,28,30,.85) over material, radius 18; the Editor page selected (amber, black label); a locked page's label is amber at 38 % — still tappable, the tap asks (hint "Needs the originals") -->
-<rect x="127.7" y="74" width="249.3" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
-<rect x="130.7" y="77" width="59.2" height="24" rx="12" fill="#FFB340"/>
-<text x="160.3" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
-<text x="216.4" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Text</text>
-<text x="276.6" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Frames</text>
-<text x="343.2" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Masks</text>
+<g id="tab-pill"><!-- EditorTabPill(locked: Text · Frames · Regions): rgba(28,28,30,.85) over material, radius 18; the Editor page selected (amber, black label); a locked page's label is amber at 38 % — still tappable, the tap asks (hint "Needs the originals") -->
+<rect x="118.1" y="74" width="258.9" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+<rect x="121.1" y="77" width="59.2" height="24" rx="12" fill="#FFB340"/>
+<text x="150.7" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+<text x="206.8" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Text</text>
+<text x="267" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Frames</text>
+<text x="338.4" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340" fill-opacity="0.38">Regions</text>
 </g>
 </g>
 <g id="foot"><!-- phoneBody's foot, bottom-anchored on the safe area (818): VStack(spacing 0) { statusCard(.dark) padded 12 sides / 8 below ; EditorGroupBar(.phone, locked) } — where the timeline card and the six buttons are in the editor -->

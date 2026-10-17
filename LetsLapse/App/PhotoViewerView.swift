@@ -167,14 +167,14 @@ struct PhotoViewerView: View {
     // lives here (like the grade) and persists through the per-project
     // sidecar (`AppModel.setOverlayDocument`) on finished gestures.
 
-    /// Which rail page is showing. `LL_RAIL=text|masks|frames` opens the
-    /// editor straight onto a page, the way `LL_EDITOR` opens the editor at
-    /// all: the rail's pages are otherwise only reachable by a tap, which a
-    /// screenshot or a design-mirror check has no way to make.
+    /// Which rail page is showing. `LL_RAIL=text|masks|regions|frames` opens
+    /// the editor straight onto a page, the way `LL_EDITOR` opens the editor
+    /// at all: the rail's pages are otherwise only reachable by a tap, which
+    /// a screenshot or a design-mirror check has no way to make.
     @State private var railTab: RailTab = {
         #if DEBUG
         if let hook = ProcessInfo.processInfo.environment["LL_RAIL"],
-           let tab = RailTab(rawValue: hook.capitalized) {
+           let tab = RailTab(hook: hook) {
             return tab
         }
         #endif
@@ -1423,6 +1423,12 @@ struct PhotoViewerView: View {
     /// image is given an exact frame, so the scroll view can only have the room
     /// left over — the ordering that keeps a greedy `ScrollView` from claiming
     /// the screen and squeezing the picture to a sliver.
+    ///
+    /// The top row is the Editor page's (2026-10-16, Steven's audit): Back ·
+    /// ⓘ · the tab pill, floating over the picture — so a tap on Text or
+    /// Regions moves the highlight and nothing else up there. The rail's own
+    /// tab bar between the media and the controls went with it; the Mac
+    /// (which never stacks in practice) keeps it.
     private func stackedBody(in container: CGSize) -> some View {
         let media = metrics.frame(in: container, scale: isTypingCopy ? 0 : mediaScale)
         let span = metrics.dragSpan(in: container)
@@ -1430,7 +1436,13 @@ struct PhotoViewerView: View {
             imagePane()
                 .frame(width: media.width, height: media.height)
                 .frame(maxWidth: .infinity)
-                .overlay(alignment: .top) { chrome }
+                .overlay(alignment: .top) {
+                    #if os(iOS)
+                    touchChrome(showsBadge: false)
+                    #else
+                    chrome
+                    #endif
+                }
                 .overlay(alignment: .bottom) { overlayToastView }
             // Between the media and the controls, and on the media's side of
             // the handle: the strip says which frame is on screen, so it moves
@@ -1451,10 +1463,12 @@ struct PhotoViewerView: View {
             if span > 0, !isTypingCopy {
                 MediaResizeHandle(scale: $mediaScale, span: span)
             }
+            #if os(macOS)
             railTabBar
                 .padding(.horizontal, 16)
                 .padding(.top, 6)
                 .padding(.bottom, 2)
+            #endif
             ScrollViewReader { scroller in
                 ScrollView(.vertical) {
                     controlStack(isWide: false)
@@ -1593,7 +1607,8 @@ struct PhotoViewerView: View {
                 if !zoom.isFitted { zoomPill }
             }
             Spacer(minLength: 8)
-            EditorTabPill(selection: $railTab, tabs: availableRailTabs, accent: accentColor)
+            EditorTabPill(selection: $railTab, tabs: availableRailTabs, accent: accentColor,
+                          marked: markedRailTabs)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -2152,6 +2167,7 @@ struct PhotoViewerView: View {
                 key: EditorPagingStateKey.self,
                 value: EditorPagingState(
                     canPage: allowsPaging,
+                    page: effectiveRailTab,
                     paneFrame: proxy.frame(in: .named(EditorPagingState.hostSpace)),
                     anchor: geometry.anchor,
                     hasPicture: rendered != nil,
@@ -3095,11 +3111,14 @@ struct PhotoViewerView: View {
     }
 
     /// True while a swipe across the picture may page to the next project:
-    /// the Editor page at fit scale with nothing open, armed or being typed.
-    /// Everything else — a pan of a zoomed picture, a mask being drawn, a
-    /// crop handle, the keyboard — owns the finger.
+    /// any page at fit scale with nothing open, armed or being typed (the
+    /// Editor page alone until 2026-10-16 — a swipe now walks the set on
+    /// Text and Regions too, and lands on the same page). Everything else —
+    /// a pan of a zoomed picture, a mask being drawn, a crop handle, a text
+    /// layer's own drag (deeper in the tree, so it wins), the keyboard — owns
+    /// the finger.
     private var allowsPaging: Bool {
-        paging != nil && effectiveRailTab == .editor && openGroup == nil && expandedGradeID == nil
+        paging != nil && openGroup == nil && expandedGradeID == nil
             && zoom.isFitted && !cropEditing && !maskGestureActive
             && maskTool == nil && shapeTool == nil && armedMaskField == nil
             && !isTypingCopy && !isOfferingPresetSave && !isNamingPreset
@@ -3201,7 +3220,17 @@ struct PhotoViewerView: View {
     private var railTabBar: some View {
         RailTabBar(
             selection: $railTab, tabs: availableRailTabs,
-            accent: accentColor, onAccent: pillTextColor)
+            accent: accentColor, onAccent: pillTextColor, marked: markedRailTabs)
+    }
+
+    /// The pages printed with a `*` (2026-10-16): Regions, once the project
+    /// has a region of its own — a drawn mask, a custom mask file or a
+    /// register shape. Sky and Land are the analysis's, not work done here,
+    /// and a grade inside a mask is the Editor page's.
+    private var markedRailTabs: Set<RailTab> {
+        let hasRegions = !overlayDocument.shapeMasks.isEmpty || !overlayDocument.customMasks.isEmpty
+            || !(shapeRegister?.shapes.isEmpty ?? true)
+        return hasRegions ? [.masks] : []
     }
 
     /// A page requested for this project's editor (`AppModel.requestedEditorPage`).
@@ -3231,7 +3260,9 @@ struct PhotoViewerView: View {
         case .frames:
             if allFrames.count > 1 { framesTab } else { EmptyView() }
         case .masks:
-            masksTab
+            // The phone splits the page into Masks | Shapes tabs; a rail
+            // (the Mac, the iPad) keeps the one stack.
+            masksTab(tabbed: !isWide)
         }
     }
 
@@ -3307,8 +3338,9 @@ struct PhotoViewerView: View {
         }
     }
 
-    private var masksTab: some View {
+    private func masksTab(tabbed: Bool) -> some View {
         OverlayMasksPanel(
+            tabbed: tabbed,
             document: $overlayDocument,
             inspectedRegion: $inspectedRegion,
             showMask: $showMask,

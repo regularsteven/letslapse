@@ -140,7 +140,7 @@ struct FindShapesView: View {
                     .monospacedDigit()
                 }
             }
-            Text("Hits and passed-over are your Add and Clear in the editor's Masks tab (a shape the register already held counts as a hit); missed is a shape you added that the engine did not propose although it ran; agreed is a proposal another engine also made in a Use all run. Shapes found by several engines are scored once, for all of them.")
+            Text("Hits and passed-over are your Add and Clear in the editor's Regions tab (a shape the register already held counts as a hit); missed is a shape you added that the engine did not propose although it ran; agreed is a proposal another engine also made in a Use all run. Shapes found by several engines are scored once, for all of them.")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)

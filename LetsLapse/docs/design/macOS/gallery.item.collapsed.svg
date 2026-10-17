@@ -72,7 +72,7 @@
         <rect x="1019" y="118" width="96" height="30" rx="15" fill="#C36A00"/>
         <text x="1067" y="138" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
         <text x="1165" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
-        <text x="1263" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
+        <text x="1263" y="138" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Regions</text>
       </g>
       <g id="groupbar" transform="translate(310,53)">
         <rect x="706" y="110" width="298" height="62" rx="12" fill="#FFFFFF"/>

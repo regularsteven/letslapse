@@ -49,11 +49,11 @@
   <path d="M37 83 L31 89 L37 95" fill="none" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
 </g>
 <g id="tab-pill"><!-- EditorTabPill top-right over the picture: rgba(28,28,30,.85) over material, amber on ink -->
-<rect x="195.8" y="74" width="181.2" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
-<rect x="198.8" y="77" width="58.8" height="24" rx="12" fill="#FFB340"/>
-<text x="228.2" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
-<text x="284.6" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
-<text x="342.8" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Masks</text>
+<rect x="186.2" y="74" width="190.8" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+<rect x="189.2" y="77" width="58.8" height="24" rx="12" fill="#FFB340"/>
+<text x="218.6" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Editor</text>
+<text x="275" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+<text x="338" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Regions</text>
 </g>
 </g>
 <g id="pixel-zoom"><!-- `zoomControls`: the 1:1 toggle, bottom-trailing of the picture pane, 12 pt in, lifted above the foot; shown only while `hasPixelsToReveal` -->

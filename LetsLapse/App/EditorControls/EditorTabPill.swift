@@ -1,9 +1,11 @@
 import SwiftUI
 
-// Mirrors the Editor / Text / Masks pill floating top-right over the picture
+// Mirrors the Editor / Text / Regions pill floating top-right over the picture
 // on boards 2a (iPhone) and 5a (iPad) — spec §4 and decision 6: the rail's
 // tab bar moves over the picture on the touch editors; the Mac keeps
-// `RailTabBar` in its rail.
+// `RailTabBar` in its rail. Since 2026-10-16 every page of the touch editors
+// draws it in the same top row (Back · ⓘ · the pill), so a tap on Text or
+// Regions changes the highlight and nothing else up there.
 
 /// The over-picture tab switcher — the same `RailTab` selection the rail's
 /// `RailTabBar` drives, dressed as a translucent pill so it can sit on the
@@ -22,6 +24,9 @@ struct EditorTabPill: View {
     /// on this device (`EditorPreviewPage`). A tap still reaches the
     /// selection, whose owner asks whether to fetch them.
     var locked: Set<RailTab> = []
+    /// Pages printed with a trailing `*` — they hold work of this project's
+    /// own (`RailTab.label(marked:)`; Regions once a mask or a shape exists).
+    var marked: Set<RailTab> = []
 
     var body: some View {
         HStack(spacing: 2) {
@@ -46,7 +51,7 @@ struct EditorTabPill: View {
             // control wherever it lives.
             withAnimation(.easeInOut(duration: 0.18)) { selection = tab }
         } label: {
-            Text(tab.rawValue)
+            Text(tab.label(marked: marked.contains(tab)))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(selected ? Color.black : locked.contains(tab) ? accent.opacity(0.38) : accent)
                 .padding(.vertical, 5)
@@ -58,7 +63,8 @@ struct EditorTabPill: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
-        .accessibilityLabel("\(tab.rawValue) controls")
+        .accessibilityLabel("\(tab.title) controls")
+        .accessibilityValue(marked.contains(tab) ? "has work" : "")
         .accessibilityHint(locked.contains(tab) ? "Needs the originals" : "")
     }
 }
@@ -72,7 +78,7 @@ private struct EditorTabPillPreview: View {
             LinearGradient(
                 colors: [.orange, .pink, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
                 .frame(width: 393, height: 200)
-            EditorTabPill(selection: $tab, tabs: [.editor, .text, .masks], accent: LL.amber)
+            EditorTabPill(selection: $tab, tabs: [.editor, .text, .masks], accent: LL.amber, marked: [.masks])
                 .padding(16)
         }
     }

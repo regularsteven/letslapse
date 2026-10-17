@@ -2,6 +2,15 @@
 
 Canvas 820×1180 pt (iPad 10th gen class), portrait + landscape where bespoke.
 
+✅ **2026-10-16, the pill's Masks seat is Regions (Steven's consistency audit, code first):** every landscape
+`project-photo.viewer.*.landscape.svg` here has its `EditorTabPill` re-fitted — the seat reads **Regions** (72.0 pt
+against Masks' 62.4, the pill 9.6 pt wider to the left of its right edge at 1164) and prints `Regions*` once the project
+holds a region of its own (none of these files' shoots do). The iPhone's Masks \| Shapes split is compact-width only:
+the iPad's rail keeps the one stack, as the Mac does. A swipe between projects now works from the Text and Regions
+pages too. **Still open on the iPad:** in LANDSCAPE the Text / Regions pages take the rail body, so the pill leaves the
+floating layout's top row for the head of the rail — a floating Text / Regions layout is a design question of its own
+(docs/TODO.md); in portrait the rail holds the pill on every page already.
+
 ✅ **2026-09-26, connected asset states + status glyphs — mirrors DRAWN** (plan §9–§16): the one iPad-specific file,
 [project-photo.viewer.preview.landscape.svg](project-photo.viewer.preview.landscape.svg) — the editor's preview page in
 the floating layout (the 582×776 poster top-left, the chrome row, the status card in the timeline capsule's seat beside

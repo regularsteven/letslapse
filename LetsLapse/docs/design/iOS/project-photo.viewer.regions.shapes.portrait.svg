@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="393" height="852" viewBox="0 0 393 852" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Photo editor · Regions page · Shapes section · portrait</title>
+  <desc>Mirrors App/PhotoViewerView.swift (stackedBody, touchChrome, markedRailTabs, masksTab(tabbed: true)) hosting App/Overlay/OverlayMasksPanel.swift in its PHONE form (tabbed — RegionsSection.shapes: sectionBar, shapeToolMenu, shapesCard with findRow, RegisterShapeTile) with App/EditorControls/EditorTabPill.swift in the top row. Code first (Steven's consistency audit, 2026-10-16), drawn from the iPhone 16 Pro simulator the same afternoon (regions-shapes.png: LL_TAB=gallery LL_ITEM=0633D6E7…:regions LL_REGIONS=shapes@2 on the tram library's &quot;Photo 13. 9. at 13:45&quot;, a 3:4 still with ONE register shape, found by Find shapes; measured at 402 pt wide and carried to this 393 pt canvas). THE SHAPES SECTION is why the page split (Steven: the shapes component had to come up higher, the Sky mask section out of the way): the switcher's second seat, then ＋ SHAPE alone (shapeToolMenu — a Menu: Ellipse / Rectangle / Square, Cancel while armed; dashed amber-45 % on amber-4 %, full width, 30 pt; while armed it fills amber and reads &quot;Ellipse ✓&quot; / &quot;Rectangle ✓&quot; / &quot;Square ✓&quot;), then the SHAPES card (shapesCard, 14 pt padding, radius 12, #1C1C1E): &quot;Shapes&quot; 13/600 white 55 % with the mono count &quot;1 shape&quot;; the FIND ROW — the detector menu (&quot;Standard&quot; + chevron.down, amber 11.5/500, submenus Detector · Sensitivity · Size over ShapeDetectionMode) at the left and the amber &quot;Find&quot; 11.5/600 at the right, then the engine's one-line detail in 10 pt white 55 % (&quot;Find shapes in this picture · Vision passes, Hough rims, region proposals at 1024 + 2048 · 74 / 69&quot;, two lines at this width); then the 3-column grid of RegisterShapeTile (105.7×79.25, 8 pt columns, 10 pt rows): an ink tile with the picture's own 3:4 frame letterboxed inside (ruled by a 0.5 pt white-25 % hairline) and the shape filled white 90 % at its place in that frame, the caption &quot;◎ Rectangle&quot; (◎ found by Find shapes · ✎ drawn here) under it — the tile is cut by the fold as captured; the legend line follows. The MASKS section (the deck, the Custom Masks card) is project-photo.viewer.regions.masks' sibling file, project-photo.viewer.regions.portrait.svg, which also carries the page's rules: the switcher's memory (@AppStorage editor.regionsSection), the clearing of the other section's selection and tool on a tap, followSelection, the Regions* mark, the stable top row and the swipe. NOT DRAWN: a selected shape's detail card (its handles on the picture; &quot;Use as mask&quot; makes a Radial mask and lands on the Masks section), the armed ＋ Shape label, a find's results block with Add / Reject, the locked register (＋ Shape and Find disabled — the Mac's photo-viewer.masks.locked.svg). Hooks: LL_TAB=gallery LL_ITEM=&lt;uuid|latest&gt;:regions LL_REGIONS=shapes[@&lt;seconds&gt;] (DEBUG), LL_SHAPETOOL=ellipse|rect|square, LL_SHAPES_MODE=&lt;engine&gt;.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="0" y="0" width="393" height="852"/></clipPath>
+    <clipPath id="pane"><rect x="0" y="59" width="393" height="524"/></clipPath>
+    <clipPath id="fold"><rect x="0" y="0" width="393" height="818"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B9BFC6"/>
+      <stop offset="1" stop-color="#D9DCDF"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8E9093"/>
+      <stop offset="1" stop-color="#6E7073"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#screen)">
+    <rect width="393" height="852" fill="#000000"/>
+    <!-- Status bar -->
+    <text x="46" y="36" font-size="15" class="sb" fill="#FFFFFF">17:43</text>
+    <rect x="330" y="26" width="24" height="12" rx="3" fill="none" stroke="#FFFFFF" stroke-opacity="0.5"/><rect x="332" y="28" width="18" height="8" rx="1.5" fill="#FFFFFF"/>
+
+    <!-- Image pane 393×524 (a 3:4 still): the tram at its stop, stand-in strokes for the photograph -->
+    <g clip-path="url(#pane)">
+      <rect x="0" y="59" width="393" height="524" fill="url(#sky)"/>
+      <rect x="0" y="130" width="393" height="150" fill="#6F7B72"/>
+      <rect x="110" y="110" width="283" height="190" fill="#9C8A78"/>
+      <rect x="110" y="110" width="283" height="36" fill="#5E7E72"/>
+      <g fill="#2F2F33" opacity="0.6">
+        <rect x="135" y="160" width="16" height="22"/><rect x="175" y="160" width="16" height="22"/><rect x="215" y="160" width="16" height="22"/><rect x="255" y="160" width="16" height="22"/><rect x="295" y="160" width="16" height="22"/><rect x="335" y="160" width="16" height="22"/>
+        <rect x="135" y="210" width="16" height="22"/><rect x="175" y="210" width="16" height="22"/><rect x="215" y="210" width="16" height="22"/><rect x="255" y="210" width="16" height="22"/><rect x="295" y="210" width="16" height="22"/><rect x="335" y="210" width="16" height="22"/>
+      </g>
+      <path d="M0 215 L60 205 L130 225 L130 300 L0 310 Z" fill="#4F5F48"/>
+      <rect x="0" y="355" width="393" height="228" fill="url(#road)"/>
+      <path d="M0 400 L393 392 L393 396 L0 404 Z" fill="#B5B7BA" opacity="0.5"/>
+      <path d="M0 520 L393 470 L393 476 L0 526 Z" fill="#C9B890" opacity="0.8"/>
+      <!-- the tram -->
+      <path d="M150 300 L330 292 L350 330 L350 405 L150 410 Z" fill="#E7E2D8"/>
+      <path d="M150 300 L330 292 L336 312 L150 320 Z" fill="#F2B544"/>
+      <path d="M150 376 L350 370 L350 405 L150 410 Z" fill="#D63A2F"/>
+      <rect x="160" y="322" width="90" height="42" rx="4" fill="#2B3A44"/>
+      <rect x="262" y="322" width="80" height="40" rx="4" fill="#2B3A44"/>
+      <text x="205" y="358" font-size="9" class="sb" fill="#FFFFFF" text-anchor="middle">9384</text>
+      <rect x="236" y="250" width="3" height="50" fill="#333"/>
+    </g>
+
+    <g id="touch-chrome"><!-- touchChrome: the Editor page's row, unchanged on every page since 2026-10-16 — back disc, ⓘ disc, the tab pill trailing -->
+      <circle cx="34" cy="89" r="18" fill="#000" fill-opacity="0.4"/>
+      <text x="34" y="94.5" font-size="15" class="sb" fill="#FFFFFF" text-anchor="middle" data-symbol="chevron.left">‹</text>
+      <circle cx="78" cy="89" r="18" fill="#000" fill-opacity="0.4"/>
+      <circle cx="78" cy="89" r="7.5" fill="none" stroke="#FFFFFF" stroke-width="1.5" data-symbol="info.circle"/>
+      <rect x="77.25" y="87.5" width="1.5" height="5.5" fill="#FFFFFF"/><circle cx="78" cy="85.3" r="0.9" fill="#FFFFFF"/>
+      <g id="tab-pill"><!-- EditorTabPill: seats Editor 58.8 · Text 50 · Regions* 77.7; the selected seat amber with a black label -->
+        <rect x="180.5" y="74" width="196.5" height="30" rx="15" fill="#1C1C1E" opacity="0.85"/>
+        <rect x="296.3" y="77" width="77.7" height="24" rx="12" fill="#FFB340"/>
+        <text x="212.9" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Editor</text>
+        <text x="269.3" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#FFB340">Text</text>
+        <text x="335.2" y="93.3" text-anchor="middle" font-size="12" class="sb" fill="#000">Regions*</text>
+      </g>
+    </g>
+    <circle cx="365" cy="555" r="16" fill="#000" fill-opacity="0.45"/>
+    <text x="365" y="560" font-size="12" class="sb" fill="#FFFFFF" text-anchor="middle" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
+
+    <!-- MediaResizeHandle -->
+    <rect x="178.5" y="597" width="36" height="5" rx="2.5" fill="#FFFFFF" fill-opacity="0.35"/>
+
+    <g clip-path="url(#fold)">
+    <g id="section-bar"><!-- sectionBar: Shapes chosen -->
+      <rect x="16" y="625" width="361" height="36" rx="18" fill="#1C1C1E"/>
+      <rect x="197.5" y="628" width="176.5" height="30" rx="15" fill="#FFB340"/>
+      <text x="107.25" y="647.5" font-size="13" class="sb" fill="#FFB340" text-anchor="middle">Masks</text>
+      <text x="285.75" y="647.5" font-size="13" class="sb" fill="#000" text-anchor="middle">Shapes</text>
+    </g>
+
+    <g id="shape-tool"><!-- shapeToolMenu, full width: "＋ Shape" resting; a Menu of Ellipse / Rectangle / Square -->
+      <rect x="16" y="673" width="361" height="30" rx="9" fill="#FFB340" fill-opacity="0.04"/>
+      <rect x="16.75" y="673.75" width="359.5" height="28.5" rx="8.25" fill="none" stroke="#FFB340" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="196.5" y="692.5" font-size="12.5" class="sb" fill="#FFB340" text-anchor="middle">＋ Shape</text>
+    </g>
+
+    <g id="shapes-card"><!-- shapesCard: header · the find row · the engine's detail · the register's tiles (RegisterShapeTile) -->
+      <rect x="16" y="715" width="361" height="200" rx="12" fill="#1C1C1E"/>
+      <text x="30" y="740" font-size="13" class="sb" fill="#FFFFFF" fill-opacity="0.55">Shapes</text>
+      <text x="363" y="740" font-size="11" class="mono" fill="#FFFFFF" fill-opacity="0.55" text-anchor="end">1 shape</text>
+      <g id="find-row">
+        <text x="30" y="765" font-size="11.5" class="m" fill="#FFB340">Standard</text>
+        <text x="85" y="765" font-size="9" class="sb" fill="#FFB340" data-symbol="chevron.down">⌄</text>
+        <text x="363" y="765" font-size="11.5" class="sb" fill="#FFB340" text-anchor="end">Find</text>
+        <text x="30" y="783" font-size="10" fill="#FFFFFF" fill-opacity="0.55">Find shapes in this picture · Vision passes, Hough rims, region</text>
+        <text x="30" y="796" font-size="10" fill="#FFFFFF" fill-opacity="0.55">proposals at 1024 + 2048 · 74 / 69</text>
+      </g>
+      <g id="tile-1"><!-- RegisterShapeTile: ink tile, the 3:4 frame letterboxed (59.4 wide), the rectangle shape white 90 % where the picture holds it -->
+        <rect x="30" y="806" width="105.7" height="79.25" rx="7" fill="#101012"/>
+        <rect x="53.15" y="806" width="59.4" height="79.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="0.5"/>
+        <rect x="74" y="840" width="14" height="22" fill="#FFFFFF" fill-opacity="0.9"/>
+      </g>
+    </g>
+    </g>
+    <!-- Home indicator -->
+    <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFFFFF" fill-opacity="0.35"/>
+  </g>
+</svg>

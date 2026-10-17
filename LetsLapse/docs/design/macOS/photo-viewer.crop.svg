@@ -120,7 +120,7 @@
         <text x="744.8" y="85" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
         <text x="818.2" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
         <text x="891.8" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
-        <text x="965.2" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
+        <text x="965.2" y="85" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Regions</text>
       </g>
 
       <!-- EditorGroupBar (.macCard): a white card, padding 6, six 46 pt cells

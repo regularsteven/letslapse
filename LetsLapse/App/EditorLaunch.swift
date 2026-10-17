@@ -114,8 +114,12 @@ struct EditorPagingState: Equatable {
     static let hostSpace = "EditorPagerHost"
 
     /// True while a horizontal drag over the editor is the pager's to take:
-    /// the Editor page at fit scale with nothing open or armed.
+    /// any page at fit scale with nothing open, armed or being typed (the
+    /// Editor page alone until 2026-10-16).
     var canPage: Bool
+    /// The page on screen — the one a swipe carries to the next project, so
+    /// a person working through Text or Regions stays on it.
+    var page: RailTab = .editor
     /// The picture pane's frame in the host's space — the neighbours'
     /// posters are fitted into it, so a page turn hands over in place.
     var paneFrame: CGRect
