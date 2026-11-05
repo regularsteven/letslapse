@@ -1966,6 +1966,61 @@ PicPlace's older page back over a newer local one.
 
 ---
 
+### Sync: tags edited in the manifest alone, pulled with an older keyword list
+
+**Raised:** 2026-11-05 (Readia's LetsLapse page edits tags; Steven asked for
+the app side to be looked at) · **Status:** built 2026-11-05, uncommitted,
+on no device yet · **Size:** small · **UI:** none, so no design mirror applies
+
+A project's tags live twice: `capture.sceneTags` in the manifest (the sidebar,
+search, the index) and `edited.keywords` in `metadata.json` (the Gallery's Tags
+block, the batch panel, an export's `dc:subject`). A hand edit writes both
+(`setSceneTags` → `writeProjectKeywords`). A pull takes them from two places:
+the manifest from the server's row, `metadata.json` from the records bundle.
+
+A client that writes the manifest alone leaves them disagreeing. Readia does
+(its LetsLapse page, `ProjectTagWriter` in the Readia repo): it cannot write an
+Apple Archive. So does a device whose push stops between its PUT and its
+bundle. After the pull the two panels showed the old list, and the next add or
+remove there wrote that old list back over the edit.
+
+**Fix:** after either door a pull comes through (`registerPulledProject`,
+`applyPulledUpdate`), `AppModel.settleKeywordsAfterPull` makes the record's
+keywords follow the tags that arrived. The rule is `PulledKeywords.settled` in
+the Kit (`PulledKeywordsTests`, 7 cases):
+
+- the manifest wins, because a bundle only ever goes up inside a push that PUT
+  its manifest first, so the manifest is never the older of the two;
+- tags the silent pass chose are left alone (they were never keywords);
+- a project with no keywords in its record is left alone (the panels already
+  fall back to the manifest's list);
+- it is not an edit: `modifiedAt` stays the one that arrived, so the revision
+  is still the server's and nothing is pushed back. The stamp on the keywords
+  is the arriving edit's own (`modifiedAt`, `modifiedBy`).
+
+No change to the data model, the manifest or the API. An older build behaves
+as before.
+
+**Checked 2026-11-05** in the "LetsLapse Readia QA" Simulator against
+readia.test, on the throwaway project `qa-talk`, whose server bundle was given
+`edited.keywords: ["Lisbon"]`:
+
+- the build before the fix pulled a Readia edit (`Lisbon, broll`): manifest
+  `["Lisbon","broll"]`, record still `["Lisbon"]`;
+- this build pulled the next one (`Lisbon, broll, second`): the log's
+  `pull: 7EE16898 keywords follow the tags that arrived`, both lists equal,
+  base revision equal to `modifiedAt` in milliseconds, `0 queued to send`;
+- a launch after that pulled and sent nothing.
+
+Both runs also show the app taking a revision written by no device: the
+change feed carried it, and `updated_by` is null on the row.
+
+**Not done:** a device build. A frame-level keyword edit on a one-frame
+project (`single.edited`) is not settled. "No tags" still cannot be said over
+a file's own keywords, by a pull or by hand.
+
+---
+
 ### PicPlace: re-check the stored originals now and then (a scrub)
 
 **Raised:** 2026-09-24 (Steven: fine to add later, but note it and why it

@@ -10915,6 +10915,8 @@ final class AppModel: ObservableObject {
         validatedSourceFrames.remove(originID)
         dropHoldings(for: originID)
         assetStore.forget(projectFolder: captureFolderURL(for: originID))
+        // The bundle's keywords may be older than the manifest's tags.
+        settleKeywordsAfterPull(projectID: originID)
         return capture
     }
 
@@ -10963,6 +10965,8 @@ final class AppModel: ObservableObject {
         validatedSourceFrames.remove(projectID)
         noteFilesChanged(for: projectID)
         assetStore.forget(projectFolder: captureFolderURL(for: projectID))
+        // The bundle's keywords may be older than the manifest's tags.
+        settleKeywordsAfterPull(projectID: projectID)
         noteIndexChanged()
     }
 

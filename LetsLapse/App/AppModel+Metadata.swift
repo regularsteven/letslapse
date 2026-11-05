@@ -208,8 +208,10 @@ extension AppModel {
 
     /// Writes the project's keywords into the edited layer beside the
     /// manifest cache — `setSceneTags` calls this, so the tag editor and the
-    /// Keywords row are one field.
-    func writeProjectKeywords(_ keywords: [String], for capture: CaptureProject) {
+    /// Keywords row are one field. The stamp is this device's own, now, for
+    /// an edit made here; a pull passes the edit's own (`settleKeywordsAfterPull`).
+    func writeProjectKeywords(_ keywords: [String], for capture: CaptureProject,
+                              editedAt: Date = Date(), editedBy: UUID = DeviceIdentity.id) {
         let folder = projectFolderURL(for: capture)
         // Equal to what the file said → no edit to record; a revert.
         let sameAsImported = keywords == importedProjectKeywords(for: capture)
@@ -218,13 +220,41 @@ extension AppModel {
             edited.keywords = (keywords.isEmpty || sameAsImported) ? nil : keywords
             metadata.edited = edited.isEmpty ? nil : edited
             var stamps = metadata.editedAt ?? [:]
-            stamps[MetadataField.keywords.rawValue] = edited.keywords == nil ? nil : Date()
+            stamps[MetadataField.keywords.rawValue] = edited.keywords == nil ? nil : editedAt
             metadata.editedAt = stamps.isEmpty ? nil : stamps
             var devices = metadata.editedBy ?? [:]
-            devices[MetadataField.keywords.rawValue] = edited.keywords == nil ? nil : DeviceIdentity.id
+            devices[MetadataField.keywords.rawValue] = edited.keywords == nil ? nil : editedBy
             metadata.editedBy = devices.isEmpty ? nil : devices
         }
         metadataRevision += 1
+    }
+
+    /// After a pull has put the server's manifest and records bundle on this
+    /// device: the project record's keywords follow the tags that arrived,
+    /// where the two disagree (`PulledKeywords` in the Kit says when and why
+    /// — a manifest edited without its bundle, as Readia's LetsLapse page
+    /// does). Called by both doors a pull comes through,
+    /// `registerPulledProject` and `applyPulledUpdate`, after the record
+    /// cache has let go of what it held, so the read here is the bundle's.
+    ///
+    /// Not an edit: `modifiedAt` stays the one that arrived, so the
+    /// project's revision is still the server's and nothing is pushed back.
+    /// The record this leaves differs from the server's bundle until this
+    /// device next pushes the project for a reason of its own, which sends
+    /// it — every other device settles the same way in the meantime.
+    func settleKeywordsAfterPull(projectID: UUID) {
+        guard let capture = self.capture(id: projectID) else { return }
+        guard let keywords = PulledKeywords.settled(
+            pulledTags: capture.sceneTags,
+            taggedAutomatically: capture.sceneTaggedAutomatically == true,
+            edited: projectMetadata(for: capture)?.edited?.keywords,
+            imported: importedProjectKeywords(for: capture),
+            clean: Self.cleanedSceneTags
+        ) else { return }
+        writeProjectKeywords(keywords, for: capture,
+                             editedAt: capture.modifiedAt ?? Date(),
+                             editedBy: capture.modifiedBy ?? DeviceIdentity.id)
+        LLog("pull: \(capture.id.uuidString.prefix(8)) keywords follow the tags that arrived — \(keywords.isEmpty ? "none" : keywords.joined(separator: ", "))")
     }
 
     /// The project's keywords as its files said them: the project record's
