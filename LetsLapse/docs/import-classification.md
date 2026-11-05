@@ -413,3 +413,72 @@ LL_IMPORT_STILLS=<folder> [LL_IMPORT_ANSWER=shoot|photos|cancel] \
 - iPhone 16 Pro simulator (a throwaway device beside Steven's): both
   states as on the Mac — full-height sheet, buttons anchored above the home
   indicator. iPad not yet run.
+
+## 11. A drop on the Gallery (2026-11-05, Mac)
+
+Photos and videos dragged from the Finder onto the Gallery's grid are
+imported where they are dropped (`AppModel.importDropped`,
+`App/GalleryDropImport.swift`). It is the same import — the reading, the
+copy that keeps each file's name, the derived sidecars — through a second
+door, `ImportDoor.gallery`, which differs from Create's in three ways:
+
+- **It asks only when the photos could be a shoot.** Create's row asks about
+  every set of two or more (§4); a drop asks when
+  `Reading.mayBeShoot` — anything the reading does not call photos outright:
+  a clean run (*Interval shoot · Detected*), and every set the files
+  disagree about (§3.4's warnings — strangers, a short or slow beat,
+  RAW+JPEG pairs, a numbered set with no clock). A set the reading calls
+  photos — no beat anywhere, fewer than five files, names that say nothing —
+  becomes one photo project per file without a word. The bias is
+  deliberate: several hundred frames of a shoot landing as several hundred
+  projects costs far more than one question.
+- **Nothing opens.** A shoot is registered and left in the Gallery, not
+  taken into the blend flow; a photo batch does not move to the Projects
+  list; a video is one project per file, registered and left alone
+  (`registerImportedMovie` — Create's row goes on into the flow).
+- **Videos ride along.** `.mov`, `.mp4` and `.m4v` — loose, or directly
+  inside a dropped folder — import after the photos, one after another. A
+  `.lapse` archive in the drop goes through `openArchive` once the rest is
+  in. Cancel on the question cancels the whole drop.
+
+The Gallery shows it: a strip under the header carries the progress and then,
+for six seconds, what came in (*Imported 12 photos and 2 videos*); the grid
+scrolls to the first new tile; one project alone is selected; a filter or a
+search that hides everything just dropped is cleared. A drop that cannot be
+taken raises *Couldn't import*.
+
+Verified through the drop's own handler — `LL_GALLERY_DROP=<path>[:<path>…]`,
+with `LL_TAB=gallery`, a scratch root and auto-sync off as in §10 — on
+generated JPEGs stamped with EXIF capture times:
+
+- 6 unrelated photos (a folder) → `photos, not asked`, six `Photo · Imported`
+  projects at their own dates, the Gallery still up.
+- 2 photos + 2 movies (loose files) → not asked; *Imported 2 photos and 2
+  videos*; both movies plain Video tiles, no flow.
+- 30 frames 2.0 s apart (a folder) → the sheet, *Interval shoot · Detected ·
+  One project of 30 frames, 2.0 s apart*; Import → one `Interval · Imported`
+  project, no blends, selected in the grid.
+- 240 unrelated photos dropped under the Video filter → the strip counts
+  *Copying frame N of 240…*, then *Imported 240 photos* with the filter back
+  on All.
+- the shoot + a movie with `LL_IMPORT_ANSWER=cancel` → nothing made.
+- a `.txt` → *Nothing to import there. Drop photos, videos, or a folder
+  holding them.*
+- Create's rows, unchanged: `LL_IMPORT_STILLS` on the six photos still asks,
+  its batch still lands on Projects; `LL_IMPORT_VIDEO` still opens *New
+  blended clip*.
+
+Not run: a real drag from the Finder (the hook enters at the function the
+drop calls), and anything on iPad or iPhone, which do not take the drop yet.
+
+Steven signed the running Mac app off on 2026-11-05, with these calls as
+built: one project dropped is selected and several are not (a selection of
+several is batch mode, an edit surface); a filter or search hiding everything
+just dropped is cleared; RAW+JPEG pairs and numbered files with no clock ask;
+Cancel on the question imports nothing of the drop, its videos included; the
+strip's caption says "frame" for a batch of photos (Create's card's wording,
+shared); a drop on the sidebar or the preview pane is not taken — the grid
+column is the target. The mirrors, drawn the same evening from the Debug
+build at 1310×800: `design/macOS/gallery.drop.svg` (files held over the
+grid), `gallery.importing.svg` and `gallery.imported.svg` (the strip's two
+states).

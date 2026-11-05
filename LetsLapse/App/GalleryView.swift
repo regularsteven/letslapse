@@ -461,6 +461,10 @@ struct GalleryView: View {
         VStack(spacing: 0) {
             galleryHeader
             Divider()
+            #if os(macOS)
+            // An import in flight, and what a drop just brought in.
+            GalleryImportStrip()
+            #endif
             if let review {
                 AutoRenameReviewList(session: review)
                     .transition(.opacity)
@@ -479,7 +483,41 @@ struct GalleryView: View {
                 .transition(.opacity)
             }
         }
+        #if os(macOS)
+        // Photos and videos dragged from the Finder become projects here
+        // (GalleryDropImport.swift) — the header and the grid are one target.
+        .modifier(GalleryDropTarget(isEnabled: review == nil))
+        .onChange(of: model.galleryImportLanding) { _, landing in
+            if let landing { showImported(landing) }
+        }
+        #endif
     }
+
+    #if os(macOS)
+    /// A drop's projects, shown where they landed. The grid scrolls to the
+    /// first of them; one project alone is selected, so the pane says what
+    /// came in — several are not, because a selection of several is batch
+    /// mode, and a drop is not a request to edit anything. A filter or a
+    /// search that hides everything just dropped is cleared: what was dropped
+    /// on the grid ends on the grid.
+    private func showImported(_ landing: AppModel.GalleryImportLanding) {
+        let ids = landing.captureIDs
+        if focus == nil, review == nil, let first = ids.first {
+            let visible = Set(sortedIDs)
+            if !ids.contains(where: visible.contains) {
+                filter = .all
+                picplaceFilter = .all
+                shapeSelection = []
+                query = .empty
+            }
+            if ids.count == 1, !selection.showsSelectionHeader {
+                selection.select(only: first)
+            }
+            // A turn late: the grid has to have drawn the tile to scroll to.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { scrollTarget = first }
+        }
+    }
+    #endif
 
     /// The tile menu's Edit: the item view on the Mac (2026-09-13), the
     /// pager on iOS (2026-09-21).

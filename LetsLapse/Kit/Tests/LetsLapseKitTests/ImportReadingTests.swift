@@ -354,6 +354,25 @@ final class ImportReadingTests: XCTestCase {
         XCTAssertEqual(one.count, 1)
     }
 
+    // MARK: - A drop on the Gallery
+
+    /// A drop asks only when the set could be a shoot: a clean run and every
+    /// set the files disagree about do; photos come in without the question.
+    func testOnlyASetThatCouldBeAShootAsksOnADrop() {
+        XCTAssertTrue(read(charles.names, charles.times).mayBeShoot)
+        // A run with a stray file in it.
+        XCTAssertTrue(read(charles.names + ["cover.jpg"], charles.times + [nil]).mayBeShoot)
+        // A short clean sequence, and the same names with no clock at all.
+        let short = sequence("_WEX", from: 1, gaps: Array(repeating: 3.62, count: 9), startingAt: t0)
+        XCTAssertTrue(read(short.names, short.times).mayBeShoot)
+        XCTAssertTrue(read(short.names, short.names.map { _ in nil }).mayBeShoot)
+
+        var noise = Noise()
+        let snaps = sequence("IMG_", from: 1, gaps: (0..<39).map { _ in noise.uniform(5, 3600) }, startingAt: t0, ext: "JPG")
+        XCTAssertFalse(read(snaps.names, snaps.times).mayBeShoot)
+        XCTAssertFalse(read(Array(charles.names[..<3]), Array(charles.times[..<3])).mayBeShoot)
+    }
+
     // MARK: - Names
 
     func testStemAndTail() {

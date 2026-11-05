@@ -112,6 +112,16 @@ extension ImportedStills {
         /// which is what lets a slowly ramping interval stay one run.
         public static let window = 8
 
+        /// Whether the set could be a shoot — the question a drop on the
+        /// Gallery asks before it imports photos without a word. False only
+        /// for the set the reading calls photos outright: no beat anywhere,
+        /// too few files, names that say nothing. A clean run is one, and so
+        /// is every set the files disagree about (a run with strangers, a
+        /// short or slow beat, RAW+JPEG pairs, a numbered set with no clock):
+        /// several hundred frames of a shoot landing as several hundred
+        /// projects costs far more than one question does.
+        public var mayBeShoot: Bool { suggested != .photos }
+
         /// The strangers of every kind, in the order the set was given.
         public var strangerNames: [String] {
             var names: [String] = []

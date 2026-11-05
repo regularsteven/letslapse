@@ -8184,6 +8184,49 @@ final class AppModel: ObservableObject {
     /// showing it, so a headless import can be driven end to end.
     var stagedStillsImportAnswer: StillsImportQuestion.Answer?
 
+    /// Where an import of outside files started — which decides when it asks
+    /// and where it ends.
+    enum ImportDoor {
+        /// Create's rows, the share sheet, Open With. Two or more photos are
+        /// always asked about; a shoot opens in the blend flow, a batch lands
+        /// on the Projects list, one photo on its project screen.
+        case create
+        /// A drop on the Gallery. The files become projects where they were
+        /// dropped: asked about only when they could be a shoot
+        /// (`ImportedStills.Reading.mayBeShoot`), and nothing opens — no
+        /// blend flow, no other tab.
+        case gallery
+    }
+
+    /// What a drop on the Gallery made, for the Gallery to show: the grid
+    /// scrolls to it and the strip under the header says what came in. Nil
+    /// the rest of the time; the Gallery clears it.
+    @Published var galleryImportLanding: GalleryImportLanding?
+    /// A drop on the Gallery that could not be imported, or stopped part
+    /// way. Its own line rather than `errorMessage`, which only the Create
+    /// flow's screens show.
+    @Published var galleryImportFailure: String?
+
+    struct GalleryImportLanding: Identifiable, Equatable {
+        let id = UUID()
+        /// The projects made — photos (or the shoot) first, then videos, in
+        /// the order they were imported.
+        var captureIDs: [UUID] = []
+        var photos = 0
+        var videos = 0
+        /// The frames of the interval shoot, when the photos came in as one.
+        var shootFrames: Int?
+
+        /// "Imported 12 photos and 2 videos".
+        var line: String {
+            var parts: [String] = []
+            if let shootFrames { parts.append("an interval shoot of \(shootFrames) frames") }
+            if photos > 0 { parts.append(photos == 1 ? "1 photo" : "\(photos) photos") }
+            if videos > 0 { parts.append(videos == 1 ? "1 video" : "\(videos) videos") }
+            return "Imported " + parts.joined(separator: " and ")
+        }
+    }
+
     struct StillsImportQuestion: Identifiable, Equatable {
         enum Answer: String { case shoot, photos, cancel }
 
@@ -8262,7 +8305,33 @@ final class AppModel: ObservableObject {
             errorMessage = "No photos there. Choose image files, or a folder holding them."
             return
         }
-        mediaImport?.totalFrames = urls.count
+        _ = await importStillSet(urls, selection: selection, syntheticNames: syntheticNames, door: .create)
+    }
+
+    /// What became of a set of stills handed to `importStillSet`.
+    private enum StillsOutcome {
+        /// Cancel on the question sheet: nothing was copied.
+        case cancelled
+        /// The projects made — none when the import failed, which has been
+        /// said already — and whether they are one interval shoot.
+        case made([CaptureProject], asShoot: Bool)
+    }
+
+    /// Says an import failure where the person who started it is looking.
+    private func reportImportFailure(_ message: String, door: ImportDoor) {
+        switch door {
+        case .create: errorMessage = message
+        case .gallery: galleryImportFailure = message
+        }
+    }
+
+    /// The stills import proper, for both doors: reads `urls`, asks what
+    /// they are when the door's rule says to, copies, registers. The caller
+    /// holds the library-activity bracket and the progress card.
+    private func importStillSet(
+        _ urls: [URL], selection: [URL], syntheticNames: Set<String>, door: ImportDoor
+    ) async -> StillsOutcome {
+        mediaImport = MediaImportProgress(totalFrames: urls.count)
 
         // Header reads only — milliseconds per file, but 300 of them, and the
         // main actor is drawing the progress card.
@@ -8272,29 +8341,37 @@ final class AppModel: ObservableObject {
 
         // Two or more files are a question — a shoot, or a photo each — asked
         // with the files' reading in front of the person and answered on the
-        // sheet. One file is a photo and needs no asking.
+        // sheet. One file is a photo and needs no asking. A drop on the
+        // Gallery asks only when the files could be a shoot: photos dropped
+        // there are photos, and come in without a word.
         var kind: ImportedStills.Reading.Kind = .photos
         if sequence.count >= 2 {
             let reading = ImportedStills.reading(for: sequence, syntheticNames: syntheticNames)
-            let answer: StillsImportQuestion.Answer
-            if let staged = stagedStillsImportAnswer {
-                answer = staged
-            } else {
-                mediaImport = nil
-                stillsImportQuestion = StillsImportQuestion(
-                    reading: reading, count: sequence.count,
-                    folderName: Self.commonFolderName(of: sequence),
-                    formats: sequence.formatLabels, cameraName: sequence.cameraName,
-                    spanSeconds: sequence.elapsedSeconds)
-                answer = await withCheckedContinuation { continuation in
-                    stillsImportDecision = continuation
-                }
-                mediaImport = MediaImportProgress(totalFrames: sequence.count)
+            let asks = door == .create || reading.mayBeShoot
+            if door == .gallery {
+                LLog("drop: \(sequence.count) photos read as \(reading.suggested?.rawValue ?? "undecided") — \(asks ? "asking" : "photos, not asked")")
             }
-            switch answer {
-            case .cancel: return
-            case .shoot: kind = .shoot
-            case .photos: kind = .photos
+            if asks {
+                let answer: StillsImportQuestion.Answer
+                if let staged = stagedStillsImportAnswer {
+                    answer = staged
+                } else {
+                    mediaImport = nil
+                    stillsImportQuestion = StillsImportQuestion(
+                        reading: reading, count: sequence.count,
+                        folderName: Self.commonFolderName(of: sequence),
+                        formats: sequence.formatLabels, cameraName: sequence.cameraName,
+                        spanSeconds: sequence.elapsedSeconds)
+                    answer = await withCheckedContinuation { continuation in
+                        stillsImportDecision = continuation
+                    }
+                    mediaImport = MediaImportProgress(totalFrames: sequence.count)
+                }
+                switch answer {
+                case .cancel: return .cancelled
+                case .shoot: kind = .shoot
+                case .photos: kind = .photos
+                }
             }
         }
 
@@ -8303,8 +8380,7 @@ final class AppModel: ObservableObject {
         mediaImport?.totalBytes = totalBytes
 
         if kind == .photos, sequence.count >= 2 {
-            await importPhotoBatch(sequence, totalBytes: totalBytes)
-            return
+            return .made(await importPhotoBatch(sequence, totalBytes: totalBytes, door: door), asShoot: false)
         }
 
         let id = UUID()
@@ -8318,21 +8394,31 @@ final class AppModel: ObservableObject {
             mediaImport?.phase = .finishing
             let capture = try registerImportedStills(
                 sequence, id: id, relativeNames: relativeNames, selection: selection)
-            // A sequence goes straight into the blend flow — turning a shoot
-            // into a clip is what importing one is for. A single photo has no
-            // sequence to blend ("1 photos → one still" is not an offer), so it
-            // lands on its own project screen, where a Photo-mode capture does.
-            if capture.isPhotoCapture {
-                show(capture)
-            } else {
-                openCapture(capture)
+            switch door {
+            case .create:
+                // A sequence goes straight into the blend flow — turning a
+                // shoot into a clip is what importing one is for. A single
+                // photo has no sequence to blend ("1 photos → one still" is
+                // not an offer), so it lands on its own project screen, where
+                // a Photo-mode capture does.
+                if capture.isPhotoCapture {
+                    show(capture)
+                } else {
+                    openCapture(capture)
+                }
+            case .gallery:
+                // Dropped on the Gallery, it is in the Gallery: no flow, no
+                // other screen. The grid shows it (`galleryImportLanding`).
+                break
             }
+            return .made([capture], asShoot: !capture.isPhotoCapture)
         } catch {
             // A half-copied project folder is not a project. Nothing has been
             // written to the manifest yet, so removing the tree leaves the
             // library exactly as it was.
             try? FileManager.default.removeItem(at: root)
-            errorMessage = "Couldn't import those photos: \(error.localizedDescription)"
+            reportImportFailure("Couldn't import those photos: \(error.localizedDescription)", door: door)
+            return .made([], asShoot: false)
         }
     }
 
@@ -8349,8 +8435,11 @@ final class AppModel: ObservableObject {
     /// A failure stops the batch where it is and says how far it got — every
     /// project made before it is complete and stays. The batch lands on the
     /// Projects list filtered to photos, where the new projects sit at their
-    /// own capture dates.
-    private func importPhotoBatch(_ sequence: ImportedStills.Sequence, totalBytes: Int64) async {
+    /// own capture dates — or, dropped on the Gallery, stays there. Returns
+    /// the projects made.
+    private func importPhotoBatch(
+        _ sequence: ImportedStills.Sequence, totalBytes: Int64, door: ImportDoor
+    ) async -> [CaptureProject] {
         var made: [CaptureProject] = []
         var copiedBytes: Int64 = 0
         do {
@@ -8381,16 +8470,21 @@ final class AppModel: ObservableObject {
             // Said on Create, where the person still is — a batch that stopped
             // short does not move them to the list, or the line would be
             // shown to nobody.
-            errorMessage = made.isEmpty
-                ? "Couldn't import those photos: \(error.localizedDescription)"
-                : "Imported \(made.count) of \(sequence.count) photos, then: \(error.localizedDescription)"
+            reportImportFailure(
+                made.isEmpty
+                    ? "Couldn't import those photos: \(error.localizedDescription)"
+                    : "Imported \(made.count) of \(sequence.count) photos, then: \(error.localizedDescription)",
+                door: door)
             tagSerially(made)
-            return
+            return made
         }
         mediaImport?.phase = .finishing
-        requestedProjectsFilter = .photos
-        requestedTab = .projects
+        if door == .create {
+            requestedProjectsFilter = .photos
+            requestedTab = .projects
+        }
         tagSerially(made)
+        return made
     }
 
     /// The batch's Vision pass: one frame each, one after another, off the
@@ -8985,12 +9079,26 @@ final class AppModel: ObservableObject {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
         beginActivity(.importingArchive)
-        mediaImport = MediaImportProgress(phase: .reading, name: url.lastPathComponent)
         defer {
             mediaImport = nil
             endActivity(.importingArchive)
         }
 
+        do {
+            let capture = try await registerImportedMovie(url)
+            autoTagIfEnabled(capture)
+            openCapture(capture)
+        } catch {
+            errorMessage = "Couldn't import that video: \(error.localizedDescription)"
+        }
+    }
+
+    /// Copies one movie into the library and registers its project, behind
+    /// the progress card. Opens nothing — where the import ends is its
+    /// caller's: Create's row goes on into the blend flow, a drop on the
+    /// Gallery stays where it is. A failure leaves no folder behind.
+    private func registerImportedMovie(_ url: URL) async throws -> CaptureProject {
+        mediaImport = MediaImportProgress(phase: .reading, name: url.lastPathComponent)
         let byteCount = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
         let shotAt = await Self.movieCreationDate(of: url)
         mediaImport?.phase = .copying
@@ -9018,11 +9126,152 @@ final class AppModel: ObservableObject {
             // captured one describe themselves the same way.
             Task { [weak self] in await self?.refreshVideoMetadata(for: capture.id) }
             recordAssets(for: capture)
-            autoTagIfEnabled(capture)
-            openCapture(capture)
+            return capture
         } catch {
             try? FileManager.default.removeItem(at: root)
-            errorMessage = "Couldn't import that video: \(error.localizedDescription)"
+            throw error
+        }
+    }
+
+    // MARK: - A drop on the Gallery
+
+    /// Whether `url` is a movie an import takes — the three containers every
+    /// other reader in the app is written for.
+    nonisolated static func isImportableMovie(_ url: URL) -> Bool {
+        ["mov", "mp4", "m4v"].contains(url.pathExtension.lowercased())
+    }
+
+    /// The movies a dropped selection means: loose files as themselves, and
+    /// the movies directly inside a dropped folder — shallow, as the stills
+    /// walk is — in the Finder's own order, each once.
+    nonisolated static func expandMovieSelection(_ selection: [URL]) -> [URL] {
+        var found: [URL] = []
+        var seen = Set<String>()
+        for url in selection {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            else { continue }
+            let candidates: [URL] = isDirectory.boolValue
+                ? ((try? FileManager.default.contentsOfDirectory(
+                    at: url, includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])) ?? [])
+                    .filter(isImportableMovie)
+                    .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+                : (isImportableMovie(url) ? [url] : [])
+            for candidate in candidates {
+                let key = candidate.standardizedFileURL.resolvingSymlinksInPath().path
+                if seen.insert(key).inserted { found.append(candidate) }
+            }
+        }
+        return found
+    }
+
+    /// Files dropped on the Gallery: every photo and every video becomes a
+    /// project of its own, in the Gallery, where it was dropped.
+    ///
+    /// The same import the Create rows run — the EXIF reading, the copy that
+    /// keeps each file's name, the derived sidecars — with two differences,
+    /// both the point of the gesture. **Nothing opens**: no blend flow, no
+    /// project screen, no other tab; a video is registered and left alone
+    /// rather than taken into the flow as Create's row does. And **photos
+    /// are asked about only when they could be a shoot**
+    /// (`ImportedStills.Reading.mayBeShoot`) — the sheet's *Interval shoot*
+    /// makes one project of them, *Photos* one each, Cancel imports nothing
+    /// of the drop — where Create asks about every set.
+    ///
+    /// A `.lapse` archive dropped here goes through the door a double-click
+    /// in the Finder does, after whatever else was dropped with it. False
+    /// when nothing was taken: nothing importable, or an import under way.
+    @discardableResult
+    func importDropped(_ urls: [URL]) -> Bool {
+        let archives = urls.filter(ProjectArchive.isArchive)
+        let media = urls.filter { !ProjectArchive.isArchive($0) }
+        let stills = Self.expandStillSelection(media)
+        let movies = Self.expandMovieSelection(media)
+        guard !stills.isEmpty || !movies.isEmpty else {
+            guard !archives.isEmpty else {
+                galleryImportFailure = "Nothing to import there. Drop photos, videos, or a folder holding them."
+                return false
+            }
+            archives.forEach { openArchive(at: $0) }
+            return true
+        }
+        guard mediaImport == nil, stillsImportQuestion == nil, !preparingImport else {
+            galleryImportFailure = Self.importBusyMessage
+            return false
+        }
+        LLog("drop: \(stills.count) photo(s), \(movies.count) video(s) dropped on the Gallery")
+        galleryImportLanding = nil
+        // Claimed before the task starts, so a second drop a moment later is
+        // refused rather than run beside this one.
+        mediaImport = MediaImportProgress(totalFrames: stills.count)
+        Task {
+            await runDropImport(stills: stills, movies: movies, selection: media)
+            archives.forEach { openArchive(at: $0) }
+        }
+        return true
+    }
+
+    private func runDropImport(stills: [URL], movies: [URL], selection: [URL]) async {
+        let scoped = selection.filter { $0.startAccessingSecurityScopedResource() }
+        defer { scoped.forEach { $0.stopAccessingSecurityScopedResource() } }
+
+        beginActivity(.importingArchive)
+        defer {
+            mediaImport = nil
+            endActivity(.importingArchive)
+        }
+
+        var landing = GalleryImportLanding()
+        if !stills.isEmpty {
+            switch await importStillSet(stills, selection: selection, syntheticNames: [], door: .gallery) {
+            case .cancelled:
+                // Cancel on the sheet is the drop's Cancel: the videos that
+                // came with the photos stay where they were too.
+                LLog("drop: cancelled on the question — nothing imported")
+                return
+            case .made(let made, let asShoot):
+                landing.captureIDs += made.map(\.id)
+                if asShoot {
+                    landing.shootFrames = made.first?.sourceFileNames.count
+                } else {
+                    landing.photos = made.count
+                }
+            }
+        }
+
+        // One project a movie, one after another under the same card. A
+        // movie that will not come in is named and the rest carry on.
+        var videos: [CaptureProject] = []
+        var failures: [String] = []
+        for movie in movies {
+            do {
+                videos.append(try await registerImportedMovie(movie))
+            } catch {
+                LLog("drop: \(movie.lastPathComponent) failed — \(error.localizedDescription)")
+                failures.append("\(movie.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+        landing.captureIDs += videos.map(\.id)
+        landing.videos = videos.count
+        tagSerially(videos)
+
+        if let first = failures.first {
+            let line = failures.count == 1
+                ? "Couldn't import \(first)"
+                : "Couldn't import \(failures.count) videos — \(first)"
+            galleryImportFailure = [galleryImportFailure, line].compactMap { $0 }.joined(separator: "\n")
+        }
+        guard !landing.captureIDs.isEmpty else { return }
+        LLog("drop: \(landing.line)")
+        galleryImportLanding = landing
+        // The strip's line is a moment's confirmation, and goes by itself —
+        // here rather than in the Gallery, which may not be on screen when
+        // a long import ends.
+        let landed = landing.id
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            if self?.galleryImportLanding?.id == landed { self?.galleryImportLanding = nil }
         }
     }
 

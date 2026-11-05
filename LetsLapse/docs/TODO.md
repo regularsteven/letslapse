@@ -11,6 +11,54 @@ live inline.
 
 ## Open
 
+### Gallery drag and drop on iPad and iPhone
+
+**Detail:** [import-classification.md](import-classification.md) §11 ·
+**Raised:** 2026-11-05 (Steven: drop a video, an image, or a set of both on
+the Gallery and have each imported as a standalone photo or video capture —
+no blend screens, no suggested workflow; a set that looks like an interval
+shoot asks: a shoot, or N separate photos) · **the Mac is built — 2026-11-05,
+code first (both Steven's calls), signed off by him on the running app and
+mirrored the same evening** — `AppModel.importDropped` (the `.gallery`
+door of `importStillSet`; `registerImportedMovie` is the video import
+without the blend flow), `App/GalleryDropImport.swift` (the target and its
+highlight, the strip under the header, the alert),
+`ImportedStills.Reading.mayBeShoot` + its test, `LL_GALLERY_DROP`; mirrors
+`design/macOS/gallery.drop.svg`, `gallery.importing.svg` and
+`gallery.imported.svg`. Verified through the drop's handler on a scratch
+library (doc §11). Left:
+
+- **iPad and iPhone** (Steven: Mac only in this pass). The model side is
+  shared; the Gallery needs the target on its compact and iPad layouts, and
+  a drag from Photos carries picture data, not a file — stage it
+  (`NSItemProvider.loadFileRepresentation`) and send a RAW+JPEG pair through
+  `PhotoLibraryOriginals`, as the share sheet's door does. UI work: ask
+  design or code first, then mirror both platforms.
+- **No agent has made a real Finder drag.** `LL_GALLERY_DROP` hands paths to
+  the function the drop calls; the `dropDestination` delivery and the live
+  highlight are the API Create's video drop already uses, and were Steven's
+  to try on the running app.
+- **A large drop redraws the grid as it lands.** 240 photos took 12.9 s
+  with the grid showing them arrive and 7.4 s with a filter hiding them
+  (Debug build); `sample` shows the main thread busy throughout, in the
+  grid's bodies under every index move and progress tick. Fine at that
+  size. Measure a Release build and a 1,000-photo drop before deciding
+  whether the grid should hold still while an import runs.
+
+### Gallery mirrors (macOS) sit 6 pt high against the app on macOS 27
+
+**Raised:** 2026-11-05, measured while mirroring the Gallery drop (the ⚠️
+in the note at the top of `design/macOS/INDEX.md`). In the Debug build at
+1310×800 the grid column's top edge is at window y 32 and the header's
+divider at 86; every `design/macOS/gallery*.svg` draws 28 and 80 — a 28 pt
+title bar and a 52 pt header — so the first row of tiles is 6 pt lower in
+the app than in any Gallery mirror, past the contract's point or two. Not
+yet known: whether the 4 pt is the system's title bar (then every Mac
+mirror with a title bar carries it) and whether the 2 pt arrived with the
+header's sync pill. Measure one screen outside the Gallery first, then
+re-base the family together; the three drop mirrors are derived from
+`gallery.svg` and follow it.
+
 ### Editor pages after the 2026-10-16 consistency audit — what is left
 
 Shipped 2026-10-16 (code first, mirrors the same day): the Masks page is

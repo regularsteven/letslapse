@@ -1,0 +1,680 @@
+<svg viewBox="0 0 1350 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Gallery · the import strip, importing · 1310×800</title>
+  <desc>Mirrors App/GalleryDropImport.swift (GalleryImportStrip, the AppModel.mediaImport branch) under App/GalleryView.swift's header — gallery.svg while an import of outside files is running. Code first, Mac only; Steven signed off the running app on 2026-11-05 and this file was drawn the same day. THE STRIP is gridColumn's third child — galleryHeader, Divider, GalleryImportStrip, the grid — and draws nothing at all the rest of the time: 34 pt of row and a Divider, so the grid sits 35 pt lower while it is up and closes back when it goes. It is the Gallery's on the Mac only (#if os(macOS)). IMPORTING: an HStack(spacing: 10) padded 16 — the glyph (photo.stack for photos, film once the progress names a movie; 13 pt semibold, LL.accent), progress.caption at 13 pt on one line with middle truncation, the bar, and LLFormat.bytes(totalBytes) at 12 pt with monospaced digits in secondary, which is absent until the total is known. The bar is drawn, as Create's import card draws its own: two 5 pt Capsules, Color.primary at 12 % under LL.accent at fraction × width, eased over 0.25 s; it takes whatever the caption and the size leave, never less than 80 pt. The strip shows ANY import of outside files, whichever tab started it — the import is the library's and the Gallery is where its projects appear — so Create's rows raise it too; a drop is simply the one that starts here. MEASURED on the Debug build at 1310×800 (LL_TAB=gallery LL_SELECT=latest LL_GALLERY_DROP=&lt;a folder of 240 photos&gt;, a scratch library), at frame 99 of 240: the row 34 pt under the header's divider with its own divider below; the glyph 13.5 × 14.5 from 17.5 pt inside the column; the caption from 44 pt inside; the bar 490 × 5, its top 14.5 pt down the row, 202 pt of it filled; the size ending 16 pt inside the column's right edge; the first row of tiles 14 pt under the strip's divider, as it is under the header's without the strip. HERE the row is y 101–135, its divider 135–136, the content x 237–983 and the tiles from y 150. The caption counts frames for a batch of separate photos as well as for a shoot (MediaImportProgress's own words — the same line Create's card shows). The tiles arrive in the grid under the strip as each project registers; the sample grid here stands for a library mid-import. When the import ends the strip turns into gallery.imported.svg for six seconds; before it starts, a drop is gallery.drop.svg, and the one question a drop can ask is stills-import.question.svg (docs/import-classification.md §11). THE REST OF THE WINDOW is gallery.svg's, unchanged — the sidebar, the header, the sample grid with its first tile selected and the preview pane that selection raises; see that file's desc for the panes. This family draws a 28 pt title bar and a 52 pt header (divider at window y 80); the build measured here, on macOS 27, puts the column's top edge at window y 32 and the header's divider at 86 — noted in INDEX.md, not corrected in one file of the family alone.</desc>
+
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1310" height="800" rx="11"/></clipPath>
+    <clipPath id="grid"><rect x="221" y="136" width="778" height="684"/></clipPath>
+    <clipPath id="searchclip"><rect x="457" y="57" width="168" height="34"/></clipPath>
+    <clipPath id="t1"><rect x="235" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t2"><rect x="489" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t3"><rect x="743" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t4"><rect x="235" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t5"><rect x="489" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t6"><rect x="743" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t7"><rect x="235" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t8"><rect x="489" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t9"><rect x="743" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t10"><rect x="235" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t11"><rect x="489" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t12"><rect x="743" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="hero"><rect x="1014" y="70" width="302" height="150" rx="10"/></clipPath>
+
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
+    </linearGradient>
+    <linearGradient id="dawn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7E9AB8"/><stop offset="0.6" stop-color="#E4C39A"/><stop offset="1" stop-color="#F7E6C8"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9BB0C4"/><stop offset="1" stop-color="#D8C6AE"/>
+    </linearGradient>
+    <linearGradient id="fog" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C7CFD6"/><stop offset="1" stop-color="#8E9AA4"/>
+    </linearGradient>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#131A2A"/><stop offset="1" stop-color="#2E3348"/>
+    </linearGradient>
+    <linearGradient id="storm" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A5464"/><stop offset="1" stop-color="#A9A08E"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B7A272"/><stop offset="1" stop-color="#4E5A63"/>
+    </linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="7.5" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1310" height="800" fill="#F2F2F7"/>
+
+    <!-- Window chrome. The title is "Gallery", not "LetsLapse": GalleryView's
+         macOS branch sets .navigationTitle, which retitles the main Window. -->
+    <g id="titlebar">
+      <rect x="20" y="20" width="1310" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="675" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Gallery</text>
+    </g>
+
+    <!-- ================= SIDEBAR (GallerySidebar, fixed 200pt) ================= -->
+    <g id="sidebar">
+      <rect x="20" y="48" width="200" height="772" fill="#F2F2F7"/>
+
+      <text x="38" y="75" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">LIBRARY</text>
+
+      <!-- All (selected) -->
+      <rect x="24" y="81" width="192" height="31" rx="8" fill="#C36A00" fill-opacity="0.10"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.6" data-symbol="square.grid.2x2">
+        <rect x="41" y="90" width="6" height="6" rx="1.4"/><rect x="49" y="90" width="6" height="6" rx="1.4"/>
+        <rect x="41" y="98" width="6" height="6" rx="1.4"/><rect x="49" y="98" width="6" height="6" rx="1.4"/>
+      </g>
+      <text x="68" y="101" font-size="14" fill="#C36A00">All</text>
+
+      <!-- Photos -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="photo">
+        <rect x="40" y="124" width="16" height="12" rx="2"/><circle cx="45" cy="128.5" r="1.6"/>
+        <path d="M41 134 l5-4 4 3 3-2 3 3"/>
+      </g>
+      <text x="68" y="134" font-size="14" fill="#000">Photos</text>
+
+      <!-- Interval -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="square.stack">
+        <rect x="41" y="155" width="14" height="10" rx="2"/>
+        <path d="M42.5 168 h11 M44.5 171 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="167" font-size="14" fill="#000">Interval</text>
+
+      <!-- Video -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="film">
+        <rect x="40" y="189" width="16" height="12" rx="2"/>
+        <path d="M43.5 189 v12 M52.5 189 v12" stroke-width="1.1" opacity="0.8"/>
+      </g>
+      <text x="68" y="200" font-size="14" fill="#000">Video</text>
+
+      <line x1="32" y1="231" x2="208" y2="231" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- PICPLACE (2026-09-26 — connected asset states plan §14, glyphs §16): GallerySidebar.picplaceSection,
+           only in a library connected to PicPlace (a library never connected has no section, and its tiles' pills
+           show only the layers or a slashed camera — never a camera for originals here, never a cloud).
+           LLSectionHeader "PicPlace", then one LibraryFilterRow per PicPlaceFilter, each with its count over what
+           the kind, tags, words and shapes leave (All has none). The glyph is the filter's own status glyph
+           (PicPlaceFilter.statusGlyph → StatusGlyphView, 13 pt semibold, a 20 pt column centred at x 48) in the
+           light palette, and it keeps its colours when the row is lit — selection shows on the label and the
+           capsule alone: All square.grid.2x2 neutral #48484A · On this device camera.fill green #248A3D ·
+           Download available camera.fill grey #AEAEB2 · Not available to download the camera with a slash
+           knocked through, grey · Needs uploading icloud.and.arrow.up.fill neutral, the arrow knocked out ·
+           Has blends square.3.layers.3d, the outline, neutral · Syncing / Needs attention the same cloud in
+           LL.accent (the amber of a light surface). Glyph paths: holdings-pill.make.py's 24 grid, scaled.
+           Label 14 pt at x 68, WRAPPING rather than truncating (.fixedSize vertical) — a label gets
+           164 − 20 − 3 × 10 − the count's width, so four of the seven take two lines (CoreText, SF Pro 14);
+           the count 12 pt monospaced digits, secondary, trailing at x 202 on the first line's baseline.
+           Row = 7 + 17 per line + 7, 2 apart, as the Library rows above. The filter starts on All, so both
+           All rows are lit. The counts are this file's fourteen projects as their pills draw them (grid below,
+           components/gallery-filmstrip.*): 11 here · 2 on PicPlace only · 1 nowhere · 5 not backed up (the
+           upload under way included) · 3 with blends · 1 moving · 1 with its working copy here (stage 5). While the status sweep's first walk runs,
+           "Checking N of M projects…" (11 pt secondary, 18 in, 4 under the last row) follows — not drawn. -->
+      <g id="picplace-filters">
+      <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">PICPLACE</text>
+      <!-- All: row 270–301 -->
+      <rect x="24" y="270" width="192" height="31" rx="8" fill="#C36A00" fill-opacity="0.10"/>
+      <g fill="none" stroke="#48484A" stroke-width="1.4" data-symbol="square.grid.2x2"><rect x="42.65" y="279.65" width="3.9" height="3.9" rx="1.1"/><rect x="49.45" y="279.65" width="3.9" height="3.9" rx="1.1"/><rect x="42.65" y="286.45" width="3.9" height="3.9" rx="1.1"/><rect x="49.45" y="286.45" width="3.9" height="3.9" rx="1.1"/></g>
+      <text x="68" y="290" font-size="14" fill="#C36A00">All</text>
+      <!-- On this device: row 303–334 -->
+      <g transform="translate(38.40,308.04) scale(0.8)" data-symbol="camera.fill"><path fill="#248A3D" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g>
+      <text x="68" y="323" font-size="14" fill="#000">On this device</text>
+      <text x="202" y="323" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">11</text>
+      <!-- Working copy here: row 336–367 (stage 5, 2026-10-04 — .asset(.workingCopy, .here): the green picture;
+           the originals are not here, their full-size graded copy is) -->
+      <g transform="translate(38.40,341.04) scale(0.8)" data-symbol="photo.fill"><mask id="pp-knock-picture" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M4.6 16.6L9.2 11.4L12.4 14.8L15.2 12.2L19.4 16.6Z" fill="#000000"/><circle cx="16.3" cy="8.9" r="1.8" fill="#000000"/></mask><path d="M4.2 4.5H19.8A2.2 2.2 0 0 1 22 6.7V17.3A2.2 2.2 0 0 1 19.8 19.5H4.2A2.2 2.2 0 0 1 2 17.3V6.7A2.2 2.2 0 0 1 4.2 4.5Z" fill="#248A3D" mask="url(#pp-knock-picture)"/></g>
+      <text x="68" y="356" font-size="14" fill="#000">Working copy here</text>
+      <text x="202" y="356" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
+      <!-- Download available: row 369–417 -->
+      <g transform="translate(38.40,374.04) scale(0.8)" data-symbol="camera.fill"><path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g>
+      <text x="68" y="389" font-size="14" fill="#000">Download</text>
+      <text x="68" y="406" font-size="14" fill="#000">available</text>
+      <text x="202" y="389" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">2</text>
+      <!-- Not available to download: row 419–467 -->
+      <g transform="translate(38.40,424.04) scale(0.8)" data-symbol="camera.fill + a slash knocked through (no SF camera.slash)"><mask id="pp-knock-camera" maskUnits="userSpaceOnUse" x="0" y="33" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M3 2.4L21 21.6" stroke="#000000" stroke-width="5" stroke-linecap="round"/></mask><g mask="url(#pp-knock-camera)"><path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g><path d="M3 2.4L21 21.6" stroke="#AEAEB2" stroke-width="2.3" stroke-linecap="round"/></g>
+      <text x="68" y="439" font-size="14" fill="#000">Not available to</text>
+      <text x="68" y="456" font-size="14" fill="#000">download</text>
+      <text x="202" y="439" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
+      <!-- Needs uploading: row 469–517 -->
+      <g transform="translate(38.64,474.84) scale(0.79)" data-symbol="icloud.and.arrow.up.fill"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#48484A"/><path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="68" y="489" font-size="14" fill="#000">Needs</text>
+      <text x="68" y="506" font-size="14" fill="#000">uploading</text>
+      <text x="202" y="489" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">5</text>
+      <!-- Has blends: row 519–550 -->
+      <g transform="translate(38.88,525.18) scale(0.76)" data-symbol="square.3.layers.3d" fill="none" stroke="#48484A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.2L20.8 8L12 12.8L3.2 8Z"/><path d="M3.2 11.6L12 16.4L20.8 11.6"/><path d="M3.2 15.2L12 20L20.8 15.2"/></g>
+      <text x="68" y="539" font-size="14" fill="#000">Has blends</text>
+      <text x="202" y="539" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">3</text>
+      <!-- Syncing / Needs attention: row 552–600 -->
+      <g transform="translate(38.64,557.84) scale(0.79)" data-symbol="icloud.and.arrow.up.fill"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#C36A00"/><path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="68" y="572" font-size="14" fill="#000">Syncing / Needs</text>
+      <text x="68" y="589" font-size="14" fill="#000">attention</text>
+      <text x="202" y="572" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
+      </g>
+
+      <line x1="32" y1="620" x2="208" y2="620" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- TAGS, COLLECTIONS and SHAPES as before, 389 pt lower (2026-09-26; +33 on 2026-10-04 for the
+           Working copy here row): the PICPLACE section above them ends at 600. COLLECTIONS and SHAPES now
+           scroll under the window edge. -->
+      <g transform="translate(0,389)">
+      <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">TAGS</text>
+
+      <circle cx="37.5" cy="288" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="293" font-size="14" fill="#000">Water</text>
+      <circle cx="37.5" cy="319" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="324" font-size="14" fill="#000">Sky &amp; weather</text>
+      <circle cx="37.5" cy="350" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="355" font-size="14" fill="#000">Urban</text>
+      <circle cx="37.5" cy="381" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="386" font-size="14" fill="#000">Landmark</text>
+      <!-- 2026-09-08: a hand-typed tag is a first-class member of this list. Today
+           SceneSearch.availableTags filters the library's tags through
+           SceneMetadata.orderedTaxonomy, which would drop it silently — that filter
+           has to widen with the editor, or a tag the user created is searchable and
+           invisible here. -->
+      <circle cx="37.5" cy="412" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="417" font-size="14" fill="#000">Rooftops</text>
+
+      <line x1="32" y1="447" x2="208" y2="447" stroke="#000" stroke-opacity="0.10"/>
+
+      <text x="38" y="480" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">COLLECTIONS</text>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="rectangle.stack">
+        <rect x="41" y="494" width="14" height="10" rx="2"/>
+        <path d="M42.5 507 h11 M44.5 510 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="506" font-size="14" fill="#000">All Collections</text>
+
+      <line x1="32" y1="537" x2="208" y2="537" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- SHAPES (2026-09-11): GallerySidebar.shapesSection — the four ShapeFilter rows,
+           drawn as LibraryFilterRow like the kind rows above. A project shows under
+           Ellipse / Rectangle / Square when its shapes.json register holds one (found by
+           Find shapes or drawn in the Masks tab) and under No Shapes when it holds none or
+           has no register. Rows narrow like the tag rows (a project must hold every lit
+           shape); No Shapes stands alone — lighting it clears the others. A lit row draws
+           as All does above: #C36A00 @ 10% capsule (x 24, 192×31, rx 8), accent glyph and
+           label; while any row is lit a 12pt semibold "Clear shapes" link in #C36A00 sits
+           14pt in, 4pt under the last row. All four rows are always offered — an empty row
+           is the prompt to run Find shapes, not a dead control. -->
+      <text x="38" y="570" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">SHAPES</text>
+
+      <!-- Ellipse -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="oval">
+        <ellipse cx="48" cy="591" rx="8" ry="5.5"/>
+      </g>
+      <text x="68" y="596" font-size="14" fill="#000">Ellipse</text>
+
+      <!-- Rectangle -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="rectangle">
+        <rect x="40" y="618.5" width="16" height="11" rx="2"/>
+      </g>
+      <text x="68" y="629" font-size="14" fill="#000">Rectangle</text>
+
+      <!-- Square -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="square">
+        <rect x="42" y="650.5" width="12" height="12" rx="2"/>
+      </g>
+      <text x="68" y="662" font-size="14" fill="#000">Square</text>
+
+      <!-- No Shapes -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="circle.slash">
+        <circle cx="48" cy="690" r="7"/>
+        <path d="M43 685 L53 695"/>
+      </g>
+      <text x="68" y="695" font-size="14" fill="#000">No Shapes</text>
+      </g>
+    </g>
+
+    <line x1="220.5" y1="48" x2="220.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= HEADER (galleryHeader, 52pt) ================= -->
+    <g id="header">
+      <!-- sidebar toggle, accent because showSidebar is true -->
+      <rect x="237" y="58" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.7" data-symbol="sidebar.left">
+        <rect x="245" y="66" width="16" height="16" rx="2.6"/>
+        <path d="M251 66 v16"/>
+      </g>
+
+      <text x="302.5" y="81" font-size="20" class="b" fill="#000">Gallery</text>
+
+      <!-- search · sort · zoom · Timeline, 42pt left of where they sat before the
+           sync pill joined the row (the two Spacers gave up 21 each) -->
+      <g transform="translate(-42,0)">
+      <!-- SceneSearchField, fixed 190pt. The placeholder is longer than the
+           field and clips — drawn as it renders. -->
+      <rect x="446" y="57" width="190" height="34" rx="17" fill="#000" fill-opacity="0.06"/>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.9" data-symbol="magnifyingglass">
+        <circle cx="459.5" cy="73" r="4.6"/><path d="M463 76.5 l3.5 3.5" stroke-linecap="round"/>
+      </g>
+      <g clip-path="url(#searchclip)">
+        <text x="475" y="79" font-size="15" fill="#6D6D72">Search titles, tags, in frame</text>
+      </g>
+
+      <!-- sort: menu capsule + direction button -->
+      <rect x="646" y="60" width="84" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+      <text x="655" y="79" font-size="13" class="m" fill="#C36A00">Capture</text>
+      <path d="M712 71 l4.5 5 4.5-5" fill="none" stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+      <rect x="734" y="60" width="28" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+      <path d="M743 70 h10 l-5 8 z" fill="#C36A00" data-symbol="arrowtriangle.down.fill"/>
+
+      <!-- zoom cluster: 2×2 glyph, 80pt Slider, 3×3 glyph -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.3" data-symbol="square.grid.2x2">
+        <rect x="772" y="69" width="4.6" height="4.6" rx="1"/><rect x="779.4" y="69" width="4.6" height="4.6" rx="1"/>
+        <rect x="772" y="76.4" width="4.6" height="4.6" rx="1"/><rect x="779.4" y="76.4" width="4.6" height="4.6" rx="1"/>
+      </g>
+      <rect x="788" y="72" width="80" height="4" rx="2" fill="#000" fill-opacity="0.14"/>
+      <!-- Never .tint()ed, so the filled track is system blue, not LL.accent. -->
+      <rect x="788" y="72" width="20" height="4" rx="2" fill="#0A6FD8"/>
+      <circle cx="808" cy="74" r="8" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.1" data-symbol="square.grid.3x3">
+        <rect x="872" y="68" width="3.1" height="3.1" rx="0.7"/><rect x="876.5" y="68" width="3.1" height="3.1" rx="0.7"/><rect x="881" y="68" width="3.1" height="3.1" rx="0.7"/>
+        <rect x="872" y="72.5" width="3.1" height="3.1" rx="0.7"/><rect x="876.5" y="72.5" width="3.1" height="3.1" rx="0.7"/><rect x="881" y="72.5" width="3.1" height="3.1" rx="0.7"/>
+        <rect x="872" y="77" width="3.1" height="3.1" rx="0.7"/><rect x="876.5" y="77" width="3.1" height="3.1" rx="0.7"/><rect x="881" y="77" width="3.1" height="3.1" rx="0.7"/>
+      </g>
+
+      <!-- Timeline toggle, OFF: .buttonStyle(.bordered) unfilled -->
+      <rect x="894" y="62" width="89" height="24" rx="6" fill="#000" fill-opacity="0.06"/>
+      <rect x="894" y="62" width="89" height="24" rx="6" fill="none" stroke="#000" stroke-opacity="0.10"/>
+      <g fill="none" stroke="#000" stroke-width="1.4" data-symbol="calendar">
+        <rect x="902" y="68" width="12" height="11" rx="2"/><path d="M902 71.5 h12 M905.5 66.5 v3 M910.5 66.5 v3"/>
+      </g>
+      <text x="920" y="78" font-size="13" fill="#000">Timeline</text>
+      </g>
+
+      <!-- SYNC PILL (2026-09-15) — the Projects header's ProjectSharingChip, to the
+           right of Timeline (Steven): green serving / red not / amber failed; it opens
+           the "Project Syncing" sheet (../iOS/projects.sharing.portrait.svg — on the
+           Mac a fixed 360×620 panel: PicPlace over nearby devices) over the model's
+           one ProjectTransferServer. The row is a ViewThatFits since the pill
+           joined: this full row where it fits, else a tighter one with no zoom
+           slider and Timeline as a 32pt glyph. -->
+      <g id="sync-pill" data-symbol="antenna.radiowaves.left.and.right">
+        <circle cx="967" cy="74" r="16" fill="#34C759" fill-opacity="0.12"/>
+        <circle cx="967" cy="74" r="15.5" fill="none" stroke="#34C759" stroke-opacity="0.35"/>
+        <g stroke="#34C759" stroke-width="1.6" fill="none" stroke-linecap="round">
+          <path d="M960.5 69.5 a5 5 0 0 0 0 9 M973.5 69.5 a5 5 0 0 1 0 9"/>
+          <path d="M963.5 72.5 a2 2 0 0 0 0 3 M970.5 72.5 a2 2 0 0 1 0 3"/>
+          <path d="M967 75 v4.5"/>
+        </g>
+      </g>
+    </g>
+
+    <line x1="221" y1="100.5" x2="999" y2="100.5" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= GRID (GalleryGridContent.standardGrid) ================= -->
+    <g id="grid" clip-path="url(#grid)">
+      <!-- every tile, badge and pill 35 pt lower: the strip (34) and its Divider (1) -->
+      <g transform="translate(0,35)">
+
+      <!-- row 1 -->
+      <g clip-path="url(#t1)">
+        <rect x="235" y="115" width="242" height="181.5" fill="url(#dusk)"/>
+        <path d="M235 232 h242 v64.5 h-242 z" fill="#3B4450" opacity="0.85"/>
+        <path d="M235 226 l30-8 26 5 34-12 30 7 40-10 34 9 48-6 v22 h-242 z" fill="#2A3140"/>
+        <rect x="255" y="248" width="150" height="4" rx="2" fill="#E7B478" opacity="0.45"/>
+        <rect x="285" y="262" width="120" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
+      </g>
+      <g clip-path="url(#t2)">
+        <rect x="489" y="115" width="242" height="181.5" fill="url(#dawn)"/>
+        <path d="M489 244 h242 v52.5 h-242 z" fill="#7C8698" opacity="0.8"/>
+        <path d="M540 244 v-46 h14 v-16 h10 v16 h14 v46 z" fill="#5D6675"/>
+        <path d="M489 250 h242 v6 h-242 z" fill="#4E576A"/>
+      </g>
+      <g clip-path="url(#t3)">
+        <rect x="743" y="115" width="242" height="181.5" fill="url(#roof)"/>
+        <path d="M743 210 l40-26 40 26 z" fill="#A5613F"/>
+        <path d="M803 226 l46-30 46 30 z" fill="#93553A"/>
+        <path d="M869 216 l44-28 44 28 z" fill="#AA6844"/>
+        <rect x="743" y="248" width="242" height="48.5" fill="#C8B79E"/>
+      </g>
+
+      <!-- row 2 -->
+      <g clip-path="url(#t4)">
+        <rect x="235" y="308.5" width="242" height="181.5" fill="url(#fog)"/>
+        <path d="M235 420 h242 v70 h-242 z" fill="#7A858F" opacity="0.6"/>
+        <ellipse cx="330" cy="424" rx="120" ry="16" fill="#DCE3E8" opacity="0.55"/>
+        <ellipse cx="410" cy="450" rx="140" ry="14" fill="#CBD4DB" opacity="0.5"/>
+      </g>
+      <g clip-path="url(#t5)">
+        <rect x="489" y="308.5" width="242" height="181.5" fill="url(#night)"/>
+        <rect x="489" y="424" width="242" height="66" fill="#0E1220"/>
+        <rect x="500" y="440" width="220" height="5" rx="2.5" fill="#FFD98A" opacity="0.85"/>
+        <rect x="512" y="456" width="200" height="4" rx="2" fill="#FF8A6A" opacity="0.7"/>
+        <rect x="528" y="470" width="170" height="3" rx="1.5" fill="#FFC46A" opacity="0.5"/>
+      </g>
+      <g clip-path="url(#t6)">
+        <rect x="743" y="308.5" width="242" height="181.5" fill="url(#storm)"/>
+        <ellipse cx="820" cy="352" rx="90" ry="22" fill="#39414E" opacity="0.7"/>
+        <ellipse cx="920" cy="342" rx="70" ry="18" fill="#333B47" opacity="0.6"/>
+        <rect x="743" y="440" width="242" height="50" fill="#8E8571"/>
+      </g>
+
+      <!-- row 3 -->
+      <g clip-path="url(#t7)">
+        <rect x="235" y="502" width="242" height="181.5" fill="url(#dusk)"/>
+        <ellipse cx="356" cy="580" rx="110" ry="20" fill="#F0C489" opacity="0.5"/>
+        <rect x="235" y="612" width="242" height="71.5" fill="#5A4B3E"/>
+      </g>
+      <g clip-path="url(#t8)">
+        <rect x="489" y="502" width="242" height="181.5" fill="url(#night)"/>
+        <circle cx="560" cy="546" r="3" fill="#FFF" opacity="0.7"/><circle cx="618" cy="530" r="2.2" fill="#FFF" opacity="0.6"/>
+        <circle cx="676" cy="558" r="2.6" fill="#FFF" opacity="0.5"/>
+        <rect x="489" y="614" width="242" height="69.5" fill="#0C1018"/>
+        <rect x="505" y="630" width="86" height="4" rx="2" fill="#7FD4FF" opacity="0.55"/>
+      </g>
+      <g clip-path="url(#t9)">
+        <rect x="743" y="502" width="242" height="181.5" fill="url(#water)"/>
+        <rect x="743" y="592" width="242" height="91.5" fill="#4A555E"/>
+        <rect x="765" y="606" width="180" height="5" rx="2.5" fill="#C7A874" opacity="0.5"/>
+        <rect x="785" y="624" width="140" height="4" rx="2" fill="#B79A6B" opacity="0.4"/>
+      </g>
+
+      <!-- row 4, scrolling in under the tab bar -->
+      <g clip-path="url(#t10)"><rect x="235" y="695.5" width="242" height="181.5" fill="url(#dawn)"/></g>
+      <g clip-path="url(#t11)"><rect x="489" y="695.5" width="242" height="181.5" fill="url(#roof)"/></g>
+      <g clip-path="url(#t12)"><rect x="743" y="695.5" width="242" height="181.5" fill="url(#fog)"/></g>
+
+      <!-- shoot-type badges (MediaBadge, bottom-leading, 6pt padding) -->
+      <g id="type-badges" font-size="11.5" fill="#FFFFFF" class="sb">
+        <rect x="241" y="266.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="282" text-anchor="middle">Interval</text>
+        <rect x="495" y="266.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="525" y="282" text-anchor="middle">Interval</text>
+        <rect x="749" y="266.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="774" y="282" text-anchor="middle">Video</text>
+
+        <rect x="241" y="460" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="475.5" text-anchor="middle">Interval</text>
+        <rect x="495" y="460" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="520" y="475.5" text-anchor="middle">Video</text>
+        <rect x="749" y="460" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="775" y="475.5" text-anchor="middle">Photo</text>
+
+        <rect x="241" y="653.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="669" text-anchor="middle">Interval</text>
+        <rect x="495" y="653.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="525" y="669" text-anchor="middle">Interval</text>
+        <rect x="749" y="653.5" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="775" y="669" text-anchor="middle">Photo</text>
+      </g>
+
+      <!-- "N clips" badges (amber, top-trailing, only where blends ≥ 2) -->
+      <g id="clip-badges" font-size="11.5" fill="#FFB340" class="sb">
+        <rect x="410" y="121" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="136.5" text-anchor="middle">3 clips</text>
+        <rect x="410" y="314.5" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="330" text-anchor="middle">2 clips</text>
+        <rect x="410" y="508" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="523.5" text-anchor="middle">4 clips</text>
+      </g>
+
+      <!-- HOLDINGS PILLS (2026-09-26 — plan §12, glyphs §16): GalleryTile's .overlay(alignment: .bottomTrailing)
+           { HoldingsPill(captureID:).padding(6) } — components/holdings-pill.<state>.svg, 18 high, placed at
+           x = tileMaxX − 6 − W, y = tileMaxY − 24 (W = the file's width). Edit holdings-pill.make.py, never these.
+           The same fourteen projects as the filmstrip components and the sidebar's counts: t1 both.safe (River Sunset
+           to Dusk — photos and its three blends here, backed up), t2 here.uploading, t3 here.needs, t4 both.needs
+           (a new blend not up), t5 here.safe, t6 here.needs, t7 there.blend-here.safe (the originals removed here,
+           the four blends kept), t8 there.safe (a preview — the tick stays), t9 here.safe; row 4's pills fall under
+           the window edge (t10 here.safe, t11 here.needs, t12 here.safe), t13 here.safe and t14 nowhere.originals
+           below the fold. -->
+      <g id="holdings-pills">
+        <image href="../components/holdings-pill.both.safe.svg" x="410.7" y="272.5" width="60.3" height="18"/><!-- t1 -->
+        <image href="../components/holdings-pill.here.uploading.svg" x="679" y="272.5" width="46" height="18"/><!-- t2 -->
+        <image href="../components/holdings-pill.here.needs.svg" x="933" y="272.5" width="46" height="18"/><!-- t3 -->
+        <image href="../components/holdings-pill.both.needs.svg" x="410.7" y="466" width="60.3" height="18"/><!-- t4 -->
+        <image href="../components/holdings-pill.here.safe.svg" x="679" y="466" width="46" height="18"/><!-- t5 -->
+        <image href="../components/holdings-pill.here.needs.svg" x="933" y="466" width="46" height="18"/><!-- t6 -->
+        <image href="../components/holdings-pill.there.blend-here.safe.svg" x="410.7" y="659.5" width="60.3" height="18"/><!-- t7 -->
+        <image href="../components/holdings-pill.there.safe.svg" x="679" y="659.5" width="46" height="18"/><!-- t8 -->
+        <image href="../components/holdings-pill.here.safe.svg" x="933" y="659.5" width="46" height="18"/><!-- t9 -->
+      </g>
+
+      <!-- selection: 2.5pt accent strokeBorder, inset on the tile's own radius -->
+      <rect x="236.25" y="116.25" width="239.5" height="179" rx="8" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+      </g>
+    </g>
+
+    <!-- ================= IMPORT STRIP, importing (GalleryImportStrip while AppModel.mediaImport != nil) =================
+         HStack(spacing: 10), .padding(.horizontal, 16), .frame(height: 34), then a Divider: y 101–135 + 135–136.
+         Content runs x 237–983. -->
+    <g id="import-strip" data-state="importing" data-accessibility-id="gallery.import.progress">
+      <!-- photo.stack for photos (progress.name == nil), film for a video: 13 pt semibold, LL.accent -->
+      <g transform="translate(235.9,108.8) scale(0.78)" data-symbol="photo.stack"><rect x="3" y="7" width="14" height="12" rx="2" fill="none" stroke="#C36A00" stroke-width="2" stroke-linejoin="round"/><path d="M7 4h12a2 2 0 0 1 2 2v9M3 16l4-4 3 3 3-4 4 5" fill="none" stroke="#C36A00" stroke-width="2" stroke-linejoin="round"/></g>
+      <!-- progress.caption, 13 pt, one line, middle truncation -->
+      <text x="265" y="122.3" font-size="13" fill="#000" textLength="160" lengthAdjust="spacingAndGlyphs">Copying frame 99 of 240…</text>
+      <!-- the bar, drawn (the system linear bar fills control grey on the Mac whatever the tint says):
+           5 pt Capsules, Color.primary at 12 % under LL.accent at fraction × width; it takes the room the
+           caption and the size leave (minWidth 80) — 490 pt here, 99 / 240 of it filled -->
+      <rect x="436" y="115.5" width="490" height="5" rx="2.5" fill="#000" fill-opacity="0.12"/>
+      <rect x="436" y="115.5" width="202" height="5" rx="2.5" fill="#C36A00"/>
+      <!-- LLFormat.bytes(progress.totalBytes): 12 pt monospaced digits, secondary; absent while the total is 0 -->
+      <text x="936.5" y="122.3" font-size="12" class="mono" fill="#6D6D72" textLength="46" lengthAdjust="spacingAndGlyphs">17,2 MB</text>
+      <line x1="221" y1="135.5" x2="999" y2="135.5" stroke="#000" stroke-opacity="0.10"/>
+    </g>
+
+    <!-- ================= PREVIEW PANEL (GalleryPreviewPanel, fixed 300pt) ================= -->
+    <line x1="999.5" y1="48" x2="999.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
+    <g id="preview">
+      <rect x="1000" y="48" width="330" height="772" fill="#FFFFFF"/>
+
+      <g clip-path="url(#hero)">
+        <rect x="1014" y="70" width="302" height="150" fill="url(#dusk)"/>
+        <path d="M1014 166 h302 v54 h-302 z" fill="#3B4450" opacity="0.85"/>
+        <path d="M1014 160 l34-9 30 6 38-13 34 8 45-11 38 10 53-7 v16 h-302 z" fill="#2A3140"/>
+        <rect x="1036" y="182" width="170" height="5" rx="2.5" fill="#E7B478" opacity="0.45"/>
+        <rect x="1070" y="198" width="136" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
+      </g>
+
+      <text x="1014" y="248" font-size="16" class="b" fill="#000">River Sunset to Dusk</text>
+      <text x="1014" y="266" font-size="12" fill="#6D6D72">Aug 20, 2026</text>
+      <text x="1090" y="266" font-size="12" fill="#000" fill-opacity="0.3">·</text>
+      <text x="1099" y="266" font-size="12" fill="#6D6D72">4,8 GB</text>
+
+      <!-- Action grid (redrawn 2026-09-13 as shipped since 2026-09-11): Open alone
+           on top, filled; then one row of equal buttons — Edit, Text, Shapes (photo
+           projects only — a still has masks to edit) and New clip (never on a Photo
+           capture, which is one asset). Each is 57pt tall, rx 9, a 16pt medium
+           glyph over an 11pt medium label; 8pt gaps. -->
+      <g id="actions">
+        <rect x="1014" y="286" width="302" height="57" rx="9" fill="#C36A00"/>
+        <g fill="none" stroke="#FFFFFF" stroke-width="1.8" data-symbol="arrow.up.forward.square" transform="translate(15,0)">
+          <rect x="1142" y="298" width="16" height="16" rx="3.4"/><path d="M1147 309 l6-6 M1149.5 303 h3.5 v3.5" stroke-linecap="round"/>
+        </g>
+        <text x="1165" y="333" font-size="11" class="m" text-anchor="middle" fill="#FFFFFF">Open</text>
+
+        <rect x="1014" y="351" width="69.5" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="pencil" transform="translate(3.75,0)">
+          <path d="M1038 376 l1-4.5 10.5-10.5 3.5 3.5 -10.5 10.5 z" stroke-linejoin="round"/>
+        </g>
+        <text x="1048.75" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Edit</text>
+
+        <rect x="1091.5" y="351" width="69.5" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="textformat" transform="translate(11.25,0)">
+          <path d="M1105 375 l6-13 6 13 M1107 371 h8 M1119 375 h6" stroke-linecap="round"/>
+        </g>
+        <text x="1126.25" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Text</text>
+
+        <rect x="1169" y="351" width="69.5" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="circle.square" transform="translate(18.75,0)">
+          <rect x="1177" y="362" width="16" height="16" rx="2.5"/><circle cx="1185" cy="370" r="4.5"/>
+        </g>
+        <text x="1203.75" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Shapes</text>
+
+        <rect x="1246.5" y="351" width="69.5" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="plus.circle" transform="translate(26.25,0)">
+          <circle cx="1255" cy="370" r="8"/><path d="M1251 370 h8 M1255 366 v8" stroke-linecap="round"/>
+        </g>
+        <text x="1281.25" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">New clip</text>
+      </g>
+
+      <line x1="1000" y1="424.5" x2="1330" y2="424.5" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- AUTO RENAME & TAG (2026-09-16): directly above TAGS, the batch panel's row on one
+           project — the existing Auto rename & tag sheet through the cached engine (the tile's
+           frame, analysed once and kept beside the project). Same 35 pt primary-6 % row as
+           gallery.batch.svg's; the label becomes the run's own status ("Looking at this one…")
+           with a small spinner while one is in flight. TAGS and everything under it move down
+           49 pt. Not drawn in the inspector dress (gallery.item.*): the editor is right there. -->
+      <g id="auto-rename" data-symbol="sparkles">
+        <rect x="1014" y="436.5" width="302" height="35" rx="9" fill="#000" fill-opacity="0.06"/>
+        <path d="M1033 448 l1.6 4.4 4.4 1.6 -4.4 1.6 -1.6 4.4 -1.6 -4.4 -4.4 -1.6 4.4 -1.6 z M1039.5 445.5 l0.8 2.2 2.2 0.8 -2.2 0.8 -0.8 2.2 -0.8 -2.2 -2.2 -0.8 2.2 -0.8 z" fill="#C36A00"/>
+        <text x="1047" y="459" font-size="14" class="sb" fill="#C36A00">Auto rename &amp; tag</text>
+        <path d="M1300 449.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-opacity="0.6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+      </g>
+      <!-- TAGS (2026-09-13, design-first): the project's keyword list — the same list the
+           sidebar filters and search read (sceneTags) and the record's dc:subject keywords
+           (Part 2 §4.5: tags ARE keywords) — promoted back out of the METADATA group to its
+           own block directly under the action grid, where the 2026-09-08 design had it. One
+           editor, always the whole project's: the scope switch below does not reach it, and
+           METADATA no longer draws a Keywords row (per-frame keywords a file carried are kept
+           and exported, not edited here — Steven, 2026-09-13). The origin marker and its
+           revert come with it (10 pt at the header's trailing edge, as on every METADATA
+           row). Header = LLSectionHeader (13 pt semibold secondary, kerning 0.5, 4 pt in),
+           the field 21 pt under the block top. Edit components/tag-field.*, not this markup. -->
+      <g id="tags" data-field="keywords">
+        <text x="1018" y="498.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+        <text x="1302" y="498.5" font-size="10" class="m" text-anchor="end" fill="#C36A00">edited here</text>
+        <g data-symbol="arrow.uturn.backward" data-action="revert" transform="translate(1306,490)" fill="none" stroke="#C36A00" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3 l-2.5 2.5 2.5 2.5 M0.5 5.5 h5.5 a2.5 2.5 0 0 0 0 -5 h-1"/>
+        </g>
+        <image href="../components/tag-field.applied.narrow.svg" x="1014" y="507" width="302" height="115"/>
+      </g>
+      <!-- PRESETS (2026-09-13, design-first): a disclosure row, collapsed by default — the
+           header (LLSectionHeader), then trailing the PresetStatePill (the applied preset in
+           LL.accent with white text; Original / Edited on primary 8 % in secondary) and a
+           12 pt chevron.right (chevron.down while open). The whole 25 pt row is the button;
+           the state is per panel life, not persisted. Open, the group is the editor's own
+           Presets grid — see gallery.presets.svg / gallery.preview.presets.portrait.svg. -->
+      <g id="presets" data-state="collapsed">
+        <text x="1018" y="653" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
+        <rect x="1232" y="636" width="67" height="25" rx="12.5" fill="#C36A00"/>
+        <text x="1265.5" y="653" font-size="12.5" class="sb" text-anchor="middle" fill="#FFFFFF">Cinema</text>
+        <path d="M1307 644 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+      </g>
+
+
+      <!-- INFO + METADATA (2026-09-13, data model Milestone 1; moved under TAGS + PRESETS the same day — code first, mirrored after
+           Steven's sign-off): the TAGS block is gone; tags ARE keywords now, the last row of
+           the METADATA group. Three shared components, stacked 14pt apart, 12pt under the
+           divider (GalleryPreviewPanel.recordSections): the scope switch an interval project
+           gets (Whole project / This frame — metadata-scope.*), the read-only INFO group
+           (metadata-info.*: what the frames all agree on — this iPhone JPEG shoot's frames
+           share only their size; camera, exposure, captured and GPS vary and so are not
+           true of the whole, hence one row) and the editable METADATA group
+           (metadata-fields.*: nothing from these files, so no markers and every field
+           empty). Keywords is the group's last row: the label the panel draws, then the same
+           tag editor as before (tag-field.applied.narrow.svg) — these five came from the
+           app's own tagging, so the row says "edited here" and offers the revert. Edit the
+           component files, not this markup; see components/README.md. The group is 1218pt
+           tall, so from Copyright URL down the panel scrolls under the window edge —
+           specified, reached by scrolling, as the BLENDED CLIPS list already was. -->
+      <image href="../components/metadata-scope.project.narrow.svg" x="1014" y="675" width="302" height="22"/>
+      <image href="../components/metadata-info.interval.narrow.svg" x="1014" y="711" width="302" height="44"/>
+      <image href="../components/metadata-fields.empty.narrow.svg" x="1014" y="769" width="302" height="1218"/>
+      
+      <!-- metaRows on a 72pt label column — 12pt under the record groups (metadataSection's padding.top); every y below is the 2026-09-08 value + 1364 -->
+      <g id="meta">
+        <text x="1014" y="2014" font-size="12" class="sb" fill="#6D6D72">In frame</text>
+        <text x="1096" y="2014" font-size="12" fill="#6D6D72">river, bridge, quay, sky</text>
+
+        <text x="1014" y="2041" font-size="12" class="sb" fill="#6D6D72">Storage</text>
+        <text x="1096" y="2041" font-size="12" fill="#6D6D72">4,8 GB</text>
+
+        <!-- HERE (2026-09-26 — plan §10, words §12): HoldingsHereRow, the holdings pill in words, under Storage
+             on the same 72 pt label column — line(_:): every original and blend here, PicPlace's backed-up marker
+             matching → "Originals and blends · backed up on PicPlace", which wraps at the 210 pt value width
+             (302 − 72 − 10 − 10), so the row is 42 and everything after it 42 pt lower. -->
+        <text x="1014" y="2068" font-size="12" class="sb" fill="#6D6D72">Here</text>
+        <text x="1096" y="2068" font-size="12" fill="#6D6D72">Originals and blends · backed up on</text>
+        <text x="1096" y="2083" font-size="12" fill="#6D6D72">PicPlace</text>
+
+        <text x="1014" y="2110" font-size="12" class="sb" fill="#6D6D72">Field notes</text>
+        <text x="1096" y="2110" font-size="12" fill="#6D6D72">2 notes</text>
+      </g>
+
+      <!-- the divider, the footer and BLENDED CLIPS: as before, 42 pt lower for the Here row (2026-09-26) -->
+      <g transform="translate(0,42)">
+      <line x1="1000" y1="2080.5" x2="1330" y2="2080.5" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- footer: four equal buttons, 20pt dividers, Delete tinted red -->
+      <g id="footer">
+        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line" transform="translate(4.15,0)">
+          <path d="M1043 2102 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M1040 2107 h16" stroke-linecap="round"/>
+        </g>
+        <text x="1051.75" y="2121" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
+        <line x1="1089.5" y1="2105" x2="1089.5" y2="2125" stroke="#000" stroke-opacity="0.10"/>
+
+        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="square.and.arrow.up" transform="translate(11.35,0)">
+          <path d="M1110 2101 v-8 M1106.5 2096 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M1104 2099 v8 h12 v-8"/>
+        </g>
+        <text x="1127.25" y="2121" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
+        <line x1="1165" y1="2105" x2="1165" y2="2125" stroke="#000" stroke-opacity="0.10"/>
+
+        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="folder" transform="translate(18.65,0)">
+          <path d="M1176 2094 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/>
+        </g>
+        <text x="1202.75" y="2121" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text>
+        <line x1="1240.5" y1="2105" x2="1240.5" y2="2125" stroke="#000" stroke-opacity="0.10"/>
+
+        <g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash" transform="translate(25.85,0)">
+          <path d="M1245 2096 h15 M1247 2096 v11 h11 v-11 M1250.5 2094 h4"/>
+        </g>
+        <text x="1278.25" y="2121" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
+      </g>
+
+      <!-- ===== blended clips list (2026-09-07): the same shared component
+           iOS project-detail uses, in its "narrow" (272pt) width set, replacing
+           the old one-line "Variations · 3 blended clips" meta row above. Card
+           height = rows.count * 62 (no gap), a divider per internal boundary —
+           see components/README.md. 2026-09-07 (Part 2, design-first,
+           tick-chip revision same day): four independent tick chips — Blends,
+           Slices, Image, Video — sit between the header and the list; at this
+           narrow width they wrap to two 33pt rows (Blends/Slices, Image/Video)
+           rather than widening a gap the way the wide set does, 74pt total.
+           Pushes the card down 83pt; the window's #win clip-path, unchanged,
+           now trims a bit more of the third row than Part 1 did — still "the
+           panel scrolling under the window edge," just more of it, since the
+           filter claims real vertical budget in an already-tight 300pt-fixed
+           panel. Kept all three rows anyway rather than dropping to two, to
+           stay consistent with the iOS wide set's own three states. -->
+      <text x="1014" y="2165" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 3</text>
+      <image href="../components/blend-list-filter.all.narrow.svg" x="1014" y="2174" width="302" height="74"/>
+      <g id="blended-clips-list">
+        <rect x="1014" y="2257" width="302" height="186" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <image href="../components/blended-clip-row.default.narrow.svg" x="1014" y="2257" width="302" height="62"/>
+        <line x1="1098" y1="2319" x2="1302" y2="2319" stroke="#000" stroke-opacity="0.08"/>
+        <image href="../components/blended-clip-row.from-codec.narrow.svg" x="1014" y="2319" width="302" height="62"/>
+        <line x1="1098" y1="2381" x2="1302" y2="2381" stroke="#000" stroke-opacity="0.08"/>
+        <image href="../components/blended-clip-row.true-light.narrow.svg" x="1014" y="2381" width="302" height="62"/>
+      </g>
+      </g>
+    </g>
+
+    <!-- ================= FLOATING TAB BAR (over all three panes) ================= -->
+    <g id="tab-bar" transform="translate(15,0)">
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(520 772) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+        <text x="520" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+      </g>
+      <rect x="557" y="757" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+      <g fill="none" stroke="#C36A00">
+        <g transform="translate(590 772) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+        <text x="590" y="796" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(660 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="660" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(730 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="730" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(800 772) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+        <text x="800" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1310" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="675" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · the import strip, importing · 1310×800 pt window</text>
+  <text x="675" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GalleryDropImport.swift (GalleryImportStrip over AppModel.mediaImport) under the Gallery's header — staged with LL_TAB=gallery LL_GALLERY_DROP=&lt;folder&gt;</text>
+</svg>
