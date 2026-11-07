@@ -1,24 +1,34 @@
 # Readia: approved LetsLapse assets — the brief
 
-**From:** the LetsLapse app · **Date:** 2026-11-06 · **For:** the Readia developer
-**App side:** built on `ios-app`, uncommitted, verified on the Mac against a
-scratch library. **No sync against a server has been run yet.**
+**From:** the LetsLapse app · **Date:** 2026-11-07 (first draft 2026-11-06) ·
+**For:** the Readia developer
+**App side:** committed on `ios-app` as `42f0e34` and pushed; tested by
+Steven on the Mac, run in the iPhone Simulator; the design mirrors are drawn.
+**No sync against a server has been run yet** — the first joint run is §6.
 **Read with:** [approved-assets.md](approved-assets.md) (the app's reference),
 and in the Readia repo `docs/letslapse-assets.md` (today's tag-driven
 surfacing) and `docs/storage-letslapse-audit/picplace-contract.md` (the API).
+**Scope:** everything in §3 is server logic inside Readia. The app is done and
+needs nothing back from the server for approvals to work.
+**Handover copy:** the same text as a shared doc, for comments —
+https://claude.ai/artifact/BCJwPJ4FXgSWJCHGnHKgzC (this file is the source).
 
 ## The short version
 
 - In LetsLapse a person can now mark outputs **Approved**: a photo as edited,
   a video's source clip, an edited clip, a blended clip. One project can hold
-  several.
+  several. Approved is an attribute of an **asset** — a source or an output —
+  never of a project.
 - The approvals are **fields in the manifest** the app already PUTs, and the
   approved files are `source` and `blend` assets the app already uploads.
   **No new endpoint, asset kind or feature flag is needed for the app to
   work.**
-- Readia's job is to read those fields, list the approved assets at
-  `/vue/letslapse/approved`, and let the person take any of them into Assets
-  (`/vue/assets`, `/vue/assets/photographs`, `/vue/assets/video`).
+- Readia's job, in Steven's words: a route **`/vue/letslapse/approved`** that
+  shows a **curated list — the same list the app's Approved view shows** —
+  and from it the person **nominates** what they want available inside
+  Assets. The server may hold the nominations as a **white-list** of approved
+  assets; what is on the list becomes visible in `/vue/assets/photographs`
+  and `/vue/assets/video`.
 - This answers the open question in `letslapse-assets.md` §8.1: a project now
   says which of its outputs stands for it, so Readia no longer has to guess
   the newest render.
@@ -189,34 +199,90 @@ anything missed.
 
 ### 3.3 The page: `/vue/letslapse/approved`
 
-The signed-in person's approved assets.
+The signed-in person's approved assets — **the same list the app shows** in
+its Gallery under Library ▸ Approved. "The same" means the same set, the same
+unit and the same words; the sort and the dress are Readia's.
 
-- One row or tile per approved asset, not per project.
-- Its picture (the file, or the poster while waiting), the project's name, a
-  label for what it is (Photo, Video, Edited clip, Timelapse, Image), size,
-  length for video, approved when and on which device.
-- Waiting items say so, and what will bring them in ("uploads when the
-  device is on Wi-Fi").
-- Whether it is in Assets, and the action to change that (§3.4).
-- A link to the project's page.
+**The set and the unit.** One tile per approved asset by the rule in §2.3 —
+never one per project. A project with a colour render and a black-and-white
+render approved is two tiles; an interval shoot is its approved clip(s), never
+its frames. A `role: picture` render is never a tile of its own: it is the file
+behind the photo's `source` tile.
 
-### 3.4 Into Assets, by the person's choice
+**What a tile shows in the app**, so the page can match it:
 
-Steven's words: from Readia, a person nominates approved assets for use, and
-those appear in `/vue/assets/photographs`, `/vue/assets/video` and the Library
-overview. So being approved does not by itself put an asset in Assets.
+| On the tile | The app | Readia's equivalent |
+|---|---|---|
+| The picture | A photo as edited (its grade applied); a source clip's own frame; an output's own frame, or its still when the file is not on the device | The approved file; while **waiting** (§2.5) the project's poster for a photo, and for an output its still — `posters/<blend id>.jpg` inside the records bundle each push sends |
+| The badge, bottom-left | One of **Photo · Video · Edited clip · Blended clip · Timelapse · Image · Time slice · Time-slice poster** (table below) | The same word |
+| The seal, top-left | `checkmark.seal.fill` in the app's accent `#C36A00`. Never green, which the app reserves for "on this device" | A seal, in the accent if the page follows the app |
+| The name | The project's title under the grid (on the Mac, in the pane) | The project's name; a link to its page |
+| Where the file is | The holdings pill (device / PicPlace) | Ready, or waiting — and what brings it in ("uploads when the device is on Wi-Fi") |
 
-- An **Add to Assets** action per approved asset, and its reverse. Several at
-  once would help: an event shoot can produce dozens.
-- The nomination is Readia's own record, not written to the manifest.
+**The badge words**, from `ApprovedAssetTile.badge`:
+
+| The approved asset | Badge | Belongs in |
+|---|---|---|
+| `source` of a Photo project | Photo | `/vue/assets/photographs` |
+| `source` of a video project | Video | `/vue/assets/video` |
+| `blends[]` with `role: edit` | Edited clip | `/vue/assets/video` |
+| `blends[]` with `timeSlice`, `kind: video` | Time slice | `/vue/assets/video` |
+| `blends[]` with `timeSlice`, `kind: image` | Time-slice poster | `/vue/assets/photographs` |
+| `blends[]`, `kind: image` | Image | `/vue/assets/photographs` |
+| `blends[]`, `kind: video`, project `kind: video` | Blended clip | `/vue/assets/video` |
+| `blends[]`, `kind: video`, project is a shoot | Timelapse | `/vue/assets/video` |
+
+So the file's type decides the Assets route — image → photographs, video →
+video — and the badge says what made it.
+
+**Order.** The app lists in the Gallery's current sort (the person's choice,
+newest capture first by default), and within a project the project's own
+approval first, then its outputs newest first. For the page, newest
+`approvedAt` first is the natural default; a sort by project name and by
+capture date would mirror the app.
+
+**Narrowing.** In the app the Approved row is a switch beside the other
+filters: it narrows with the library's search, tags, PicPlace state and media
+kind. The page can offer the same — a search box, the project's tags, a
+Photographs / Video split — but the first version needs only the list.
+
+**Per tile, beyond what the app shows:** size, length for video, approved when
+and on which device (`approvedBy` is a device uuid; `GET /devices` has the
+names), **whether it is on the white-list**, and the action to change that
+(§3.4).
+
+### 3.4 Into Assets, by the person's choice: the white-list
+
+Steven's model, 2026-11-07: approval is the app's act and means "cleared for
+use"; **nomination** is Readia's act and means "use it here". Being approved
+puts an asset on `/vue/letslapse/approved`; being nominated puts it in Assets.
+
+- Keep the nominations as a **white-list of approved assets**: a row per
+  approved-asset key (§2.3 — project uuid + `source` or blend id), Readia's own
+  record, never written to the manifest.
+- An asset on the list is visible in `/vue/assets/photographs` or
+  `/vue/assets/video` by its file type (table in §3.3), and in the Library
+  overview as a surfaced row (§3.5).
+- A **Nominate** action per tile on the Approved page, and its reverse.
+  Several at once would help: an event shoot can produce dozens.
+- Steven has also said the server "may wish to white-list any approved asset"
+  — that is, put every approved asset on the list without a nomination. The
+  brief treats that as an account-level switch to add later if wanted (§4), not
+  the default: the default is the person's choice per asset, as he described
+  the flow.
+- A nomination outlives the asset's file: if the approval is removed in the
+  app the row leaves Assets (§3.5) but the white-list entry can stay, so a
+  re-approval brings the asset straight back.
 
 ### 3.5 Surface one row per approved asset
 
 Today `letslapse_surfaced_items` is unique on `(user_id, project_id)` and
-`SurfacedFile::for()` picks the file. For a nominated approved asset:
+`SurfacedFile::for()` picks the file. For a white-listed approved asset:
 
 - The row is keyed by project **and** approval key, so a project with two
   approved renders can be two assets.
+- It lands in `/vue/assets/photographs` or `/vue/assets/video` by the file's
+  type (§3.3), and in the Library overview.
 - The file is the approval's file, not a rule's pick.
 - When an approved photo is edited, the same Assets row and the same link
   serve the new file. A Studio design or a Producer timeline holding it should
@@ -239,11 +305,16 @@ does not need it.
 
 ## 4. Decisions for Steven before or while this is built
 
-| Question | Why it matters |
-|---|---|
-| Do the chosen tags keep putting whole projects into Assets, beside approvals? | The two rules can disagree: a tagged shoot surfaces its newest render, its approval names another. Simplest: where a project holds any approval, only its approved assets can be in Assets |
-| Should there be an "add every approved asset to Assets" switch? | The brief assumes a choice per asset, as Steven described |
-| Should Readia be able to approve or un-approve? | Not asked for. It would be a manifest write like `ProjectTagWriter`, and for a photo it would have to leave `approvedFile` to the app |
+Settled on 2026-11-07: the unit is the approved **asset** (a source or an
+output), the page is `/vue/letslapse/approved`, it shows what the app's
+Approved view shows, and the person nominates from it. Still open:
+
+| Question | Why it matters | The brief's default |
+|---|---|---|
+| Does approval alone put an asset into Assets, or only a nomination? | Steven described nomination as the person's act, and then said the server "may wish to white-list any approved asset". Both can be true: a per-account switch *Add every approved asset to Assets* on top of the per-asset choice | Nomination per asset; the switch is a later addition |
+| Do the chosen tags keep putting whole projects into Assets, beside approvals? | The two rules can disagree: a tagged shoot surfaces its newest render, its approval names another | Where a project holds any approval, only its approved assets can be in Assets; the tag rule stays for projects with none |
+| Should Readia be able to approve or un-approve? | Not asked for. It would be a manifest write like `ProjectTagWriter`, and for a photo it would have to leave `approvedFile` to the app | No: approval stays the app's act, nomination Readia's |
+| Does removing an approval in the app also drop the nomination? | A re-approval could then come straight back into Assets, or need a second nomination | The white-list entry stays; the Assets row is withdrawn while the approval is gone (§3.5) |
 
 ## 5. Facts to rely on, unless you say otherwise
 
@@ -275,7 +346,12 @@ The app's Debug hooks press the real paths with no hand on the device:
 |---|---|
 | `LL_APPROVE=<latest\|uuid>:<source\|newest\|blend uuid>[:off][@<seconds>]` | Approves, or with `:off` removes the approval |
 | `LL_RENDER_EDITS=<latest\|uuid>[@<seconds>]` | Renders a video's edits to an edited clip |
-| `LL_APPROVED=1` | Opens the Gallery on the Approved view |
+| `LL_APPROVED=1` | Opens the Gallery on the Approved view — the list the page should match |
+| `LL_INFO=1\|large` (iOS, with `LL_ITEM`) | Opens the phone's project panel, where Output lives |
+
+What has been run so far: the app on the Mac against a scratch library
+(approve, re-edit, Render Edits, remove), and the Simulator showing the same
+library's approvals. **No push of an approval to any server yet.**
 
 A first joint run, in the "LetsLapse Readia QA" Simulator against
 `readia.test`, on throwaway projects only:
@@ -289,8 +365,11 @@ A first joint run, in the "LetsLapse Readia QA" Simulator against
    Expect a `role: edit` blend with sound and one approved video.
 4. Remove an approval (`:off`). Expect the item to leave the page and its
    Assets row to be withdrawn.
-5. Add an approved asset to Assets, place it in a Studio design, then edit the
-   photo in the app. Expect the design to show the new picture.
+5. Nominate an approved asset, see it in `/vue/assets/photographs`, place it
+   in a Studio design, then edit the photo in the app. Expect the design to
+   show the new picture.
+6. Nominate an edited clip and see it in `/vue/assets/video`; play it and
+   hear the sound.
 
 The app's log says what it did: `approved:`, `render edits:`, `export:`, and
 the usual `picplace:` lines for the pushes and uploads.
