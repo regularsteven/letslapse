@@ -619,7 +619,7 @@ extension PicPlaceController {
             LLog("picplace: push queue — \(sent) sent, \(failed) failed\(pushQueue.isEmpty && heldPushes.isEmpty ? "" : ", \(pushQueue.count + heldPushes.count) held")\(sendsPaused ? " (paused)" : "")")
         }
         updateAutoError()
-        if sent > 0 { scheduleOriginalsQueue(); scheduleBlendsQueue(); scheduleProxyQueue() }
+        if sent > 0 { scheduleOriginalsQueue(); scheduleBlendsQueue(); scheduleProxyQueue(); queueApprovedSourceUploads() }
     }
 
     private enum PushOutcome { case sent, failed, nothing }
@@ -1163,7 +1163,12 @@ extension PicPlaceController {
             let ownSet = record.heavyDigest != nil || record.originalsMovedAt != nil
             let serverHeavyFiles = record.serverHeavyFiles ?? 0
             let sentElsewhere = !ownSet && serverHeavyFiles > 0 && serverHeavyFiles >= (record.heavyFiles ?? 0)
-            let sendsBlends = !capture.isPhotoCapture && autoBlendsEnabled
+            // An approved output is one a person asked to have on PicPlace
+            // (docs/approved-assets.md): it goes whatever *Upload blends
+            // automatically* says, and so does a Photo capture's approved
+            // render, which is the one blend of a photo that travels alone.
+            let approvedBlends = model.approvedFiles(for: capture).contains { $0.hasPrefix("blends/") }
+            let sendsBlends = (!capture.isPhotoCapture && autoBlendsEnabled) || approvedBlends
             guard ownSet || sentElsewhere
                     || (sendsBlends && model.blends(for: capture).contains(where: { !model.blendFileMissing($0) })) else { continue }
             if let due = record.retryDueAt, due > now { continue }
@@ -1213,7 +1218,7 @@ extension PicPlaceController {
                     break
                 }
             }
-            guard blendsAllowed else { continue }
+            guard blendsAllowed || (approvedBlends && heavyChecksAllowed) else { continue }
             let bytes = blendListing.reduce(Int64(0)) { $0 + $1.bytes }
             autoStatus = "Uploading blends · \(capture.displayTitle) · \(blendListing.count.formatted()) · \(LLFormat.bytes(bytes))"
             LLog("picplace: blends queue — \(capture.displayTitle): \(blendListing.count) blend(s), \(bytes) bytes")

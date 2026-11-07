@@ -146,15 +146,6 @@ struct PhotoViewerView: View {
     /// A chip tap held back for confirmation: applying it from Edited would
     /// discard the manual adjustments on screen.
     @State private var pendingApply: PresetApplyRequest?
-    /// The "Save as preset?" offer raised on the way out of an Edited grade.
-    @State private var isOfferingPresetSave = false
-    /// Set while that offer is what sent the user into the naming alert, so a
-    /// completed save leaves the editor rather than dropping them back into it.
-    @State private var exitsAfterPresetSave = false
-    /// "Not now" on the inline offer, where there is no exit to leave through.
-    /// Cleared whenever a preset is applied, so a fresh round of edits is
-    /// offered again rather than silently never asking twice.
-    @State private var declinedPresetSave = false
 
     /// The still's display aspect (w ÷ h). nil until the metadata probe lands —
     /// see `MediaPaneMetrics` for what the layout does in the meantime.
@@ -1074,18 +1065,6 @@ struct PhotoViewerView: View {
         return (position * steps).rounded() / steps
     }
 
-    /// True when this editor owns the way out — the iOS back button it draws
-    /// itself. When it doesn't (the Mac window's own close button, the
-    /// fullscreen sheet's chrome) there is no exit to intercept, so the
-    /// "Save as preset?" offer sits inline in the controls instead.
-    private var ownsExit: Bool {
-        #if os(iOS)
-        return showsBackButton
-        #else
-        return false
-        #endif
-    }
-
     var body: some View {
         if let relaunchOn {
             // The originals landed under a working copy: the editor on them,
@@ -1335,8 +1314,8 @@ struct PhotoViewerView: View {
             relaunchOn = still
         }
         .onChange(of: exitRequest) { _, request in
-            guard let request else { return }
-            if request.offersPresetSave { requestExit() } else { finishExit() }
+            guard request != nil else { return }
+            finishExit()
         }
         .onChange(of: frameWindowKey) { _, _ in refreshFrameWindow() }
         .onChange(of: displayedURL) { _, _ in
@@ -1361,17 +1340,10 @@ struct PhotoViewerView: View {
             // closing it must not lose text typed in the last two seconds.
             persistOverlays()
         }
-        .overlay(alignment: .bottom) {
-            if isOfferingPresetSave {
-                presetSaveOffer
-                    .padding(16)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
         .alert("Save as preset", isPresented: $isNamingPreset) {
             TextField("Preset name", text: $newPresetName)
             Button("Save") { saveCurrentAsPreset() }
-            Button("Cancel", role: .cancel) { exitsAfterPresetSave = false }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("Saves the \(preset.displayName) grade and these adjustments so you can apply them to another photo.")
         }
@@ -1518,7 +1490,7 @@ struct PhotoViewerView: View {
 
     /// The 36 pt disc the fullscreen player uses too.
     private var backButton: some View {
-        chromeDisc(systemImage: "chevron.left", label: "Back") { requestExit() }
+        chromeDisc(systemImage: "chevron.left", label: "Back") { finishExit() }
     }
 
     /// ⓘ — the project's panel (tags, presets, info, metadata, what came of
@@ -1579,7 +1551,7 @@ struct PhotoViewerView: View {
     private func pictureTapped() {
         #if os(iOS)
         guard effectiveRailTab == .editor, openGroup == nil, expandedGradeID == nil,
-              !isTypingCopy, !isOfferingPresetSave else { return }
+              !isTypingCopy else { return }
         withAnimation(.easeInOut(duration: 0.22)) {
             clearPreviewState = !isClearPreview
         }
@@ -2059,10 +2031,8 @@ struct PhotoViewerView: View {
 
     /// The Editor page's rail (3b / 6c), top to bottom: the tab pill, the
     /// six main buttons, the open group's card, the masks and "Reset
-    /// adjustments". All of it scrolls. The inline save offer is NOT here:
-    /// it lives in one place only, inside the Presets card under the tiles
-    /// (`presetsContext.saveOffer`), so an Edited grade does not grow a
-    /// prompt at the foot of every other group.
+    /// adjustments". All of it scrolls. Save as Preset is one button, inside
+    /// the Presets card under the tiles.
     @ViewBuilder private var railEditorStack: some View {
         railTabBar
         EditorGroupBar(
@@ -3121,7 +3091,7 @@ struct PhotoViewerView: View {
         paging != nil && openGroup == nil && expandedGradeID == nil
             && zoom.isFitted && !cropEditing && !maskGestureActive
             && maskTool == nil && shapeTool == nil && armedMaskField == nil
-            && !isTypingCopy && !isOfferingPresetSave && !isNamingPreset
+            && !isTypingCopy && !isNamingPreset
     }
 
     /// 280pt where there is room for it, and never more than the picture it is
@@ -3934,48 +3904,6 @@ struct PhotoViewerView: View {
         #endif
     }
 
-    /// "Save as preset?" — the offer made when an Edited grade is about to be
-    /// left behind. Inline rather than a blocking alert: the edits are already
-    /// safe on the project, so this is an invitation to name a look, not a
-    /// warning about losing one.
-    private var presetSaveOffer: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Save these edits as a preset?")
-                .font(.system(size: 14.5, weight: .semibold))
-            Text("Your adjustments stay on this project either way. Saving them makes the look reusable.")
-                .font(.system(size: 12.5))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                // Where the offer is standing in for an exit we don't own,
-                // declining dismisses the offer — not the editor.
-                Button("Not now") {
-                    if ownsExit {
-                        finishExit()
-                    } else {
-                        withAnimation(.easeOut(duration: 0.2)) { declinedPresetSave = true }
-                    }
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
-                Spacer(minLength: 0)
-                Button("Save as Preset") {
-                    isOfferingPresetSave = false
-                    exitsAfterPresetSave = ownsExit
-                    newPresetName = ""
-                    isNamingPreset = true
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(accentColor)
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
     // MARK: - The group panel
 
     /// The one `PhotoAdjustmentsPanel` call site, dressed for the layout in
@@ -4037,8 +3965,6 @@ struct PhotoViewerView: View {
                 newPresetName = ""
                 isNamingPreset = true
             },
-            saveOffer: presetState.isEdited && !ownsExit && !declinedPresetSave
-                ? AnyView(presetSaveOffer) : nil,
             lightroomCard: lightroomSidecar != nil ? AnyView(lightroomCard) : nil)
     }
 
@@ -4455,7 +4381,6 @@ struct PhotoViewerView: View {
                 adjustments = .neutral
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline.clear() }
                 presetState = .original
-                declinedPresetSave = false
                 scheduleUpdate()
                 persist()
                 return
@@ -4471,7 +4396,6 @@ struct PhotoViewerView: View {
                 ? .named(id: custom.id, snapshot: custom.snapshot)
                 : .edited
         }
-        declinedPresetSave = false
         scheduleUpdate()
         // A chip tap is a finished gesture, not a drag: persist it now.
         persist()
@@ -4749,28 +4673,13 @@ struct PhotoViewerView: View {
             }
         }
         newPresetName = ""
-        guard exitsAfterPresetSave else {
-            scheduleUpdate()
-            return
-        }
-        exitsAfterPresetSave = false
-        finishExit()
-    }
-
-    /// Back, with the exit-time offer in the way when there is one to make.
-    private func requestExit() {
-        guard presetState.isEdited else {
-            finishExit()
-            return
-        }
-        withAnimation(.easeOut(duration: 0.2)) { isOfferingPresetSave = true }
+        scheduleUpdate()
     }
 
     /// Leaves the editor. The debounced write may not have run yet, so the
     /// grade is persisted here rather than trusted to a task that is about to
     /// be torn down with the view.
     private func finishExit() {
-        isOfferingPresetSave = false
         persist()
         // Typed overlay text has no release gesture — its only mid-session
         // commit is the 2 s safety net, which dies with the view.

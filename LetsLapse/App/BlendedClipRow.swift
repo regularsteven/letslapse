@@ -5,6 +5,12 @@ import SwiftUI
 /// `ProjectDetailView`'s own list and the macOS Gallery preview panel — see
 /// `docs/design/components/blended-clip-row.<state>.<width>.svg` for the
 /// design contract both mirror (thumbnail 58×42, 12pt gap, trailing "Open").
+///
+/// Since 2026-11-05 (docs/approved-assets.md) it is an EDITED CLIPS row
+/// too — Render Edits' output, titled *Edited clip N*, with no Open (there
+/// is no blend to re-open: it is the editor's own picture) — and every row
+/// ends in the approve seal: grey outline until the output is approved for
+/// use, the accent seal after. A press toggles.
 struct BlendedClipRow: View {
     var blend: AppModel.BlendProject
     @ObservedObject var model: AppModel
@@ -56,13 +62,17 @@ struct BlendedClipRow: View {
             // Not drawn disabled, and not dead either: the still and the line
             // under the title say where the clip is, and a tap is the parent's
             // `onPlay`, which asks to fetch it first (2026-09-25).
-            .accessibilityLabel(missing ? "Blended clip \(model.versionNumber(for: blend)), not on this device" : "Play blended clip \(model.versionNumber(for: blend))")
+            .accessibilityLabel(missing ? "\(spokenName), not on this device" : "Play \(spokenName)")
+
+            ApproveToggle(isApproved: blend.isApproved) {
+                model.setApproved(!blend.isApproved, for: blend)
+            }
 
             if missing {
                 if let capture = model.capture(for: blend) {
                     BlendDownloadButton(picplace: model.picplace, capture: capture, blend: blend)
                 }
-            } else {
+            } else if !blend.isEditRender {
                 Button("Open", action: onOpen)
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(LL.accent)
@@ -86,6 +96,11 @@ struct BlendedClipRow: View {
     // Sliced outputs are named by their recipe (decided 2026-08-28):
     // timeslice-vert-left-segs_24-lag_2, the poster without the lag.
     private var title: String {
+        if blend.isEditRender {
+            var parts = ["Edited clip \(model.editNumber(for: blend))"]
+            if let seconds = blend.outputSeconds { parts.append(SpeedMath.clipLength(seconds)) }
+            return parts.joined(separator: " · ")
+        }
         if let timeSlice = blend.timeSlice {
             var parts = [blend.kind == .image
                 ? timeSlice.posterDisplayName : timeSlice.displayName]
@@ -101,10 +116,20 @@ struct BlendedClipRow: View {
         return parts.joined(separator: " · ")
     }
 
+    /// "blended clip 2" / "edited clip 1" — what VoiceOver calls the row.
+    private var spokenName: String {
+        blend.isEditRender
+            ? "edited clip \(model.editNumber(for: blend))"
+            : "blended clip \(model.versionNumber(for: blend))"
+    }
+
     private var subtitle: String {
         var parts: [String] = []
         if blend.kind == .video, let fps = blend.outputFPS {
             parts.append("\(fps) fps")
+        }
+        if blend.isEditRender, blend.summary.contains("sound kept") {
+            parts.append("with sound")
         }
         if let codecLabel = blend.sourceCodecLabel {
             parts.append("from \(codecLabel)")

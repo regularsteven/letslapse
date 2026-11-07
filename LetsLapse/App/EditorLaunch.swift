@@ -74,12 +74,11 @@ struct EditorPageRequest: Equatable {
 /// Mac, 2026-09-13, where the editor is a column of the Gallery window rather
 /// than a window of its own). The editor answers through its own exit path —
 /// the debounced grade write, the overlay write, the library flush — and then
-/// calls `onExit` instead of `dismiss`. `offersPresetSave` is the Back
-/// button's exit-time offer; a filmstrip move skips it, the way a photo app
-/// walks a catalogue without a prompt at every step.
+/// calls `onExit` instead of `dismiss`. Nothing stands in the way: the
+/// exit-time "Save these edits as a preset?" offer is gone (Steven,
+/// 2026-11-05 — the Presets page's Save as Preset button is the one door).
 struct EditorExitRequest: Equatable {
     let id = UUID()
-    var offersPresetSave: Bool
 }
 
 // MARK: - Paging (iOS, 2026-09-21)

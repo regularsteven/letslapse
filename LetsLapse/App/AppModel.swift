@@ -339,6 +339,28 @@ final class AppModel: ObservableObject {
         /// Optional for backward-compat: projects saved before the toggle
         /// existed decode cleanly and land on that same default.
         var hideBadFrames: Bool?
+        /// Approved (2026-11-05, docs/approved-assets.md): a person has cleared
+        /// this project's own picture or clip for use downstream — a Photo
+        /// capture's picture as the editor shows it, a video's source clip
+        /// as it is. Never set on an interval shoot, whose source is frames:
+        /// there a blended clip is what gets approved (`BlendProject.approvedAt`).
+        /// An edit like any other — it stamps `modifiedAt` and rides the
+        /// manifest to PicPlace. Read and write through `AppModel.isApproved`
+        /// / `setApproved` (App/ApprovedAssets.swift).
+        var approvedAt: Date?
+        var approvedBy: UUID?
+        /// The file that stands for the approval downstream, relative to the
+        /// project folder: the source itself when it is untouched and a
+        /// browser can show it (`source/C1370.MP4`, `source/photo.jpg`), else
+        /// the full-size render of the finished picture (`blends/<id>.jpg`,
+        /// a blend record of role `picture`). The app keeps it current —
+        /// `settleApprovedPicture` — so a server never has to work it out.
+        var approvedFile: String?
+        /// What `approvedFile` was made from: the finished picture's
+        /// fingerprint (the poster's token), or `source` for the file as it
+        /// is. A different fingerprint means the picture was edited since
+        /// and the render is due again.
+        var approvedToken: String?
 
         /// A Scanner shoot, said outright by the project itself. The stored
         /// field first; the display string second, which catches every Scanner
@@ -549,6 +571,25 @@ final class AppModel: ObservableObject {
         var revision: Int?
         var modifiedAt: Date?
         var modifiedBy: UUID?
+        /// What made this output, when it was not a blend (2026-11-05,
+        /// docs/approved-assets.md) — a `BlendRole` raw value, kept as a
+        /// string so a role a later build adds never fails this build's
+        /// decode of the whole document:
+        /// - `edit`: **Render Edits** — the project's source at 1× with its
+        ///   edits baked in and its sound kept (a video). Listed as an
+        ///   *Edited clip*, never as a blended one.
+        /// - `picture`: the full-size render of an approved Photo capture's
+        ///   finished picture, owned by the approval
+        ///   (`CaptureProject.approvedFile`) and replaced when the picture is
+        ///   edited. Plumbing: `ProjectStore.blends(for:)` leaves it out, so
+        ///   no list, picker or holdings line ever shows it.
+        /// Absent on every blend.
+        var role: String?
+        /// Approved (2026-11-05): a person has cleared this output for use
+        /// downstream — see `CaptureProject.approvedAt`. Its file is
+        /// `outputFileName`.
+        var approvedAt: Date?
+        var approvedBy: UUID?
 
         /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
         var sourceCodecLabel: String? {
@@ -1441,6 +1482,8 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self, self.isLibraryLoaded else { return }
                 self.picplace.noteProjectChanged(id)
+                // An approved photo's downstream file follows its edits.
+                self.noteApprovedProjectWritten(id)
             }
         }
         manifestSeenModifiedAt = (try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
@@ -4316,7 +4359,9 @@ final class AppModel: ObservableObject {
     // MARK: - Projects & versions
 
     func versionNumber(for blend: BlendProject) -> Int {
-        let siblings = store.blends(for: blend.captureID).sorted { $0.createdAt < $1.createdAt }
+        // Among the blends alone: an edited clip (Render Edits) has its own
+        // count (`editNumber(for:)`) and takes no number from these.
+        let siblings = store.blends(for: blend.captureID).filter { !$0.isEditRender }.sorted { $0.createdAt < $1.createdAt }
         return (siblings.firstIndex { $0.id == blend.id } ?? max(0, siblings.count - 1)) + 1
     }
 
@@ -4804,6 +4849,9 @@ final class AppModel: ObservableObject {
     /// Every project's summary for the Gallery's PicPlace filters
     /// (`App/ProjectStatus.swift`).
     let statusStore = ProjectStatusStore()
+    /// Render Edits runs and approved pictures being brought up to date
+    /// (`App/ApprovedAssets.swift`) — its own observable, as the two above.
+    let approvals = ApprovedAssetsStore()
 
     /// Drops one project's cached size — for paths that change a folder's
     /// contents without persisting the library (field notes today).
@@ -9764,6 +9812,12 @@ final class AppModel: ObservableObject {
             // empty library's Projects tab draws none.
             _ = picplace
             nearby.update()
+            // An approved photo whose picture moved after its downstream
+            // file was made (a render the last run did not finish).
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                self?.settleStaleApprovedPictures()
+            }
         }
         sweepTrashAtLaunch()
         ProjectArchive.sweepStaleExports()
@@ -11965,7 +12019,8 @@ final class AppModel: ObservableObject {
     /// is rendered — a still becomes a JPEG, a clip is re-encoded — into a temp
     /// file the caller owns and must delete, leaving the on-disk original alone.
     func gradedExportCopy(
-        of url: URL, for capture: CaptureProject
+        of url: URL, for capture: CaptureProject,
+        progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, isTemporary: Bool) {
         // The state first, and the values only as a second net: Original is a
         // promise about the bytes that leave the app, not a fact derived from
@@ -12006,7 +12061,9 @@ final class AppModel: ObservableObject {
                     url: url, preset: grade.preset, adjustments: grade.adjustments)
             }.value
         } else {
-            graded = try await VideoGrader.bakedCopy(of: url, grade: grade)
+            graded = try await VideoGrader.bakedCopy(of: url, grade: grade, progress: progress)
+            // An identity composition hands the source back: not a copy.
+            if graded == url { return (url, false) }
         }
         return (graded, true)
     }

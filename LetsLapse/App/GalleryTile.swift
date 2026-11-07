@@ -6,6 +6,9 @@ import SwiftUI
 ///
 /// Badges:
 /// - Bottom-left: shoot type (Photos / Interval / Video) — always shown
+/// - Top-left: the approved seal when anything of the project is approved
+///   (`isApproved`, 2026-11-05) — the selection circle's corner, which takes
+///   it over while circles show
 /// - Top-right: amber "N clips" badge — only when the project has ≥ 2 blended clips
 /// - Bottom-right: the holdings pill (`HoldingsPill`) — what this device
 ///   holds (camera · layers · both · a ring while downloading) | PicPlace
@@ -28,6 +31,9 @@ struct GalleryTile: View {
     var capture: AppModel.CaptureProject
     var isSelected: Bool
     var showsCircle = false
+    /// Something of the project is approved for use (the index row's
+    /// count) — the seal beside the type badge.
+    var isApproved = false
     var onTap: () -> Void
     /// A tap ON the circle: toggles this tile in the selection without
     /// touching the others — the circle invites exactly that, and a plain
@@ -73,6 +79,15 @@ struct GalleryTile: View {
             // "N clips" badge (top-right, amber, only when ≥ 2 blended clips)
             if let count = blendCount, count >= 2 {
                 MediaBadge(text: "\(count) clips", tint: LL.amber)
+                    .padding(6)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            // Approved: the seal, in the corner the selection circle takes
+            // while a selection is being made (beside the type badge it ran
+            // into the holdings pill on a six-column grid).
+            if isApproved, !showsCircle {
+                ApprovedSeal(size: 22)
                     .padding(6)
             }
         }
@@ -159,6 +174,7 @@ struct GalleryTile: View {
         if let count = blendCount, count >= 2 {
             parts.append("\(count) blended clips")
         }
+        if isApproved { parts.append("approved") }
         return parts.joined(separator: ", ")
     }
 }

@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1350 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Gallery · item view · PicPlace</title>
-  <desc>Mirrors the Gallery ITEM VIEW on the Mac with the inspector's PICPLACE group (PicPlaceStatusCard at its 302pt narrow width, planned): gallery.item.interval.svg — "River Sunset to Dusk", the inspector scrolled to its foot — with one group added between the In frame / Storage / Field notes rows and the Rename · Finder · Delete… footer: the PICPLACE header and the status component, here SYNCED ("On PicPlace · Synced 5 min ago · 1,057 files · 4,8 GB", Sync again, and the Also on row naming the other devices the server has presence records for). The footer, OUTPUT and the clips list are the interval mirror's, 98pt lower. The six states are components/picplace-status.&lt;state&gt;.narrow.svg; the actions are the same as the iPhone card's. **2026-09-26 (connected asset states, plan §10 / §12 / §16):** the meta rows gain HERE under Storage — HoldingsHereRow, the holdings pill in words: “Originals and blends · backed up on PicPlace” (every original and all three blends here, PicPlace's backed-up marker matching), two lines at the 210 pt value width, so the inspector is drawn scrolled 42 pt further (1486.5) and the PICPLACE group, the footer and OUTPUT keep their places; the filmstrip's tiles wear the holdings pill (components/gallery-filmstrip.interval.svg — tile 1, this project, both.safe: the same fact as the Here row). The PICPLACE group stays a reference to components/picplace-status.synced.narrow.svg, whose card now speaks the status-glyph rule (its glyph the pill's cloud) — edit it there.</desc>
+  <desc>Mirrors the Gallery ITEM VIEW on the Mac with the inspector's PICPLACE group (PicPlaceStatusCard at its 302pt narrow width, planned): gallery.item.interval.svg — "River Sunset to Dusk", the inspector scrolled to its foot — with one group added between the In frame / Storage / Field notes rows and the Rename · Finder · Delete… footer: the PICPLACE header and the status component, here SYNCED ("On PicPlace · Synced 5 min ago · 1,057 files · 4,8 GB", Sync again, and the Also on row naming the other devices the server has presence records for). The footer, OUTPUT and the clips list are the interval mirror's, 98pt lower. The six states are components/picplace-status.&lt;state&gt;.narrow.svg; the actions are the same as the iPhone card's. **2026-09-26 (connected asset states, plan §10 / §12 / §16):** the meta rows gain HERE under Storage — HoldingsHereRow, the holdings pill in words: “Originals and blends · backed up on PicPlace” (every original and all three blends here, PicPlace's backed-up marker matching), two lines at the 210 pt value width, so the inspector is drawn scrolled 42 pt further (1486.5) and the PICPLACE group, the footer and OUTPUT keep their places; the filmstrip's tiles wear the holdings pill (components/gallery-filmstrip.interval.svg — tile 1, this project, both.safe: the same fact as the Here row). The PICPLACE group stays a reference to components/picplace-status.synced.narrow.svg, whose card now speaks the status-glyph rule (its glyph the pill's cloud) — edit it there. ======== 2026-11-06 ======== INSPECTOR REDRAWN from the running Debug build (approved-scratch library, 1310×800, LL_TAB=gallery LL_ITEM=&lt;uuid&gt;, frames read through accessibility), closing the 2026-09-27 reorder and the 2026-11-05 Output move in one pass. GalleryPreviewPanel's .inspector dress is the pane's order without the thumbnail, Open and PRESETS: the title over date · size (18 pt under the top), a full-bleed divider, Auto rename &amp; tag (in the inspector too since 2026-09-27), TAGS, PICPLACE (always in the inspector; above the rows since 2026-09-27), the rows (In frame · Storage · Here · Field notes, each only when it has a value), a divider, Rename · Finder · Delete…, a divider, then OUTPUT ABOVE INFO — the buttons (components/output-actions.*), the project's own approval for a photo or a video (components/output-approval.*), EDITED CLIPS and BLENDED CLIPS (components/blended-clip-row.*, every row ending in the approve seal) — a divider, and the record groups: the scope switch an interval project gets, INFO, METADATA. Rhythm as the pane's (gallery.svg's PANE REDRAWN paragraph): 14 between the groups above the rows, 12 above the rows, 27 a row, 10 round the 50 pt footer, 14 above OUTPUT, 12 under a header, 16 above the EDITED / BLENDED headers and the last divider. Where the text before this date describes the inspector differently, this paragraph is the spec. The editor column, the rail and the filmstrip are unchanged — the filmstrip's tiles wear no seal (GalleryFilmstrip draws ProjectThumbnailView, not GalleryTile). THIS FILE: the PICPLACE group is no longer at the inspector's foot — it sits under TAGS, above the rows — so the inspector is drawn at the TOP of its scroll (it was scrolled 1486.5 pt): the title, Auto rename &amp; tag, TAGS, the PICPLACE header and the card (synced, with the Also on row), In frame · Storage · Here · Field notes, the footer, and OUTPUT's header and the top of its buttons at the filmstrip's edge. </desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1310" height="800" rx="11"/></clipPath>
     <clipPath id="inspector"><rect x="20" y="48" width="330" height="621"/></clipPath>
@@ -48,65 +48,38 @@
       <text x="675" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
     </g>
 
-    <!-- ================= INSPECTOR, scrolled 1486.5 pt: the foot of phase one and all of phase three ================= -->
-    <!-- 2026-09-26: scrolled 42 pt further than gallery.item.interval.svg (1444.5) for the HERE row, so the PICPLACE
-         group, the footer and OUTPUT keep the places they had. -->
+    <!-- ================= INSPECTOR (GalleryPreviewPanel .inspector, 330 pt — redrawn 2026-11-06) =================
+         River Sunset to Dusk at the top of its scroll — the PICPLACE group under TAGS (synced, with the Also on row).
+         Order and rhythm: the desc's INSPECTOR REDRAWN paragraph. Every y is the app's own stack arithmetic. -->
     <rect x="20" y="48" width="330" height="621" fill="#FFFFFF"/>
     <line x1="350.5" y1="48" x2="350.5" y2="669" stroke="#000" stroke-opacity="0.10"/>
     <g id="inspector" clip-path="url(#inspector)">
-      <image href="../components/metadata-fields.empty.narrow.svg" x="34" y="-1109" width="302" height="1218"/>
-      <!-- metaRows on a 72pt label column, 12 under the record group -->
-      <g id="meta">
-        <text x="34" y="138" font-size="12" class="sb" fill="#6D6D72">In frame</text><text x="116" y="138" font-size="12" fill="#6D6D72">river, bridge, quay, sky</text>
-        <text x="34" y="165" font-size="12" class="sb" fill="#6D6D72">Storage</text><text x="116" y="165" font-size="12" fill="#6D6D72">4,8 GB</text>
-        <!-- HERE (2026-09-26 — connected asset states plan §10, words §12): HoldingsHereRow (GalleryPreviewPanel.swift),
-             under Storage on the same 72 pt label column, 12 pt secondary, wrapping (.fixedSize vertical). line(_:) for
-             this project: tier originals, its three blends all here → "Originals and blends"; on PicPlace with the
-             backed-up marker matching what is here (AppModel.isBackedUp) → " · backed up on PicPlace" — the filmstrip's
-             tile 1 pill (both.safe) in words. 253.8 pt of text in a 210 pt value column (302 − 72 − 10 − 10) → two
-             lines, a 42 pt row. Other readings: "Originals" (no blends) · "Originals · 1 of 3 blends" · "… · not backed
-             up" · "Blends only (2 of 3) — originals on PicPlace · 2.4 GB" · "Preview only — originals not on PicPlace
-             yet" · "… — originals missing". -->
-        <text x="34" y="192" font-size="12" class="sb" fill="#6D6D72">Here</text><text x="116" y="192" font-size="12" fill="#6D6D72">Originals and blends · backed up on</text>
-        <text x="116" y="207" font-size="12" fill="#6D6D72">PicPlace</text>
-        <text x="34" y="234" font-size="12" class="sb" fill="#6D6D72">Field notes</text><text x="116" y="234" font-size="12" fill="#6D6D72">2 notes</text>
-      </g>
-      <!-- PICPLACE — components/picplace-status.synced.narrow.svg, flat on the pane like the rows above it:
-           header 28pt under Field notes (13pt semibold secondary, x 38 like OUTPUT's), the component 10pt under
-           the header at x 34, and the footer divider 12.5pt under the component's 60pt — everything from that
-           divider down is gallery.item.interval.svg's, 98pt lower (246.5 → 344.5). -->
-      <g id="picplace">
-        <text x="38" y="262" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PICPLACE</text>
-        <image href="../components/picplace-status.synced.narrow.svg" x="34" y="272" width="302" height="60"/>
-      </g>
-      <line x1="20" y1="344.5" x2="350" y2="344.5" stroke="#000" stroke-opacity="0.10"/>
-      <!-- footer: THREE equal buttons in the inspector (Share is OUTPUT's), 20pt dividers, Delete tinted red -->
-      <g id="footer">
-        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line" transform="translate(-960.35,-1701)"><path d="M1043 2053 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M1040 2058 h16" stroke-linecap="round"/></g>
-        <text x="84.33" y="385" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
-        <line x1="134.67" y1="369" x2="134.67" y2="389" stroke="#000" stroke-opacity="0.10"/>
-        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="folder" transform="translate(-999.1,-1701)"><path d="M1176 2045 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/></g>
-        <text x="185" y="385" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text>
-        <line x1="235.33" y1="369" x2="235.33" y2="389" stroke="#000" stroke-opacity="0.10"/>
-        <g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash" transform="translate(-966.8,-1701)"><path d="M1245 2047 h15 M1247 2047 v11 h11 v-11 M1250.5 2045 h4"/></g>
-        <text x="285.67" y="385" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
-      </g>
-      <line x1="20" y1="411" x2="350" y2="411" stroke="#000" stroke-opacity="0.10"/>
-      <!-- OUTPUT (phase three): the buttons are a component; the clips list is the screen's, on the shared rows -->
-      <g id="output">
-        <text x="38" y="437" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">OUTPUT</text>
-        <image href="../components/output-actions.clip.narrow.svg" x="34" y="454" width="302" height="57"/>
-        <text x="38" y="542.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 3</text>
-        <image href="../components/blend-list-filter.all.narrow.svg" x="34" y="558" width="302" height="74"/>
-        <g id="blended-clips-list">
-          <rect x="34" y="644" width="302" height="186" rx="16" fill="#FFF" filter="url(#soft)"/>
-          <image href="../components/blended-clip-row.default.narrow.svg" x="34" y="644" width="302" height="62"/>
-          <line x1="118" y1="706" x2="322" y2="706" stroke="#000" stroke-opacity="0.08"/>
-          <image href="../components/blended-clip-row.from-codec.narrow.svg" x="34" y="706" width="302" height="62"/>
-          <line x1="118" y1="768" x2="322" y2="768" stroke="#000" stroke-opacity="0.08"/>
-          <image href="../components/blended-clip-row.true-light.narrow.svg" x="34" y="768" width="302" height="62"/>
-        </g>
-      </g>
+      <text x="34" y="81" font-size="16" class="b" fill="#000">River Sunset to Dusk</text>
+      <text x="34" y="99" font-size="12" fill="#6D6D72">Aug 20, 2026</text>
+      <text x="110" y="99" font-size="12" fill="#000" fill-opacity="0.3">·</text>
+      <text x="119" y="99" font-size="12" fill="#6D6D72">4,8 GB</text>
+      <line x1="20" y1="121" x2="350" y2="121" stroke="#000" stroke-opacity="0.10"/>
+      <g id="auto-rename" data-symbol="sparkles"><rect x="34" y="133.5" width="302" height="35" rx="9" fill="#000" fill-opacity="0.06"/><path d="M53 145 l1.6 4.4 4.4 1.6 -4.4 1.6 -1.6 4.4 -1.6 -4.4 -4.4 -1.6 4.4 -1.6 z M59.5 142.5 l0.8 2.2 2.2 0.8 -2.2 0.8 -0.8 2.2 -0.8 -2.2 -2.2 -0.8 2.2 -0.8 z" fill="#C36A00"/><text x="67" y="156" font-size="14" class="sb" fill="#C36A00">Auto rename &amp; tag</text><path d="M320 146.5 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-opacity="0.6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/></g>
+      <text x="38" y="195" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+      <text x="322" y="195" font-size="10" class="m" text-anchor="end" fill="#C36A00">edited here</text>
+      <g data-symbol="arrow.uturn.backward" data-action="revert" transform="translate(326,186.5)" fill="none" stroke="#C36A00" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3 l-2.5 2.5 2.5 2.5 M0.5 5.5 h5.5 a2.5 2.5 0 0 0 0 -5 h-1"/></g>
+      <image href="../components/tag-field.applied.narrow.svg" x="34" y="204" width="302" height="115"/>
+      <text x="38" y="345" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PICPLACE</text>
+      <image href="../components/picplace-status.synced.narrow.svg" x="34" y="352" width="302" height="60"/>
+      <g id="meta"><text x="34" y="442" font-size="12" class="sb" fill="#6D6D72">In frame</text><text x="116" y="442" font-size="12" fill="#6D6D72">river, bridge, quay, sky</text><text x="34" y="469" font-size="12" class="sb" fill="#6D6D72">Storage</text><text x="116" y="469" font-size="12" fill="#6D6D72">4,8 GB</text><text x="34" y="496" font-size="12" class="sb" fill="#6D6D72">Here</text><text x="116" y="496" font-size="12" fill="#6D6D72">Originals and blends · backed up on</text><text x="116" y="511" font-size="12" fill="#6D6D72">PicPlace</text><text x="34" y="538" font-size="12" class="sb" fill="#6D6D72">Field notes</text><text x="116" y="538" font-size="12" fill="#6D6D72">2 notes</text></g>
+      <line x1="20" y1="552" x2="350" y2="552" stroke="#000" stroke-opacity="0.10"/>
+      <g id="footer"><g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line"><path d="M79.33 583 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M76.33 588 h16" stroke-linecap="round"/></g><text x="84.33" y="602" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text><line x1="134.67" y1="577.5" x2="134.67" y2="597.5" stroke="#000" stroke-opacity="0.10"/><g fill="none" stroke="#000" stroke-width="1.5" data-symbol="folder"><path d="M177 574 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/></g><text x="185" y="602" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text><line x1="235.33" y1="577.5" x2="235.33" y2="597.5" stroke="#000" stroke-opacity="0.10"/><g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash"><path d="M278.17 575.5 h15 M280.17 575.5 v11 h11 v-11 M283.67 573.5 h4"/></g><text x="285.67" y="602" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text></g>
+      <line x1="20" y1="623" x2="350" y2="623" stroke="#000" stroke-opacity="0.10"/>
+      <!-- OUTPUT above INFO (2026-11-05). An interval shoot: New clip · Share project; no approval row of its own (it is approved through a clip); BLENDED CLIPS · 3, row 1 approved — the accent seal -->
+      <text x="38" y="650" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">OUTPUT</text>
+      <image href="../components/output-actions.clip.narrow.svg" x="34" y="668" width="302" height="57"/>
+      <text x="38" y="755" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 3</text>
+      <image href="../components/blend-list-filter.all.narrow.svg" x="34" y="770" width="302" height="74"/>
+      <g id="blended-clips-list"><rect x="34" y="856" width="302" height="186" rx="16" fill="#FFF" filter="url(#soft)"/><image href="../components/blended-clip-row.approved.narrow.svg" x="34" y="856" width="302" height="62"/><line x1="118" y1="918" x2="322" y2="918" stroke="#000" stroke-opacity="0.08"/><image href="../components/blended-clip-row.from-codec.narrow.svg" x="34" y="918" width="302" height="62"/><line x1="118" y1="980" x2="322" y2="980" stroke="#000" stroke-opacity="0.08"/><image href="../components/blended-clip-row.true-light.narrow.svg" x="34" y="980" width="302" height="62"/></g>
+      <line x1="20" y1="1058.5" x2="350" y2="1058.5" stroke="#000" stroke-opacity="0.10"/>
+      <image href="../components/metadata-scope.project.narrow.svg" x="34" y="1072" width="302" height="22"/>
+      <image href="../components/metadata-info.interval.narrow.svg" x="34" y="1109" width="302" height="44"/>
+      <image href="../components/metadata-fields.empty.narrow.svg" x="34" y="1167" width="302" height="1218"/>
     </g>
 
     <!-- ================= EDITOR COLUMN: header, media + strip, rail ================= -->

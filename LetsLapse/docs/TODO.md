@@ -11,6 +11,62 @@ live inline.
 
 ## Open
 
+### Approved assets and Render Edits — built and mirrored 2026-11-06, what is left
+
+**Detail:** [approved-assets.md](approved-assets.md) · **Server side:**
+[readia-approved-assets-brief.md](readia-approved-assets-brief.md) ·
+**Raised:** 2026-11-05 (Steven: "production ready assets" — a way to mark a
+photo, a clip or a blended clip as cleared for downstream use, a view of
+them, a proper render of a video's edits that keeps its sound, and a brief
+for Readia) · **built code first (his call), uncommitted:** approvals as
+fields of `project.json`, the Gallery's Approved row and view, Output above
+Info in every dress of the panel, Render Edits and edited clips, the
+approved photo's render that follows its edits, the blends queue and an
+upload job for approved files, `CompositionExporter`'s sound into `.mp4`,
+and the exit-time *Save as preset?* offer removed. Verified on the Mac
+against six real projects in a scratch library (doc §8). Left:
+
+- ~~Sign-off, then the mirrors.~~ **Done 2026-11-06.** Steven signed off
+  the running Mac app; the mirrors are drawn: 24 macOS Gallery files and the
+  new `gallery.approved.svg` / `.empty`, four iOS files (two new:
+  `gallery.approved.portrait`, `editor-pager.info.portrait`), the clip-row
+  and Output components (`docs/design/*/INDEX.md`, `components/README.md`).
+  Three small code changes came out of drawing them: timeline tiles wear the
+  seal too, the approval caption says *Tap* on touch devices, and
+  `LL_INFO=1|large` opens the phone's ⓘ sheet for a headless run.
+- **A sync against a server has not been run.** Needs a bound bench root
+  (`LL_PICPLACE_TOKENS`) on picplace.test or readia.test, on throwaways:
+  approve → the push carries the fields → the approved blend goes up with
+  *Upload blends automatically* off → an approved source gets its job →
+  the approved photo's re-render replaces the file. The no-server dry run
+  passes.
+- **Run in the iPhone Simulator 2026-11-06, not on a device or an iPad.**
+  The phone's grid seals, Library sheet, Approved view and ⓘ sheet were
+  seen on the iPhone 16 simulator (iOS 18.6) with the six scratch projects.
+  Owed: a physical phone, the iPad pane, an approval made and a render run
+  ON the phone (the simulator only displayed approvals made on the Mac).
+  Render Edits in the iOS background fails as any GPU work does there; it
+  should pause and resume, as a blend job does.
+- **Two retired phone mirrors.** `iOS/gallery.preview.portrait.svg` and
+  `.presets` draw the Gallery preview sheet the phone dropped on 2026-09-21.
+  They are marked, not redrawn. Delete them, or say what they should become.
+- **Mirror gaps left marked:** the Mac inspector's PICPLACE card is drawn at
+  rest in the six preview files (its downloading / nearby dress needs a
+  bound bench root to capture); an interval's and a photo's ⓘ sheet on the
+  phone are captured, not drawn.
+- **Superseded photo renders stay on the server** (asked of Readia in the
+  brief, §3.6). On the device they go to the trash.
+- **Encoding is unoptimised by decision.** 8-bit H.264 at source size for an
+  edited clip (a 10-bit log clip is rendered to 8-bit), full-size JPEG 0.95
+  for a photo. Steven's later job: caching and encode choices.
+- **Render Edits for photos and interval shoots** is not offered. A photo's
+  approval follows its edits; several named versions of one photo (a colour
+  and a black and white) would need it.
+- **A clip row has no "remove from this device"** of its own; the PicPlace
+  card's Remove does it for the project's blends together.
+- **The Projects tab** shows edited clips inside its one clips list and has
+  no Output block.
+
 ### Gallery drag and drop on iPad and iPhone
 
 **Detail:** [import-classification.md](import-classification.md) §11 ·

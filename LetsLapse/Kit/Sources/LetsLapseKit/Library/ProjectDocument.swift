@@ -31,7 +31,7 @@ public enum ProjectDocumentFormat {
     /// `library.json` they are `Double` seconds since 2001-01-01; in
     /// `project.json` ISO-8601 with millisecond fractions. Every other
     /// number is a number on both sides.
-    public static let dateKeys: Set<String> = ["createdAt", "addedAt", "modifiedAt", "deletedAt", "sizeMeasuredAt"]
+    public static let dateKeys: Set<String> = ["createdAt", "addedAt", "modifiedAt", "deletedAt", "sizeMeasuredAt", "approvedAt"]
 
     public static func url(inProjectFolder folder: URL) -> URL {
         folder.appendingPathComponent(fileName)

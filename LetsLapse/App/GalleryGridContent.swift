@@ -19,6 +19,11 @@ struct GalleryGridContent: View {
     /// The index's rows for the grid's question, in order (M3): a tile
     /// reads its own record as it comes on screen.
     var rows: [LibraryIndex.ProjectRow]
+    /// The Approved view (2026-11-05): the approved outputs of `rows`'
+    /// projects, one tile each, in the rows' order — nil in every other
+    /// view. A project with two approved renders is two tiles; an interval
+    /// shoot is its approved clip.
+    var approvedAssets: [ApprovedAsset]? = nil
     var columnCount: Int
     var timelineMode: Bool
     @Binding var selection: GallerySelection
@@ -63,7 +68,9 @@ struct GalleryGridContent: View {
 
     var body: some View {
         Group {
-            if rows.isEmpty {
+            if let approvedAssets {
+                if approvedAssets.isEmpty { approvedEmptyState } else { approvedGrid(approvedAssets) }
+            } else if rows.isEmpty {
                 emptyState
             } else if timelineMode {
                 TimelineGalleryGrid(
@@ -120,6 +127,7 @@ struct GalleryGridContent: View {
                                     capture: capture,
                                     isSelected: selection.ids.contains(capture.id),
                                     showsCircle: selection.showsCircles,
+                                    isApproved: row.approvedCount > 0,
                                     onTap:       { tap(capture, order: rows.map(\.id)) },
                                     onToggle:    { selection.toggle(capture.id) },
                                     onOpen:      { onOpen(capture.id) },
@@ -166,6 +174,65 @@ struct GalleryGridContent: View {
             repeating: GridItem(.flexible(), spacing: 12),
             count: max(2, columnCount)
         )
+    }
+
+    // MARK: Approved view
+
+    /// The standard grid's layout over approved outputs instead of
+    /// projects. A click selects the output's project — the pane beside the
+    /// grid is a project's — and a double click opens it; the tile's menu
+    /// takes the approval away.
+    private func approvedGrid(_ assets: [ApprovedAsset]) -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(assets) { asset in
+                        if let capture = model.capture(id: asset.captureID) {
+                            ApprovedAssetTile(
+                                asset: asset,
+                                capture: capture,
+                                isSelected: selection.ids.contains(capture.id),
+                                onTap: {
+                                    if tapOpens { onOpen(capture.id) } else { selection.select(only: capture.id) }
+                                },
+                                onOpen: { onOpen(capture.id) },
+                                onOutsideTap: { deselectAllFromBackground() }
+                            )
+                            .contextMenu {
+                                Button("Open") { onOpen(capture.id) }
+                                Divider()
+                                Button("Remove Approval") { model.setApproved(false, for: asset) }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 14)
+                // Clearance for the floating tab bar.
+                Color.clear.frame(height: 82)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { deselectAllFromBackground() }
+        .pullsToRefresh(onRefresh)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var approvedEmptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "checkmark.seal")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Nothing approved")
+                .font(.headline)
+            Text("Approve a photo, a clip or a blended clip from its Output section, and it shows here — ready for use.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
     }
 
     // MARK: Selection
@@ -470,6 +537,10 @@ private struct TimelineGalleryGrid<Menu: View>: View {
                                                 capture: capture,
                                                 isSelected: selection.ids.contains(capture.id),
                                                 showsCircle: selection.showsCircles,
+                                                // As the standard grid's tiles: the seal on a
+                                                // project that holds an approval (it was left
+                                                // out here until 2026-11-06).
+                                                isApproved: row.approvedCount > 0,
                                                 onTap:  { onTap(capture, order) },
                                                 onToggle: { selection.toggle(capture.id) },
                                                 onOpen: { onOpen(capture.id) },

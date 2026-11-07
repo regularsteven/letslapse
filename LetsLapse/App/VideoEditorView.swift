@@ -91,12 +91,6 @@ struct VideoEditorView: View {
     /// A tile tap held back for confirmation: applying it from Edited would
     /// discard the manual adjustments on screen.
     @State private var pendingApply: PresetApplyRequest?
-    /// The "Save as preset?" offer raised on the way out of an Edited grade.
-    @State private var isOfferingPresetSave = false
-    /// Set while that offer is what sent the user into the naming alert.
-    @State private var exitsAfterPresetSave = false
-    /// "Not now" on the inline offer, where there is no exit to leave through.
-    @State private var declinedPresetSave = false
 
     /// The movie's display aspect (w ÷ h). Unlike the photo editor this is
     /// normally known before the first frame: a video capture already carries
@@ -197,17 +191,6 @@ struct VideoEditorView: View {
 
     private var capture: AppModel.CaptureProject? {
         model.capture(id: captureID)
-    }
-
-    /// True when this editor owns the way out — the back button it draws on
-    /// iOS. The Mac window's close button isn't ours to intercept, so there the
-    /// "Save as preset?" offer sits inline in the rail instead.
-    private var ownsExit: Bool {
-        #if os(iOS)
-        return true
-        #else
-        return false
-        #endif
     }
 
     /// Amber over the dark editor; the light Mac window keeps the app accent.
@@ -364,25 +347,18 @@ struct VideoEditorView: View {
         // Mac window that was merely fronted hears it too (see the photo editor).
         .onReceive(model.$requestedEditorPage) { consumePageRequest($0) }
         .onChange(of: exitRequest) { _, request in
-            guard let request else { return }
-            if request.offersPresetSave { requestExit() } else { finishExit() }
+            guard request != nil else { return }
+            finishExit()
         }
         .onDisappear {
             player.pause()
             if let timeObserver { player.removeTimeObserver(timeObserver) }
             timeObserver = nil
         }
-        .overlay(alignment: .bottom) {
-            if isOfferingPresetSave {
-                presetSaveOffer
-                    .padding(16)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
         .alert("Save as preset", isPresented: $isNamingPreset) {
             TextField("Preset name", text: $newPresetName)
             Button("Save") { saveCurrentAsPreset() }
-            Button("Cancel", role: .cancel) { exitsAfterPresetSave = false }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("Saves the \(preset.displayName) grade and these adjustments so you can apply them to another project.")
         }
@@ -485,7 +461,7 @@ struct VideoEditorView: View {
 
     /// The 36 pt disc the fullscreen player uses too.
     private var backButton: some View {
-        chromeDisc(systemImage: "chevron.left", label: "Back") { requestExit() }
+        chromeDisc(systemImage: "chevron.left", label: "Back") { finishExit() }
     }
 
     /// ⓘ — the project's panel as a sheet, when a pager hosts one (see
@@ -545,7 +521,7 @@ struct VideoEditorView: View {
     /// Editor page with no panel open. A movie has no zoom to double-tap.
     private func pictureTapped() {
         #if os(iOS)
-        guard railTab == .editor, openGroup == nil, !isOfferingPresetSave else { return }
+        guard railTab == .editor, openGroup == nil else { return }
         withAnimation(.easeInOut(duration: 0.22)) {
             clearPreviewState = !isClearPreview
         }
@@ -556,8 +532,7 @@ struct VideoEditorView: View {
     /// see `PhotoViewerView.allowsPaging`. On the Text page too, since
     /// 2026-10-16; the swipe lands the next project on the same page.
     private var allowsPaging: Bool {
-        paging != nil && openGroup == nil
-            && !isOfferingPresetSave && !isNamingPreset
+        paging != nil && openGroup == nil && !isNamingPreset
     }
 
     /// `VIDEO · 1 min 7 s` — what the strip is measuring. A movie has a
@@ -987,9 +962,8 @@ struct VideoEditorView: View {
     /// The Editor page's rail (3b / 6c), top to bottom: the tab pill, the
     /// six main buttons, the open group's card and "Reset adjustments". No
     /// masks card: shapes are drawn on stills, and a movie has no Masks page
-    /// to manage them from. All of it scrolls. The inline save offer is NOT
-    /// here: it lives in one place only, inside the Presets card under the
-    /// tiles (`presetsContext.saveOffer`).
+    /// to manage them from. All of it scrolls. Save as Preset is one button,
+    /// inside the Presets card under the tiles.
     @ViewBuilder private var railEditorStack: some View {
         railTabBar
         EditorGroupBar(
@@ -1085,45 +1059,6 @@ struct VideoEditorView: View {
         }
     }
 
-    /// "Save as preset?" — the offer made when an Edited grade is about to be
-    /// left behind. The photo editor draws the same card; see it for why this
-    /// is an inline invitation rather than a blocking alert.
-    private var presetSaveOffer: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Save these edits as a preset?")
-                .font(.system(size: 14.5, weight: .semibold))
-            Text("Your adjustments stay on this project either way. Saving them makes the look reusable.")
-                .font(.system(size: 12.5))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                Button("Not now") {
-                    if ownsExit {
-                        finishExit()
-                    } else {
-                        withAnimation(.easeOut(duration: 0.2)) { declinedPresetSave = true }
-                    }
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
-                Spacer(minLength: 0)
-                Button("Save as Preset") {
-                    isOfferingPresetSave = false
-                    exitsAfterPresetSave = ownsExit
-                    newPresetName = ""
-                    isNamingPreset = true
-                }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(accentColor)
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
     // MARK: - The group panel
 
     /// The one `PhotoAdjustmentsPanel` call site, dressed for the layout in
@@ -1193,8 +1128,6 @@ struct VideoEditorView: View {
                 newPresetName = presetState.snapshot.map { $0.isBuiltIn ? "" : $0.name } ?? ""
                 isNamingPreset = true
             },
-            saveOffer: presetState.isEdited && !ownsExit && !declinedPresetSave
-                ? AnyView(presetSaveOffer) : nil,
             lightroomCard: nil)
     }
 
@@ -1449,7 +1382,6 @@ struct VideoEditorView: View {
                 adjustments = .neutral
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline.clear() }
                 presetState = .original
-                declinedPresetSave = false
                 renderToken += 1
                 persist()
                 return
@@ -1465,7 +1397,6 @@ struct VideoEditorView: View {
                 ? .named(id: custom.id, snapshot: custom.snapshot)
                 : .edited
         }
-        declinedPresetSave = false
         renderToken += 1
         // A tile tap is a finished gesture, not a drag: persist it now.
         persist()
@@ -1515,27 +1446,12 @@ struct VideoEditorView: View {
             }
         }
         newPresetName = ""
-        guard exitsAfterPresetSave else {
-            renderToken += 1
-            return
-        }
-        exitsAfterPresetSave = false
-        finishExit()
-    }
-
-    /// Back, with the exit-time offer in the way when there is one to make.
-    private func requestExit() {
-        guard presetState.isEdited else {
-            finishExit()
-            return
-        }
-        withAnimation(.easeOut(duration: 0.2)) { isOfferingPresetSave = true }
+        renderToken += 1
     }
 
     /// Leaves the editor, persisting first — the debounced write may not have
     /// run yet, and its task dies with the view.
     private func finishExit() {
-        isOfferingPresetSave = false
         persist()
         // The library write is asynchronous now; drain it before the editor
         // goes away.

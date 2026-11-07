@@ -39,7 +39,14 @@ public final class LibraryIndex: @unchecked Sendable {
     /// then lost it for good — six blends the documents held and the index
     /// did not, the export regenerated at every launch. An older database
     /// is dropped and rebuilt from the files.
-    public static let schemaVersion = 4
+    ///
+    /// 5 (2026-11-05, approved assets): `projects.approved_count` — how many
+    /// of the project's outputs a person has approved (its own picture or
+    /// clip, and each approved blend). The one schema step that is ADDED to
+    /// a version-4 database rather than rebuilt: no document held an
+    /// approval before this version, so every existing row's true count is
+    /// the column's default, 0.
+    public static let schemaVersion = 5
     public static let folderName = "Index"
     public static let fileName = "library.sqlite"
 
@@ -64,6 +71,13 @@ public final class LibraryIndex: @unchecked Sendable {
     private func migrate() throws {
         let version = db.userVersion
         guard version < Self.schemaVersion else { return }
+        if version == 4 {
+            // 4 → 5 adds one column whose default is every row's truth (see
+            // `schemaVersion`): no rebuild of a 1,500-project library for it.
+            try db.execute("ALTER TABLE projects ADD COLUMN approved_count INTEGER NOT NULL DEFAULT 0;")
+            try db.setUserVersion(Self.schemaVersion)
+            return
+        }
         if version > 0 {
             // A database from an older schema: drop it and start over. It is
             // a cache; the files rebuild it.
@@ -97,7 +111,8 @@ public final class LibraryIndex: @unchecked Sendable {
                 shape_ellipses INTEGER NOT NULL DEFAULT 0,
                 shape_rectangles INTEGER NOT NULL DEFAULT 0,
                 shape_squares INTEGER NOT NULL DEFAULT 0,
-                shapes_indexed_at REAL
+                shapes_indexed_at REAL,
+                approved_count INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS projects_created ON projects(deleted_at, created_at);
             CREATE INDEX IF NOT EXISTS projects_added ON projects(deleted_at, added_at);
@@ -290,8 +305,15 @@ public final class LibraryIndex: @unchecked Sendable {
         }
         let names = (capture["sourceFileNames"] as? [String] ?? []).filter { !$0.hasSuffix(".json") }
         let preset = capture["presetState"] as? [String: Any]
-        let liveBlendRecords = blends.filter { $0["deletedAt"] == nil }
+        // An approved Photo capture's full-size render (role `picture`) is
+        // the approval's plumbing, never a clip anyone made: it is not
+        // counted as a blend, here or in the app's lists.
+        let liveBlendRecords = blends.filter { $0["deletedAt"] == nil && ($0["role"] as? String) != "picture" }
         let liveBlends = liveBlendRecords.count
+        // Approved outputs (docs/approved-assets.md): the project's own
+        // picture or clip, and each live blend a person approved.
+        let approved = (capture["approvedAt"] != nil ? 1 : 0)
+            + liveBlendRecords.filter { $0["approvedAt"] != nil }.count
         let kind = capture["kind"] as? String ?? ""
         let mode = capture["mode"] as? String ?? ""
         let captureMode = capture["captureMode"] as? String
@@ -319,7 +341,8 @@ public final class LibraryIndex: @unchecked Sendable {
                 title, caption, rating, creator, keywords, city, country,
                 folder, document_modified_at, assets_indexed_at,
                 category, scanner_sidecar, edited_at,
-                shape_ellipses, shape_rectangles, shape_squares, shapes_indexed_at
+                shape_ellipses, shape_rectangles, shape_squares, shapes_indexed_at,
+                approved_count
             ) VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?,?,
                 (SELECT title FROM projects WHERE id = ?), (SELECT caption FROM projects WHERE id = ?),
                 (SELECT rating FROM projects WHERE id = ?), (SELECT creator FROM projects WHERE id = ?),
@@ -330,7 +353,8 @@ public final class LibraryIndex: @unchecked Sendable {
                 COALESCE((SELECT shape_ellipses FROM projects WHERE id = ?), 0),
                 COALESCE((SELECT shape_rectangles FROM projects WHERE id = ?), 0),
                 COALESCE((SELECT shape_squares FROM projects WHERE id = ?), 0),
-                (SELECT shapes_indexed_at FROM projects WHERE id = ?))
+                (SELECT shapes_indexed_at FROM projects WHERE id = ?),
+                ?)
             """, [
                 .text(id), text("originID"), text("originDeviceID"), text("derivedFromOriginID"), text("importedFromID"),
                 plain("kind"), plain("captureMode"), plain("name"), .init(capture["originalName"] as? String ?? ""), .init(mode),
@@ -344,6 +368,7 @@ public final class LibraryIndex: @unchecked Sendable {
                 .text(folder), .init(documentModifiedAt?.timeIntervalSinceReferenceDate), .text(id),
                 .text(category.rawValue), .init(sidecar), .init(editedAt),
                 .text(id), .text(id), .text(id), .text(id),
+                .int(Int64(approved)),
             ])
         // The cubes the document names — the live grade, every keyframe and
         // the preset snapshot (docs/lut-library-assets.md §2.6): the rows a
@@ -533,6 +558,9 @@ public final class LibraryIndex: @unchecked Sendable {
         public var shapes: Set<ShapeRow> = []
         /// Projects with at least one live blend (the clip picker).
         public var withBlends = false
+        /// Projects holding at least one approved output (the Gallery's
+        /// Approved row).
+        public var approved = false
         public var offset = 0
         public var limit = 60
         public init() {}
@@ -562,6 +590,9 @@ public final class LibraryIndex: @unchecked Sendable {
         public var folder: String
         public var category: ProjectCategory
         public var editedAt: Date?
+        /// How many of the project's outputs are approved — its own picture
+        /// or clip, and each approved blend.
+        public var approvedCount: Int = 0
 
         public var displayName: String { name ?? originalName }
     }
@@ -612,6 +643,16 @@ public final class LibraryIndex: @unchecked Sendable {
         return counts
     }
 
+    /// How many approved outputs the query's projects hold between them —
+    /// the Gallery's Approved row counts assets, not projects (a project
+    /// with two approved renders is two). The query's own `approved` term
+    /// is implied.
+    public func approvedTotal(_ query: ProjectQuery) throws -> Int {
+        lock.lock(); defer { lock.unlock() }
+        let (whereSQL, values) = Self.whereClause(query)
+        return Int(try db.scalar("SELECT COALESCE(SUM(p.approved_count), 0) FROM projects p \(whereSQL)", values) ?? 0)
+    }
+
     /// The live project holding `originID` — as its origin, its own id or
     /// its one-hop import id, the three threads `AppModel.existingImport`
     /// follows — or nil.
@@ -658,6 +699,7 @@ public final class LibraryIndex: @unchecked Sendable {
         }
         if query.excludeScans { clauses.append("p.category <> 'scan'") }
         if query.withBlends { clauses.append("p.blend_count > 0") }
+        if query.approved { clauses.append("p.approved_count > 0") }
         for row in query.shapes.sorted(by: { $0.rawValue < $1.rawValue }) {
             switch row {
             case .ellipse: clauses.append("p.shape_ellipses > 0")
@@ -709,7 +751,8 @@ public final class LibraryIndex: @unchecked Sendable {
         p.id, p.origin_id, p.kind, p.capture_mode, p.name, p.original_name, p.mode,
         p.created_at, p.added_at, p.modified_at, p.deleted_at,
         p.frame_count, p.width, p.height, p.duration_seconds, p.size_bytes,
-        p.scene_tags, p.blend_count, p.title, p.rating, p.folder, p.category, p.edited_at
+        p.scene_tags, p.blend_count, p.title, p.rating, p.folder, p.category, p.edited_at,
+        p.approved_count
         """
 
     private static func projectRow(_ cursor: SQLiteDatabase.Cursor) -> ProjectRow {
@@ -729,7 +772,8 @@ public final class LibraryIndex: @unchecked Sendable {
             title: cursor.text(18), rating: cursor.int(19).map(Int.init),
             folder: cursor.text(20) ?? "",
             category: ProjectCategory(rawValue: cursor.text(21) ?? "") ?? .interval,
-            editedAt: cursor.real(22).map { Date(timeIntervalSinceReferenceDate: $0) })
+            editedAt: cursor.real(22).map { Date(timeIntervalSinceReferenceDate: $0) },
+            approvedCount: Int(cursor.int(23) ?? 0))
     }
 
     public struct SearchHit: Equatable, Sendable {

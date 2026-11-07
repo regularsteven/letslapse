@@ -1,0 +1,374 @@
+<svg viewBox="0 0 1350 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Gallery · the Approved view, nothing approved · 1310×800</title>
+  <desc>Mirrors GalleryGridContent.approvedEmptyState (App/GalleryGridContent.swift, 2026-11-05; docs/approved-assets.md) — gallery.approved.svg's view in a library where nothing is approved, or where the other filters leave no approved output: the sidebar's APPROVED row lit with a count of 0, and in the grid column the empty state — checkmark.seal at largeTitle in secondary, Nothing approved (.headline: 13 pt bold on the Mac), and the hint in .footnote secondary (10 pt on the Mac), centred, at most 320 pt wide: Approve a photo, a clip or a blended clip from its Output section, and it shows here — ready for use. A VStack(spacing: 12), centred in the column. Nothing is selected, so there is no pane and the column runs to the window's right edge. Drawn from the code (the scratch library always holds an approval once one is given; clearing them all shows this). The header is gallery.svg's row with no pane beside it: the column is 331 pt wider and the row's two Spacers share that, so the title sits 165.5 pt further right and the search · sort · zoom · Timeline cluster and the sync pill 331, ending flush 16 pt from the window's edge. The sidebar's PICPLACE counts are gallery.svg's. The family's known offset stands (INDEX.md, 2026-11-05).</desc>
+
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1310" height="800" rx="11"/></clipPath>
+    <clipPath id="grid"><rect x="221" y="101" width="778" height="719"/></clipPath>
+    <clipPath id="searchclip"><rect x="457" y="57" width="168" height="34"/></clipPath>
+    <clipPath id="t1"><rect x="235" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t2"><rect x="489" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t3"><rect x="743" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t4"><rect x="235" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t5"><rect x="489" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t6"><rect x="743" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t7"><rect x="235" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t8"><rect x="489" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t9"><rect x="743" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t10"><rect x="235" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t11"><rect x="489" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t12"><rect x="743" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="hero"><rect x="1014" y="70" width="302" height="150" rx="10"/></clipPath>
+
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
+    </linearGradient>
+    <linearGradient id="dawn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7E9AB8"/><stop offset="0.6" stop-color="#E4C39A"/><stop offset="1" stop-color="#F7E6C8"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9BB0C4"/><stop offset="1" stop-color="#D8C6AE"/>
+    </linearGradient>
+    <linearGradient id="fog" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C7CFD6"/><stop offset="1" stop-color="#8E9AA4"/>
+    </linearGradient>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#131A2A"/><stop offset="1" stop-color="#2E3348"/>
+    </linearGradient>
+    <linearGradient id="storm" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A5464"/><stop offset="1" stop-color="#A9A08E"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B7A272"/><stop offset="1" stop-color="#4E5A63"/>
+    </linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="7.5" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1310" height="800" fill="#F2F2F7"/>
+
+    <!-- Window chrome. The title is "Gallery", not "LetsLapse": GalleryView's
+         macOS branch sets .navigationTitle, which retitles the main Window. -->
+    <g id="titlebar">
+      <rect x="20" y="20" width="1310" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="675" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Gallery</text>
+    </g>
+
+    <!-- ================= SIDEBAR (GallerySidebar, fixed 200pt) ================= -->
+    <g id="sidebar">
+      <rect x="20" y="48" width="200" height="772" fill="#F2F2F7"/>
+
+      <text x="38" y="75" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">LIBRARY</text>
+
+      <!-- All (selected) -->
+      <rect x="24" y="81" width="192" height="31" rx="8" fill="#C36A00" fill-opacity="0.10"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.6" data-symbol="square.grid.2x2">
+        <rect x="41" y="90" width="6" height="6" rx="1.4"/><rect x="49" y="90" width="6" height="6" rx="1.4"/>
+        <rect x="41" y="98" width="6" height="6" rx="1.4"/><rect x="49" y="98" width="6" height="6" rx="1.4"/>
+      </g>
+      <text x="68" y="101" font-size="14" fill="#C36A00">All</text>
+
+      <!-- Photos -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="photo">
+        <rect x="40" y="124" width="16" height="12" rx="2"/><circle cx="45" cy="128.5" r="1.6"/>
+        <path d="M41 134 l5-4 4 3 3-2 3 3"/>
+      </g>
+      <text x="68" y="134" font-size="14" fill="#000">Photos</text>
+
+      <!-- Interval -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="square.stack">
+        <rect x="41" y="155" width="14" height="10" rx="2"/>
+        <path d="M42.5 168 h11 M44.5 171 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="167" font-size="14" fill="#000">Interval</text>
+
+      <!-- Video -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="film">
+        <rect x="40" y="189" width="16" height="12" rx="2"/>
+        <path d="M43.5 189 v12 M52.5 189 v12" stroke-width="1.1" opacity="0.8"/>
+      </g>
+      <text x="68" y="200" font-size="14" fill="#000">Video</text>
+
+      <line x1="32" y1="231" x2="208" y2="231" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- APPROVED (2026-11-05, docs/approved-assets.md): GallerySidebar.approvedSection, between LIBRARY and what follows
+           in every library — LLSectionHeader "Approved", then ONE LibraryFilterRow: checkmark.seal (checkmark.seal.fill
+           and LL.accent once lit, with the accent 10 % capsule, as All above), the label 14 pt, and trailing the number of
+           approved OUTPUTS the other filters leave (12 pt monospaced digits, secondary) — outputs, not projects: a project
+           with two approved renders counts twice. A switch, like a tag row: lit, the grid becomes one tile per approved
+           output (gallery.approved.svg); it narrows with Library, PicPlace, Tags, Shapes and the search. Header 33 pt
+           under the divider, the row 270–301, its own divider at 321 — the Library section's rhythm. Drawn LIT. -->
+      <g id="approved-filter" data-state="lit">
+      <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">APPROVED</text>
+      <rect x="24" y="270" width="192" height="31" rx="8" fill="#C36A00" fill-opacity="0.10"/>
+      <g transform="translate(39.03,276.53) scale(0.7476)" data-symbol="checkmark.seal.fill"><path d="M12.00 1.50 L12.68 1.65 L13.31 2.06 L13.86 2.63 L14.35 3.23 L14.81 3.74 L15.29 4.05 L15.86 4.17 L16.54 4.14 L17.31 4.06 L18.10 4.05 L18.84 4.20 L19.42 4.58 L19.80 5.16 L19.95 5.90 L19.94 6.69 L19.86 7.46 L19.83 8.14 L19.95 8.71 L20.26 9.19 L20.77 9.65 L21.37 10.14 L21.94 10.69 L22.35 11.32 L22.50 12.00 L22.35 12.68 L21.94 13.31 L21.37 13.86 L20.77 14.35 L20.26 14.81 L19.95 15.29 L19.83 15.86 L19.86 16.54 L19.94 17.31 L19.95 18.10 L19.80 18.84 L19.42 19.42 L18.84 19.80 L18.10 19.95 L17.31 19.94 L16.54 19.86 L15.86 19.83 L15.29 19.95 L14.81 20.26 L14.35 20.77 L13.86 21.37 L13.31 21.94 L12.68 22.35 L12.00 22.50 L11.32 22.35 L10.69 21.94 L10.14 21.37 L9.65 20.77 L9.19 20.26 L8.71 19.95 L8.14 19.83 L7.46 19.86 L6.69 19.94 L5.90 19.95 L5.16 19.80 L4.58 19.42 L4.20 18.84 L4.05 18.10 L4.06 17.31 L4.14 16.54 L4.17 15.86 L4.05 15.29 L3.74 14.81 L3.23 14.35 L2.63 13.86 L2.06 13.31 L1.65 12.68 L1.50 12.00 L1.65 11.32 L2.06 10.69 L2.63 10.14 L3.23 9.65 L3.74 9.19 L4.05 8.71 L4.17 8.14 L4.14 7.46 L4.06 6.69 L4.05 5.90 L4.20 5.16 L4.58 4.58 L5.16 4.20 L5.90 4.05 L6.69 4.06 L7.46 4.14 L8.14 4.17 L8.71 4.05 L9.19 3.74 L9.65 3.23 L10.14 2.63 L10.69 2.06 L11.32 1.65Z" fill="#C36A00"/><path d="M8.3 12.4L10.9 15L15.8 9.7" fill="none" stroke="#FFFFFF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="68" y="290" font-size="14" fill="#C36A00">Approved</text>
+      <text x="202" y="290" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">0</text>
+      </g>
+
+      <line x1="32" y1="321" x2="208" y2="321" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- Everything under APPROVED as before, 90 pt lower (2026-11-06). -->
+      <g transform="translate(0,90)">
+
+      <!-- PICPLACE (2026-09-26 — connected asset states plan §14, glyphs §16): GallerySidebar.picplaceSection,
+           only in a library connected to PicPlace (a library never connected has no section, and its tiles' pills
+           show only the layers or a slashed camera — never a camera for originals here, never a cloud).
+           LLSectionHeader "PicPlace", then one LibraryFilterRow per PicPlaceFilter, each with its count over what
+           the kind, tags, words and shapes leave (All has none). The glyph is the filter's own status glyph
+           (PicPlaceFilter.statusGlyph → StatusGlyphView, 13 pt semibold, a 20 pt column centred at x 48) in the
+           light palette, and it keeps its colours when the row is lit — selection shows on the label and the
+           capsule alone: All square.grid.2x2 neutral #48484A · On this device camera.fill green #248A3D ·
+           Download available camera.fill grey #AEAEB2 · Not available to download the camera with a slash
+           knocked through, grey · Needs uploading icloud.and.arrow.up.fill neutral, the arrow knocked out ·
+           Has blends square.3.layers.3d, the outline, neutral · Syncing / Needs attention the same cloud in
+           LL.accent (the amber of a light surface). Glyph paths: holdings-pill.make.py's 24 grid, scaled.
+           Label 14 pt at x 68, WRAPPING rather than truncating (.fixedSize vertical) — a label gets
+           164 − 20 − 3 × 10 − the count's width, so four of the seven take two lines (CoreText, SF Pro 14);
+           the count 12 pt monospaced digits, secondary, trailing at x 202 on the first line's baseline.
+           Row = 7 + 17 per line + 7, 2 apart, as the Library rows above. The filter starts on All, so both
+           All rows are lit. The counts are this file's fourteen projects as their pills draw them (grid below,
+           components/gallery-filmstrip.*): 11 here · 2 on PicPlace only · 1 nowhere · 5 not backed up (the
+           upload under way included) · 3 with blends · 1 moving · 1 with its working copy here (stage 5). While the status sweep's first walk runs,
+           "Checking N of M projects…" (11 pt secondary, 18 in, 4 under the last row) follows — not drawn. -->
+      <g id="picplace-filters">
+      <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">PICPLACE</text>
+      <!-- All: row 270–301 -->
+      <rect x="24" y="270" width="192" height="31" rx="8" fill="#C36A00" fill-opacity="0.10"/>
+      <g fill="none" stroke="#48484A" stroke-width="1.4" data-symbol="square.grid.2x2"><rect x="42.65" y="279.65" width="3.9" height="3.9" rx="1.1"/><rect x="49.45" y="279.65" width="3.9" height="3.9" rx="1.1"/><rect x="42.65" y="286.45" width="3.9" height="3.9" rx="1.1"/><rect x="49.45" y="286.45" width="3.9" height="3.9" rx="1.1"/></g>
+      <text x="68" y="290" font-size="14" fill="#C36A00">All</text>
+      <!-- On this device: row 303–334 -->
+      <g transform="translate(38.40,308.04) scale(0.8)" data-symbol="camera.fill"><path fill="#248A3D" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g>
+      <text x="68" y="323" font-size="14" fill="#000">On this device</text>
+      <text x="202" y="323" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">11</text>
+      <!-- Working copy here: row 336–367 (stage 5, 2026-10-04 — .asset(.workingCopy, .here): the green picture;
+           the originals are not here, their full-size graded copy is) -->
+      <g transform="translate(38.40,341.04) scale(0.8)" data-symbol="photo.fill"><mask id="pp-knock-picture" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M4.6 16.6L9.2 11.4L12.4 14.8L15.2 12.2L19.4 16.6Z" fill="#000000"/><circle cx="16.3" cy="8.9" r="1.8" fill="#000000"/></mask><path d="M4.2 4.5H19.8A2.2 2.2 0 0 1 22 6.7V17.3A2.2 2.2 0 0 1 19.8 19.5H4.2A2.2 2.2 0 0 1 2 17.3V6.7A2.2 2.2 0 0 1 4.2 4.5Z" fill="#248A3D" mask="url(#pp-knock-picture)"/></g>
+      <text x="68" y="356" font-size="14" fill="#000">Working copy here</text>
+      <text x="202" y="356" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
+      <!-- Download available: row 369–417 -->
+      <g transform="translate(38.40,374.04) scale(0.8)" data-symbol="camera.fill"><path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g>
+      <text x="68" y="389" font-size="14" fill="#000">Download</text>
+      <text x="68" y="406" font-size="14" fill="#000">available</text>
+      <text x="202" y="389" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">2</text>
+      <!-- Not available to download: row 419–467 -->
+      <g transform="translate(38.40,424.04) scale(0.8)" data-symbol="camera.fill + a slash knocked through (no SF camera.slash)"><mask id="pp-knock-camera" maskUnits="userSpaceOnUse" x="0" y="33" width="24" height="24"><rect width="24" height="24" fill="#FFFFFF"/><path d="M3 2.4L21 21.6" stroke="#000000" stroke-width="5" stroke-linecap="round"/></mask><g mask="url(#pp-knock-camera)"><path fill="#AEAEB2" fill-rule="evenodd" d="M5.6 7.2H8.3L9.7 5Q10.1 4.4 10.8 4.4H13.2Q13.9 4.4 14.3 5L15.7 7.2H18.4A3.1 3.1 0 0 1 21.5 10.3V17.4A3.1 3.1 0 0 1 18.4 20.5H5.6A3.1 3.1 0 0 1 2.5 17.4V10.3A3.1 3.1 0 0 1 5.6 7.2ZM7.7 13.7a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0 -8.6 0ZM9.6 13.7a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0 -4.8 0Z"/></g><path d="M3 2.4L21 21.6" stroke="#AEAEB2" stroke-width="2.3" stroke-linecap="round"/></g>
+      <text x="68" y="439" font-size="14" fill="#000">Not available to</text>
+      <text x="68" y="456" font-size="14" fill="#000">download</text>
+      <text x="202" y="439" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
+      <!-- Needs uploading: row 469–517 -->
+      <g transform="translate(38.64,474.84) scale(0.79)" data-symbol="icloud.and.arrow.up.fill"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#48484A"/><path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="68" y="489" font-size="14" fill="#000">Needs</text>
+      <text x="68" y="506" font-size="14" fill="#000">uploading</text>
+      <text x="202" y="489" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">5</text>
+      <!-- Has blends: row 519–550 -->
+      <g transform="translate(38.88,525.18) scale(0.76)" data-symbol="square.3.layers.3d" fill="none" stroke="#48484A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.2L20.8 8L12 12.8L3.2 8Z"/><path d="M3.2 11.6L12 16.4L20.8 11.6"/><path d="M3.2 15.2L12 20L20.8 15.2"/></g>
+      <text x="68" y="539" font-size="14" fill="#000">Has blends</text>
+      <text x="202" y="539" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">3</text>
+      <!-- Syncing / Needs attention: row 552–600 -->
+      <g transform="translate(38.64,557.84) scale(0.79)" data-symbol="icloud.and.arrow.up.fill"><path d="M6.5 19.5H17.8A4.6 4.6 0 0 0 18.6 10.4A6.8 6.8 0 0 0 5.8 9.3A5.2 5.2 0 0 0 6.5 19.5Z" fill="#C36A00"/><path d="M12 17.3V10.7M9.1 13.4L12 10.5L14.9 13.4" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <text x="68" y="572" font-size="14" fill="#000">Syncing / Needs</text>
+      <text x="68" y="589" font-size="14" fill="#000">attention</text>
+      <text x="202" y="572" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">1</text>
+      </g>
+
+      <line x1="32" y1="620" x2="208" y2="620" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- TAGS, COLLECTIONS and SHAPES as before, 389 pt lower (2026-09-26; +33 on 2026-10-04 for the
+           Working copy here row): the PICPLACE section above them ends at 600. COLLECTIONS and SHAPES now
+           scroll under the window edge. -->
+      <g transform="translate(0,389)">
+      <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">TAGS</text>
+
+      <circle cx="37.5" cy="288" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="293" font-size="14" fill="#000">Water</text>
+      <circle cx="37.5" cy="319" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="324" font-size="14" fill="#000">Sky &amp; weather</text>
+      <circle cx="37.5" cy="350" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="355" font-size="14" fill="#000">Urban</text>
+      <circle cx="37.5" cy="381" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="386" font-size="14" fill="#000">Landmark</text>
+      <!-- 2026-09-08: a hand-typed tag is a first-class member of this list. Today
+           SceneSearch.availableTags filters the library's tags through
+           SceneMetadata.orderedTaxonomy, which would drop it silently — that filter
+           has to widen with the editor, or a tag the user created is searchable and
+           invisible here. -->
+      <circle cx="37.5" cy="412" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="417" font-size="14" fill="#000">Rooftops</text>
+
+      <line x1="32" y1="447" x2="208" y2="447" stroke="#000" stroke-opacity="0.10"/>
+
+      <text x="38" y="480" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">COLLECTIONS</text>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="rectangle.stack">
+        <rect x="41" y="494" width="14" height="10" rx="2"/>
+        <path d="M42.5 507 h11 M44.5 510 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="506" font-size="14" fill="#000">All Collections</text>
+
+      <line x1="32" y1="537" x2="208" y2="537" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- SHAPES (2026-09-11): GallerySidebar.shapesSection — the four ShapeFilter rows,
+           drawn as LibraryFilterRow like the kind rows above. A project shows under
+           Ellipse / Rectangle / Square when its shapes.json register holds one (found by
+           Find shapes or drawn in the Masks tab) and under No Shapes when it holds none or
+           has no register. Rows narrow like the tag rows (a project must hold every lit
+           shape); No Shapes stands alone — lighting it clears the others. A lit row draws
+           as All does above: #C36A00 @ 10% capsule (x 24, 192×31, rx 8), accent glyph and
+           label; while any row is lit a 12pt semibold "Clear shapes" link in #C36A00 sits
+           14pt in, 4pt under the last row. All four rows are always offered — an empty row
+           is the prompt to run Find shapes, not a dead control. -->
+      <text x="38" y="570" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">SHAPES</text>
+
+      <!-- Ellipse -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="oval">
+        <ellipse cx="48" cy="591" rx="8" ry="5.5"/>
+      </g>
+      <text x="68" y="596" font-size="14" fill="#000">Ellipse</text>
+
+      <!-- Rectangle -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="rectangle">
+        <rect x="40" y="618.5" width="16" height="11" rx="2"/>
+      </g>
+      <text x="68" y="629" font-size="14" fill="#000">Rectangle</text>
+
+      <!-- Square -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="square">
+        <rect x="42" y="650.5" width="12" height="12" rx="2"/>
+      </g>
+      <text x="68" y="662" font-size="14" fill="#000">Square</text>
+
+      <!-- No Shapes -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="circle.slash">
+        <circle cx="48" cy="690" r="7"/>
+        <path d="M43 685 L53 695"/>
+      </g>
+      <text x="68" y="695" font-size="14" fill="#000">No Shapes</text>
+      </g>
+      </g>
+    </g>
+
+    <line x1="220.5" y1="48" x2="220.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= HEADER (galleryHeader, 52pt) ================= -->
+    <g id="header">
+      <!-- sidebar toggle, accent because showSidebar is true -->
+      <rect x="237" y="58" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.7" data-symbol="sidebar.left">
+        <rect x="245" y="66" width="16" height="16" rx="2.6"/>
+        <path d="M251 66 v16"/>
+      </g>
+
+      <text x="468" y="81" font-size="20" class="b" fill="#000">Gallery</text>
+
+      <!-- search · sort · zoom · Timeline, 42pt left of where they sat before the
+           sync pill joined the row (the two Spacers gave up 21 each) -->
+      <g transform="translate(289,0)"><!-- −42 for the sync pill, +331 with no pane -->
+      <!-- SceneSearchField, fixed 190pt. The placeholder is longer than the
+           field and clips — drawn as it renders. -->
+      <rect x="446" y="57" width="190" height="34" rx="17" fill="#000" fill-opacity="0.06"/>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.9" data-symbol="magnifyingglass">
+        <circle cx="459.5" cy="73" r="4.6"/><path d="M463 76.5 l3.5 3.5" stroke-linecap="round"/>
+      </g>
+      <g clip-path="url(#searchclip)">
+        <text x="475" y="79" font-size="15" fill="#6D6D72">Search titles, tags, in frame</text>
+      </g>
+
+      <!-- sort: menu capsule + direction button -->
+      <rect x="646" y="60" width="84" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+      <text x="655" y="79" font-size="13" class="m" fill="#C36A00">Capture</text>
+      <path d="M712 71 l4.5 5 4.5-5" fill="none" stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+      <rect x="734" y="60" width="28" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+      <path d="M743 70 h10 l-5 8 z" fill="#C36A00" data-symbol="arrowtriangle.down.fill"/>
+
+      <!-- zoom cluster: 2×2 glyph, 80pt Slider, 3×3 glyph -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.3" data-symbol="square.grid.2x2">
+        <rect x="772" y="69" width="4.6" height="4.6" rx="1"/><rect x="779.4" y="69" width="4.6" height="4.6" rx="1"/>
+        <rect x="772" y="76.4" width="4.6" height="4.6" rx="1"/><rect x="779.4" y="76.4" width="4.6" height="4.6" rx="1"/>
+      </g>
+      <rect x="788" y="72" width="80" height="4" rx="2" fill="#000" fill-opacity="0.14"/>
+      <!-- Never .tint()ed, so the filled track is system blue, not LL.accent. -->
+      <rect x="788" y="72" width="20" height="4" rx="2" fill="#0A6FD8"/>
+      <circle cx="808" cy="74" r="8" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.1" data-symbol="square.grid.3x3">
+        <rect x="872" y="68" width="3.1" height="3.1" rx="0.7"/><rect x="876.5" y="68" width="3.1" height="3.1" rx="0.7"/><rect x="881" y="68" width="3.1" height="3.1" rx="0.7"/>
+        <rect x="872" y="72.5" width="3.1" height="3.1" rx="0.7"/><rect x="876.5" y="72.5" width="3.1" height="3.1" rx="0.7"/><rect x="881" y="72.5" width="3.1" height="3.1" rx="0.7"/>
+        <rect x="872" y="77" width="3.1" height="3.1" rx="0.7"/><rect x="876.5" y="77" width="3.1" height="3.1" rx="0.7"/><rect x="881" y="77" width="3.1" height="3.1" rx="0.7"/>
+      </g>
+
+      <!-- Timeline toggle, OFF: .buttonStyle(.bordered) unfilled -->
+      <rect x="894" y="62" width="89" height="24" rx="6" fill="#000" fill-opacity="0.06"/>
+      <rect x="894" y="62" width="89" height="24" rx="6" fill="none" stroke="#000" stroke-opacity="0.10"/>
+      <g fill="none" stroke="#000" stroke-width="1.4" data-symbol="calendar">
+        <rect x="902" y="68" width="12" height="11" rx="2"/><path d="M902 71.5 h12 M905.5 66.5 v3 M910.5 66.5 v3"/>
+      </g>
+      <text x="920" y="78" font-size="13" fill="#000">Timeline</text>
+      </g>
+
+      <!-- SYNC PILL (2026-09-15) — the Projects header's ProjectSharingChip, to the
+           right of Timeline (Steven): green serving / red not / amber failed; it opens
+           the "Project Syncing" sheet (../iOS/projects.sharing.portrait.svg — on the
+           Mac a fixed 360×620 panel: PicPlace over nearby devices) over the model's
+           one ProjectTransferServer. The row is a ViewThatFits since the pill
+           joined: this full row where it fits, else a tighter one with no zoom
+           slider and Timeline as a 32pt glyph. -->
+      <g id="sync-pill" transform="translate(331,0)" data-symbol="antenna.radiowaves.left.and.right">
+        <circle cx="967" cy="74" r="16" fill="#34C759" fill-opacity="0.12"/>
+        <circle cx="967" cy="74" r="15.5" fill="none" stroke="#34C759" stroke-opacity="0.35"/>
+        <g stroke="#34C759" stroke-width="1.6" fill="none" stroke-linecap="round">
+          <path d="M960.5 69.5 a5 5 0 0 0 0 9 M973.5 69.5 a5 5 0 0 1 0 9"/>
+          <path d="M963.5 72.5 a2 2 0 0 0 0 3 M970.5 72.5 a2 2 0 0 1 0 3"/>
+          <path d="M967 75 v4.5"/>
+        </g>
+      </g>
+    </g>
+
+    <line x1="221" y1="100.5" x2="1330" y2="100.5" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= GRID (GalleryGridContent.standardGrid) ================= -->
+    <g id="grid">
+      <!-- APPROVED, EMPTY (GalleryGridContent.approvedEmptyState): checkmark.seal at .largeTitle in secondary, "Nothing
+           approved" .headline, the hint .footnote secondary centred in 320 pt — a VStack(spacing: 12) centred in the grid
+           column, which runs to the window's right edge because nothing is selected (no pane). -->
+      <g transform="translate(754.93,374.43) scale(1.7143)" data-symbol="checkmark.seal" fill="none" stroke="#6D6D72" stroke-linecap="round" stroke-linejoin="round"><path d="M12.00 2.25 L12.63 2.40 L13.21 2.80 L13.72 3.37 L14.15 3.96 L14.56 4.45 L15.00 4.75 L15.53 4.85 L16.16 4.79 L16.89 4.68 L17.65 4.64 L18.34 4.77 L18.89 5.11 L19.23 5.66 L19.36 6.35 L19.32 7.11 L19.21 7.84 L19.15 8.47 L19.25 9.00 L19.55 9.44 L20.04 9.85 L20.63 10.28 L21.20 10.79 L21.60 11.37 L21.75 12.00 L21.60 12.63 L21.20 13.21 L20.63 13.72 L20.04 14.15 L19.55 14.56 L19.25 15.00 L19.15 15.53 L19.21 16.16 L19.32 16.89 L19.36 17.65 L19.23 18.34 L18.89 18.89 L18.34 19.23 L17.65 19.36 L16.89 19.32 L16.16 19.21 L15.53 19.15 L15.00 19.25 L14.56 19.55 L14.15 20.04 L13.72 20.63 L13.21 21.20 L12.63 21.60 L12.00 21.75 L11.37 21.60 L10.79 21.20 L10.28 20.63 L9.85 20.04 L9.44 19.55 L9.00 19.25 L8.47 19.15 L7.84 19.21 L7.11 19.32 L6.35 19.36 L5.66 19.23 L5.11 18.89 L4.77 18.34 L4.64 17.65 L4.68 16.89 L4.79 16.16 L4.85 15.53 L4.75 15.00 L4.45 14.56 L3.96 14.15 L3.37 13.72 L2.80 13.21 L2.40 12.63 L2.25 12.00 L2.40 11.37 L2.80 10.79 L3.37 10.28 L3.96 9.85 L4.45 9.44 L4.75 9.00 L4.85 8.47 L4.79 7.84 L4.68 7.11 L4.64 6.35 L4.77 5.66 L5.11 5.11 L5.66 4.77 L6.35 4.64 L7.11 4.68 L7.84 4.79 L8.47 4.85 L9.00 4.75 L9.44 4.45 L9.85 3.96 L10.28 3.37 L10.79 2.80 L11.37 2.40Z" stroke-width="1.7"/><path d="M8.3 12.4L10.9 15L15.8 9.7" stroke-width="1.8"/></g>
+      <text x="775.5" y="437" font-size="13" class="b" text-anchor="middle" fill="#000">Nothing approved</text>
+      <text x="775.5" y="461" font-size="10" text-anchor="middle" fill="#6D6D72">Approve a photo, a clip or a blended clip from its Output section,</text>
+      <text x="775.5" y="474" font-size="10" text-anchor="middle" fill="#6D6D72">and it shows here — ready for use.</text>
+    </g>
+
+    <!-- ================= FLOATING TAB BAR (over all three panes) ================= -->
+    <g id="tab-bar" transform="translate(15,0)">
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(520 772) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+        <text x="520" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+      </g>
+      <rect x="557" y="757" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+      <g fill="none" stroke="#C36A00">
+        <g transform="translate(590 772) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+        <text x="590" y="796" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(660 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="660" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(730 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="730" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(800 772) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+        <text x="800" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1310" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="675" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · the Approved view, nothing approved · 1310×800 pt window</text>
+  <text x="675" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors GalleryGridContent.approvedEmptyState — the Approved row lit over a library with no approved output</text>
+</svg>

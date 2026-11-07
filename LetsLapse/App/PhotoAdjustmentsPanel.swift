@@ -45,9 +45,6 @@ struct EditorPresetsContext {
     /// "Delete preset" on a saved preset's tile; nil hides the entry.
     var onDelete: ((CustomPreset) -> Void)?
     var onSaveAsPreset: () -> Void
-    /// The owner's inline "Save these edits as a preset?" card, when it wants
-    /// it shown here rather than in its own rail.
-    var saveOffer: AnyView?
     /// The owner's Lightroom import card, when a sidecar exists.
     var lightroomCard: AnyView?
 }
@@ -531,23 +528,18 @@ struct PhotoAdjustmentsPanel: View {
         presets.tiles(style: tileStyle, accent: accent)
     }
 
-    /// Under the tiles: the owner's Lightroom card, then ONE way to keep the
-    /// edits in hand — the owner's inline offer when it is making one (the
-    /// offer carries its own Save as Preset button), otherwise the plain
-    /// row. This is the only place the offer appears.
+    /// Under the tiles: the owner's Lightroom card, then the one way to keep
+    /// the edits in hand — Save as Preset. Nothing else asks (the exit-time
+    /// offer and its inline card went 2026-11-05).
     @ViewBuilder private func presetsFooter(_ presets: EditorPresetsContext) -> some View {
         if let card = presets.lightroomCard { card }
-        if let offer = presets.saveOffer {
-            offer
-        } else {
-            Button(action: presets.onSaveAsPreset) {
-                Label("Save as Preset", systemImage: "square.and.arrow.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(accent)
-            }
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        Button(action: presets.onSaveAsPreset) {
+            Label("Save as Preset", systemImage: "square.and.arrow.down")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(accent)
         }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Tool groups
@@ -1478,7 +1470,7 @@ private struct PhotoAdjustmentsPanelPreview: View {
                 frame: nil, presetState: .original, basePreset: .original,
                 customPresets: [], cache: cache,
                 onSelect: { _ in }, onDelete: nil, onSaveAsPreset: {},
-                saveOffer: nil, lightroomCard: nil),
+                lightroomCard: nil),
             autoWhite: { nil })
     }
 }

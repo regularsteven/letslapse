@@ -44,7 +44,11 @@ extension AppModel {
     /// Every asset a project lists: its frames (never the sidecars) and its
     /// blend outputs — the names `assets.ndjson` is keyed by.
     func assetNames(for capture: CaptureProject) -> [String] {
+        // An approved photo's full-size render is a file of the project
+        // like any other, though no list shows it (`blends(for:)` leaves
+        // it out): it gets its hash line too.
         Self.assetNames(capture: capture, blends: blends(for: capture))
+            + (approvedPictureBlend(for: capture).map { [$0.outputFileName] } ?? [])
     }
 
     /// The same from a document read anywhere — the backfill's scan, off

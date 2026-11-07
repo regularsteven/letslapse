@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1350 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Gallery · preview panel on an imported photo (INFO + METADATA from the file) · 1310×800</title>
-  <desc>Mirrors App/GalleryView.swift (macOS branch) + App/GallerySidebar.swift + App/GalleryGridContent.swift + App/GalleryTile.swift + App/GalleryPreviewPanel.swift with App/MetadataPanelSections.swift — the same window as gallery.svg (see its desc for the three-pane layout, the 1310×800 choice, the grid and tab-bar measurements; the sidebar and grid are drawn identically here) with a PHOTO project selected: _WEX3518, the Sony ARW + Lightroom .xmp sidecar of the Milestone 1 test set, imported through Create ▸ Import photos (the import copies; the original is never touched). What changes is the preview panel. Title is the file name, the date line the capture date and file size (31. 8. 2026 · 18,9 MB). The action grid is Open, then Edit · Text · Shapes — no New clip: a Photo capture is one asset. No scope switch for the same reason. INFO (components/metadata-info.photo.narrow.svg) is everything the file said: camera, lens, exposure, captured (in the file's own zone), GPS with the Open in Maps link, size with the format, software. METADATA (components/metadata-fields.file.narrow.svg) is the IPTC Core record with its origins: from file for what the sidecar carried (Caption, Creator, Copyright, Rating 5 — the sidecar wins over the ARW's own 0 — Sublocation, State, Country, Country code), edited here with the revert arrow on Title, which a person retyped in this panel, and no marker on the empty rows. Keywords is the group's last row: the seven dc:subject keywords from the sidecar (components/tag-field.imported.narrow.svg), marked from file; they also seed the project's searchable tags. Below: Storage alone among the metaRows (no AI elements, no field notes yet), the divider and the Rename · Share · Finder · Delete… footer, both ~1.5k pt down and reached by scrolling; no BLENDED CLIPS section, since a Photo project has none. The record itself lives in Projects/&lt;id&gt;/assets.ndjson (one line per asset: bytes, SHA-256, the imported layer, the edited layer with per-field editedAt/editedBy) and metadata.json (the project-level record); edits write the edited layer only. Verified against the running Mac Debug build on a scratch library, 2026-09-13. **2026-09-13, later the same day — TAGS up, PRESETS in (design-first, code owed):** Steven's ruling: tags are the highest-priority metadata a person manages and belong above INFO on every platform, directly under the Open / Edit / Text / Shapes buttons. So the TAGS block comes back out of METADATA to where the 2026-09-08 design had it, and a collapsible PRESETS row follows it. ONE list, ONE editor: tags ARE keywords (Part 2 §4.5 — the manifest's sceneTags that the sidebar, search and the picker read, kept in step with the record's dc:subject that an export writes), so METADATA no longer draws a Keywords row in either scope; the block is always the whole project's, and per-frame keywords a file carried stay stored and exported but are not edited here (settled with Steven 2026-09-13). The origin marker and its revert move with it (10 pt at the header's trailing edge). PRESETS is a 25 pt disclosure row — LLSectionHeader 'PRESETS', then trailing the PresetStatePill (the applied preset's name in LL.accent with white text; Original / Edited on primary 8 % in secondary) and a 12 pt chevron.right — the whole row the button, collapsed by default, its state per panel life. Open (chevron.down), it is the editor's own Presets group verbatim — PhotoAdjustmentsPanel's .rail layout: PresetTile .macGrid in three columns of 85.33×72 at 8 pt, each tile THIS project's hero (AppModel.presetPreviewFrame) rendered through that preset alone at 160 px via PresetThumbnailCache, the applied one ringed — drawn in gallery.presets.svg; a tap applies through AppModel.applyPreset / applyCustomPreset, which keep the project's own rotation, crop and owned white (a preset never carries geometry), after the PresetApplyRequest confirmation when the project is Edited or keyframed. No Save as Preset row, no Lightroom card: nothing is being graded here. A Scanner capture, which presetPreviewFrame excludes, shows no PRESETS row. GEOMETRY: the TAGS block is 21 pt of header plus the field, the PRESETS row 25, the record groups 14 apart as before — so INFO / the scope switch move down by 230 pt, and everything from the metaRows down by 41.5 net (the Keywords row's 229.5 gone, 271 added). The iPad panel follows this file as it always has (same 272 pt column, the Mac's 3-column grid). Implemented and verified the same day (Debug builds: the Mac over a scratch library via -storage.libraryRootPath, the iPhone 17 Pro and iPad Pro 11" M5 simulators; hooks LL_TAB=gallery LL_SELECT=latest|&lt;uuid&gt; and LL_PANEL=presets). Drawn here on Original — an imported photo with nothing applied, the pill in grey — and the sidecar's seven keywords in the TAGS block, 'from file' (tag-field.imported.narrow.svg, 156 tall, which is why INFO moves 230 here against 189 in gallery.svg). **2026-09-13, evening — the pane is 330 pt (item view, code first, mirrored after Steven's sign-off):** GalleryColumns.pane went 300 → 330 so the right-hand divider holds still when the Gallery changes into its item view (gallery.item.svg — the editor's rail is 330); the content column is 302 and every `narrow` component is drawn at 302 now (components/README.md). The window is drawn at 1310×800 rather than 1280 so the centre column keeps its 778 pt and the tiles their 242×181.5 — at 1280 the grid would take the 30 pt instead (232×174 tiles); nothing else in the file depends on it. The action row's four buttons are 69.5 wide, the footer's four 75.5, the origin markers, PRESETS pill and chevron sit 30 pt further right, the tab bar 15 (it centres on the window). With the imported tag field three rows instead of four (115 tall) and the photo INFO group 221 tall (Captured and GPS on one line each), PRESETS sits 41 pt higher and everything from INFO down 70 pt higher than the 300 pt drawing.</desc>
+  <desc>Mirrors App/GalleryView.swift (macOS branch) + App/GallerySidebar.swift + App/GalleryGridContent.swift + App/GalleryTile.swift + App/GalleryPreviewPanel.swift with App/MetadataPanelSections.swift — the same window as gallery.svg (see its desc for the three-pane layout, the 1310×800 choice, the grid and tab-bar measurements; the sidebar and grid are drawn identically here) with a PHOTO project selected: _WEX3518, the Sony ARW + Lightroom .xmp sidecar of the Milestone 1 test set, imported through Create ▸ Import photos (the import copies; the original is never touched). What changes is the preview panel. Title is the file name, the date line the capture date and file size (31. 8. 2026 · 18,9 MB). The action grid is Open, then Edit · Text · Shapes — no New clip: a Photo capture is one asset. No scope switch for the same reason. INFO (components/metadata-info.photo.narrow.svg) is everything the file said: camera, lens, exposure, captured (in the file's own zone), GPS with the Open in Maps link, size with the format, software. METADATA (components/metadata-fields.file.narrow.svg) is the IPTC Core record with its origins: from file for what the sidecar carried (Caption, Creator, Copyright, Rating 5 — the sidecar wins over the ARW's own 0 — Sublocation, State, Country, Country code), edited here with the revert arrow on Title, which a person retyped in this panel, and no marker on the empty rows. Keywords is the group's last row: the seven dc:subject keywords from the sidecar (components/tag-field.imported.narrow.svg), marked from file; they also seed the project's searchable tags. Below: Storage alone among the metaRows (no AI elements, no field notes yet), the divider and the Rename · Share · Finder · Delete… footer, both ~1.5k pt down and reached by scrolling; no BLENDED CLIPS section, since a Photo project has none. The record itself lives in Projects/&lt;id&gt;/assets.ndjson (one line per asset: bytes, SHA-256, the imported layer, the edited layer with per-field editedAt/editedBy) and metadata.json (the project-level record); edits write the edited layer only. Verified against the running Mac Debug build on a scratch library, 2026-09-13. **2026-09-13, later the same day — TAGS up, PRESETS in (design-first, code owed):** Steven's ruling: tags are the highest-priority metadata a person manages and belong above INFO on every platform, directly under the Open / Edit / Text / Shapes buttons. So the TAGS block comes back out of METADATA to where the 2026-09-08 design had it, and a collapsible PRESETS row follows it. ONE list, ONE editor: tags ARE keywords (Part 2 §4.5 — the manifest's sceneTags that the sidebar, search and the picker read, kept in step with the record's dc:subject that an export writes), so METADATA no longer draws a Keywords row in either scope; the block is always the whole project's, and per-frame keywords a file carried stay stored and exported but are not edited here (settled with Steven 2026-09-13). The origin marker and its revert move with it (10 pt at the header's trailing edge). PRESETS is a 25 pt disclosure row — LLSectionHeader 'PRESETS', then trailing the PresetStatePill (the applied preset's name in LL.accent with white text; Original / Edited on primary 8 % in secondary) and a 12 pt chevron.right — the whole row the button, collapsed by default, its state per panel life. Open (chevron.down), it is the editor's own Presets group verbatim — PhotoAdjustmentsPanel's .rail layout: PresetTile .macGrid in three columns of 85.33×72 at 8 pt, each tile THIS project's hero (AppModel.presetPreviewFrame) rendered through that preset alone at 160 px via PresetThumbnailCache, the applied one ringed — drawn in gallery.presets.svg; a tap applies through AppModel.applyPreset / applyCustomPreset, which keep the project's own rotation, crop and owned white (a preset never carries geometry), after the PresetApplyRequest confirmation when the project is Edited or keyframed. No Save as Preset row, no Lightroom card: nothing is being graded here. A Scanner capture, which presetPreviewFrame excludes, shows no PRESETS row. GEOMETRY: the TAGS block is 21 pt of header plus the field, the PRESETS row 25, the record groups 14 apart as before — so INFO / the scope switch move down by 230 pt, and everything from the metaRows down by 41.5 net (the Keywords row's 229.5 gone, 271 added). The iPad panel follows this file as it always has (same 272 pt column, the Mac's 3-column grid). Implemented and verified the same day (Debug builds: the Mac over a scratch library via -storage.libraryRootPath, the iPhone 17 Pro and iPad Pro 11" M5 simulators; hooks LL_TAB=gallery LL_SELECT=latest|&lt;uuid&gt; and LL_PANEL=presets). Drawn here on Original — an imported photo with nothing applied, the pill in grey — and the sidecar's seven keywords in the TAGS block, 'from file' (tag-field.imported.narrow.svg, 156 tall, which is why INFO moves 230 here against 189 in gallery.svg). **2026-09-13, evening — the pane is 330 pt (item view, code first, mirrored after Steven's sign-off):** GalleryColumns.pane went 300 → 330 so the right-hand divider holds still when the Gallery changes into its item view (gallery.item.svg — the editor's rail is 330); the content column is 302 and every `narrow` component is drawn at 302 now (components/README.md). The window is drawn at 1310×800 rather than 1280 so the centre column keeps its 778 pt and the tiles their 242×181.5 — at 1280 the grid would take the 30 pt instead (232×174 tiles); nothing else in the file depends on it. The action row's four buttons are 69.5 wide, the footer's four 75.5, the origin markers, PRESETS pill and chevron sit 30 pt further right, the tab bar 15 (it centres on the window). With the imported tag field three rows instead of four (115 tall) and the photo INFO group 221 tall (Captured and GPS on one line each), PRESETS sits 41 pt higher and everything from INFO down 70 pt higher than the 300 pt drawing. ======== 2026-11-06 ======== SIDEBAR, 2026-11-06: an APPROVED section sits between LIBRARY and what follows (GallerySidebar.approvedSection — one row, the seal, the count of approved outputs; a switch), so every section under it is 90 pt lower. TILES, 2026-11-06: a tile whose project holds an approval wears ApprovedSeal top-leading, 6 in (22 pt). The sample library's approvals, the same in every Gallery mirror: River Sunset to Dusk's Blended clip 1 (t1), Vltava Embankment's Edited clip 1 (t3 — the graded video; its source is NOT approved), the stock clip's source (t5, a video with no edits), _WEX3518 the photo as edited (t6) and one blended clip of t7 — five approved outputs from five projects, so those five tiles wear the seal and the sidebar's count reads 5. PANE REDRAWN 2026-11-06 from the running Debug build (approved-scratch library, 1310×800, frames read through accessibility), closing the 2026-09-27 reorder and the 2026-11-05 Output move in one pass. GalleryPreviewPanel's pane is 330 pt (x 1000–1330, a 302 pt column) and its one order is: the thumbnail — the picture WHOLE, its height following its own aspect since 2026-10-11 (ProjectThumbnailView fitsPicture: this 3:2 photo is 302 × 201.3 where the family drew a fixed 150) — the title over date · size, Open alone (57 pt, filled; Edit / Text / Shapes / New clip left on 2026-09-27 — Open lands in the editor), a full-bleed divider, Auto rename &amp; tag, TAGS, PRESETS (no PICPLACE group: this library was never connected), the rows (In frame · Storage · Here · Field notes, each only when it has a value), a divider, a footer of THREE buttons — Rename · Finder · Delete… (Share went on 2026-11-05: Output has Share project) — a divider, then OUTPUT ABOVE INFO: the buttons (components/output-actions.*), the project's own approval for a photo or a video (components/output-approval.*), EDITED CLIPS and BLENDED CLIPS (the tick-chip filter, then components/blended-clip-row.*, every row ending in the approve seal), a divider, and the record groups — the scope switch an interval project gets, INFO, METADATA — over 82 pt of tab-bar clearance. Rhythm: 14 between the groups above the rows, 12 above the rows, 27 a row (15 more per wrapped line), 10 round the 50 pt footer, 14 above the OUTPUT header, 12 under a header, 16 above the EDITED / BLENDED headers and above the last divider. The text between the two dates below describes the pane as it was drawn before; where it disagrees with this paragraph, this paragraph is the spec. INFO and METADATA now follow OUTPUT, so the pane is drawn SCROLLED 412.8 pt — the TAGS header 12 pt under the pane's top edge — to keep what this file exists for inside the window: TAGS (from file), PRESETS, Storage and Here, the three-button footer, OUTPUT (Share project alone — a Photo capture has nothing to blend — and the photo's approval, approved: components/output-approval.photo.approved), then INFO whole and the head of METADATA. </desc>
 
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1310" height="800" rx="11"/></clipPath>
@@ -18,7 +18,7 @@
     <clipPath id="t10"><rect x="235" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
     <clipPath id="t11"><rect x="489" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
     <clipPath id="t12"><rect x="743" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
-    <clipPath id="hero"><rect x="1014" y="70" width="302" height="150" rx="10"/></clipPath>
+    <clipPath id="hero"><rect x="1014" y="-342.8" width="302" height="201.33" rx="10"/></clipPath>
 
     <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
@@ -44,6 +44,9 @@
     <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
       <feDropShadow dx="0" dy="8" stdDeviation="7.5" flood-color="#000" flood-opacity="0.14"/>
     </filter>
+    <!-- ApprovedSeal (App/ApprovedAssetViews.swift, 2026-11-05): checkmark.seal.fill, white tick on LL.accent, 13.6 pt symbol on a 22 pt black 50 % disc — placed top-leading, 6 in, on a tile whose project holds an approval -->
+    <g id="approved-seal"><g data-view="ApprovedSeal"><circle cx="11.00" cy="11.00" r="11.00" fill="#000" fill-opacity="0.5"/><g transform="translate(2.27,2.27) scale(0.7275)" data-symbol="checkmark.seal.fill"><path d="M12.00 1.50 L12.68 1.65 L13.31 2.06 L13.86 2.63 L14.35 3.23 L14.81 3.74 L15.29 4.05 L15.86 4.17 L16.54 4.14 L17.31 4.06 L18.10 4.05 L18.84 4.20 L19.42 4.58 L19.80 5.16 L19.95 5.90 L19.94 6.69 L19.86 7.46 L19.83 8.14 L19.95 8.71 L20.26 9.19 L20.77 9.65 L21.37 10.14 L21.94 10.69 L22.35 11.32 L22.50 12.00 L22.35 12.68 L21.94 13.31 L21.37 13.86 L20.77 14.35 L20.26 14.81 L19.95 15.29 L19.83 15.86 L19.86 16.54 L19.94 17.31 L19.95 18.10 L19.80 18.84 L19.42 19.42 L18.84 19.80 L18.10 19.95 L17.31 19.94 L16.54 19.86 L15.86 19.83 L15.29 19.95 L14.81 20.26 L14.35 20.77 L13.86 21.37 L13.31 21.94 L12.68 22.35 L12.00 22.50 L11.32 22.35 L10.69 21.94 L10.14 21.37 L9.65 20.77 L9.19 20.26 L8.71 19.95 L8.14 19.83 L7.46 19.86 L6.69 19.94 L5.90 19.95 L5.16 19.80 L4.58 19.42 L4.20 18.84 L4.05 18.10 L4.06 17.31 L4.14 16.54 L4.17 15.86 L4.05 15.29 L3.74 14.81 L3.23 14.35 L2.63 13.86 L2.06 13.31 L1.65 12.68 L1.50 12.00 L1.65 11.32 L2.06 10.69 L2.63 10.14 L3.23 9.65 L3.74 9.19 L4.05 8.71 L4.17 8.14 L4.14 7.46 L4.06 6.69 L4.05 5.90 L4.20 5.16 L4.58 4.58 L5.16 4.20 L5.90 4.05 L6.69 4.06 L7.46 4.14 L8.14 4.17 L8.71 4.05 L9.19 3.74 L9.65 3.23 L10.14 2.63 L10.69 2.06 L11.32 1.65Z" fill="#C36A00"/><path d="M8.3 12.4L10.9 15L15.8 9.7" fill="none" stroke="#FFFFFF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></g></g></g>
+    <clipPath id="pane-scroll"><rect x="1000" y="48" width="330" height="772"/></clipPath>
   </defs>
 
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
@@ -95,6 +98,25 @@
       <text x="68" y="200" font-size="14" fill="#000">Video</text>
 
       <line x1="32" y1="231" x2="208" y2="231" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- APPROVED (2026-11-05, docs/approved-assets.md): GallerySidebar.approvedSection, between LIBRARY and what follows
+           in every library — LLSectionHeader "Approved", then ONE LibraryFilterRow: checkmark.seal (checkmark.seal.fill
+           and LL.accent once lit, with the accent 10 % capsule, as All above), the label 14 pt, and trailing the number of
+           approved OUTPUTS the other filters leave (12 pt monospaced digits, secondary) — outputs, not projects: a project
+           with two approved renders counts twice. A switch, like a tag row: lit, the grid becomes one tile per approved
+           output (gallery.approved.svg); it narrows with Library, PicPlace, Tags, Shapes and the search. Header 33 pt
+           under the divider, the row 270–301, its own divider at 321 — the Library section's rhythm. Drawn at rest. -->
+      <g id="approved-filter" data-state="rest">
+      <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">APPROVED</text>
+      <g transform="translate(39.03,276.53) scale(0.7476)" data-symbol="checkmark.seal" fill="none" stroke="#6D6D72" stroke-linecap="round" stroke-linejoin="round"><path d="M12.00 2.25 L12.63 2.40 L13.21 2.80 L13.72 3.37 L14.15 3.96 L14.56 4.45 L15.00 4.75 L15.53 4.85 L16.16 4.79 L16.89 4.68 L17.65 4.64 L18.34 4.77 L18.89 5.11 L19.23 5.66 L19.36 6.35 L19.32 7.11 L19.21 7.84 L19.15 8.47 L19.25 9.00 L19.55 9.44 L20.04 9.85 L20.63 10.28 L21.20 10.79 L21.60 11.37 L21.75 12.00 L21.60 12.63 L21.20 13.21 L20.63 13.72 L20.04 14.15 L19.55 14.56 L19.25 15.00 L19.15 15.53 L19.21 16.16 L19.32 16.89 L19.36 17.65 L19.23 18.34 L18.89 18.89 L18.34 19.23 L17.65 19.36 L16.89 19.32 L16.16 19.21 L15.53 19.15 L15.00 19.25 L14.56 19.55 L14.15 20.04 L13.72 20.63 L13.21 21.20 L12.63 21.60 L12.00 21.75 L11.37 21.60 L10.79 21.20 L10.28 20.63 L9.85 20.04 L9.44 19.55 L9.00 19.25 L8.47 19.15 L7.84 19.21 L7.11 19.32 L6.35 19.36 L5.66 19.23 L5.11 18.89 L4.77 18.34 L4.64 17.65 L4.68 16.89 L4.79 16.16 L4.85 15.53 L4.75 15.00 L4.45 14.56 L3.96 14.15 L3.37 13.72 L2.80 13.21 L2.40 12.63 L2.25 12.00 L2.40 11.37 L2.80 10.79 L3.37 10.28 L3.96 9.85 L4.45 9.44 L4.75 9.00 L4.85 8.47 L4.79 7.84 L4.68 7.11 L4.64 6.35 L4.77 5.66 L5.11 5.11 L5.66 4.77 L6.35 4.64 L7.11 4.68 L7.84 4.79 L8.47 4.85 L9.00 4.75 L9.44 4.45 L9.85 3.96 L10.28 3.37 L10.79 2.80 L11.37 2.40Z" stroke-width="1.7"/><path d="M8.3 12.4L10.9 15L15.8 9.7" stroke-width="1.8"/></g>
+      <text x="68" y="290" font-size="14" fill="#000">Approved</text>
+      <text x="202" y="290" font-size="12" class="mono" text-anchor="end" fill="#6D6D72">5</text>
+      </g>
+
+      <line x1="32" y1="321" x2="208" y2="321" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- Everything under APPROVED as before, 90 pt lower (2026-11-06). -->
+      <g transform="translate(0,90)">
 
       <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">TAGS</text>
 
@@ -161,6 +183,7 @@
         <path d="M43 685 L53 695"/>
       </g>
       <text x="68" y="695" font-size="14" fill="#000">No Shapes</text>
+      </g>
     </g>
 
     <line x1="220.5" y1="48" x2="220.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
@@ -312,137 +335,51 @@
         <rect x="410" y="508" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="523.5" text-anchor="middle">4 clips</text>
       </g>
 
+      <!-- APPROVED SEALS (2026-11-05): GalleryTile's .overlay(alignment: .topLeading) { ApprovedSeal(size: 22).padding(6) }
+           on a tile whose project holds an approval (ProjectRow.approvedCount > 0) — the selection circle's corner, which
+           takes it over while circles show. The sample library's approvals, the same in every Gallery mirror: River Sunset to Dusk's Blended clip 1 (t1), Vltava Embankment's Edited clip 1 (t3 — the graded video; its source is NOT approved), the stock clip's source (t5, a video with no edits), _WEX3518 the photo as edited (t6) and one blended clip of t7 — five approved outputs from five projects, so those five tiles wear the seal and the sidebar's count reads 5. -->
+      <g id="approved-seals">
+        <use href="#approved-seal" x="241" y="121"/><!-- t1 -->
+        <use href="#approved-seal" x="749" y="121"/><!-- t3 -->
+        <use href="#approved-seal" x="495" y="314.5"/><!-- t5 -->
+        <use href="#approved-seal" x="749" y="314.5"/><!-- t6 -->
+        <use href="#approved-seal" x="241" y="508"/><!-- t7 -->
+      </g>
+
       <!-- selection: 2.5pt accent strokeBorder, inset on the tile's own radius -->
       <rect x="744.25" y="309.75" width="239.5" height="179" rx="8" fill="none" stroke="#C36A00" stroke-width="2.5"/>
     </g>
 
-    <!-- ================= PREVIEW PANEL (GalleryPreviewPanel, fixed 300pt) ================= -->
+    <!-- ================= PREVIEW PANEL (GalleryPreviewPanel .pane, fixed 330 pt — redrawn 2026-11-06) =================
+         _WEX3518 (t6), an imported photo — the pane scrolled 412.8 pt: TAGS · PRESETS · rows · footer · OUTPUT · INFO · METADATA.
+         Order and rhythm: see the desc's PANE REDRAWN paragraph. Every y is the app's own stack arithmetic
+         (accessibility frames of the Debug build), on the family's 28 pt title bar and 302 pt column. -->
     <line x1="999.5" y1="48" x2="999.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
-    <g id="preview">
+    <g id="preview" clip-path="url(#pane-scroll)">
       <rect x="1000" y="48" width="330" height="772" fill="#FFFFFF"/>
-
-      <g clip-path="url(#hero)">
-        <rect x="1014" y="70" width="302" height="150" fill="url(#dusk)"/>
-        <path d="M1014 166 h302 v54 h-302 z" fill="#3B4450" opacity="0.85"/>
-        <path d="M1014 160 l34-9 30 6 38-13 34 8 45-11 38 10 53-7 v16 h-302 z" fill="#2A3140"/>
-        <rect x="1036" y="182" width="170" height="5" rx="2.5" fill="#E7B478" opacity="0.45"/>
-        <rect x="1070" y="198" width="136" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
-      </g>
-
-      <text x="1014" y="248" font-size="16" class="b" fill="#000">_WEX3518</text>
-      <text x="1014" y="266" font-size="12" fill="#6D6D72">31. 8. 2026</text>
-      <text x="1080" y="266" font-size="12" fill="#000" fill-opacity="0.3">·</text>
-      <text x="1089" y="266" font-size="12" fill="#6D6D72">18,9 MB</text>
-
-      <!-- Action grid (redrawn 2026-09-13 as shipped since 2026-09-11): Open alone
-           on top, filled; then one row of equal buttons — Edit, Text, Shapes. No New
-           clip: a Photo capture is one asset. Each is 57pt tall, rx 9, a 16pt medium
-           glyph over an 11pt medium label; 8pt gaps. -->
-      <g id="actions">
-        <rect x="1014" y="286" width="302" height="57" rx="9" fill="#C36A00"/>
-        <g fill="none" stroke="#FFFFFF" stroke-width="1.8" data-symbol="arrow.up.forward.square" transform="translate(15,0)">
-          <rect x="1142" y="298" width="16" height="16" rx="3.4"/><path d="M1147 309 l6-6 M1149.5 303 h3.5 v3.5" stroke-linecap="round"/>
-        </g>
-        <text x="1165" y="333" font-size="11" class="m" text-anchor="middle" fill="#FFFFFF">Open</text>
-
-        <rect x="1014" y="351" width="85.3" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
-        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="pencil">
-          <path d="M1049.5 376 l1-4.5 10.5-10.5 3.5 3.5 -10.5 10.5 z" stroke-linejoin="round"/>
-        </g>
-        <text x="1056.7" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Edit</text>
-
-        <rect x="1107.3" y="351" width="85.3" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
-        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="textformat">
-          <path d="M1140 375 l6-13 6 13 M1142 371 h8 M1154 375 h6" stroke-linecap="round"/>
-        </g>
-        <text x="1150" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Text</text>
-
-        <rect x="1200.7" y="351" width="85.3" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
-        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="circle.square">
-          <rect x="1235.3" y="362" width="16" height="16" rx="2.5"/><circle cx="1243.3" cy="370" r="4.5"/>
-        </g>
-        <text x="1243.3" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Shapes</text>
-      </g>
-
-      <line x1="1000" y1="424.5" x2="1330" y2="424.5" stroke="#000" stroke-opacity="0.10"/>
-
-      <!-- TAGS (2026-09-13, design-first): the project's keyword list — the same list the
-           sidebar filters and search read (sceneTags) and the record's dc:subject keywords
-           (Part 2 §4.5: tags ARE keywords) — promoted back out of the METADATA group to its
-           own block directly under the action grid, where the 2026-09-08 design had it. One
-           editor, always the whole project's: the scope switch below does not reach it, and
-           METADATA no longer draws a Keywords row (per-frame keywords a file carried are kept
-           and exported, not edited here — Steven, 2026-09-13). The origin marker and its
-           revert come with it (10 pt at the header's trailing edge, as on every METADATA
-           row). Header = LLSectionHeader (13 pt semibold secondary, kerning 0.5, 4 pt in),
-           the field 21 pt under the block top. Edit components/tag-field.*, not this markup. -->
-      <g id="tags" data-field="keywords">
-        <text x="1018" y="449.5" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
-        <text x="1316" y="449.5" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
-        <image href="../components/tag-field.imported.narrow.svg" x="1014" y="458" width="302" height="115"/>
-      </g>
-      <!-- PRESETS (2026-09-13, design-first): a disclosure row, collapsed by default — the
-           header (LLSectionHeader), then trailing the PresetStatePill (the applied preset in
-           LL.accent with white text; Original / Edited on primary 8 % in secondary) and a
-           12 pt chevron.right (chevron.down while open). The whole 25 pt row is the button;
-           the state is per panel life, not persisted. Open, the group is the editor's own
-           Presets grid — see gallery.presets.svg / gallery.preview.presets.portrait.svg. -->
-      <g id="presets" data-state="collapsed">
-        <text x="1018" y="604" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text>
-        <rect x="1227" y="587" width="72" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/>
-        <text x="1263" y="604" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Original</text>
-        <path d="M1307 595 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
-      </g>
-
-
-      <!-- INFO + METADATA (2026-09-13, data model Milestone 1; moved under TAGS + PRESETS the same day): a Photo project is one asset,
-           so no scope switch — the panel edits its one record. INFO is what the file said
-           (metadata-info.photo.narrow.svg); METADATA the IPTC Core record with its origins
-           (metadata-fields.file.narrow.svg: from file, edited here + revert on Title, nothing on
-           the empty rows). Keywords, the group's last row: the label the panel draws, "from
-           file", then the sidecar's seven keywords in the shared tag editor
-           (tag-field.imported.narrow.svg). Edit the component files, not this markup — see
-           components/README.md. The window edge catches the panel after Copyright; the
-           rest is reached by scrolling. -->
-      <image href="../components/metadata-info.photo.narrow.svg" x="1014" y="626" width="302" height="221"/>
-      <image href="../components/metadata-fields.file.narrow.svg" x="1014" y="861" width="302" height="1218"/>
-      
-      <!-- metaRows on a 72pt label column — 12pt under the record groups; Storage is the
-           only one this project has (no AI elements, no field notes) -->
-      <g id="meta">
-        <text x="1014" y="2106" font-size="12" class="sb" fill="#6D6D72">Storage</text>
-        <text x="1096" y="2106" font-size="12" fill="#6D6D72">18,9 MB</text>
-      </g>
-
-      <line x1="1000" y1="2118.5" x2="1330" y2="2118.5" stroke="#000" stroke-opacity="0.10"/>
-
-      <!-- footer: four equal buttons, 20pt dividers, Delete tinted red -->
-      <g id="footer">
-        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line" transform="translate(4.15,0)">
-          <path d="M1043 2140 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M1040 2145 h16" stroke-linecap="round"/>
-        </g>
-        <text x="1051.75" y="2159" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
-        <line x1="1089.5" y1="2143" x2="1089.5" y2="2163" stroke="#000" stroke-opacity="0.10"/>
-
-        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="square.and.arrow.up" transform="translate(11.35,0)">
-          <path d="M1110 2139 v-8 M1106.5 2134 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M1104 2137 v8 h12 v-8"/>
-        </g>
-        <text x="1127.25" y="2159" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
-        <line x1="1165" y1="2143" x2="1165" y2="2163" stroke="#000" stroke-opacity="0.10"/>
-
-        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="folder" transform="translate(18.65,0)">
-          <path d="M1176 2132 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/>
-        </g>
-        <text x="1202.75" y="2159" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text>
-        <line x1="1240.5" y1="2143" x2="1240.5" y2="2163" stroke="#000" stroke-opacity="0.10"/>
-
-        <g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash" transform="translate(25.85,0)">
-          <path d="M1245 2134 h15 M1247 2134 v11 h11 v-11 M1250.5 2132 h4"/>
-        </g>
-        <text x="1278.25" y="2159" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
-      </g>
-      <!-- no BLENDED CLIPS section: a Photo project has no blends -->
+      <g id="hero" data-view="ProjectThumbnailView(fitsPicture)"><g clip-path="url(#hero)"><g transform="translate(1014,-355.38) scale(1.24793) translate(-743,-308.5)"><rect x="743" y="308.5" width="242" height="181.5" fill="url(#storm)"/><ellipse cx="820" cy="352" rx="90" ry="22" fill="#39414E" opacity="0.7"/><ellipse cx="920" cy="342" rx="70" ry="18" fill="#333B47" opacity="0.6"/><rect x="743" y="440" width="242" height="50" fill="#8E8571"/></g></g></g>
+      <text x="1014" y="-114.47" font-size="16" class="b" fill="#000">_WEX3518</text>
+      <text x="1014" y="-96.47" font-size="12" fill="#6D6D72">31. 8. 2026</text>
+      <text x="1086.2" y="-96.47" font-size="12" fill="#000" fill-opacity="0.3">·</text>
+      <text x="1095.2" y="-96.47" font-size="12" fill="#6D6D72">18,9 MB</text>
+      <g id="actions" data-action="open"><rect x="1014" y="-74.97" width="302" height="57" rx="9" fill="#C36A00"/><g fill="none" stroke="#FFFFFF" stroke-width="1.8" data-symbol="arrow.up.forward.square"><rect x="1157" y="-62.97" width="16" height="16" rx="3.4"/><path d="M1162 -51.97 l6-6 M1164.5 -57.97 h3.5 v3.5" stroke-linecap="round"/></g><text x="1165" y="-27.97" font-size="11" class="m" text-anchor="middle" fill="#FFFFFF">Open</text></g>
+      <line x1="1000" y1="-1.47" x2="1330" y2="-1.47" stroke="#000" stroke-opacity="0.10"/>
+      <g id="auto-rename" data-symbol="sparkles"><rect x="1014" y="11.03" width="302" height="35" rx="9" fill="#000" fill-opacity="0.06"/><path d="M1033 22.53 l1.6 4.4 4.4 1.6 -4.4 1.6 -1.6 4.4 -1.6 -4.4 -4.4 -1.6 4.4 -1.6 z M1039.5 20.03 l0.8 2.2 2.2 0.8 -2.2 0.8 -0.8 2.2 -0.8 -2.2 -2.2 -0.8 2.2 -0.8 z" fill="#C36A00"/><text x="1047" y="33.53" font-size="14" class="sb" fill="#C36A00">Auto rename &amp; tag</text><path d="M1300 24.03 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-opacity="0.6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/></g>
+      <text x="1018" y="72.53" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TAGS</text>
+      <text x="1316" y="72.53" font-size="10" class="m" text-anchor="end" fill="#000" fill-opacity="0.3">from file</text>
+      <image href="../components/tag-field.imported.narrow.svg" x="1014" y="81" width="302" height="115"/>
+      <g id="presets" data-state="collapsed"><text x="1018" y="227.03" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">PRESETS</text><rect x="1227" y="210.03" width="72" height="25" rx="12.5" fill="#000" fill-opacity="0.08"/><text x="1263" y="227.03" font-size="12.5" class="sb" text-anchor="middle" fill="#6D6D72">Original</text><path d="M1307 218.03 l4.5 4.5 -4.5 4.5" fill="none" stroke="#6D6D72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/></g>
+      <g id="meta"><text x="1014" y="264.53" font-size="12" class="sb" fill="#6D6D72">Storage</text><text x="1096" y="264.53" font-size="12" fill="#6D6D72">18,9 MB</text><text x="1014" y="291.53" font-size="12" class="sb" fill="#6D6D72">Here</text><text x="1096" y="291.53" font-size="12" fill="#6D6D72">Originals</text></g>
+      <line x1="1000" y1="305.53" x2="1330" y2="305.53" stroke="#000" stroke-opacity="0.10"/>
+      <g id="footer"><g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line"><path d="M1059.33 336.53 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M1056.33 341.53 h16" stroke-linecap="round"/></g><text x="1064.33" y="355.53" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text><line x1="1114.67" y1="331.03" x2="1114.67" y2="351.03" stroke="#000" stroke-opacity="0.10"/><g fill="none" stroke="#000" stroke-width="1.5" data-symbol="folder"><path d="M1157 327.53 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/></g><text x="1165" y="355.53" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text><line x1="1215.33" y1="331.03" x2="1215.33" y2="351.03" stroke="#000" stroke-opacity="0.10"/><g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash"><path d="M1258.17 329.03 h15 M1260.17 329.03 v11 h11 v-11 M1263.67 327.03 h4"/></g><text x="1265.67" y="355.53" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text></g>
+      <line x1="1000" y1="376.53" x2="1330" y2="376.53" stroke="#000" stroke-opacity="0.10"/>
+      <!-- OUTPUT above INFO (2026-11-05). A Photo capture: Share project alone, then its own approval — approved here, so the row is the accent one and tile 6 wears the seal; the app keeps a full-size render of the edited picture current -->
+      <text x="1018" y="403.53" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">OUTPUT</text>
+      <image href="../components/output-actions.share.narrow.svg" x="1014" y="421" width="302" height="57"/>
+      <image href="../components/output-approval.photo.approved.narrow.svg" x="1014" y="492" width="302" height="65"/>
+      <line x1="1000" y1="573.53" x2="1330" y2="573.53" stroke="#000" stroke-opacity="0.10"/>
+      <image href="../components/metadata-info.photo.narrow.svg" x="1014" y="586" width="302" height="221"/>
+      <image href="../components/metadata-fields.file.narrow.svg" x="1014" y="821" width="302" height="1218"/>
     </g>
 
     <!-- ================= FLOATING TAB BAR (over all three panes) ================= -->

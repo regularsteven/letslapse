@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 302 57" width="302" height="57" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Output actions · video · narrow</title>
+  <desc>Mirrors GalleryPreviewPanel.outputSection's button row for a VIDEO project (App/GalleryPreviewPanel.swift, both dresses since 2026-11-05 — the pane beside the grid and the item view's inspector; docs/approved-assets.md): New clip (the blend flow) · Render Edits (RenderEditsButton — wand.and.stars: the clip at 1× with the editor's edits baked in and its sound kept, stored as an edited clip) · Share project (the .lapse archive). The same actionButton as the other states: 57 pt tall, radius 9, primary at 7 %, a 16 pt medium glyph over an 11 pt medium label, three equal widths (95.33) 8 pt apart across the 302 pt column. THIS STATE: the clip has edits to bake, so Render Edits is live. See components/README.md.</desc>
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
+  <g id="output-actions" data-state="video" data-width="narrow">
+    <g><rect x="0.00" y="0" width="95.33" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+      <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="plus.circle"><circle cx="47.67" cy="19" r="8"/><path d="M43.67 19 h8 M47.67 15 v8" stroke-linecap="round"/></g>
+      <text x="47.67" y="47" font-size="11" class="m" text-anchor="middle" fill="#000">New clip</text></g>
+    <g><rect x="103.33" y="0" width="95.33" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+      <g data-symbol="wand.and.stars"><path d="M144 26.5 L153.5 17" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round"/><path d="M156.2 10 L157.22 12.38 L159.6 13.4 L157.22 14.42 L156.2 16.8 L155.18 14.42 L152.8 13.4 L155.18 12.38Z M148.4 11.1 L149.03 12.57 L150.5 13.2 L149.03 13.83 L148.4 15.3 L147.77 13.83 L146.3 13.2 L147.77 12.57Z M157.8 19.5 L158.43 20.97 L159.9 21.6 L158.43 22.23 L157.8 23.7 L157.17 22.23 L155.7 21.6 L157.17 20.97Z" fill="#000"/></g>
+      <text x="151.00" y="47" font-size="11" class="m" text-anchor="middle" fill="#000">Render Edits</text></g>
+    <g><rect x="206.67" y="0" width="95.33" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+      <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="square.and.arrow.up"><path d="M254.33 22 v-11 M250.33 15 l4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/><path d="M247.33 18 v9 h14 v-9"/></g>
+      <text x="254.33" y="47" font-size="11" class="m" text-anchor="middle" fill="#000">Share project</text></g>
+  </g>
+</svg>

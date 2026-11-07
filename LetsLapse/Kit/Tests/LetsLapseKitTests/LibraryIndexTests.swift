@@ -523,6 +523,100 @@ final class LibraryIndexTests: XCTestCase {
         XCTAssertEqual(try index.projects(LibraryIndex.ProjectQuery()).rows.map(\.id), try index.projectIDs(LibraryIndex.ProjectQuery()), "the page and the ids agree")
     }
 
+    // MARK: - Approved outputs (2026-11-05)
+
+    /// A document written by hand with approvals on it: the capture's own,
+    /// and its blends'.
+    private func writeApprovals(_ n: Int, created: Double, source: Bool, blends: [(approved: Bool, deleted: Bool, role: String?)]) throws {
+        var capture: [String: Any] = [
+            "id": id(n), "kind": "video", "createdAt": ProjectDocumentFormat.documentDate(fromManifestSeconds: created),
+            "originalName": "clip.mp4", "mode": "Import", "sourceFileNames": ["source/clip.mp4"], "originID": id(n),
+            "presetState": ["kind": "original"],
+        ]
+        if source {
+            capture["approvedAt"] = ProjectDocumentFormat.documentDate(fromManifestSeconds: created + 50)
+            capture["approvedFile"] = "source/clip.mp4"
+        }
+        let records: [[String: Any]] = blends.enumerated().map { b, blend in
+            var record: [String: Any] = [
+                "id": blendID(n, b), "captureID": id(n), "kind": "video",
+                "createdAt": ProjectDocumentFormat.documentDate(fromManifestSeconds: created + Double(b)),
+                "outputFileName": "blends/\(b).mp4", "summary": "\(b)", "linearLight": false, "useRamp": false,
+                "rampStart": 1, "rampEnd": 1, "curve": "linear",
+            ]
+            if blend.approved { record["approvedAt"] = ProjectDocumentFormat.documentDate(fromManifestSeconds: created + 60) }
+            if blend.deleted { record["deletedAt"] = ProjectDocumentFormat.documentDate(fromManifestSeconds: created + 70) }
+            if let role = blend.role { record["role"] = role }
+            return record
+        }
+        let folder = projects.appendingPathComponent(id(n), isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: ["formatVersion": 2, "capture": capture, "blends": records], options: [.sortedKeys])
+            .write(to: ProjectDocumentFormat.url(inProjectFolder: folder))
+    }
+
+    /// The Approved row's rule: a project's own approval and each LIVE
+    /// approved blend count one each; a tombstoned blend and the approval's
+    /// own picture render count nothing — and the render is no blend either.
+    func testApprovedCountsOutputsNotProjects() throws {
+        try writeProject(1, created: 100, blends: 1)                                   // nothing approved
+        try writeApprovals(2, created: 200, source: true, blends: [])                   // its source
+        try writeApprovals(3, created: 300, source: false, blends: [
+            (approved: true, deleted: false, role: "edit"),                             // an edited clip
+            (approved: true, deleted: false, role: nil),                                // a blended clip
+            (approved: true, deleted: true, role: nil),                                 // approved, then deleted
+            (approved: false, deleted: false, role: nil),
+        ])
+        try writeApprovals(4, created: 400, source: true, blends: [(approved: false, deleted: false, role: "picture")])
+        let index = try openIndex()
+        try index.rebuild(fromProjectsFolder: projects)
+
+        XCTAssertEqual(try index.project(id: uuid(1))?.approvedCount, 0)
+        XCTAssertEqual(try index.project(id: uuid(2))?.approvedCount, 1)
+        XCTAssertEqual(try index.project(id: uuid(3))?.approvedCount, 2)
+        XCTAssertEqual(try index.project(id: uuid(4))?.approvedCount, 1)
+        XCTAssertEqual(try index.project(id: uuid(3))?.blendCount, 3, "live blends, the edited clip among them")
+        XCTAssertEqual(try index.project(id: uuid(4))?.blendCount, 0, "the approval's render is not a blend")
+
+        var query = LibraryIndex.ProjectQuery(); query.approved = true
+        XCTAssertEqual(try index.projectIDs(query).map(\.uuidString), [id(4), id(3), id(2)])
+        XCTAssertEqual(try index.approvedTotal(query), 4, "outputs, not projects")
+        query.category = .video
+        XCTAssertEqual(try index.approvedTotal(query), 4)
+        query.text = "nothing-matches-this"
+        XCTAssertEqual(try index.approvedTotal(query), 0)
+
+        // Taking an approval away is an upsert like any other edit.
+        try writeApprovals(2, created: 200, source: false, blends: [])
+        try index.upsertProject(documentData: Data(contentsOf: ProjectDocumentFormat.url(inProjectFolder: projects.appendingPathComponent(id(2)))), folder: id(2))
+        XCTAssertEqual(try index.project(id: uuid(2))?.approvedCount, 0)
+    }
+
+    /// Schema 4 → 5 adds the column and keeps every row: a library is not
+    /// rebuilt for a count that was 0 for all of it.
+    func testSchemaFourGainsTheApprovedColumnWithoutARebuild() throws {
+        try writeProject(1, created: 100, blends: 1)
+        do {
+            let index = try openIndex()
+            try index.rebuild(fromProjectsFolder: projects)
+        }
+        // The same database as a version-4 build left it.
+        do {
+            let raw = try SQLiteDatabase(at: LibraryIndex.url(inRoot: root))
+            try raw.execute("ALTER TABLE projects DROP COLUMN approved_count")
+            try raw.setUserVersion(4)
+            XCTAssertFalse(raw.columns(of: "projects").contains("approved_count"))
+        }
+        // The documents are gone from under it: only a kept row can answer.
+        try FileManager.default.removeItem(at: projects.appendingPathComponent(id(1)))
+        let index = try openIndex()
+        XCTAssertEqual(try index.counts().projects, 1, "the row survived the schema step")
+        XCTAssertEqual(try index.project(id: uuid(1))?.approvedCount, 0)
+        XCTAssertEqual(try index.project(id: uuid(1))?.blendCount, 1)
+        var query = LibraryIndex.ProjectQuery(); query.approved = true
+        XCTAssertEqual(try index.projectIDs(query), [])
+    }
+
     /// The whole-list form of the origin lookup answers exactly what the
     /// single one does, id by id — the transfer picker's "already here".
     func testLiveProjectIdentitiesMatchTheOriginLookup() throws {

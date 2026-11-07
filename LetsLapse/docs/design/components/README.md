@@ -83,6 +83,10 @@ Once a shoot starts the four framing toggles hide in every mode (decision 2026-0
 
 ## Blended clip row — `blended-clip-row.<state>.<width>.svg`
 
+> ✅ **2026-11-06, the approve seal and the EDITED CLIPS row — code first (`docs/approved-assets.md`), drawn after
+> Steven signed off the running app.** Every state now ends in the seal, and four states are new (`approved`,
+> `edited`, `edited.approved` at both widths — eighteen files). See **The approve seal** and the states table below.
+
 One row of a project's **BLENDED CLIPS** list — `App/ProjectDetailView.swift`'s `versionRow`, repeated once per `AppModel.BlendProject`. Introduced 2026-09-07, migrating markup three iOS `project-detail.*` mirrors had each drawn by hand (identically, in the case of the two interval variants), and reused a third way on the macOS Gallery preview panel, which used to summarise the same data as a single "3 blended clips" text line (see macOS/INDEX.md).
 
 **Coordinate contract.** 1 unit = 1 pt, origin at the row's own top-left. Every row is 62 pt tall regardless of width — 10 pt vertical padding around the 42 pt thumbnail, matching `versionRow`'s `.padding(.vertical, 10)`:
@@ -94,9 +98,25 @@ One row of a project's **BLENDED CLIPS** list — `App/ProjectDetailView.swift`'
 
 (x values are relative to the row's own left edge; `narrow` additionally clips its title/subtitle column — see States)
 
+**The approve seal (2026-11-06).** `ApproveToggle` (`App/ApprovedAssetViews.swift`) sits in the row's `HStack(spacing: 12)`
+between the text column and the trailing button: a 28 × 28 hit area, the glyph 19 pt across (a 17 pt medium SF Symbol) —
+`checkmark.seal` in secondary at 70 % until the output is approved, `checkmark.seal.fill` in `LL.accent` after. A press
+toggles `blends[].approvedAt`. Its centre, from the row's right edge (y 31):
+
+| Trailing | Seal centre x | Text column ends | `narrow` clip | `wide` clip |
+|---|---|---|---|---|
+| **Open** (32.5 pt wide) | width − 72.5 | width − 98.5 | 119.5 | 178.5 |
+| **Download** (60.5 pt) | width − 100.5 | width − 126.5 | 91.5 | 150.5 |
+| none (`edited*`, `not-available`) | width − 28 | width − 54 | 164 | 223 |
+
+So every state clips its text — the `wide` rows that needed no clip before have one now. The glyph is drawn on a 24 grid
+(eight scallops, a tick; `data-symbol` names the SF Symbol) and is the same path wherever the app says "approved": the
+row's toggle, `output-approval.*`, the Gallery sidebar's row, and `ApprovedSeal` — the fill on a black 50 % disc, 22 pt,
+top-leading on a tile. Never green (that is the holdings pill's "here") and never a cloud.
+
 **Assembly.** A row file draws content only: no divider, no surrounding card — `versionRow` draws the whole tappable row, and a divider is the *container's* line, not the row's. Stack N rows with **no gap** (`y = cardTop + i × 62`); the card behind them is simply `height = N × 62`. Draw one divider `<line>` per internal boundary, from the title column to the row's right inset (`x1 = cardX+84`, `x2 = cardX+width−14`), at `y = cardTop + i × 62` for `i = 1 … N−1`. The section header ("BLENDED CLIPS · N") and the card `<rect>` itself stay with the calling screen, not the component — both are trivial and N-dependent, unlike the row.
 
-**States** — one file per representative row, both widths — twelve files since 2026-09-26: six states (`on-picplace` and `not-available` joined the first four) × two widths. Between them every subtitle segment `versionSubtitle` can produce is demonstrated at least once, and the SAME three rows are reused verbatim across every screen that shows them — real content carried over from the pre-component mirrors, not invented per screen:
+**States** — one file per representative row, both widths — eighteen files since 2026-11-06: nine states (`on-picplace` and `not-available` joined the first four on 2026-09-26; `approved`, `edited` and `edited.approved` on 2026-11-06) × two widths. Between them every subtitle segment `versionSubtitle` can produce is demonstrated at least once, and the SAME three rows are reused verbatim across every screen that shows them — real content carried over from the pre-component mirrors, not invented per screen:
 
 | File | Shows | Used by |
 |---|---|---|
@@ -106,6 +126,9 @@ One row of a project's **BLENDED CLIPS** list — `App/ProjectDetailView.swift`'
 | `sliced` | "timeslice-vert-left-segs_24-lag_2 · 2.4 s" / "30 fps · yesterday" — a time-sliced VIDEO export, `blend.timeSlice != nil`; the title is `TimeSliceRecipe.displayName` (`Kit/TimeSlice.swift:164`), not "Blended clip N" | `project-detail.video.filtered.portrait` (Part 2 demo) — added 2026-09-07 for the filter mockup, so filtering to Time slices has something real to show |
 | `on-picplace` | 2026-09-26 (plan §11/§15/§16): the clip's file is not here and PicPlace holds it — its still, "On PicPlace · 24 fps · yesterday" (`BlendWhereLine`), **Download** where Open was (`BlendDownloadButton`), pill `blend.there.safe` | `iOS/project-detail.interval.preview.portrait` |
 | `not-available` | 2026-09-26: neither here nor on PicPlace — "Not available to download · …", no button, pill `blend.nowhere` | — (the state's reference; Victory Bridge Sunset) |
+| `approved` | 2026-11-06: `default` once its output is approved for use (`blends[].approvedAt`) — the seal filled in `LL.accent`, nothing else moves | macOS Gallery pane and inspector (row 1 of River Sunset to Dusk's three: `macOS/gallery.svg` and its family, `gallery.item.interval`, `gallery.item.picplace*`) |
+| `edited` | 2026-11-06: an **EDITED CLIPS** row — Render Edits' output (`BlendProject.role == "edit"`): "Edited clip 1 · 32 s" / "30 fps · with sound · yesterday", no speed (it is 1×), **no Open** (it is the editor's own picture, there is no blend to re-open), the outline seal at the row's inset | — (the state's reference) |
+| `edited.approved` | 2026-11-06: the same row approved — the seal filled | `macOS/gallery.approved` (the pane), `macOS/gallery.item.video` (under the fold) · the phone's sheet draws it inline at 365 pt (`iOS/editor-pager.info.portrait`) |
 
 `narrow` rows carry the identical title/subtitle strings, clipped to a 165pt-wide column (x 84–249; 135 pt when the column was 272) rather than hand-shortened — the same simplification the searchclip in `macOS/gallery.svg` already makes for its placeholder, and the nearest static equivalent of SwiftUI's own `.lineLimit(1)` truncation on a tighter width. `sliced.wide` needs the same clip (224pt, x 84–308) even at the full 361pt width — it is the one state whose real string is long enough to overflow there too.
 
@@ -376,6 +399,12 @@ Look, tested 2026-09-26), and components stay flat. **When `holdings-pill.make.p
 
 ## Output actions — `output-actions.<state>.narrow.svg`
 
+> ✅ **2026-11-06, OUTPUT is in both dresses of `GalleryPreviewPanel` and sits above INFO — code first
+> (`docs/approved-assets.md`), drawn after Steven signed off the running app.** The group is no longer the inspector's
+> foot: it follows the Rename · Finder · Delete… footer in the pane and the inspector alike. Four states are new
+> (`video`, `video.no-edits`, `video.rendering`, `clip.preview`), and the project's own approval row under the buttons is
+> its own component — **Output approval**, below.
+
 The button row of the OUTPUT group at the foot of the item view's inspector — `GalleryPreviewPanel.outputSection`
 (`.inspector` style, 2026-09-13): what comes of the project, Steven's phase three (tags / titles / metadata are management,
 the editor is craft, blends / export / share are what's next — phases one and three share the inspector, in that order).
@@ -387,10 +416,41 @@ list under it are the screen's (`blend-list-filter.*.narrow`, `blended-clip-row.
 | File | Shows | Used by |
 |---|---|---|
 | `clip` | **New clip** (the blend flow) · **Share project** (the .lapse archive — "Sharing…", disabled, while it runs) | `macOS/gallery.item.interval` (a video project takes the same two) |
-| `share` | **Share project** alone, full width — a Photo capture is one photo, nothing to blend | the photo item files' foot (below the fold in `macOS/gallery.item`; drawn in no file yet) |
+| `share` | **Share project** alone, full width — a Photo capture is one photo, nothing to blend | `macOS/gallery.metadata` (the pane), `macOS/gallery.item` (the inspector) |
+| `clip.preview` | 2026-11-06: `clip` on a project whose originals are not here — **New clip** at 45 % (not disabled: a press asks to fetch the originals, as Share project does without dimming) | `macOS/gallery.item.preview*` |
+| `video` | 2026-11-06: a video project's three — **New clip · Render Edits · Share project** (`RenderEditsButton`, `wand.and.stars`: the clip at 1× with the editor's edits baked in and its sound kept, stored as an edited clip), 95.33 pt each, 8 apart | `macOS/gallery.approved` (the pane), `macOS/gallery.item.video` (the inspector) |
+| `video.no-edits` | 2026-11-06: the clip is as it was shot — Render Edits disabled at 45 % (nothing to bake; the source itself can be approved) | — (the state's reference) |
+| `video.rendering` | 2026-11-06: a render running — the button reads *Rendering…*, disabled, and `RenderEditsStatus` follows 12 pt under the row: the bar in `LL.accent`, the percent, **Cancel** (85 pt tall in all). A failed render puts the reason and **Dismiss** there (not drawn) | — (the state's reference) |
 
 **Mirrors.** `App/GalleryPreviewPanel.swift` `outputSection` (`onNewClip`, `exportShare`, `isExporting`). Export lands here
 when there is a graded-still export to offer (docs/TODO.md "Graded still export"); none is drawn.
+
+**Placement.** The buttons' `HStack` takes its tallest child — Share project's glyph makes it 61.5 pt — so a screen gives
+the 57 pt component a 61 pt slot and places it 2 pt in; whatever follows starts 12 pt under the slot.
+
+## Output approval — `output-approval.<state>.narrow.svg`
+
+The project's **own** approval, under Output's buttons in both dresses — `GalleryPreviewPanel.sourceApprovalRow`
+(2026-11-05, `docs/approved-assets.md`; drawn 2026-11-06 after sign-off). It exists for a Photo capture (the picture as
+the editor shows it: the approval follows the edits, and the app keeps a full-size render current) and for a video (the
+source clip as it is). Never for an interval shoot, whose source is frames — it is approved through a clip — nor a scan.
+
+One button, the whole row: the seal in a 22 pt column (the outline in secondary at rest, the fill in `LL.accent` once
+approved), then the title 14 pt semibold over the caption 11.5 pt secondary, 2 apart; padded 12 × 9 on primary at 6 %,
+radius 9 — `LL.accent` at 10 % with the title reading **Approved** in the accent once it is. The caption wraps in the
+column the row leaves it: 236 pt at 302 (`302 − 24 − 22 − two 10 pt gaps`), so the row is `9 + 17 + 2 + 14 per caption
+line + 9` tall. On touch devices the approved captions end *Tap to remove.*; these four are the Mac's.
+
+| File | Shows | Height | Used by |
+|---|---|---|---|
+| `photo` | *Approve this photo* · *Clears the photo, as edited, for use.* | 51 | — (the state's reference) |
+| `photo.approved` | *Approved* · *The photo as you edit it — every change goes with it. Click to remove.* | 65 | `macOS/gallery.metadata`, `macOS/gallery.item` |
+| `video` | *Approve the source clip* · *Clears the clip as shot — your edits are not in it. Render Edits first for the graded one.* (a clip with no edits reads *Clears the clip, as it is, for use.*, 51 pt — not drawn) | 65 | `macOS/gallery.approved`, `macOS/gallery.item.video` |
+| `video.approved` | *Approved* · *The source clip, as shot — your edits are not in it. Render Edits and approve that clip for the graded one. Click to remove.* (no edits: *The source clip, as it is. Click to remove.*, 51 pt — not drawn) | 79 | — on the Mac; the phone draws it inline at 365 pt, three lines ending *Tap to remove.* (`iOS/editor-pager.info.portrait`) |
+
+**Mirrors.** `App/GalleryPreviewPanel.swift` `sourceApprovalRow`, `sourceApprovalCaption`; `AppModel.setApproved(_:for:)`,
+`canApproveSource(_:)` in `App/ApprovedAssets.swift`. Heights measured from the Debug build's accessibility frames
+(51 / 65 / 93 at the 285 pt column a legacy scroller leaves; re-wrapped for 302 with CoreText).
 
 ## Library banner — `library-banner.unreadable.<width>.svg`
 
@@ -459,6 +519,14 @@ The optional cloud tier's chrome, drawn 2026-09-14 (design first, Steven's call;
 **Nearby originals** (2026-09-28, code first; `docs/nearby-originals-plan.md`) — one more phone state, `preview-nearby` (118): the preview-only card when a device of this account on the same network holds the originals — the grey camera, *Preview only*, *The originals are on iPhone 18 Pro, nearby · 20 files · 76,3 MB* cut by `lineLimit(2)` to two lines ending *· 7…*, **Import from iPhone 18 Pro** enabled and wrapping beside it, the Blends line, no note (a removal's originals are on PicPlace, which is the *, and on PicPlace* form). While importing it takes the syncing layout, titled *Importing from iPhone 18 Pro*. The cut caption and the wrapped label are the code's — raised with Steven.
 
 **`working-copy`** (2026-10-04, picture tiers stage 5; `phone` 144 and `narrow` 60): the preview-only card when the project's working copy is here — the green `photo.fill` (#248A3D on the light card), the title *Working copy here*, the caption *The originals are on PicPlace · 1 file · 2,9 MB* and *Download originals* as on `preview-only`; under the divider the **Working copy** line (`HeavyLine.Action.removeWorkingCopy`, first before any Blends line): *Here · 1,3 MB · text, masks, shapes and crop work on it* with **Remove…** (no server check behind it; its confirm *Remove the working copy from this iPhone?* / Remove Working Copy), then the note *The working copy comes back from PicPlace when you open the project to edit it.* After the Remove the card is `preview-only`. The narrow card (the Mac's item view) keeps the header alone, as its siblings do: title, caption and the Working copy line's Remove… on one row.
+
+**`preview-only` at `narrow`** (2026-11-06; 40): the preview-only card in the Mac inspector, which the item view's preview
+mirrors show at the top since the PICPLACE group moved above the rows (2026-09-27) — the grey camera, *Preview only*,
+*The originals are on PicPlace · 214 files · 1,16 GB*, **Download originals** trailing: the narrow set's layout with the
+phone state's words. **Drawn from the code and the phone state, not from a capture** — staging it needs a bound bench
+root (account tokens); its downloading and nearby dress are not drawn, so the six `macOS/gallery.item.preview*` files show
+the card at rest. Found while placing it: `working-copy.narrow` overlaps its own *Remove…* with the Working copy line at
+302 pt — not corrected here.
 
 **Account card** — `picplace-account.<state>.phone.svg` (361): the Settings PICPLACE card's contents, the screen drawing the card. `signed-out` (96): Sign in with PicPlace in accent over "Keep a copy of your projects on picplace.co", then Server with a chevron. `signed-in` (**886.8** since 2026-09-28; 754 from 2026-09-26; 220 before): Account · This device · On PicPlace · the first-connection line (*Try again*) · the auto-sync switches in the code's order — Sync changes automatically · Only on Wi-Fi · **Upload blends automatically** (plan §11, on by default) · Upload originals automatically · **Let my devices import originals from this one** (nearby originals, on by default, shown while PicPlace offers the key; 132.8 pt; with Local Network refused its subtitle is the failure sentence and its title `LL.levelOff`) — · Server (read-only; the Mac and Simulator builds only) · Sign Out… in record red. Still left out (listed in its desc): the Library row, the auto-sync status and problem rows, Check PicPlace now, Disconnect this library…. Same row grammar as the Storage card. **`signed-in.free-up`** (2026-10-04, **1041.9**): the same card once PicPlace's estimate has found something to free — after the nearby row, *Remove originals already on PicPlace* (accent title, three subtitle lines, 84.4 pt) and **Remove working copies not opened in 30 days** (stage 5: accent title, two subtitle lines, 70.7 pt; `workingCopyIdleDays`, the record's `workingCopyUsedAt`), and the On PicPlace row's subtitle carrying the bound library's renditions figure, *48,5 MB of working copies and tiles*.
 

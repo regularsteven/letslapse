@@ -89,9 +89,14 @@ final class ProjectStore: @unchecked Sendable {
     }
 
     /// The project's live blends, newest first — what `blends(for:)`
-    /// always answered.
+    /// always answered. An approved Photo capture's full-size render (role
+    /// `picture`) is the approval's plumbing, not an output anyone made: it
+    /// is left out, so no list, picker, hero or holdings line ever takes it
+    /// for the project's picture (`allBlends(for:)` has it).
     func blends(for id: UUID) -> [AppModel.BlendProject] {
-        (document(id: id)?.blends ?? []).filter { $0.deletedAt == nil }.sorted { $0.createdAt > $1.createdAt }
+        (document(id: id)?.blends ?? [])
+            .filter { $0.deletedAt == nil && !$0.isApprovedPicture }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
     /// The project's blends as stored, tombstoned ones included.

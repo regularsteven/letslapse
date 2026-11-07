@@ -831,7 +831,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_GALLERY_DROP", "LL_OPEN_FILES", "LL_IMPORT_LIBRARY", "LL_SEED_PHOTOS_PAIR", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE", "LL_PILL_SHEET", "LL_BLEND_RESUME", "LL_BLEND_CANT_RESUME", "LL_RENDITIONS"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TRANSFER_PAIR", "LL_TRANSFER_LIST", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_IMPORT_ARCHIVE", "LL_GALLERY_DROP", "LL_OPEN_FILES", "LL_IMPORT_LIBRARY", "LL_SEED_PHOTOS_PAIR", "LL_EXPORT_ARCHIVE", "LL_APPLY_PRESET", "LL_ROTATE", "LL_DELETE", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE", "LL_DNGARCHIVE", "LL_LIGHTROOM", "LL_MIXER", "LL_PRESETS", "LL_AUTOAPPLY", "LL_REGISTER", "LL_SHAPEMATION", "LL_BOARD", "LL_SHAPES", "LL_SHAPES_SCOPE", "LL_SHAPES_MODE", "LL_SHAPES_RUN", "LL_PADS", "LL_SELECT", "LL_PANEL", "LL_AUTORENAME", "LL_DRAG", "LL_KEY", "LL_PICPLACE", "LL_PICPLACE_TOKENS", "LL_PICPLACE_SERVER", "LL_DROP_SOURCES", "LL_PREVIEW_PROMPT", "LL_ITEM", "LL_CONTINUED_PROBE", "LL_PILL_SHEET", "LL_BLEND_RESUME", "LL_BLEND_CANT_RESUME", "LL_RENDITIONS", "LL_APPROVE", "LL_APPROVED", "LL_RENDER_EDITS", "LL_INFO"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -1346,6 +1346,61 @@ struct ContentView: View {
                     }
                 }
                 LLog("LL_ROTATE turned \(capture.id.uuidString.prefix(8)) \(turns)× — quarterTurns now \(model.capture(id: capture.id)?.quarterTurns ?? 0)")
+            }
+        }
+        // LL_RENDER_EDITS=<latest|uuid>[@<seconds>] — presses the panel's
+        // Render Edits on a video project through `renderEdits(for:)`, two
+        // seconds after launch (or that many): the source at 1× with the
+        // edits baked in and the sound kept, stored as an edited clip. The
+        // log's `render edits:` lines say what came of it.
+        if let raw = environment["LL_RENDER_EDITS"], !raw.isEmpty {
+            let parts = raw.split(separator: "@")
+            let which = String(parts[0])
+            let delay = parts.count > 1 ? Double(parts[1]) ?? 2 : 2
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                let capture = which == "latest"
+                    ? model.newestCapture()
+                    : UUID(uuidString: which).flatMap { id in model.capture(id: id) }
+                guard let capture else { LLog("LL_RENDER_EDITS: no such project \(which)"); return }
+                model.renderEdits(for: capture)
+            }
+        }
+        // LL_APPROVE=<latest|uuid>:<source|newest|blend uuid>[:off][@<seconds>][;…]
+        // — approves through `setApproved`, two seconds after launch (or
+        // that many): `source` is the project's own picture or clip,
+        // `newest` its newest output (an edited or a blended clip), a uuid
+        // that output; `:off` takes the approval away. Several entries, each
+        // at its own delay. The log's `approved:` lines say what happened.
+        if let raw = environment["LL_APPROVE"], !raw.isEmpty {
+            for entry in raw.split(separator: ";") {
+                let timed = entry.split(separator: "@")
+                let delay = timed.count > 1 ? Double(timed[1]) ?? 2 : 2
+                let parts = timed[0].split(separator: ":").map(String.init)
+                guard parts.count >= 2 else { LLog("LL_APPROVE: expected <project>:<source|newest|blend uuid>, got \(entry)"); continue }
+                let approving = !(parts.count > 2 && parts[2] == "off")
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    let capture = parts[0] == "latest"
+                        ? model.newestCapture()
+                        : UUID(uuidString: parts[0]).flatMap { id in model.capture(id: id) }
+                    guard let capture else { LLog("LL_APPROVE: no such project \(parts[0])"); return }
+                    switch parts[1] {
+                    case "source":
+                        guard model.canApproveSource(capture) else {
+                            LLog("LL_APPROVE: \(capture.displayTitle) has no source to approve (an interval shoot is approved through a clip)")
+                            return
+                        }
+                        model.setApproved(approving, for: capture)
+                    case "newest":
+                        guard let blend = model.blends(for: capture).first else { LLog("LL_APPROVE: \(capture.displayTitle) has no output"); return }
+                        model.setApproved(approving, for: blend)
+                    default:
+                        guard let blend = UUID(uuidString: parts[1]).flatMap({ model.blend(id: $0) }) else {
+                            LLog("LL_APPROVE: no such output \(parts[1])")
+                            return
+                        }
+                        model.setApproved(approving, for: blend)
+                    }
+                }
             }
         }
         // LL_DROP_SOURCES=<latest|uuid>[:originals|blends|all] — a genuine

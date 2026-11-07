@@ -50,6 +50,9 @@ struct GalleryView: View {
     @State private var shapeSelection = GalleryView.initialShapeSelection  // sidebar Shapes rows
     /// The sidebar's PicPlace section (connected libraries only).
     @State private var picplaceFilter = PicPlaceFilter.all
+    /// The sidebar's Approved row: the grid shows approved outputs, one
+    /// tile each, of what the other sections leave (docs/approved-assets.md).
+    @State private var approvedOnly = false
     /// Follows `statusStore.revision`, so the grid re-filters as the status
     /// sweep lands and as PicPlace moves.
     @State private var statusRevision = 0
@@ -226,6 +229,8 @@ struct GalleryView: View {
                 // sidebar's PicPlace section, pressed from launch.
                 if let raw = ProcessInfo.processInfo.environment["LL_PICPLACE_FILTER"],
                    let hooked = PicPlaceFilter(rawValue: raw) { picplaceFilter = hooked }
+                // `LL_APPROVED=1` — the sidebar's Approved row, lit from launch.
+                if ProcessInfo.processInfo.environment["LL_APPROVED"] == "1" { approvedOnly = true }
                 // `LL_SIDEBAR=1` — the phone's library sheet (Library, PicPlace,
                 // Tags, Shapes) up from launch, a beat late: a sheet raised in
                 // the tab's first pass is dropped on iOS.
@@ -262,6 +267,8 @@ struct GalleryView: View {
                     tagSelection: $query.tags,
                     shapeSelection: $shapeSelection,
                     presentTags: presentTags,
+                    approvedOnly: $approvedOnly,
+                    approvedCount: approvedCount,
                     // The phone's only Timeline switch since the header glyph
                     // was retired (2026-09-15); the wide layouts keep the button.
                     timelineMode: $timelineMode,
@@ -349,6 +356,7 @@ struct GalleryView: View {
                     // screen keeps one door: the tile menu's Project details.
                     GalleryGridContent(
                         rows:         sortedRows,
+                        approvedAssets: approvedAssets,
                         columnCount:  columnCount,
                         timelineMode: timelineMode,
                         selection:    $selection,
@@ -447,6 +455,8 @@ struct GalleryView: View {
                 tagSelection: $query.tags,
                 shapeSelection: $shapeSelection,
                 presentTags: presentTags,
+                approvedOnly: $approvedOnly,
+                approvedCount: approvedCount,
                 picplaceFilter: picplaceConnected ? $picplaceFilter : nil,
                 picplaceCounts: picplaceCounts,
                 picplaceProgress: model.statusStore.sweeping
@@ -471,6 +481,7 @@ struct GalleryView: View {
             } else {
                 GalleryGridContent(
                     rows:         sortedRows,
+                    approvedAssets: approvedAssets,
                     columnCount:  columnCount,
                     timelineMode: timelineMode,
                     selection:    $selection,
@@ -507,6 +518,7 @@ struct GalleryView: View {
             if !ids.contains(where: visible.contains) {
                 filter = .all
                 picplaceFilter = .all
+                approvedOnly = false
                 shapeSelection = []
                 query = .empty
             }
@@ -869,7 +881,7 @@ struct GalleryView: View {
     /// library is narrowed" on the compact one: `showSidebar` is a Mac pane
     /// state, and reading it on an iPhone lit the button permanently.
     private var libraryButton: some View {
-        let isLit = isWide ? showSidebar : (filter != .all || !query.tags.isEmpty || !shapeSelection.isEmpty || picplaceFilter != .all)
+        let isLit = isWide ? showSidebar : (filter != .all || !query.tags.isEmpty || !shapeSelection.isEmpty || picplaceFilter != .all || approvedOnly)
         return Button {
             if isWide {
                 withAnimation(.easeInOut(duration: 0.22)) { showSidebar.toggle() }
@@ -933,7 +945,23 @@ struct GalleryView: View {
     /// lists scans, and its sidebar's Shapes rows ride along.
     private var listQuery: ProjectListQuery {
         ProjectListQuery(sort: sortKey, ascending: sortAscending, filter: filter, query: query,
-                         listsScans: false, shapes: shapeSelection)
+                         listsScans: false, shapes: shapeSelection, approved: approvedOnly)
+    }
+
+    /// The Approved view's tiles: every approved output of the projects the
+    /// grid's question leaves, in the grid's order — nil while the row is
+    /// not lit, and the grid draws projects.
+    private var approvedAssets: [ApprovedAsset]? {
+        guard approvedOnly else { return nil }
+        return sortedRows.flatMap { row in
+            model.capture(id: row.id).map { model.approvedAssets(for: $0) } ?? []
+        }
+    }
+
+    /// The Approved row's number: the approved outputs lighting it shows,
+    /// under the kind, the tags, the words and the shapes.
+    private var approvedCount: Int {
+        model.approvedTotal(for: listQuery)
     }
 
     /// The library after filtering by type, search and the sidebar's Shapes
@@ -1066,11 +1094,11 @@ struct GalleryView: View {
         return true
     }
 
-    /// Back: through the editor's own exit, offer and all.
+    /// Back: through the editor's own exit, so its writes land.
     private func leaveItem() {
         guard focus != nil else { return }
         itemTransition = .back
-        exitRequest = EditorExitRequest(offersPresetSave: true)
+        exitRequest = EditorExitRequest()
     }
 
     /// The filmstrip (or an arrow): the current editor leaves — writes made,
@@ -1088,7 +1116,7 @@ struct GalleryView: View {
         // closes the trace when its picture is up.
         PageTurnTrace.begin(capture.displayTitle)
         itemTransition = .move(GalleryFocus(request: request, page: page))
-        exitRequest = EditorExitRequest(offersPresetSave: false)
+        exitRequest = EditorExitRequest()
     }
 
     /// ← / → in the item view: the neighbour in the grid's order.

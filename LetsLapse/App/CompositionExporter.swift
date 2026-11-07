@@ -45,6 +45,10 @@ enum CompositionExporter {
             throw ExportFailure("the clip has no video track")
         }
         let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
+        // What the sound is, for the writer: a passthrough into anything but
+        // a QuickTime movie needs the source's format said up front.
+        let soundTrack: AVAssetTrack? = audioTrack ?? nil
+        let audioFormat: CMFormatDescription? = try? await soundTrack?.load(.formatDescriptions).first
         let preferred = try await videoTrack.load(.preferredTransform)
         let duration = try await asset.load(.duration).seconds
         // Progress denominator only — a frame more or fewer just parks the bar
@@ -62,6 +66,7 @@ enum CompositionExporter {
                                 asset: asset,
                                 videoTrack: videoTrack,
                                 audioTrack: audioTrack ?? nil,
+                                audioFormat: audioFormat,
                                 composition: composition,
                                 transform: composition == nil ? preferred : .identity,
                                 outputURL: outputURL,
@@ -93,6 +98,7 @@ enum CompositionExporter {
         asset: AVAsset,
         videoTrack: AVAssetTrack,
         audioTrack: AVAssetTrack?,
+        audioFormat: CMFormatDescription?,
         composition: AVVideoComposition?,
         transform: CGAffineTransform,
         outputURL: URL,
@@ -145,17 +151,61 @@ enum CompositionExporter {
         writer.add(videoInput)
         writer.shouldOptimizeForNetworkUse = true
 
-        // Passthrough audio: nil settings on both ends copies samples verbatim.
+        // The sound goes with the picture — never dropped without a line.
+        // Passthrough where the container carries the source's codec as a
+        // player expects it: nil settings on both ends copies the samples
+        // verbatim, with the source's format as the writer's hint (every
+        // container but a QuickTime movie requires one before it will take
+        // a passthrough at all — until 2026-11-06 none was given, so an
+        // .mp4 took no sound from any source, and said nothing). An .mp4
+        // takes AAC that way and nothing else: a camera's PCM (Sony's XAVC S
+        // writes 16-bit big-endian) can be muxed into one, but a browser
+        // will not play it, and an .mp4 is what goes downstream. Anything
+        // else is decoded and written as AAC.
         var audioPair: (output: AVAssetReaderTrackOutput, input: AVAssetWriterInput)?
         if let audioTrack {
-            let output = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: nil)
-            output.alwaysCopiesSampleData = false
-            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: nil)
-            input.expectsMediaDataInRealTime = false
-            if reader.canAdd(output), writer.canAdd(input) {
-                reader.add(output)
-                writer.add(input)
-                audioPair = (output, input)
+            let source = audioFormat.flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee }
+            let passesThrough = fileType != .mp4 || source?.mFormatID == kAudioFormatMPEG4AAC
+            if passesThrough {
+                let output = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: nil)
+                output.alwaysCopiesSampleData = false
+                let input = AVAssetWriterInput(mediaType: .audio, outputSettings: nil, sourceFormatHint: audioFormat)
+                input.expectsMediaDataInRealTime = false
+                if reader.canAdd(output), writer.canAdd(input) {
+                    reader.add(output)
+                    writer.add(input)
+                    audioPair = (output, input)
+                }
+            }
+            if audioPair == nil {
+                let channels = min(max(Int(source?.mChannelsPerFrame ?? 2), 1), 2)
+                // AAC-LC's rates; a camera's 48 kHz stays 48 kHz.
+                let rate = source.map { $0.mSampleRate == 44_100 ? 44_100.0 : 48_000.0 } ?? 48_000
+                let decoded = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: [
+                    AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false,
+                    AVLinearPCMIsBigEndianKey: false,
+                    AVLinearPCMIsNonInterleaved: false,
+                    AVSampleRateKey: rate,
+                    AVNumberOfChannelsKey: channels,
+                ])
+                decoded.alwaysCopiesSampleData = false
+                let encoded = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: rate,
+                    AVNumberOfChannelsKey: channels,
+                    AVEncoderBitRateKey: channels == 1 ? 128_000 : 256_000,
+                ])
+                encoded.expectsMediaDataInRealTime = false
+                if reader.canAdd(decoded), writer.canAdd(encoded) {
+                    reader.add(decoded)
+                    writer.add(encoded)
+                    audioPair = (decoded, encoded)
+                    LLog("export: \(outputURL.lastPathComponent) — sound written as AAC (\(channels) ch, \(Int(rate)) Hz): the source's own codec does not go into this container as a player expects it")
+                } else {
+                    LLog("export: ALARM \(outputURL.lastPathComponent) — the source has sound and neither a passthrough nor an AAC encode of it could be set up; the copy is silent")
+                }
             }
         }
 

@@ -2,6 +2,15 @@
 
 Canvas 820×1180 pt (iPad 10th gen class), portrait + landscape where bespoke.
 
+✅ **2026-11-06, approved assets and the Output block — code first, signed off on the Mac, the Mac's mirrors drawn the
+same day** (`docs/approved-assets.md`): the iPad's Gallery takes the Mac's sidebar and pane, so it has the APPROVED
+section, OUTPUT above INFO and the seals as `../macOS/INDEX.md` lists them (its footer has no Finder button, and its
+approval caption ends *Tap to remove.*). No file here draws the Gallery; none is owed until one does. ⚠️ Not run on an
+iPad or an iPad simulator.
+
+✅ **2026-11-06, the "Save these edits as a preset?" offer is gone (Steven's instruction):**
+[project-photo.viewer.presets.landscape.svg](project-photo.viewer.presets.landscape.svg)'s note says so; it drew no offer.
+
 ✅ **2026-10-16, the pill's Masks seat is Regions (Steven's consistency audit, code first):** every landscape
 `project-photo.viewer.*.landscape.svg` here has its `EditorTabPill` re-fitted — the seat reads **Regions** (72.0 pt
 against Masks' 62.4, the pill 9.6 pt wider to the left of its right edge at 1164) and prints `Regions*` once the project

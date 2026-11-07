@@ -567,6 +567,7 @@ extension PicPlaceController {
             scheduleOriginalsQueue()
             scheduleBlendsQueue()
             scheduleProxyQueue()
+            queueApprovedSourceUploads()
             // A look after an upload the app was closed in the middle of.
             resumePendingVerifications()
             // The library's collections travel too, where PicPlace keeps them.

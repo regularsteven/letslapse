@@ -15,6 +15,8 @@ struct ProjectListQuery: Hashable {
     /// Scans belong to the list exactly when they have no tab of their own.
     var listsScans: Bool
     var shapes: Set<ShapeFilter> = []
+    /// Only projects holding an approved output (the Gallery's Approved row).
+    var approved = false
 
     /// The same question in the index's terms — `CaptureFilter.matches` as
     /// a category, `ProjectsView.sorted` as a sort with its ties, the chips
@@ -46,6 +48,7 @@ struct ProjectListQuery: Hashable {
             case .empty: return .none
             }
         })
+        q.approved = approved
         return q
     }
 

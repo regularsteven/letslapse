@@ -75,6 +75,9 @@ struct EditorPager: View {
     /// Clear preview, carried across pages.
     @State private var clearPreview: Bool
     @State private var showsInfo = false
+    /// The ⓘ sheet's height. Medium on a tap, as before; `LL_INFO=large`
+    /// opens it tall so one screenshot holds Output.
+    @State private var infoDetent: PresentationDetent = .medium
     /// The poster of the project that just arrived, over its editor until
     /// the editor has drawn its own picture — so a page turn hands over in
     /// place rather than through a spinner.
@@ -172,6 +175,7 @@ struct EditorPager: View {
         }
         #if DEBUG
         .task { await consumePageHook() }
+        .task { await consumeInfoHook() }
         #endif
         .background(Color.black.ignoresSafeArea())
         .onPreferenceChange(EditorPagingStateKey.self) { state in
@@ -234,7 +238,11 @@ struct EditorPager: View {
         EditorPagingContext(
             startsClear: clearPreview,
             onClearPreviewChanged: { clearPreview = $0 },
-            onInfo: { showsInfo = true },
+            onInfo: {
+                // Medium on every press, as before the height was bound.
+                infoDetent = .medium
+                showsInfo = true
+            },
             onPicture: { pictureArrived($0) })
     }
 
@@ -285,13 +293,13 @@ struct EditorPager: View {
         }
     }
 
-    /// The page has slid off: the editor leaves — its writes made, no preset
-    /// offer in the way — and the next project's editor takes its place.
+    /// The page has slid off: the editor leaves — its writes made — and the
+    /// next project's editor takes its place.
     private func beginMove(to id: UUID) {
         guard transition == nil else { return }
         PageTurnTrace.mark("slide")
         transition = .move(id)
-        exitRequest = EditorExitRequest(offersPresetSave: false)
+        exitRequest = EditorExitRequest()
     }
 
     /// Out — Back, a deletion, New clip: the editor leaves through its own
@@ -300,7 +308,7 @@ struct EditorPager: View {
         guard transition == nil else { return }
         transition = outcome
         if focus != nil {
-            exitRequest = EditorExitRequest(offersPresetSave: false)
+            exitRequest = EditorExitRequest()
         } else {
             completeTransition()
         }
@@ -427,13 +435,12 @@ struct EditorPager: View {
                     }
                 case .vertical:
                     if clearPreview, value.translation.height > 120 {
-                        // Back, offer and all: the editor decides whether
-                        // it can go. The cover's own dismissal carries on
-                        // down from here; if the editor stays to offer a
-                        // preset, the page comes back up under the offer.
+                        // Back: through the editor's own exit, so its
+                        // writes land. The cover's own dismissal carries on
+                        // down from here.
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { drag = .zero }
                         transition = nil
-                        exitRequest = EditorExitRequest(offersPresetSave: true)
+                        exitRequest = EditorExitRequest()
                     } else {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { drag = .zero }
                     }
@@ -446,6 +453,20 @@ struct EditorPager: View {
     // MARK: - Hooks
 
     #if DEBUG
+    /// `LL_INFO=1|large[@<seconds>]` — presses ⓘ two seconds (or that many)
+    /// after the pager opens: the project's sheet over the picture, at its
+    /// medium height or, with `large`, tall enough to hold Output — the one
+    /// way a headless run sees the phone's panel since the Gallery's own
+    /// sheet was retired (2026-11-06).
+    private func consumeInfoHook() async {
+        guard let raw = ProcessInfo.processInfo.environment["LL_INFO"], !raw.isEmpty else { return }
+        let parts = raw.split(separator: "@", maxSplits: 1).map(String.init)
+        try? await Task.sleep(for: .seconds(parts.count > 1 ? (Double(parts[1]) ?? 2) : 2))
+        guard !Task.isCancelled else { return }
+        infoDetent = parts[0] == "large" ? .large : .medium
+        showsInfo = true
+    }
+
     /// `LL_PAGE=next|previous[@<seconds>][x<turns>]` — page turns without a
     /// finger, the first `seconds` (default 2) after the pager opens and the
     /// rest as far apart: the settle animation, the editor swap and the
@@ -594,7 +615,7 @@ struct EditorPager: View {
                     }
                 }
             }
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.medium, .large], selection: $infoDetent)
             .presentationDragIndicator(.visible)
         }
     }

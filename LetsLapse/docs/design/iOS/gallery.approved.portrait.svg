@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Gallery · the Approved view · portrait · 393×852</title>
+  <desc>Mirrors the Gallery's APPROVED VIEW on the iPhone (2026-11-05, code first; signed off on the running Mac app 2026-11-06 and drawn the same day from the iPhone 16 simulator, iOS 18.6 — LL_TAB=gallery LL_APPROVED=1; docs/approved-assets.md): App/GalleryView.swift (approvedOnly, approvedAssets; the compact header's ▤ Library button, lit in LL.accent while the Library sheet's Approved row is on, as for a kind or a tag), App/GalleryGridContent.swift (approvedGrid) and App/ApprovedAssetViews.swift (ApprovedAssetTile, ApprovedSeal). gallery.portrait.svg with the Approved row lit in the Library sheet: the grid is ONE TILE PER APPROVED OUTPUT, in the grid's own order — a project's own picture or clip first, then its approved outputs — at the same three columns. Each tile is the output's own picture under a MediaBadge naming the kind (Photo · Video · Edited clip · Timelapse · Blended clip for a video's blend · Image · Time slice · Time-slice poster), the holdings pill bottom-trailing (the clip's own for an output, the project's for its picture or clip) and ApprovedSeal top-leading, 6 in. Seven here: two timelapses, an edited clip, a source clip approved as it is, two photos and a stacked image. A tap opens the project's editor (the pager), as every Gallery tile does on the phone; the long press offers Open and Remove Approval. No N clips badge in this view. With nothing approved, or nothing left by the other filters, the grid is the empty state — checkmark.seal, Nothing approved, and the hint (macOS/gallery.approved.empty.svg draws it; not drawn for the phone).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="t00"><rect x="14" y="140" width="113.67" height="85.25" rx="8"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <!-- ApprovedSeal (App/ApprovedAssetViews.swift, 2026-11-05): checkmark.seal.fill, white tick on LL.accent, on a 22 pt black
+         50 % disc — top-leading, 6 in, on a tile whose project holds an approval -->
+    <g id="approved-seal"><g data-view="ApprovedSeal"><circle cx="11.00" cy="11.00" r="11.00" fill="#000" fill-opacity="0.5"/><g transform="translate(2.27,2.27) scale(0.7275)" data-symbol="checkmark.seal.fill"><path d="M12.00 1.50 L12.68 1.65 L13.31 2.06 L13.86 2.63 L14.35 3.23 L14.81 3.74 L15.29 4.05 L15.86 4.17 L16.54 4.14 L17.31 4.06 L18.10 4.05 L18.84 4.20 L19.42 4.58 L19.80 5.16 L19.95 5.90 L19.94 6.69 L19.86 7.46 L19.83 8.14 L19.95 8.71 L20.26 9.19 L20.77 9.65 L21.37 10.14 L21.94 10.69 L22.35 11.32 L22.50 12.00 L22.35 12.68 L21.94 13.31 L21.37 13.86 L20.77 14.35 L20.26 14.81 L19.95 15.29 L19.83 15.86 L19.86 16.54 L19.94 17.31 L19.95 18.10 L19.80 18.84 L19.42 19.42 L18.84 19.80 L18.10 19.95 L17.31 19.94 L16.54 19.86 L15.86 19.83 L15.29 19.95 L14.81 20.26 L14.35 20.77 L13.86 21.37 L13.31 21.94 L12.68 22.35 L12.00 22.50 L11.32 22.35 L10.69 21.94 L10.14 21.37 L9.65 20.77 L9.19 20.26 L8.71 19.95 L8.14 19.83 L7.46 19.86 L6.69 19.94 L5.90 19.95 L5.16 19.80 L4.58 19.42 L4.20 18.84 L4.05 18.10 L4.06 17.31 L4.14 16.54 L4.17 15.86 L4.05 15.29 L3.74 14.81 L3.23 14.35 L2.63 13.86 L2.06 13.31 L1.65 12.68 L1.50 12.00 L1.65 11.32 L2.06 10.69 L2.63 10.14 L3.23 9.65 L3.74 9.19 L4.05 8.71 L4.17 8.14 L4.14 7.46 L4.06 6.69 L4.05 5.90 L4.20 5.16 L4.58 4.58 L5.16 4.20 L5.90 4.05 L6.69 4.06 L7.46 4.14 L8.14 4.17 L8.71 4.05 L9.19 3.74 L9.65 3.23 L10.14 2.63 L10.69 2.06 L11.32 1.65Z" fill="#C36A00"/><path d="M8.3 12.4L10.9 15L15.8 9.7" fill="none" stroke="#FFFFFF" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></g></g></g>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- ===== HEADER — compactHeader (iPhone portrait only) ===== -->
+      <g id="header">
+        <!-- large title: 34pt bold, 15pt down, 20pt in — the tab rhythm -->
+        <text x="20" y="106" font-size="34" class="b" fill="#000">Gallery</text>
+
+        <!-- controls, centred at y 100 (title baseline − 6), trailing inset 16, 8pt apart -->
+        <!-- ▤ Library: opens the Library sheet (kinds · tags · collections). Secondary
+             while nothing narrows the library; LL.accent once a kind or tag does. -->
+        <g id="library-button">
+          <rect x="181" y="84" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+          <g fill="none" stroke="#C36A00" stroke-width="1.7" data-symbol="sidebar.left">
+            <rect x="189" y="92" width="16" height="16" rx="2.6"/>
+            <path d="M195 92 v16"/>
+          </g>
+        </g>
+
+        <!-- sort: menu capsule + direction button, as on the Mac -->
+        <g id="sort">
+          <g id="sort-menu">
+            <rect x="221" y="86" width="84" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+            <text x="230" y="105" font-size="13" class="m" fill="#C36A00">Capture</text>
+            <path d="M287 97 l4.5 5 4.5-5" fill="none" stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+          </g>
+          <g id="sort-direction">
+            <rect x="309" y="86" width="28" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+            <path d="M318 96 h10 l-5 8 z" fill="#C36A00" data-symbol="arrowtriangle.down.fill"/>
+          </g>
+        </g>
+
+        <!-- SYNC PILL (2026-09-15) — in the seat the Timeline glyph had: the same
+             ProjectSharingChip as the Projects header, opening the same
+             "Project Syncing" sheet (projects.sharing.portrait.svg), over the
+             model's one nearby-device server. Green serving / red not / amber
+             failed; RED here (sharing off), the everyday state. The Timeline
+             switch moved into the ▤ Library sheet (gallery.library-sheet.portrait.svg);
+             iPad, Mac and iPhone landscape keep the Timeline button in the row
+             and draw this pill to its right (macOS/gallery.svg). -->
+        <g id="sync-pill" data-symbol="antenna.radiowaves.left.and.right.slash">
+          <circle cx="361" cy="100" r="16" fill="#FF3B30" fill-opacity="0.12"/>
+          <circle cx="361" cy="100" r="15.5" fill="none" stroke="#FF3B30" stroke-opacity="0.35"/>
+          <g stroke="#FF3B30" stroke-width="1.6" fill="none" stroke-linecap="round">
+            <path d="M354.5 95.5 a5 5 0 0 0 0 9 M367.5 95.5 a5 5 0 0 1 0 9"/>
+            <path d="M357.5 98.5 a2 2 0 0 0 0 3 M364.5 98.5 a2 2 0 0 1 0 3"/>
+            <path d="M361 101 v4.5"/>
+            <path d="M354 93 L368 107"/>
+          </g>
+        </g>
+      </g>
+
+      <line x1="0" y1="125.5" x2="393" y2="125.5" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- ===== GRID — GalleryGridContent.standardGrid, columnCount 3 ===== -->
+      <g id="grid">
+        <!-- APPROVED GRID (GalleryGridContent.approvedGrid): the standard grid's three columns over the approved OUTPUTS,
+             one ApprovedAssetTile each — the output's own picture, 4:3 -->
+        <rect x="14" y="140" width="113.67" height="85.25" rx="8" fill="#5A4A3A"/><polygon points="14,202 54,180 92,198 127.67,184 127.67,225.25 14,225.25" fill="#3A2E22" clip-path="url(#t00)"/>
+        <rect x="139.67" y="140" width="113.67" height="85.25" rx="8" fill="#2E3A46"/>
+        <rect x="265.33" y="140" width="113.67" height="85.25" rx="8" fill="#1E2633"/><ellipse cx="195.67" cy="267.25" rx="30" ry="9" fill="#9FC2E8" opacity="0.35" transform="translate(125.66,-97.25)"/>
+        <rect x="14" y="237.25" width="113.67" height="85.25" rx="8" fill="#3B5A7A"/>
+        <rect x="139.67" y="237.25" width="113.67" height="85.25" rx="8" fill="#3D4A5C"/>
+        <rect x="265.33" y="237.25" width="113.67" height="85.25" rx="8" fill="#7A6A5A"/><circle cx="197.67" cy="265" r="12" fill="#FFD9A0" opacity="0.8"/>
+        <rect x="14" y="334.5" width="113.67" height="85.25" rx="8" fill="#8E6B3F"/>
+        <!-- output badges: MediaBadge, bottom-leading, 6 pt in — what kind of output the tile is -->
+        <g id="type-badges" font-size="11.5" fill="#FFFFFF" class="sb">
+          <rect x="20" y="195.25" width="75" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="57.5" y="210.75" text-anchor="middle">Timelapse</text>
+          <rect x="145.67" y="195.25" width="77" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="184.17" y="210.75" text-anchor="middle">Edited clip</text>
+          <rect x="271.33" y="195.25" width="75" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="308.83" y="210.75" text-anchor="middle">Timelapse</text>
+          <rect x="20" y="292.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="45" y="308" text-anchor="middle">Video</text>
+          <rect x="145.67" y="292.5" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="171.67" y="308" text-anchor="middle">Photo</text>
+          <rect x="271.33" y="292.5" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="297.33" y="308" text-anchor="middle">Photo</text>
+          <rect x="20" y="389.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="46" y="405.25" text-anchor="middle">Image</text>
+        </g>
+        <!-- holdings pills, bottom-trailing: the CLIP's pill for an output (components/holdings-pill.blend.*), the
+             project's for its own picture or clip — drawn over the badge where they meet, as the code layers it -->
+        <g id="holdings-pills">
+          <image href="../components/holdings-pill.blend.here.safe.svg" x="77.37" y="201.25" width="44.3" height="18"/>
+          <image href="../components/holdings-pill.blend.here.needs.svg" x="203.04" y="201.25" width="44.3" height="18"/>
+          <image href="../components/holdings-pill.blend.here.safe.svg" x="328.7" y="201.25" width="44.3" height="18"/>
+          <image href="../components/holdings-pill.here.safe.svg" x="75.67" y="298.5" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.needs.svg" x="201.34" y="298.5" width="46" height="18"/>
+          <image href="../components/holdings-pill.here.safe.svg" x="327" y="298.5" width="46" height="18"/>
+          <image href="../components/holdings-pill.blend.here.safe.svg" x="77.37" y="395.75" width="44.3" height="18"/>
+        </g>
+        <!-- ApprovedSeal on every tile, top-leading 6 in -->
+        <g id="approved-seals">
+          <use href="#approved-seal" x="20" y="146"/>
+          <use href="#approved-seal" x="145.67" y="146"/>
+          <use href="#approved-seal" x="271.33" y="146"/>
+          <use href="#approved-seal" x="20" y="243.25"/>
+          <use href="#approved-seal" x="145.67" y="243.25"/>
+          <use href="#approved-seal" x="271.33" y="243.25"/>
+          <use href="#approved-seal" x="20" y="340.5"/>
+        </g>
+      </g>
+
+      <!-- floating tab bar (Gallery selected) -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <g transform="translate(56.5 776) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <rect x="93.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-gallery" fill="none" stroke="#C36A00">
+          <g transform="translate(126.5 776) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <g id="tab-projects" fill="none" stroke="#8E8E93">
+          <g transform="translate(196.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <g transform="translate(266.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <g id="tab-settings" fill="none" stroke="#8E8E93">
+          <g transform="translate(336.5 776) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Gallery · the Approved view · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">GalleryView.approvedOnly · GalleryGridContent.approvedGrid · ApprovedAssetTile — one tile per approved output, ▤ lit</text>
+</svg>

@@ -11,8 +11,14 @@ import SwiftUI
 /// - **Shapes**: Ellipse / Rectangle / Square / No Shapes, from each project's
 ///   `shapes.json` register (Find shapes, or drawn in the Masks tab)
 ///
+/// Under Library, **Approved** (2026-11-05, docs/approved-assets.md): one
+/// row that turns the grid into the approved outputs of what the other
+/// sections leave — a tile per output, its number the outputs' count. A
+/// switch, like a tag or a shape row: it narrows with Library, PicPlace,
+/// Tags, Shapes and the search rather than replacing them.
+///
 /// With the library connected to PicPlace, a **PicPlace** section under
-/// Library (2026-09-25, the brief's "Gallery library filters" — plan §1b,
+/// it (2026-09-25, the brief's "Gallery library filters" — plan §1b,
 /// §14): All · On this device · Download available · Not available to
 /// download · Needs uploading · Has blends · Syncing / Needs attention, each
 /// with its count. None of it on a device that is not connected.
@@ -30,6 +36,10 @@ struct GallerySidebar: View {
     /// The tags present among the projects the grid's question matches —
     /// the index's answer (M3), in the taxonomy's order, custom after.
     var presentTags: [String]
+    /// The Approved row: lit shows approved outputs only.
+    @Binding var approvedOnly: Bool
+    /// How many approved outputs lighting the row shows.
+    var approvedCount: Int = 0
     /// The Timeline switch, when this sidebar is the only place it lives.
     var timelineMode: Binding<Bool>? = nil
     /// The PicPlace section's selection — nil in a library not connected to
@@ -47,6 +57,8 @@ struct GallerySidebar: View {
                     Divider().padding(.horizontal, 12)
                 }
                 librarySection
+                Divider().padding(.horizontal, 12)
+                approvedSection
                 if let picplaceFilter {
                     Divider().padding(.horizontal, 12)
                     picplaceSection(picplaceFilter)
@@ -112,6 +124,28 @@ struct GallerySidebar: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    // MARK: Approved
+
+    private var approvedSection: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            LLSectionHeader("Approved")
+                .padding(.horizontal, 14)
+
+            Button {
+                approvedOnly.toggle()
+            } label: {
+                LibraryFilterRow(
+                    label: "Approved",
+                    icon: approvedOnly ? "checkmark.seal.fill" : "checkmark.seal",
+                    isSelected: approvedOnly,
+                    count: approvedCount
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(approvedOnly ? .isSelected : [])
         }
     }
 

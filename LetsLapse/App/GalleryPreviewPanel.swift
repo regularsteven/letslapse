@@ -29,16 +29,19 @@ import SwiftUI
 /// - PicPlace: the project's copy there (`PicPlaceStatusCard`, `.narrow`) —
 ///   in the pane only once the library is bound to PicPlace
 /// - Management: In frame, Storage, Here, Field notes, then the button row —
-///   Rename, Share (`.pane`), Finder (Mac), Delete…
+///   Rename, Finder (Mac), Delete…
+/// - **Output** (both dresses since 2026-11-05, raised above Info — Steven):
+///   New clip (interval, video) · Render Edits (video) · Share project; the
+///   project's own approval (a photo, a video's source clip); then EDITED
+///   CLIPS (Render Edits' outputs) and BLENDED CLIPS, every row ending in
+///   the approve seal (docs/approved-assets.md)
 /// - Info and Metadata: what the files said (camera, lens, exposure, GPS…)
 ///   and the editable IPTC Core record, with an interval project's
 ///   shoot/frame scope (`MetadataPanelSections.swift`)
-/// - Blended clips (`.pane`), or the inspector's OUTPUT group: New clip,
-///   Share project and the blended-clips list
 ///
 /// Steven's three phases (2026-09-13) still hold: tags / titles / metadata
 /// are management, the editor is craft, blends / export / share are what
-/// comes next.
+/// comes next — and what comes next now sits above what the files said.
 struct GalleryPreviewPanel: View {
     enum Style {
         /// The Gallery's right-hand pane over a selected tile.
@@ -79,6 +82,8 @@ struct GalleryPreviewPanel: View {
     @State private var exportedArchive: ExportedArchive?
     @State private var isExporting = false
     @State private var blendFilter = BlendListFilter()
+    /// A clip row's Delete… waiting for its confirm.
+    @State private var blendPendingDelete: AppModel.BlendProject?
     /// Whole project by default; an interval project can scope to one frame.
     @State private var metadataScope: AppModel.MetadataScope = .project
     /// The Presets row: collapsed by default, and left as the person set it
@@ -176,25 +181,18 @@ struct GalleryPreviewPanel: View {
 
                 Divider()
 
+                // What came of the project, above what its files said
+                // (2026-11-05): Output, the approval, the clips.
+                outputSection
+                    .padding(.horizontal, 14)
+                    .padding(.top, 14)
+
+                Divider()
+                    .padding(.top, 16)
+
                 recordSections
                     .padding(.top, 12)
                     .padding(.horizontal, 14)
-
-                if style == .inspector {
-                    Divider()
-                        .padding(.top, 16)
-
-                    outputSection
-                        .padding(.horizontal, 14)
-                        .padding(.top, 16)
-                } else if !blends.isEmpty {
-                    Divider()
-                        .padding(.top, 16)
-
-                    blendedClipsSection
-                        .padding(.horizontal, 14)
-                        .padding(.top, 16)
-                }
 
                 Color.clear.frame(height: 82) // floating tab bar clearance
             }
@@ -223,6 +221,21 @@ struct GalleryPreviewPanel: View {
                 onDelete()
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Delete this clip?",
+            isPresented: Binding(get: { blendPendingDelete != nil }, set: { if !$0 { blendPendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Clip", role: .destructive) {
+                if let blend = blendPendingDelete { try? model.deleteBlend(blend) }
+                blendPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { blendPendingDelete = nil }
+        } message: {
+            Text(blendPendingDelete?.isApproved == true
+                 ? "It is approved for use: deleting it takes it out of Approved. A copy already on PicPlace is not deleted."
+                 : "The clip is moved to the trash on this device. A copy already on PicPlace is not deleted.")
         }
         .alert("Rename", isPresented: $isRenaming) {
             TextField("Title", text: $renameText)
@@ -596,7 +609,7 @@ struct GalleryPreviewPanel: View {
     // FILTERED count, not the project's.
 
     private var blendedClipsSection: some View {
-        let visible = blends.filter(blendFilter.matches)
+        let visible = blends.filter { !$0.isEditRender }.filter(blendFilter.matches)
         return VStack(alignment: .leading, spacing: 12) {
             LLSectionHeader("Blended clips · \(visible.count)")
             BlendListFilterBar(filter: $blendFilter)
@@ -604,25 +617,57 @@ struct GalleryPreviewPanel: View {
             if visible.isEmpty {
                 BlendListEmptyState()
             } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(visible.enumerated()), id: \.element.id) { index, blend in
-                        if index > 0 {
-                            Divider().padding(.leading, 84)
-                        }
-                        BlendedClipRow(
-                            blend: blend,
-                            model: model,
-                            // Each asks first when what it needs is on
-                            // PicPlace: the clip's file to play, the
-                            // originals to open its result screen.
-                            onPlay: { ask(.blend(blend.id), "Playing the clip") { playBlend(blend) } },
-                            onOpen: { ask(.newBlend, "Opening the clip") { model.openBlend(blend) } }
-                        )
-                    }
-                }
-                .llCard()
+                clipRows(visible)
             }
         }
+    }
+
+    /// Render Edits' outputs (2026-11-05): the video's own clip at 1× with
+    /// the edits baked in and the sound kept — listed like the blended
+    /// clips, apart from them, newest first.
+    private var editedClipsSection: some View {
+        let edited = blends.filter(\.isEditRender)
+        return VStack(alignment: .leading, spacing: 12) {
+            LLSectionHeader("Edited clips · \(edited.count)")
+            clipRows(edited)
+        }
+    }
+
+    /// The shared rows in their card. Each row's menu approves it and
+    /// deletes it — the panel had no way to delete a clip before, and an
+    /// edited clip has no other screen to be deleted from on the Mac.
+    private func clipRows(_ clips: [AppModel.BlendProject]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(clips.enumerated()), id: \.element.id) { index, blend in
+                if index > 0 {
+                    Divider().padding(.leading, 84)
+                }
+                BlendedClipRow(
+                    blend: blend,
+                    model: model,
+                    // Each asks first when what it needs is on
+                    // PicPlace: the clip's file to play, the
+                    // originals to open its result screen.
+                    onPlay: { ask(.blend(blend.id), "Playing the clip") { playBlend(blend) } },
+                    onOpen: { ask(.newBlend, "Opening the clip") { model.openBlend(blend) } }
+                )
+                .contextMenu {
+                    Button(blend.isApproved ? "Remove Approval" : "Approve") {
+                        model.setApproved(!blend.isApproved, for: blend)
+                    }
+                    #if os(macOS)
+                    if !model.blendFileMissing(blend) {
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([model.mediaURL(for: blend)])
+                        }
+                    }
+                    #endif
+                    Divider()
+                    Button("Delete\u{2026}", role: .destructive) { blendPendingDelete = blend }
+                }
+            }
+        }
+        .llCard()
     }
 
     private func playBlend(_ blend: AppModel.BlendProject) {
@@ -634,13 +679,17 @@ struct GalleryPreviewPanel: View {
         )
     }
 
-    // MARK: Output (inspector only)
+    // MARK: Output
 
-    /// What comes of the project, at the foot of the inspector: New clip (an
-    /// interval or video project — a Photo capture is one photo, nothing to
-    /// blend), Share project (the .lapse archive the pane's Share footer
-    /// button makes), and the blended-clips list under them. Export lands
-    /// here too when there is one to offer (Steven, 2026-09-13).
+    /// What comes of the project — in both dresses, above Info (2026-11-05):
+    /// - **New clip**: the blend flow (an interval or a video project — a
+    ///   Photo capture is one photo, nothing to blend);
+    /// - **Render Edits** (a video): the clip at 1× with the editor's edits
+    ///   baked in and its sound kept, as an edited clip — what the 1× blend
+    ///   used to be pressed into, which stripped the sound;
+    /// - **Share project**: the `.lapse` archive.
+    /// Then the project's own approval (a photo, a video's source clip),
+    /// the edited clips and the blended clips, each row ending in its seal.
     private var outputSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             LLSectionHeader("Output")
@@ -651,6 +700,13 @@ struct GalleryPreviewPanel: View {
                     }
                     .opacity(model.isAvailable(.newBlend, for: capture) ? 1 : 0.45)
                 }
+                if capture.kind == .video {
+                    RenderEditsButton(approvals: model.approvals, capture: capture) {
+                        // The render reads the clip itself: it waits for
+                        // the originals, as a new clip does.
+                        ask(.newBlend, "Rendering the edits") { model.renderEdits(for: capture) }
+                    }
+                }
                 actionButton(isExporting ? "Sharing…" : "Share project",
                              icon: "square.and.arrow.up") {
                     // A `.lapse` carries every file: the originals and the
@@ -659,11 +715,84 @@ struct GalleryPreviewPanel: View {
                 }
                 .disabled(isExporting)
             }
-            if !blends.isEmpty {
+            if capture.kind == .video {
+                RenderEditsStatus(approvals: model.approvals, captureID: capture.id)
+            }
+            if model.canApproveSource(capture) {
+                sourceApprovalRow
+            }
+            if blends.contains(where: \.isEditRender) {
+                editedClipsSection
+                    .padding(.top, 4)
+            }
+            if blends.contains(where: { !$0.isEditRender }) {
                 blendedClipsSection
                     .padding(.top, 4)
             }
         }
+    }
+
+    /// The project's own approval: a Photo capture's picture as the editor
+    /// shows it — it follows the edits — or a video's source clip as it is.
+    /// One row: the seal and what pressing it means, then, once approved,
+    /// what exactly is approved.
+    private var sourceApprovalRow: some View {
+        let approved = model.isApproved(capture)
+        let isPhoto = capture.isPhotoCapture
+        return Button {
+            model.setApproved(!approved, for: capture)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: approved ? "checkmark.seal.fill" : "checkmark.seal")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(approved ? LL.accent : Color.secondary)
+                    .frame(width: 22)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(approved ? "Approved" : (isPhoto ? "Approve this photo" : "Approve the source clip"))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(approved ? LL.accent : Color.primary)
+                    Text(sourceApprovalCaption(approved: approved, isPhoto: isPhoto))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                approved ? LL.accent.opacity(0.1) : Color.primary.opacity(0.06),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(approved ? "Approved. Remove approval" : (isPhoto ? "Approve this photo" : "Approve the source clip"))
+        .accessibilityAddTraits(approved ? .isSelected : [])
+    }
+
+    private func sourceApprovalCaption(approved: Bool, isPhoto: Bool) -> String {
+        // The row is pressed with a pointer on the Mac and a finger
+        // elsewhere (it read "Click" on the phone until 2026-11-06).
+        #if os(macOS)
+        let remove = "Click to remove."
+        #else
+        let remove = "Tap to remove."
+        #endif
+        if isPhoto {
+            return approved
+                ? "The photo as you edit it — every change goes with it. \(remove)"
+                : "Clears the photo, as edited, for use."
+        }
+        // A video's source is approved as it is: an edit reaches downstream
+        // only through its render.
+        if model.hasEditsToRender(capture) {
+            return approved
+                ? "The source clip, as shot — your edits are not in it. Render Edits and approve that clip for the graded one. \(remove)"
+                : "Clears the clip as shot — your edits are not in it. Render Edits first for the graded one."
+        }
+        return approved ? "The source clip, as it is. \(remove)" : "Clears the clip, as it is, for use."
     }
 
     // MARK: Footer
@@ -674,12 +803,8 @@ struct GalleryPreviewPanel: View {
                 renameText = capture.displayTitle
                 isRenaming = true
             }
-            if style == .pane {
-                Divider().frame(height: 20)
-                footerButton("Share", icon: "square.and.arrow.up") {
-                    exportShare()
-                }
-            }
+            // No Share here since 2026-11-05: Output's Share project is in
+            // both dresses, a few rows down.
             #if os(macOS)
             Divider().frame(height: 20)
             footerButton("Finder", icon: "folder") {
@@ -805,6 +930,88 @@ private struct HoldingsHereRow: View {
                 originals = "originals missing"
             }
             return holdings.tier == .blends ? "Blends only (\(blendsHere) of \(blends)) — \(originals)" : "Preview only — \(originals)"
+        }
+    }
+}
+
+/// Output's **Render Edits** — the panel's action button, in step with the
+/// render: dimmed while the clip has no edit to bake (it is as it was
+/// shot), "Rendering…" while one runs. Its own view so the panel does not
+/// re-render through the model on every progress tick.
+private struct RenderEditsButton: View {
+    @EnvironmentObject private var model: AppModel
+    @ObservedObject var approvals: ApprovedAssetsStore
+    let capture: AppModel.CaptureProject
+    var action: () -> Void
+
+    var body: some View {
+        let isRendering: Bool = { if case .rendering = approvals.renders[capture.id] { return true } else { return false } }()
+        let hasEdits = model.hasEditsToRender(capture)
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 16, weight: .medium))
+                Text(isRendering ? "Rendering…" : "Render Edits")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .foregroundStyle(.primary)
+        }
+        .buttonStyle(.plain)
+        .disabled(isRendering || !hasEdits)
+        .opacity(hasEdits && model.isAvailable(.newBlend, for: capture) ? 1 : 0.45)
+        .accessibilityLabel("Render Edits")
+        #if os(macOS)
+        .help(hasEdits
+              ? "Render the clip at 1× with your edits baked in and its sound kept"
+              : "No edits to render — the clip is as it was shot")
+        #endif
+    }
+}
+
+/// Under Output's buttons while Render Edits runs: its progress and a way
+/// to stop it — or, after one that failed, why, until dismissed.
+private struct RenderEditsStatus: View {
+    @EnvironmentObject private var model: AppModel
+    @ObservedObject var approvals: ApprovedAssetsStore
+    let captureID: UUID
+
+    var body: some View {
+        switch approvals.renders[captureID] {
+        case .rendering(let fraction):
+            HStack(spacing: 10) {
+                ProgressView(value: fraction)
+                    .tint(LL.accent)
+                Text("\(Int((fraction * 100).rounded())) %")
+                    .font(.system(size: 11.5).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 38, alignment: .trailing)
+                Button("Cancel") { model.cancelEditRender(for: captureID) }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+                    .buttonStyle(.plain)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Rendering edits")
+        case .failed(let message):
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+                Text(message)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Button("Dismiss") { model.cancelEditRender(for: captureID) }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+                    .buttonStyle(.plain)
+            }
+        case nil:
+            EmptyView()
         }
     }
 }
